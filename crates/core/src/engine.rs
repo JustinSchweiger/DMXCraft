@@ -1,0 +1,628 @@
+//! Lichtengine: spielt Szenen ab und berechnet daraus DMX-Frames.
+//!
+//! Merge-Regeln:
+//! * Dimmer-Kanäle: HTP – der höchste Wert aller aktiven Szenen gewinnt.
+//! * Alle anderen: LTP – die zuletzt gestartete Szene gewinnt.
+//! * Der Programmer (Live-Fader) überschreibt alles.
+//! * Master/Blackout skalieren Dimmer-Kanäle; Geräte ohne Dimmer-Kanal werden
+//!   über ihre Farbkanäle gedimmt.
+
+use std::collections::{HashMap, HashSet};
+use std::time::Duration;
+
+use crate::dmx::DmxFrame;
+use crate::show::{ChannelRef, LoopMode, SceneId, Show};
+
+/// Obergrenze für Schrittwechsel pro Tick (Schutz vor Endlosschleifen bei
+/// Szenen mit sehr kurzen Schritten).
+const MAX_STEP_ADVANCES_PER_TICK: usize = 1000;
+
+#[derive(Clone, Debug)]
+struct PlayingScene {
+    scene: SceneId,
+    /// Startreihenfolge für LTP.
+    seq: u64,
+    step: usize,
+    elapsed_ms: f64,
+    /// Noch im ersten Durchlauf von Schritt 0 (es gibt keinen Vorgänger).
+    first_entry: bool,
+    finished: bool,
+}
+
+/// Fortschritt einer laufenden Szene für die Oberfläche.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SceneProgress {
+    pub step: usize,
+    pub step_count: usize,
+    /// 0.0..=1.0 innerhalb des aktuellen Schritts.
+    pub step_fraction: f32,
+    pub finished: bool,
+}
+
+pub struct Engine {
+    show: Show,
+    playing: Vec<PlayingScene>,
+    next_seq: u64,
+    programmer: HashMap<ChannelRef, u8>,
+    master: f32,
+    blackout: bool,
+    speed: f32,
+}
+
+impl Engine {
+    pub fn new(show: Show) -> Self {
+        Self {
+            show,
+            playing: Vec::new(),
+            next_seq: 1,
+            programmer: HashMap::new(),
+            master: 1.0,
+            blackout: false,
+            speed: 1.0,
+        }
+    }
+
+    // ---------- Show ----------
+
+    pub fn show(&self) -> &Show {
+        &self.show
+    }
+
+    /// Zum Bearbeiten der Show. Danach ggf. [`Engine::sync`] aufrufen.
+    pub fn show_mut(&mut self) -> &mut Show {
+        &mut self.show
+    }
+
+    /// Ersetzt die Show komplett (z. B. nach dem Laden) und stoppt alles.
+    pub fn replace_show(&mut self, show: Show) {
+        self.show = show;
+        self.playing.clear();
+        self.programmer.clear();
+    }
+
+    /// Entfernt Wiedergabe-/Programmer-Zustand, der nach Show-Änderungen
+    /// nicht mehr gültig ist.
+    pub fn sync(&mut self) {
+        let show = &self.show;
+        self.playing
+            .retain(|p| show.scene(p.scene).is_some_and(|s| !s.steps.is_empty()));
+        for p in &mut self.playing {
+            let len = show.scene(p.scene).map_or(1, |s| s.steps.len());
+            if p.step >= len {
+                p.step = 0;
+                p.elapsed_ms = 0.0;
+            }
+        }
+        self.programmer
+            .retain(|ch, _| show.channel_def(*ch).is_some());
+    }
+
+    // ---------- Szenen ----------
+
+    pub fn is_active(&self, id: SceneId) -> bool {
+        self.playing.iter().any(|p| p.scene == id)
+    }
+
+    pub fn active_scenes(&self) -> Vec<SceneId> {
+        self.playing.iter().map(|p| p.scene).collect()
+    }
+
+    /// Startet eine Szene (von vorn). Andere Szenen derselben Zone stoppen.
+    pub fn activate(&mut self, id: SceneId) {
+        let Some(scene) = self.show.scene(id) else {
+            return;
+        };
+        if scene.steps.is_empty() {
+            return;
+        }
+        if let Some(zone) = scene.zone {
+            let show = &self.show;
+            self.playing.retain(|p| {
+                p.scene != id && show.scene(p.scene).is_none_or(|s| s.zone != Some(zone))
+            });
+        } else {
+            self.playing.retain(|p| p.scene != id);
+        }
+        self.playing.push(PlayingScene {
+            scene: id,
+            seq: self.next_seq,
+            step: 0,
+            elapsed_ms: 0.0,
+            first_entry: true,
+            finished: false,
+        });
+        self.next_seq += 1;
+    }
+
+    pub fn release(&mut self, id: SceneId) {
+        self.playing.retain(|p| p.scene != id);
+    }
+
+    pub fn toggle(&mut self, id: SceneId) {
+        if self.is_active(id) {
+            self.release(id);
+        } else {
+            self.activate(id);
+        }
+    }
+
+    pub fn release_all(&mut self) {
+        self.playing.clear();
+    }
+
+    pub fn progress(&self, id: SceneId) -> Option<SceneProgress> {
+        let p = self.playing.iter().find(|p| p.scene == id)?;
+        let scene = self.show.scene(id)?;
+        let step = scene.steps.get(p.step)?;
+        let dur = step.duration_ms().max(1) as f64;
+        Some(SceneProgress {
+            step: p.step,
+            step_count: scene.steps.len(),
+            step_fraction: (p.elapsed_ms / dur).clamp(0.0, 1.0) as f32,
+            finished: p.finished,
+        })
+    }
+
+    // ---------- Programmer ----------
+
+    pub fn set_programmer(&mut self, ch: ChannelRef, value: u8) {
+        self.programmer.insert(ch, value);
+    }
+
+    pub fn clear_programmer_channel(&mut self, ch: ChannelRef) {
+        self.programmer.remove(&ch);
+    }
+
+    pub fn clear_programmer(&mut self) {
+        self.programmer.clear();
+    }
+
+    pub fn programmer(&self) -> &HashMap<ChannelRef, u8> {
+        &self.programmer
+    }
+
+    // ---------- Master / Speed ----------
+
+    pub fn master(&self) -> f32 {
+        self.master
+    }
+
+    pub fn set_master(&mut self, v: f32) {
+        self.master = v.clamp(0.0, 1.0);
+    }
+
+    pub fn blackout(&self) -> bool {
+        self.blackout
+    }
+
+    pub fn set_blackout(&mut self, on: bool) {
+        self.blackout = on;
+    }
+
+    /// Wiedergabegeschwindigkeit (1.0 = normal).
+    pub fn speed(&self) -> f32 {
+        self.speed
+    }
+
+    pub fn set_speed(&mut self, v: f32) {
+        self.speed = v.clamp(0.05, 20.0);
+    }
+
+    // ---------- Zeit ----------
+
+    /// Zeit voranschreiten lassen.
+    pub fn tick(&mut self, dt: Duration) {
+        let dt_ms = dt.as_secs_f64() * 1000.0 * f64::from(self.speed);
+        for p in &mut self.playing {
+            let Some(scene) = self.show.scene(p.scene) else {
+                continue;
+            };
+            let len = scene.steps.len();
+            if len == 0 || p.finished {
+                continue;
+            }
+            p.elapsed_ms += dt_ms;
+            let mut guard = 0;
+            loop {
+                let dur = scene.steps[p.step].duration_ms().max(1) as f64;
+                if p.elapsed_ms < dur || guard >= MAX_STEP_ADVANCES_PER_TICK {
+                    break;
+                }
+                guard += 1;
+                if p.step + 1 < len {
+                    p.elapsed_ms -= dur;
+                    p.step += 1;
+                    p.first_entry = false;
+                } else if scene.loop_mode == LoopMode::Loop {
+                    p.elapsed_ms -= dur;
+                    p.step = 0;
+                    p.first_entry = false;
+                } else {
+                    p.elapsed_ms = dur;
+                    p.finished = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // ---------- Rendering ----------
+
+    fn is_htp(&self, ch: ChannelRef) -> bool {
+        self.show.channel_def(ch).is_some_and(|d| d.kind.is_htp())
+    }
+
+    /// Aktuelle (überblendete) Werte einer laufenden Szene.
+    fn scene_values(&self, p: &PlayingScene) -> HashMap<ChannelRef, u8> {
+        let mut out = HashMap::new();
+        let Some(scene) = self.show.scene(p.scene) else {
+            return out;
+        };
+        let len = scene.steps.len();
+        let Some(step) = scene.steps.get(p.step) else {
+            return out;
+        };
+        let current = step.value_map();
+        let t = if step.fade_ms == 0 {
+            1.0
+        } else {
+            (p.elapsed_ms / f64::from(step.fade_ms)).clamp(0.0, 1.0)
+        };
+        let previous = if p.first_entry && p.step == 0 {
+            None
+        } else {
+            Some(scene.steps[(p.step + len - 1) % len].value_map())
+        };
+
+        for (&ch, &to) in &current {
+            let from = match previous.as_ref().and_then(|m| m.get(&ch)) {
+                Some(&v) => v,
+                // Ohne Vorgänger: Intensität blendet von 0 auf, Rest springt.
+                None if self.is_htp(ch) => 0,
+                None => to,
+            };
+            out.insert(ch, lerp(from, to, t));
+        }
+        // Intensitäten, die im neuen Schritt fehlen, blenden aus.
+        if let Some(prev) = previous {
+            for (ch, from) in prev {
+                if !current.contains_key(&ch) && self.is_htp(ch) {
+                    out.insert(ch, lerp(from, 0, t));
+                }
+            }
+        }
+        out
+    }
+
+    /// Berechnet den aktuellen DMX-Frame.
+    pub fn render(&self, frame: &mut DmxFrame) {
+        frame.resize(usize::from(self.show.universes));
+        frame.clear();
+
+        // 1) Defaults
+        let mut values: HashMap<ChannelRef, u8> = HashMap::new();
+        for f in &self.show.fixtures {
+            if let Some(ty) = self.show.type_of(f) {
+                for (i, def) in ty.channels.iter().enumerate() {
+                    let ch = ChannelRef {
+                        fixture: f.id,
+                        channel: i as u16,
+                    };
+                    values.insert(ch, def.default);
+                }
+            }
+        }
+
+        // 2) Szenen in Startreihenfolge (LTP: spätere überschreiben)
+        let mut order: Vec<&PlayingScene> = self.playing.iter().collect();
+        order.sort_by_key(|p| p.seq);
+        let mut htp_touched: HashSet<ChannelRef> = HashSet::new();
+        for p in order {
+            for (ch, v) in self.scene_values(p) {
+                let Some(slot) = values.get_mut(&ch) else {
+                    continue; // Gerät existiert nicht mehr
+                };
+                if self.is_htp(ch) {
+                    if htp_touched.insert(ch) {
+                        *slot = v;
+                    } else {
+                        *slot = (*slot).max(v);
+                    }
+                } else {
+                    *slot = v;
+                }
+            }
+        }
+
+        // 3) Programmer
+        for (ch, v) in &self.programmer {
+            if let Some(slot) = values.get_mut(ch) {
+                *slot = *v;
+            }
+        }
+
+        // 4) Master / Blackout
+        let master = if self.blackout { 0.0 } else { self.master };
+        if master < 1.0 {
+            for f in &self.show.fixtures {
+                let Some(ty) = self.show.type_of(f) else {
+                    continue;
+                };
+                let has_dimmer = ty.channels.iter().any(|c| c.kind.is_htp());
+                for (i, def) in ty.channels.iter().enumerate() {
+                    let scale = if has_dimmer {
+                        def.kind.is_htp()
+                    } else {
+                        def.kind.is_color_intensity()
+                    };
+                    if scale {
+                        let ch = ChannelRef {
+                            fixture: f.id,
+                            channel: i as u16,
+                        };
+                        if let Some(v) = values.get_mut(&ch) {
+                            *v = (f32::from(*v) * master).round() as u8;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5) In den Frame schreiben
+        for f in &self.show.fixtures {
+            for (ch, v) in values.iter().filter(|(ch, _)| ch.fixture == f.id) {
+                frame.set(usize::from(f.universe), f.address + ch.channel, *v);
+            }
+        }
+    }
+
+    /// Bequemlichkeitsfunktion: neuen Frame erzeugen.
+    pub fn render_frame(&self) -> DmxFrame {
+        let mut f = DmxFrame::new(usize::from(self.show.universes));
+        self.render(&mut f);
+        f
+    }
+
+    /// Aktueller Ausgabewert eines Gerätekanals (für Fader-Anzeigen).
+    pub fn output_value(&self, frame: &DmxFrame, ch: ChannelRef) -> Option<u8> {
+        let f = self.show.fixture(ch.fixture)?;
+        frame.get(usize::from(f.universe), f.address + ch.channel)
+    }
+}
+
+fn lerp(from: u8, to: u8, t: f64) -> u8 {
+    (f64::from(from) + (f64::from(to) - f64::from(from)) * t).round() as u8
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::library::builtin_fixture_types;
+    use crate::show::{ChannelValue, FixtureId, Step};
+
+    const MS: fn(u64) -> Duration = Duration::from_millis;
+
+    fn cv(fixture: FixtureId, channel: u16, value: u8) -> ChannelValue {
+        ChannelValue {
+            fixture,
+            channel,
+            value,
+        }
+    }
+
+    /// Show mit einem D+RGB-PAR (Adr. 1) und einem RGB-PAR ohne Dimmer (Adr. 10).
+    fn setup() -> (Show, FixtureId, FixtureId) {
+        let mut s = Show::new("T", 2);
+        for t in builtin_fixture_types() {
+            s.upsert_fixture_type(t);
+        }
+        let a = s.add_fixture("A", "generic/drgb-4ch", 0, 1).unwrap();
+        let b = s.add_fixture("B", "generic/rgb-3ch", 1, 10).unwrap();
+        (s, a, b)
+    }
+
+    #[test]
+    fn defaults_are_rendered() {
+        let mut s = Show::new("T", 1);
+        for t in builtin_fixture_types() {
+            s.upsert_fixture_type(t);
+        }
+        s.add_fixture("MH", "generic/moving-head-spot-11ch", 0, 100)
+            .unwrap();
+        let e = Engine::new(s);
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 100), Some(128)); // Pan
+        assert_eq!(f.get(0, 102), Some(128)); // Tilt
+        assert_eq!(f.get(0, 105), Some(0)); // Dimmer
+    }
+
+    #[test]
+    fn scene_values_land_on_correct_addresses() {
+        let (mut s, a, b) = setup();
+        let id = s.add_scene(
+            "S",
+            None,
+            vec![Step::new(vec![cv(a, 0, 255), cv(a, 1, 200), cv(b, 2, 50)])],
+        );
+        let mut e = Engine::new(s);
+        e.activate(id);
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 1), Some(255));
+        assert_eq!(f.get(0, 2), Some(200));
+        assert_eq!(f.get(1, 12), Some(50));
+    }
+
+    #[test]
+    fn htp_highest_wins_ltp_latest_wins() {
+        let (mut s, a, _) = setup();
+        let s1 = s.add_scene(
+            "1",
+            None,
+            vec![Step::new(vec![cv(a, 0, 200), cv(a, 1, 10)])],
+        );
+        let s2 = s.add_scene(
+            "2",
+            None,
+            vec![Step::new(vec![cv(a, 0, 100), cv(a, 1, 99)])],
+        );
+        let mut e = Engine::new(s);
+        e.activate(s1);
+        e.activate(s2);
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 1), Some(200), "Dimmer HTP");
+        assert_eq!(f.get(0, 2), Some(99), "Rot LTP");
+        e.activate(s1); // neu gestartet -> jetzt die neueste
+        assert_eq!(e.render_frame().get(0, 2), Some(10));
+    }
+
+    #[test]
+    fn zones_are_exclusive() {
+        let (mut s, a, _) = setup();
+        let z = s.add_zone("Farbe");
+        let s1 = s.add_scene("Rot", Some(z), vec![Step::new(vec![cv(a, 1, 255)])]);
+        let s2 = s.add_scene("Blau", Some(z), vec![Step::new(vec![cv(a, 3, 255)])]);
+        let free = s.add_scene("Frei", None, vec![Step::new(vec![cv(a, 0, 255)])]);
+        let mut e = Engine::new(s);
+        e.activate(free);
+        e.activate(s1);
+        e.activate(s2);
+        assert!(!e.is_active(s1));
+        assert!(e.is_active(s2));
+        assert!(e.is_active(free));
+        e.toggle(s2);
+        assert!(!e.is_active(s2));
+    }
+
+    #[test]
+    fn fades_between_steps_and_loops() {
+        let (mut s, a, _) = setup();
+        let mut st1 = Step::new(vec![cv(a, 1, 0)]);
+        st1.fade_ms = 0;
+        st1.hold_ms = 100;
+        let mut st2 = Step::new(vec![cv(a, 1, 200)]);
+        st2.fade_ms = 1000;
+        st2.hold_ms = 0;
+        let id = s.add_scene("Fade", None, vec![st1, st2]);
+        let mut e = Engine::new(s);
+        e.activate(id);
+        assert_eq!(e.render_frame().get(0, 2), Some(0));
+        e.tick(MS(100)); // Schritt 2 beginnt
+        assert_eq!(e.progress(id).unwrap().step, 1);
+        e.tick(MS(500)); // Hälfte der Überblendung
+        assert_eq!(e.render_frame().get(0, 2), Some(100));
+        e.tick(MS(500)); // Ende -> Loop zu Schritt 1 (fade 0)
+        assert_eq!(e.progress(id).unwrap().step, 0);
+        assert_eq!(e.render_frame().get(0, 2), Some(0));
+    }
+
+    #[test]
+    fn first_step_fades_intensity_in() {
+        let (mut s, a, _) = setup();
+        let mut st = Step::new(vec![cv(a, 0, 200), cv(a, 1, 80)]);
+        st.fade_ms = 1000;
+        let id = s.add_scene("In", None, vec![st]);
+        let mut e = Engine::new(s);
+        e.activate(id);
+        e.tick(MS(250));
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 1), Some(50), "Dimmer blendet auf");
+        assert_eq!(f.get(0, 2), Some(80), "Farbe springt");
+    }
+
+    #[test]
+    fn once_mode_stops_on_last_step() {
+        let (mut s, a, _) = setup();
+        let id = s.add_scene(
+            "Once",
+            None,
+            vec![Step::new(vec![cv(a, 1, 1)]), Step::new(vec![cv(a, 1, 2)])],
+        );
+        s.scene_mut(id).unwrap().loop_mode = LoopMode::Once;
+        let mut e = Engine::new(s);
+        e.activate(id);
+        e.tick(MS(10_000));
+        let p = e.progress(id).unwrap();
+        assert!(p.finished);
+        assert_eq!(p.step, 1);
+        assert_eq!(e.render_frame().get(0, 2), Some(2));
+    }
+
+    #[test]
+    fn zero_length_steps_do_not_hang() {
+        let (mut s, a, _) = setup();
+        let mut st = Step::new(vec![cv(a, 1, 1)]);
+        st.hold_ms = 0;
+        let mut st2 = st.clone();
+        st2.values[0].value = 2;
+        let id = s.add_scene("Z", None, vec![st, st2]);
+        let mut e = Engine::new(s);
+        e.activate(id);
+        e.tick(Duration::from_secs(3600)); // darf nicht hängen
+        assert!(e.is_active(id));
+    }
+
+    #[test]
+    fn programmer_overrides_and_master_scales() {
+        let (mut s, a, b) = setup();
+        let id = s.add_scene(
+            "S",
+            None,
+            vec![Step::new(vec![cv(a, 0, 200), cv(a, 1, 200), cv(b, 0, 200)])],
+        );
+        let mut e = Engine::new(s);
+        e.activate(id);
+        e.set_programmer(
+            ChannelRef {
+                fixture: a,
+                channel: 0,
+            },
+            100,
+        );
+        e.set_master(0.5);
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 1), Some(50), "Programmer 100 * Master 0.5");
+        assert_eq!(
+            f.get(0, 2),
+            Some(200),
+            "Farbe bei Gerät mit Dimmer unverändert"
+        );
+        assert_eq!(f.get(1, 10), Some(100), "Gerät ohne Dimmer: Farbe skaliert");
+        e.set_blackout(true);
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 1), Some(0));
+        assert_eq!(f.get(1, 10), Some(0));
+    }
+
+    #[test]
+    fn speed_multiplies_time() {
+        let (mut s, a, _) = setup();
+        let mut st = Step::new(vec![cv(a, 0, 200)]);
+        st.fade_ms = 1000;
+        let id = s.add_scene("S", None, vec![st]);
+        let mut e = Engine::new(s);
+        e.set_speed(2.0);
+        e.activate(id);
+        e.tick(MS(250));
+        assert_eq!(e.render_frame().get(0, 1), Some(100));
+    }
+
+    #[test]
+    fn sync_drops_removed_scenes_and_fixtures() {
+        let (mut s, a, _) = setup();
+        let id = s.add_scene("S", None, vec![Step::new(vec![cv(a, 0, 1)])]);
+        let mut e = Engine::new(s);
+        e.activate(id);
+        e.set_programmer(
+            ChannelRef {
+                fixture: a,
+                channel: 0,
+            },
+            5,
+        );
+        e.show_mut().remove_scene(id);
+        e.show_mut().remove_fixture(a);
+        e.sync();
+        assert!(e.active_scenes().is_empty());
+        assert!(e.programmer().is_empty());
+    }
+}

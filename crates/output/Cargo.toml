@@ -1,0 +1,11 @@
+[package]
+name = "openlicht-output"
+description = "Ausgabeschicht: DmxOutput-Trait, Ausgabe-Thread, Backends (Simulation, später DVC Gold USB)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+openlicht-core.workspace = true
+thiserror.workspace = true
