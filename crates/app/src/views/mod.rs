@@ -2,6 +2,7 @@
 //! implementiert; gemeinsame Daten kommen über [`ViewCtx`].
 
 pub mod control;
+pub mod fixture_menu;
 pub mod library;
 pub mod setup;
 

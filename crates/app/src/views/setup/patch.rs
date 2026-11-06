@@ -104,13 +104,14 @@ fn patch_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("patch_list")
-                .num_columns(5)
+                .num_columns(6)
                 .striped(true)
                 .show(ui, |ui| {
                     ui.weak("");
                     ui.weak("Name");
                     ui.weak("Univ.");
                     ui.weak("Adr.");
+                    ui.weak("DIP an");
                     ui.weak("");
                     ui.end_row();
                     for f in &e.show().fixtures {
@@ -134,6 +135,23 @@ fn patch_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
                         if ru.changed() || ra.changed() {
                             repatch = Some((f.id, u - 1, a));
                         }
+                        let on = dmxcraft_core::dip::on_switches(f.address);
+                        let dip = if on.is_empty() {
+                            "-".to_string()
+                        } else {
+                            on.iter()
+                                .map(|s| s.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        };
+                        ui.label(
+                            egui::RichText::new(dip)
+                                .monospace()
+                                .color(crate::ui::theme::TEXT_DIM),
+                        )
+                        .on_hover_ui(|ui| {
+                            crate::ui::widgets::DipSwitch { address: f.address }.show(ui);
+                        });
                         if ui
                             .small_button("Entf.")
                             .on_hover_text("Entfernen")

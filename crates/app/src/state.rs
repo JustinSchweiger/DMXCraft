@@ -44,6 +44,10 @@ pub struct AppState {
     pub append_target: Option<SceneId>,
     pub new_scene_name: String,
     pub new_scene_zone: Option<ZoneId>,
+    /// Kopiertes Bühnenplan-Layout (Positionen relativ zum ersten Gerät).
+    pub layout_clipboard: Option<Vec<[f32; 2]>>,
+    /// Gerät, das der DMX-Patch beim nächsten Öffnen zeigen soll.
+    pub monitor_focus: Option<FixtureId>,
 }
 
 impl AppState {
@@ -66,6 +70,8 @@ impl AppState {
             append_target: None,
             new_scene_name: "Neue Szene".into(),
             new_scene_zone: None,
+            layout_clipboard: None,
+            monitor_focus: None,
         }
     }
 

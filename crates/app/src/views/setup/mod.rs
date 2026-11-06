@@ -28,7 +28,7 @@ const TABS: [(SetupTab, &str); 5] = [
     (SetupTab::Stage, "Bühnenplan"),
     (SetupTab::Scenes, "Szenen"),
     (SetupTab::Zones, "Zonen & Gruppen"),
-    (SetupTab::Monitor, "DMX-Monitor"),
+    (SetupTab::Monitor, "DMX-Adressen"),
 ];
 
 impl View for SetupView {

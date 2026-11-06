@@ -17,6 +17,10 @@ pub const TEXT_DIM: Color32 = Color32::from_rgb(0x95, 0xa2, 0xb0);
 pub const TEXT_FAINT: Color32 = Color32::from_rgb(0x55, 0x60, 0x6c);
 pub const DANGER: Color32 = Color32::from_rgb(0xef, 0x44, 0x55);
 pub const OK: Color32 = Color32::from_rgb(0x34, 0xd3, 0x99);
+/// Gehäusefarbe der DIP-Schalter-Anzeige.
+pub const DIP_BODY: Color32 = Color32::from_rgb(0x1c, 0x3f, 0x8a);
+/// Geräte-Balken im DMX-Patch.
+pub const FIXTURE_BAR: Color32 = Color32::from_rgb(0x2b, 0x35, 0x42);
 pub const WARN: Color32 = Color32::from_rgb(0xfb, 0xbf, 0x24);
 
 /// Standardfarben für Zonen ohne eigene Farbe.

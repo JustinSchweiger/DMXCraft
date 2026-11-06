@@ -93,7 +93,12 @@ Die Oberfläche hat zwei Bereiche (oben links umschalten):
   Mausrad (Shift = 10er-Schritte), Doppelklick = 0/voll, Rechtsklick = Freigeben.
 * **EINRICHTEN** – Patch und Gerätebibliothek, **Bühnenplan** (Geräte verschieben, Einrasten,
   in Reihe/Raster anordnen, ausrichten), Szenen-Editor, Zonen (Farbe, Reihenfolge) & Gruppen,
-  DMX-Monitor.
+  **DMX-Adressen** (Modus *Patch*: Geräte als Balken über ihren Adressbereich, per Ziehen auf
+  eine neue Startadresse verschieben, freie Adressen sichtbar; Modus *Ausgang*: gesendete
+  Werte; Seitenleiste mit DIP-Schalter-Stellung des ausgewählten Geräts).
+* **Rechtsklick auf ein Gerät** (Bühne, Bühnenplan, DMX-Adressen): Gruppen zuweisen/entfernen,
+  neue Gruppe, gleichen Typ auswählen, Reihenfolge umkehren, Layout kopieren/einfügen,
+  spiegeln, nächste freie Adresse, löschen (mit Rückfrage).
 
 ## Bedienung in Kürze
 

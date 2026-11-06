@@ -1,6 +1,7 @@
 //! Wiederverwendbare Bedienelemente. Sie kennen weder Engine noch App-Zustand,
 //! nur ihre Eingabewerte (siehe docs/UI-GUIDELINES.md, Abschnitt 4).
 
+pub mod dip_switch;
 pub mod fader;
 pub mod icons;
 pub mod scene_card;
@@ -10,6 +11,7 @@ pub mod stage_canvas;
 pub mod swatch;
 pub mod xy_pad;
 
+pub use dip_switch::DipSwitch;
 pub use fader::{Fader, FaderEvent};
 pub use icons::{Icon, IconButton};
 pub use scene_card::SceneCard;

@@ -16,6 +16,9 @@ use crate::ui::theme;
 
 const BOX: f32 = 28.0;
 
+/// Rückruf für das Kontextmenü: (Ui, Gerät unter der Maus, aktuelle Auswahl).
+pub type MenuFn<'m> = dyn FnMut(&mut Ui, Option<FixtureId>, &BTreeSet<FixtureId>) + 'm;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CanvasMode {
     Select,
@@ -27,6 +30,8 @@ pub enum CanvasMode {
 pub struct StageInteraction {
     lasso_start: Option<Pos2>,
     moving: bool,
+    /// Gerät, auf dem das Kontextmenü geöffnet wurde.
+    context_target: Option<FixtureId>,
 }
 
 pub struct StageCanvas<'a> {
@@ -36,6 +41,8 @@ pub struct StageCanvas<'a> {
     /// Raster zum Einrasten beim Verschieben (Felder pro Achse), `None` = frei.
     pub snap: Option<u32>,
     pub show_labels: bool,
+    /// Hintergrundraster zeichnen.
+    pub show_grid: bool,
 }
 
 /// Position eines Geräts (gespeichert oder Standard nach Patch-Reihenfolge).
@@ -54,6 +61,7 @@ impl StageCanvas<'_> {
         ui: &mut Ui,
         state: &mut StageInteraction,
         selected: &mut BTreeSet<FixtureId>,
+        menu: &mut MenuFn<'_>,
     ) -> Vec<(FixtureId, [f32; 2])> {
         let mut moves = Vec::new();
         let size = ui.available_size().max(Vec2::new(120.0, 120.0));
@@ -61,7 +69,10 @@ impl StageCanvas<'_> {
         let painter = ui.painter_at(rect);
         let r = theme::R_M as f32;
         painter.rect_filled(rect, r, theme::BG);
-        self.paint_grid(&painter, rect);
+        if self.show_grid {
+            self.paint_grid(&painter, rect);
+        }
+        painter.rect_stroke(rect, r, Stroke::new(1.0, theme::BORDER), StrokeKind::Inside);
 
         if self.show.fixtures.is_empty() {
             painter.text(
@@ -186,6 +197,20 @@ impl StageCanvas<'_> {
                 None => {}
             }
         }
+
+        // ----- Kontextmenü -----
+        if resp.secondary_clicked() {
+            let target = resp.interact_pointer_pos().and_then(hit);
+            if let Some(id) = target {
+                if !selected.contains(&id) {
+                    selected.clear();
+                    selected.insert(id);
+                }
+            }
+            state.context_target = target;
+        }
+        let target = state.context_target;
+        resp.context_menu(|ui| menu(ui, target, selected));
 
         // ----- Zeichnen -----
         let hovered = resp.hover_pos().and_then(hit);

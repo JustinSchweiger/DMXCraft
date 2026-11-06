@@ -340,6 +340,26 @@ impl Show {
         }
     }
 
+    /// Kanalanzahl eines gepatchten Geräts.
+    pub fn fixture_channels(&self, id: FixtureId) -> u16 {
+        self.fixture(id)
+            .and_then(|f| self.type_of(f))
+            .map_or(0, |t| t.channel_count())
+    }
+
+    /// Belegung eines Universums: Index = Adresse − 1 → Gerät (falls belegt).
+    pub fn address_map(&self, universe: u8) -> Vec<Option<FixtureId>> {
+        let mut map = vec![None; UNIVERSE_SIZE];
+        for f in self.fixtures.iter().filter(|f| f.universe == universe) {
+            let start = usize::from(f.address).saturating_sub(1);
+            let end = (start + usize::from(self.fixture_channels(f.id))).min(UNIVERSE_SIZE);
+            for slot in &mut map[start..end] {
+                slot.get_or_insert(f.id);
+            }
+        }
+        map
+    }
+
     /// Erste freie Adresse in einem Universum, an die `channels` Kanäle passen.
     pub fn next_free_address(&self, universe: u8, channels: u16) -> Option<u16> {
         if channels == 0 || usize::from(channels) > UNIVERSE_SIZE {
@@ -477,6 +497,18 @@ mod tests {
         assert_eq!(s.next_free_address(0, 3), Some(7));
         assert_eq!(s.next_free_address(0, 4), Some(16));
         assert_eq!(s.next_free_address(1, 512), Some(1));
+    }
+
+    #[test]
+    fn address_map_marks_ranges() {
+        let mut s = show();
+        let a = s.add_fixture("A", "generic/rgb-3ch", 0, 5).unwrap();
+        let map = s.address_map(0);
+        assert_eq!(map[3], None);
+        assert_eq!(&map[4..7], &[Some(a), Some(a), Some(a)]);
+        assert_eq!(map[7], None);
+        assert!(s.address_map(1).iter().all(Option::is_none));
+        assert_eq!(s.fixture_channels(a), 3);
     }
 
     #[test]

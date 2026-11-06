@@ -8,6 +8,7 @@ use eframe::egui;
 use crate::state::AppState;
 use crate::ui::theme;
 use crate::ui::widgets::{section_header, CanvasMode, StageCanvas, StageInteraction};
+use crate::views::fixture_menu::{self, MenuPlace};
 use crate::views::{View, ViewCtx};
 
 #[derive(Default)]
@@ -20,15 +21,31 @@ impl View for StageView {
         section_header(ui, "Bühne", |ui| selection_tools(ui, cx.engine, cx.state));
         group_bar(ui, cx.engine, cx.state);
         ui.add_space(theme::SP_XS);
+        let show = cx.engine.show();
         let canvas = StageCanvas {
-            show: cx.engine.show(),
+            show,
             frame: cx.frame,
             mode: CanvasMode::Select,
             snap: None,
             show_labels: false,
+            show_grid: false,
         };
+        let mut action = None;
+        let clip = cx.state.layout_clipboard.is_some();
         // Im Auswahlmodus entstehen keine Verschiebungen.
-        let _ = canvas.show(ui, &mut self.interaction, &mut cx.state.selected);
+        let _ = canvas.show(
+            ui,
+            &mut self.interaction,
+            &mut cx.state.selected,
+            &mut |ui, target, sel| {
+                if let Some(a) = fixture_menu::menu(ui, show, sel, target, MenuPlace::Stage, clip) {
+                    action = Some(a);
+                }
+            },
+        );
+        if let Some(a) = action {
+            fixture_menu::apply(cx.engine, cx.state, a);
+        }
     }
 }
 
