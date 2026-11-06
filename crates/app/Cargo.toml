@@ -1,16 +1,16 @@
 [package]
-name = "openlicht-app"
-description = "Desktop-Oberfläche (egui) für OpenLicht"
+name = "lightcraft-app"
+description = "Desktop-Oberfläche (egui) für LightCraft"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [[bin]]
-name = "openlicht"
+name = "lightcraft"
 path = "src/main.rs"
 
 [dependencies]
-openlicht-core.workspace = true
-openlicht-output.workspace = true
+lightcraft-core.workspace = true
+lightcraft-output.workspace = true
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }

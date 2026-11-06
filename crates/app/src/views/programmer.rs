@@ -2,7 +2,7 @@
 //! Szene oder Schritt speichern.
 
 use eframe::egui;
-use openlicht_core::{ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, Step};
+use lightcraft_core::{ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, Step};
 
 use crate::app::UiState;
 
@@ -223,7 +223,7 @@ pub fn programmer_values(e: &Engine) -> Vec<ChannelValue> {
 pub fn zone_combo(
     ui: &mut egui::Ui,
     e: &Engine,
-    zone: &mut Option<openlicht_core::ZoneId>,
+    zone: &mut Option<lightcraft_core::ZoneId>,
     id: &str,
 ) -> bool {
     let name = zone

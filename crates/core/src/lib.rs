@@ -1,4 +1,4 @@
-//! Kern von OpenLicht: Datenmodell und Lichtengine, komplett ohne I/O.
+//! Kern von LightCraft: Datenmodell und Lichtengine, komplett ohne I/O.
 //!
 //! * [`fixture`] – Gerätetypen und deren Kanäle
 //! * [`show`]    – die Show-Datei: Patch, Zonen, Szenen (JSON)

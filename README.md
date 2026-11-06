@@ -1,4 +1,4 @@
-# OpenLicht
+# LightCraft
 
 Eine freie, in Rust geschriebene DMX-Lichtsteuerung nach dem Vorbild von
 Daslight 5. Sie läuft auf Linux, Windows und macOS und soll später die
@@ -32,8 +32,8 @@ Voraussetzung: Rust ≥ 1.85 (`rustup`). Unter Linux werden zur Laufzeit die
 Die sind auf Desktop-Systemen normalerweise schon installiert.
 
 ```sh
-cargo run --release -p openlicht-app            # startet mit Demo-Show
-cargo run --release -p openlicht-app -- show.json  # lädt eine Show
+cargo run --release -p lightcraft-app            # startet mit Demo-Show
+cargo run --release -p lightcraft-app -- show.json  # lädt eine Show
 cargo test --workspace                          # Tests
 ```
 

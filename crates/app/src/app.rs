@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use eframe::egui;
-use openlicht_core::{Engine, FixtureId, SceneId, Show, ZoneId};
-use openlicht_output::{OutputKind, OutputStatus, Runtime};
+use lightcraft_core::{Engine, FixtureId, SceneId, Show, ZoneId};
+use lightcraft_output::{OutputKind, OutputStatus, Runtime};
 
 use crate::demo;
 use crate::views;
@@ -66,14 +66,14 @@ impl UiState {
     }
 }
 
-pub struct OpenLichtApp {
+pub struct LightCraftApp {
     engine: Arc<Mutex<Engine>>,
     runtime: Runtime,
     output_kind: OutputKind,
     pub ui: UiState,
 }
 
-impl OpenLichtApp {
+impl LightCraftApp {
     pub fn new(show_path: Option<String>) -> Self {
         let mut message = None;
         let show = match &show_path {
@@ -147,7 +147,7 @@ impl OpenLichtApp {
         let st = &mut self.ui;
 
         ui.horizontal_wrapped(|ui| {
-            ui.strong("OpenLicht");
+            ui.strong("LightCraft");
             ui.separator();
 
             // Datei
@@ -256,7 +256,7 @@ impl OpenLichtApp {
     }
 }
 
-impl eframe::App for OpenLichtApp {
+impl eframe::App for LightCraftApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Laufende Szenen/Monitor flüssig anzeigen.
         ui.ctx().request_repaint_after(Duration::from_millis(33));

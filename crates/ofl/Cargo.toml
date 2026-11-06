@@ -1,0 +1,18 @@
+[package]
+name = "lightcraft-ofl"
+description = "Import der Open Fixture Library (OFL) in LightCraft-Gerätetypen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+lightcraft-core.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror.workspace = true
+flate2 = "1"
+
+[[bin]]
+name = "ofl-bundle"
+path = "src/bin/ofl-bundle.rs"

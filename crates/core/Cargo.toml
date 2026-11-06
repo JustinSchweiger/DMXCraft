@@ -1,5 +1,5 @@
 [package]
-name = "openlicht-core"
+name = "lightcraft-core"
 description = "Datenmodell und Lichtengine (Patch, Szenen, Zonen, Fades, DMX-Rendering)"
 version.workspace = true
 edition.workspace = true

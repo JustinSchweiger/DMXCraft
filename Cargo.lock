@@ -1082,6 +1082,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "lightcraft-app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "lightcraft-core",
+ "lightcraft-output",
+]
+
+[[package]]
+name = "lightcraft-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "lightcraft-ofl"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "lightcraft-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "lightcraft-output"
+version = "0.1.0"
+dependencies = [
+ "lightcraft-core",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "linebender_resource_handle"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1571,32 +1608,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-name = "openlicht-app"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "openlicht-core",
- "openlicht-output",
-]
-
-[[package]]
-name = "openlicht-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "openlicht-output"
-version = "0.1.0"
-dependencies = [
- "openlicht-core",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "orbclient"
 version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2002,6 +2013,8 @@ version = "1.0.154"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6"
 dependencies = [
+ "foldhash 0.2.0",
+ "indexmap",
  "itoa",
  "memchr",
  "serde",

@@ -21,7 +21,7 @@
 //! Wichtig unter Windows: den Daslight-Treiber NICHT durch WinUSB/Zadig
 //! ersetzen, solange Daslight 5 parallel weiter funktionieren soll.
 
-use openlicht_core::DmxFrame;
+use lightcraft_core::DmxFrame;
 
 use crate::{DmxOutput, OutputError};
 

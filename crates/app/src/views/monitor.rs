@@ -1,7 +1,7 @@
 //! DMX-Monitor: zeigt die 512 Kanäle eines Universums.
 
 use eframe::egui;
-use openlicht_core::{DmxFrame, Engine, UNIVERSE_SIZE};
+use lightcraft_core::{DmxFrame, Engine, UNIVERSE_SIZE};
 
 use crate::app::UiState;
 
