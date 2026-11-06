@@ -7,6 +7,7 @@
 //! Treffer werden am Druckpunkt ermittelt (`press_origin`), damit ein Ziehen,
 //! das erst nach der Bewegungsschwelle erkannt wird, das richtige Gerät greift.
 
+use crate::i18n::t;
 use std::collections::BTreeSet;
 
 use dmxcraft_core::{plan, ChannelKind, DmxFrame, FixtureId, PlanShape, Show};
@@ -67,7 +68,7 @@ impl StageCanvas<'_> {
         let size = ui.available_size().max(Vec2::new(120.0, 120.0));
         let (rect, resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, theme::BG);
+        painter.rect_filled(rect, 0.0, theme::bg());
         if self.show_grid {
             self.paint_grid(&painter, rect);
         }
@@ -76,9 +77,9 @@ impl StageCanvas<'_> {
             painter.text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                "Noch keine Geräte – unter EINRICHTEN → Patch hinzufügen",
+                t("Noch keine Geräte – unter EINRICHTEN → Patch hinzufügen"),
                 theme::body(),
-                theme::TEXT_DIM,
+                theme::text_dim(),
             );
             return moves;
         }
@@ -238,14 +239,23 @@ impl StageCanvas<'_> {
                         egui::Align2::CENTER_TOP,
                         text,
                         theme::caption(),
-                        if sel { theme::ACCENT } else { theme::TEXT_DIM },
+                        if sel {
+                            theme::accent()
+                        } else {
+                            theme::text_dim()
+                        },
                     );
                 }
             }
         }
         if let Some(l) = lasso {
-            painter.rect_filled(l, 2.0, theme::ACCENT.gamma_multiply(0.07));
-            painter.rect_stroke(l, 2.0, Stroke::new(1.0, theme::ACCENT), StrokeKind::Inside);
+            painter.rect_filled(l, 2.0, theme::accent().gamma_multiply(0.07));
+            painter.rect_stroke(
+                l,
+                2.0,
+                Stroke::new(1.0, theme::accent()),
+                StrokeKind::Inside,
+            );
         }
         // Nur setzen, wenn nötig – sonst würde z. B. der Größenänderungs-Cursor
         // der Bereichsgrenzen überschrieben.
@@ -279,7 +289,7 @@ impl StageCanvas<'_> {
         painter.rect_stroke(
             rect,
             theme::R_M as f32,
-            Stroke::new(1.0, theme::BORDER),
+            Stroke::new(1.0, theme::border()),
             StrokeKind::Inside,
         );
     }
@@ -373,19 +383,19 @@ fn paint_fixture(
     hovered: bool,
 ) {
     let stroke = if sel {
-        Stroke::new(2.0, theme::ACCENT)
+        Stroke::new(2.0, theme::accent())
     } else if hovered {
-        Stroke::new(1.0, theme::TEXT_DIM)
+        Stroke::new(1.0, theme::text_dim())
     } else {
-        Stroke::new(1.0, theme::BORDER)
+        Stroke::new(1.0, theme::border())
     };
-    let fill = |c: Color32, l: f32| if l > 0.02 { c } else { theme::FIXTURE_OFF };
+    let fill = |c: Color32, l: f32| if l > 0.02 { c } else { theme::fixture_off() };
     let glow = |center: Pos2, radius: f32, c: Color32, l: f32| {
         if l > 0.02 {
             p.circle_filled(center, radius, c.gamma_multiply(0.12 * l));
         }
     };
-    let (c0, l0) = colors.first().copied().unwrap_or((theme::BG, 0.0));
+    let (c0, l0) = colors.first().copied().unwrap_or((theme::bg(), 0.0));
     let n = colors.len().max(1);
     match shape {
         PlanShape::Round | PlanShape::MovingHead => {
@@ -410,7 +420,7 @@ fn paint_fixture(
                     p.add(egui::Shape::convex_polygon(
                         pts,
                         fill(*c, *l),
-                        Stroke::new(0.5, theme::BG),
+                        Stroke::new(0.5, theme::bg()),
                     ));
                 }
             }
@@ -559,30 +569,30 @@ impl egui::Widget for ShapeButton {
         let (rect, resp) = ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
         let p = ui.painter();
         let bg = if self.selected {
-            theme::ACCENT_DIM
+            theme::accent_dim()
         } else if resp.hovered() {
-            theme::RAISED_HOVER
+            theme::raised_hover()
         } else {
-            theme::RAISED
+            theme::raised()
         };
         p.rect_filled(rect, theme::R_S as f32, bg);
         if self.selected {
             p.rect_stroke(
                 rect,
                 theme::R_S as f32,
-                Stroke::new(1.0, theme::ACCENT),
+                Stroke::new(1.0, theme::accent()),
                 StrokeKind::Inside,
             );
         }
         let color = if self.selected {
-            theme::ACCENT
+            theme::accent()
         } else {
-            theme::TEXT
+            theme::text()
         };
         paint_shape_icon(p, self.shape, rect.shrink(7.0), color);
         let tip = self
             .shape
-            .map_or("Automatisch (nach Gerätetyp)", |s| s.label());
+            .map_or(t("Automatisch (nach Gerätetyp)"), |s| t(s.label()));
         resp.on_hover_text(tip)
     }
 }

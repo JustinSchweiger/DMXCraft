@@ -3,6 +3,7 @@
 //! Der Dialog läuft in einem eigenen Thread, damit die Oberfläche (und die
 //! DMX-Ausgabe-Anzeige) weiterzeichnet; das Ergebnis holt `poll` ab.
 
+use crate::i18n::t;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
 
@@ -30,22 +31,22 @@ impl Pending {
         let current = PathBuf::from(current);
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let mut dialog = rfd::FileDialog::new().add_filter("DMXCraft-Show", &[SHOW_EXT]);
+            let mut dialog = rfd::FileDialog::new().add_filter(t("DMXCraft-Show"), &[SHOW_EXT]);
             if purpose == Purpose::OpenShow {
-                dialog = dialog.add_filter("Ältere Show (JSON)", &["json"]);
+                dialog = dialog.add_filter(t("Ältere Show (JSON)"), &["json"]);
             }
             if let Some(dir) = current.parent().filter(|d| d.is_dir()) {
                 dialog = dialog.set_directory(dir);
             }
             let result = match purpose {
-                Purpose::OpenShow => dialog.set_title("Show öffnen").pick_file(),
+                Purpose::OpenShow => dialog.set_title(t("Show öffnen")).pick_file(),
                 Purpose::SaveShowAs => {
                     let name = current
                         .file_stem()
                         .map(|n| format!("{}.{SHOW_EXT}", n.to_string_lossy()))
                         .unwrap_or_else(|| format!("Show.{SHOW_EXT}"));
                     dialog
-                        .set_title("Show speichern unter")
+                        .set_title(t("Show speichern unter"))
                         .set_file_name(name)
                         .save_file()
                         .map(with_show_extension)

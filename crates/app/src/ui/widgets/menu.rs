@@ -93,12 +93,12 @@ impl<'a> MenuItem<'a> {
         let font = theme::body();
         let label_w = ui
             .painter()
-            .layout_no_wrap(self.label.to_owned(), font.clone(), theme::TEXT)
+            .layout_no_wrap(self.label.to_owned(), font.clone(), theme::text())
             .size()
             .x;
         let short_w = self.shortcut.map_or(0.0, |s| {
             ui.painter()
-                .layout_no_wrap(s.to_owned(), theme::caption(), theme::TEXT)
+                .layout_no_wrap(s.to_owned(), theme::caption(), theme::text())
                 .size()
                 .x
                 + theme::SP_L
@@ -118,20 +118,20 @@ impl<'a> MenuItem<'a> {
             let fill = if self.danger {
                 theme::DANGER
             } else {
-                theme::RAISED_HOVER
+                theme::raised_hover()
             };
             p.rect_filled(rect, theme::R_S as f32, fill);
         }
         let color = if !self.enabled {
-            theme::TEXT_FAINT
+            theme::text_faint()
         } else if hovered && self.danger {
-            theme::TEXT
+            theme::text()
         } else if self.danger {
             theme::DANGER
         } else if self.checked {
-            theme::ACCENT
+            theme::accent()
         } else {
-            theme::TEXT
+            theme::text()
         };
         let icon_rect = Rect::from_center_size(
             pos2(
@@ -178,9 +178,9 @@ impl<'a> MenuItem<'a> {
                 Stroke::new(
                     1.5,
                     if self.enabled {
-                        theme::TEXT_DIM
+                        theme::text_dim()
                     } else {
-                        theme::TEXT_FAINT
+                        theme::text_faint()
                     },
                 ),
             ));
@@ -193,9 +193,9 @@ impl<'a> MenuItem<'a> {
                 s,
                 theme::caption(),
                 if self.enabled {
-                    theme::TEXT_DIM
+                    theme::text_dim()
                 } else {
-                    theme::TEXT_FAINT
+                    theme::text_faint()
                 },
             );
         }
@@ -262,7 +262,7 @@ pub fn separator(ui: &mut Ui) {
     ui.painter().hline(
         (rect.left() + theme::SP_S)..=(rect.right() - theme::SP_S),
         rect.center().y,
-        Stroke::new(1.0, theme::BORDER),
+        Stroke::new(1.0, theme::border()),
     );
 }
 
@@ -274,7 +274,7 @@ pub fn title(ui: &mut Ui, text: &str) {
         Align2::LEFT_CENTER,
         text.to_uppercase(),
         theme::heading_font(),
-        theme::TEXT_DIM,
+        theme::text_dim(),
     );
 }
 

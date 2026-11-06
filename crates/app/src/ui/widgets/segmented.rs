@@ -46,9 +46,9 @@ impl<'a, T: PartialEq + Copy> Segmented<'a, T> {
                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 28.0), Sense::click());
                 let p = ui.painter();
                 let fill = if selected {
-                    theme::ACCENT_DIM
+                    theme::accent_dim()
                 } else if resp.hovered() {
-                    theme::RAISED_HOVER
+                    theme::raised_hover()
                 } else {
                     Color32::TRANSPARENT
                 };
@@ -57,16 +57,16 @@ impl<'a, T: PartialEq + Copy> Segmented<'a, T> {
                     p.rect_stroke(
                         rect,
                         theme::R_S as f32,
-                        Stroke::new(1.0, theme::ACCENT),
+                        Stroke::new(1.0, theme::accent()),
                         StrokeKind::Inside,
                     );
                 }
                 let color = if selected {
-                    theme::ACCENT
+                    theme::accent()
                 } else if (self.dimmed)(*item) {
-                    theme::TEXT_FAINT
+                    theme::text_faint()
                 } else {
-                    theme::TEXT_DIM
+                    theme::text_dim()
                 };
                 let pos = if self.vertical {
                     egui::pos2(rect.left() + theme::SP_M, rect.center().y)

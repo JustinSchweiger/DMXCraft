@@ -1,5 +1,6 @@
 //! Szenen bearbeiten: Name, Zone, Wiedergabe, Schritte mit Zeiten.
 
+use crate::i18n::t;
 use dmxcraft_core::{Engine, LoopMode, SceneId};
 use eframe::egui;
 
@@ -30,12 +31,12 @@ fn scenes_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
     egui::Panel::left("scene_list")
         .default_size(200.0)
         .show(ui, |ui| {
-            ui.label(theme::heading_text("Szenen"));
+            ui.label(theme::heading_text(t("Szenen")));
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for s in &e.show().scenes {
                     let active = e.is_active(s.id);
                     let label = if active {
-                        format!("{}  (aktiv)", s.name)
+                        tr!("{v}  (aktiv)", v = s.name)
                     } else {
                         s.name.clone()
                     };
@@ -45,7 +46,7 @@ fn scenes_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
         });
 
     let Some(id) = st.edit_scene.filter(|id| e.show().scene(*id).is_some()) else {
-        ui.label("Wähle links eine Szene zum Bearbeiten.");
+        ui.label(t("Wähle links eine Szene zum Bearbeiten."));
         return;
     };
 
@@ -67,9 +68,9 @@ fn scenes_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
                 .striped(true)
                 .show(ui, |ui| {
                     ui.weak("#");
-                    ui.weak("Überblenden (s)");
-                    ui.weak("Halten (s)");
-                    ui.weak("Kanäle");
+                    ui.weak(t("Überblenden (s)"));
+                    ui.weak(t("Halten (s)"));
+                    ui.weak(t("Kanäle"));
                     ui.weak("");
                     ui.end_row();
                     for (i, step) in scene.steps.iter_mut().enumerate() {
@@ -80,14 +81,14 @@ fn scenes_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
                         ui.horizontal(|ui| {
                             if ui
                                 .small_button("laden")
-                                .on_hover_text("Werte in den Programmer laden")
+                                .on_hover_text(t("Werte in den Programmer laden"))
                                 .clicked()
                             {
                                 action = Some(StepAction::Load(i));
                             }
                             if ui
-                                .small_button("überschreiben")
-                                .on_hover_text("Mit Programmer-Werten überschreiben")
+                                .small_button(t("überschreiben"))
+                                .on_hover_text(t("Mit Programmer-Werten überschreiben"))
                                 .clicked()
                             {
                                 action = Some(StepAction::Overwrite(i));
@@ -98,7 +99,7 @@ fn scenes_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
                             if i + 1 < len && ui.small_button("runter").clicked() {
                                 action = Some(StepAction::Down(i));
                             }
-                            if ui.small_button("Entf.").clicked() {
+                            if ui.small_button(t("Entf.")).clicked() {
                                 action = Some(StepAction::Delete(i));
                             }
                         });
@@ -106,7 +107,9 @@ fn scenes_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
                     }
                 });
             if len == 0 {
-                ui.weak("Keine Schritte. Im Programmer Werte setzen und „Schritt“ anhängen.");
+                ui.weak(t(
+                    "Keine Schritte. Im Programmer Werte setzen und „Schritt“ anhängen.",
+                ));
             }
         });
 
@@ -129,24 +132,27 @@ fn scene_header(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState, id: SceneId
     let mut toggle = false;
     let mut zone_changed = false;
     ui.horizontal(|ui| {
-        ui.label("Name");
+        ui.label(t("Name"));
         ui.text_edit_singleline(&mut name);
-        ui.label("Zone");
+        ui.label(t("Zone"));
         zone_changed = zone_combo(ui, e, &mut zone, "edit_zone");
-        ui.label("Ablauf");
+        ui.label(t("Ablauf"));
         egui::ComboBox::from_id_salt("loop_mode")
             .selected_text(match loop_mode {
-                LoopMode::Loop => "Schleife",
-                LoopMode::Once => "Einmal",
+                LoopMode::Loop => t("Schleife"),
+                LoopMode::Once => t("Einmal"),
             })
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut loop_mode, LoopMode::Loop, "Schleife");
-                ui.selectable_value(&mut loop_mode, LoopMode::Once, "Einmal");
+                ui.selectable_value(&mut loop_mode, LoopMode::Loop, t("Schleife"));
+                ui.selectable_value(&mut loop_mode, LoopMode::Once, t("Einmal"));
             });
-        if ui.button(if active { "Stopp" } else { "Start" }).clicked() {
+        if ui
+            .button(if active { t("Stopp") } else { t("Start") })
+            .clicked()
+        {
             toggle = true;
         }
-        if ui.button("Szene löschen").clicked() {
+        if ui.button(t("Szene löschen")).clicked() {
             delete = true;
         }
     });
@@ -187,17 +193,20 @@ fn apply(e: &mut Engine, st: &mut UiState, id: SceneId, a: StepAction) {
                 e.set_programmer(v.channel_ref(), v.value);
             }
             st.selected = values.iter().map(|v| v.fixture).collect();
-            st.info(format!("Schritt {} in den Programmer geladen", i + 1));
+            st.info(tr!(
+                "Schritt {i_nr} in den Programmer geladen",
+                i_nr = i + 1
+            ));
         }
         StepAction::Overwrite(i) => {
             let values = programmer_values(e);
             if values.is_empty() {
-                st.error("Programmer ist leer");
+                st.error(t("Programmer ist leer"));
                 return;
             }
             if let Some(step) = e.show_mut().scene_mut(id).and_then(|s| s.steps.get_mut(i)) {
                 step.values = values;
-                st.info(format!("Schritt {} überschrieben", i + 1));
+                st.info(tr!("Schritt {i_nr} überschrieben", i_nr = i + 1));
             }
         }
         StepAction::Delete(i) => {

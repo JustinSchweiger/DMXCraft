@@ -34,7 +34,7 @@ impl View for SetupView {
             crate::views::fixture_menu::apply(cx.engine, cx.state, FixtureAction::Delete);
         }
         let area = egui::Frame::new()
-            .fill(theme::SURFACE)
+            .fill(theme::surface())
             .inner_margin(egui::Margin::same(6));
         egui::Panel::left("setup_library")
             .resizable(true)
@@ -46,7 +46,7 @@ impl View for SetupView {
             .resizable(true)
             .default_size(ui.available_height() * 0.48)
             .min_size(200.0)
-            .frame(egui::Frame::new().fill(theme::SURFACE))
+            .frame(egui::Frame::new().fill(theme::surface()))
             .show(ui, |ui| {
                 egui::Panel::right("setup_fixture_settings")
                     .resizable(true)

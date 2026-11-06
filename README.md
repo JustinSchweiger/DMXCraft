@@ -20,6 +20,7 @@ günstige USB-DMX-Kabel (Open DMX / FTDI) aus – ein Kabel je Universum.
 | Programmer (Live-Fader, Farbwähler) → als Szene/Schritt speichern | ✅ |
 | Master, Blackout, Speed | ✅ |
 | DMX-Monitor (512 Kanäle pro Universum) | ✅ |
+| Oberfläche auf Deutsch und Englisch, Themes Dunkelblau und Grau | ✅ |
 | Show-Datei (JSON) laden/speichern | ✅ |
 | Ausgabe-Thread mit 40 Hz, automatischer Reconnect | ✅ |
 | **USB-DMX-Kabel (Open DMX / FTDI)**, ein Kabel je Universum | ✅ |
@@ -100,10 +101,9 @@ Doppelklick maximiert.
 Außerdem: B schaltet Blackout. Unter macOS steht Cmd statt Strg. Zonen und Gruppen bearbeitet man
 über das Stift-Symbol neben den Zonen-Chips in STEUERN.
 
-Das **Schloss** sperrt die Oberfläche mit einem Passwort (beim ersten Mal festlegen, mindestens
-4 Zeichen; gespeichert wird nur ein gesalzener SHA-256-Hash). Gesperrt bleibt nur STEUERN:
-Patch, Szenen und Einstellungen lassen sich nicht ändern. Die Sperre bleibt nach einem Neustart
-bestehen; das Passwort lässt sich entsperrt unter Einstellungen → Sperre entfernen.
+Das **Schloss** sperrt die Oberfläche mit einem Passwort, das bei jedem Sperren neu festgelegt
+wird (mindestens 4 Zeichen). Es wird nirgends gespeichert und nach dem Entsperren vergessen.
+Gesperrt bleibt nur STEUERN: Patch, Szenen und Einstellungen lassen sich nicht ändern.
 
 Eine Show hat fest **8 Universen** à 512 Kanäle.
 

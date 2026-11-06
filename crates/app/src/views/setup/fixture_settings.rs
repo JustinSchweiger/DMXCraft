@@ -1,6 +1,7 @@
 //! EINRICHTEN → Geräteeinstellungen der Auswahl: Schnelltest (Licht aus/an,
 //! Moving Head zentrieren), Darstellung und Ausgangsgrenzen.
 
+use crate::i18n::t;
 use dmxcraft_core::{
     ChannelKind, ChannelRef, Engine, FixtureId, FixtureLimits, PlanShape, PLAN_SIZE_RANGE,
 };
@@ -27,34 +28,34 @@ impl View for FixtureSettings {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
         let title = match ids.len() {
-            0 => "Gerät".to_string(),
+            0 => t("Gerät").to_string(),
             1 => cx
                 .engine
                 .show()
                 .fixture(ids[0])
-                .map_or("Gerät".into(), |f| f.name.clone()),
-            n => format!("{n} Geräte"),
+                .map_or(t("Gerät").into(), |f| f.name.clone()),
+            n => tr!("{n} Geräte", n = n),
         };
         let mut quick = None;
         let some = !ids.is_empty();
         section_header(ui, &title, |ui| {
             if ui
                 .add(IconButton::new(Icon::Center).enabled(some))
-                .on_hover_text("Moving Head zentrieren (Pan/Tilt 50 %)")
+                .on_hover_text(t("Moving Head zentrieren (Pan/Tilt 50 %)"))
                 .clicked()
             {
                 quick = Some(Quick::Center);
             }
             if ui
                 .add(IconButton::new(Icon::LightOn).enabled(some))
-                .on_hover_text("Licht an (Dimmer und Weiß voll)")
+                .on_hover_text(t("Licht an (Dimmer und Weiß voll)"))
                 .clicked()
             {
                 quick = Some(Quick::On);
             }
             if ui
                 .add(IconButton::new(Icon::LightOff).enabled(some))
-                .on_hover_text("Licht aus")
+                .on_hover_text(t("Licht aus"))
                 .clicked()
             {
                 quick = Some(Quick::Off);
@@ -65,8 +66,8 @@ impl View for FixtureSettings {
         }
         let Some(first) = ids.first().copied() else {
             ui.label(
-                egui::RichText::new("Geräte im Bühnenplan oder im Patch auswählen.")
-                    .color(theme::TEXT_DIM),
+                egui::RichText::new(t("Geräte im Bühnenplan oder im Patch auswählen."))
+                    .color(theme::text_dim()),
             );
             return;
         };
@@ -122,7 +123,7 @@ impl View for FixtureSettings {
                         .fixed_decimals(1)
                         .suffix("x"),
                 )
-                .on_hover_text("Größe im Bühnenplan")
+                .on_hover_text(t("Größe im Bühnenplan"))
                 .changed();
         });
         ui.add_space(theme::SP_XS);
@@ -132,7 +133,7 @@ impl View for FixtureSettings {
         let h = ui.available_height().clamp(150.0, 320.0);
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
-                caption(ui, "Dimmer");
+                caption(ui, t("Dimmer"));
                 RangeSlider {
                     min: &mut lim.dimmer_min,
                     max: &mut lim.dimmer_max,
@@ -143,7 +144,7 @@ impl View for FixtureSettings {
             });
             ui.separator();
             ui.vertical(|ui| {
-                caption(ui, "Bewegung");
+                caption(ui, t("Bewegung"));
                 let side = (h - 24.0).min(ui.available_width() - 150.0).max(110.0);
                 LimitPad {
                     pan: (&mut lim.pan_min, &mut lim.pan_max),
@@ -160,22 +161,28 @@ impl View for FixtureSettings {
                         .num_columns(3)
                         .spacing([6.0, 4.0])
                         .show(ui, |ui| {
-                            range_row(ui, "Pan", &mut lim.pan_min, &mut lim.pan_max, has_pan);
-                            range_row(ui, "Tilt", &mut lim.tilt_min, &mut lim.tilt_max, has_tilt);
+                            range_row(ui, t("Pan"), &mut lim.pan_min, &mut lim.pan_max, has_pan);
+                            range_row(
+                                ui,
+                                t("Tilt"),
+                                &mut lim.tilt_min,
+                                &mut lim.tilt_max,
+                                has_tilt,
+                            );
                         });
                     ui.add_space(theme::SP_S);
-                    caption(ui, "Invertieren");
-                    ui.add(Toggle::new(&mut lim.invert_pan, "Pan").enabled(has_pan));
-                    ui.add(Toggle::new(&mut lim.invert_tilt, "Tilt").enabled(has_tilt));
+                    caption(ui, t("Invertieren"));
+                    ui.add(Toggle::new(&mut lim.invert_pan, t("Pan")).enabled(has_pan));
+                    ui.add(Toggle::new(&mut lim.invert_tilt, t("Tilt")).enabled(has_tilt));
                     ui.add(
-                        Toggle::new(&mut lim.swap_pan_tilt, "Tauschen")
+                        Toggle::new(&mut lim.swap_pan_tilt, t("Tauschen"))
                             .enabled(has_pan && has_tilt),
                     );
                 });
                 ui.add_space(theme::SP_S);
                 if ui
-                    .add_enabled(!lim.is_default(), egui::Button::new("Zurücksetzen"))
-                    .on_hover_text("Alle Grenzen zurücksetzen")
+                    .add_enabled(!lim.is_default(), egui::Button::new(t("Zurücksetzen")))
+                    .on_hover_text(t("Alle Grenzen zurücksetzen"))
                     .clicked()
                 {
                     lim = FixtureLimits::default();
@@ -184,8 +191,8 @@ impl View for FixtureSettings {
         });
         if ids.len() > 1 {
             ui.label(
-                egui::RichText::new("Änderungen gelten für alle ausgewählten Geräte.")
-                    .color(theme::TEXT_FAINT),
+                egui::RichText::new(t("Änderungen gelten für alle ausgewählten Geräte."))
+                    .color(theme::text_faint()),
             );
         }
 
@@ -210,7 +217,7 @@ fn caption(ui: &mut egui::Ui, text: &str) {
     ui.label(
         egui::RichText::new(text.to_uppercase())
             .font(theme::caption())
-            .color(theme::TEXT_DIM)
+            .color(theme::text_dim())
             .strong(),
     );
 }
@@ -218,9 +225,9 @@ fn caption(ui: &mut egui::Ui, text: &str) {
 /// Eine Zeile „Pan  von … bis …“ in Prozent.
 fn range_row(ui: &mut egui::Ui, label: &str, min: &mut u8, max: &mut u8, enabled: bool) {
     ui.label(egui::RichText::new(label).color(if enabled {
-        theme::TEXT_DIM
+        theme::text_dim()
     } else {
-        theme::TEXT_FAINT
+        theme::text_faint()
     }));
     let mut lo = f32::from(*min) / 255.0 * 100.0;
     let mut hi = f32::from(*max) / 255.0 * 100.0;

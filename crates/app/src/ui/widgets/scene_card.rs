@@ -24,14 +24,14 @@ impl Widget for SceneCard<'_> {
         let r = theme::R_M as f32;
         let fill = match (self.active, resp.hovered()) {
             (true, _) => self.color.gamma_multiply(0.16),
-            (false, true) => theme::RAISED_HOVER,
-            (false, false) => theme::RAISED,
+            (false, true) => theme::raised_hover(),
+            (false, false) => theme::raised(),
         };
         p.rect_filled(rect, r, fill);
         let stroke = if self.active {
             Stroke::new(1.5, self.color)
         } else {
-            Stroke::new(1.0, theme::BORDER)
+            Stroke::new(1.0, theme::border())
         };
         p.rect_stroke(rect, r, stroke, StrokeKind::Inside);
         // Farbmarke links
@@ -56,13 +56,13 @@ impl Widget for SceneCard<'_> {
             clip(self.name, ((self.width - 24.0) / 7.2) as usize),
             theme::body(),
             if self.active {
-                theme::TEXT
+                theme::text()
             } else {
-                theme::TEXT.gamma_multiply(0.9)
+                theme::text().gamma_multiply(0.9)
             },
         );
         let kind = if self.paused {
-            format!("{} · PAUSE", self.kind)
+            tr!("{kind} · PAUSE", kind = self.kind)
         } else {
             self.kind
         };
@@ -71,7 +71,7 @@ impl Widget for SceneCard<'_> {
             egui::Align2::LEFT_BOTTOM,
             kind,
             theme::caption(),
-            theme::TEXT_DIM,
+            theme::text_dim(),
         );
         // Fortschritt unten
         if self.active {
@@ -79,14 +79,14 @@ impl Widget for SceneCard<'_> {
                 pos2(rect.left() + 10.0, rect.bottom() - 4.0),
                 pos2(rect.right() - 10.0, rect.bottom() - 2.0),
             );
-            p.rect_filled(bar, 1.0, theme::BG);
+            p.rect_filled(bar, 1.0, theme::bg());
             let w = bar.width() * self.progress.clamp(0.0, 1.0);
             let done = Rect::from_min_size(bar.min, Vec2::new(w, bar.height()));
             p.rect_filled(
                 done,
                 1.0,
                 if self.paused {
-                    theme::TEXT_DIM
+                    theme::text_dim()
                 } else {
                     self.color
                 },

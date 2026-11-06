@@ -1,5 +1,6 @@
 //! App-Rahmen: Titelleiste, Layout der Ansichten, Dialoge, Ausgabe-Runtime.
 
+use crate::i18n::t;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -56,6 +57,8 @@ pub struct DmxCraftApp {
     /// Offener Systemdialog (Öffnen / Speichern unter).
     file_dialog: Option<file_dialog::Pending>,
     lock_dialog: Option<LockDialog>,
+    /// Hash des Sperr-Passworts – nur im Speicher, nach dem Entsperren vergessen.
+    lock_hash: Option<String>,
     state: AppState,
     control: ControlViews,
     setup: SetupView,
@@ -75,7 +78,7 @@ impl DmxCraftApp {
             Some(p) => match Show::load(p) {
                 Ok(mut s) => {
                     demo::ensure_builtin_types(&mut s);
-                    message = Some((format!("Show „{}“ geladen", s.name), false));
+                    message = Some((tr!("Show „{v}“ geladen", v = s.name), false));
                     s
                 }
                 Err(e) => {
@@ -94,8 +97,6 @@ impl DmxCraftApp {
         );
         let mut state = AppState::new(show_path.unwrap_or_default());
         state.message = message;
-        // Gesperrt bleibt gesperrt – auch nach einem Neustart
-        state.locked = settings.locked && settings.lock_hash.is_some();
         Self {
             engine,
             runtime,
@@ -109,6 +110,7 @@ impl DmxCraftApp {
             about_open: false,
             file_dialog: None,
             lock_dialog: None,
+            lock_hash: None,
             state,
             control: ControlViews::default(),
             setup: SetupView::default(),
@@ -142,7 +144,7 @@ impl DmxCraftApp {
     fn save_settings(&mut self) {
         if let Err(e) = self.settings.save() {
             self.state
-                .error(format!("Einstellungen nicht gespeichert: {e}"));
+                .error(tr!("Einstellungen nicht gespeichert: {e}", e = e));
         }
     }
 
@@ -155,7 +157,7 @@ impl DmxCraftApp {
                 self.history.reset(Self::lock(&self.engine).show());
                 self.state.reset_for_new_show();
                 self.state.show_path = path.to_string();
-                self.state.info(format!("Show „{name}“ geladen"));
+                self.state.info(tr!("Show „{name}“ geladen", name = name));
                 self.settings.remember(path);
                 self.save_settings();
             }
@@ -168,7 +170,7 @@ impl DmxCraftApp {
         match result {
             Ok(()) => {
                 self.state.show_path = path.to_string();
-                self.state.info(format!("Gespeichert: {path}"));
+                self.state.info(tr!("Gespeichert: {path}", path = path));
                 self.settings.remember(path);
                 self.save_settings();
             }
@@ -193,7 +195,7 @@ impl DmxCraftApp {
                 Self::lock(&self.engine).replace_show(demo::empty_show());
                 self.history.reset(Self::lock(&self.engine).show());
                 self.state.reset_for_new_show();
-                self.state.info("Neue, leere Show");
+                self.state.info(t("Neue, leere Show"));
             }
             MenuAction::OpenShow => self.start_file_dialog(ctx, Purpose::OpenShow),
             MenuAction::SaveShow => {
@@ -211,7 +213,7 @@ impl DmxCraftApp {
                 } else {
                     self.settings.recent.retain(|p| *p != path);
                     self.save_settings();
-                    self.state.error(format!("Nicht gefunden: {path}"));
+                    self.state.error(tr!("Nicht gefunden: {path}", path = path));
                 }
             }
             MenuAction::Undo | MenuAction::Redo => {
@@ -232,7 +234,7 @@ impl DmxCraftApp {
                     }
                     None => {
                         drop(e);
-                        self.state.info("Nichts rückgängig zu machen");
+                        self.state.info(t("Nichts rückgängig zu machen"));
                     }
                 }
             }
@@ -272,8 +274,6 @@ impl DmxCraftApp {
                         pw2: String::new(),
                         error: None,
                     });
-                } else if self.settings.lock_hash.is_some() {
-                    self.lock_ui();
                 } else {
                     self.lock_dialog = Some(LockDialog {
                         set_password: true,
@@ -292,17 +292,14 @@ impl DmxCraftApp {
         self.state.scene_editor_open = false;
         self.state.zones_open = false;
         self.settings_open = false;
-
-        self.settings.locked = true;
-        self.save_settings();
-        self.state.info("Oberfläche gesperrt");
+        self.state.info(t("Oberfläche gesperrt"));
     }
 
     fn unlock_ui(&mut self) {
         self.state.locked = false;
-        self.settings.locked = false;
-        self.save_settings();
-        self.state.info("Oberfläche entsperrt");
+        // Das Passwort gilt nur für eine Sperrung – beim nächsten Mal neu festlegen.
+        self.lock_hash = None;
+        self.state.info(t("Oberfläche entsperrt"));
     }
 
     fn lock_window(&mut self, ctx: &egui::Context) {
@@ -311,23 +308,23 @@ impl DmxCraftApp {
         };
         let mut open = true;
         let title = if d.set_password {
-            "Oberfläche sperren"
+            t("Oberfläche sperren")
         } else {
-            "Oberfläche entsperren"
+            t("Oberfläche entsperren")
         };
         let action = if d.set_password {
-            "Sperren"
+            t("Sperren")
         } else {
-            "Entsperren"
+            t("Entsperren")
         };
         let res = Dialog::new(title)
             .id("lock")
             .width(340.0)
-            .cancel("Abbrechen")
+            .cancel(t("Abbrechen"))
             .primary(action)
             .show(ctx, &mut open, |ui, first| {
                 form(ui, "lock_form", |f| {
-                    let r = f.row("Passwort", |ui| {
+                    let r = f.row(t("Passwort"), |ui| {
                         ui.add(
                             text_field(&mut d.pw)
                                 .password(true)
@@ -338,7 +335,7 @@ impl DmxCraftApp {
                         r.request_focus();
                     }
                     if d.set_password {
-                        f.row("Wiederholen", |ui| {
+                        f.row(t("Wiederholen"), |ui| {
                             ui.add(
                                 text_field(&mut d.pw2)
                                     .password(true)
@@ -357,16 +354,15 @@ impl DmxCraftApp {
         if confirm {
             if d.set_password {
                 if d.pw.chars().count() < 4 {
-                    d.error = Some("Mindestens 4 Zeichen".into());
+                    d.error = Some(t("Mindestens 4 Zeichen").into());
                 } else if d.pw != d.pw2 {
-                    d.error = Some("Passwörter stimmen nicht überein".into());
+                    d.error = Some(t("Passwörter stimmen nicht überein").into());
                 } else {
-                    self.settings.lock_hash = Some(crate::lock::hash_password(&d.pw));
+                    self.lock_hash = Some(crate::lock::hash_password(&d.pw));
                     self.lock_ui();
                     return;
                 }
             } else if self
-                .settings
                 .lock_hash
                 .as_deref()
                 .is_some_and(|h| crate::lock::verify(h, &d.pw))
@@ -374,7 +370,7 @@ impl DmxCraftApp {
                 self.unlock_ui();
                 return;
             } else {
-                d.error = Some("Falsches Passwort".into());
+                d.error = Some(t("Falsches Passwort").into());
                 d.pw.clear();
             }
         }
@@ -435,13 +431,16 @@ impl DmxCraftApp {
         let (fps, status) = match self.runtime.status() {
             OutputStatus::Running {
                 fps, note: None, ..
-            } => (fps, ("Ausgang aktiv".to_string(), theme::OK)),
+            } => (fps, (t("Ausgang aktiv").to_string(), theme::OK)),
             OutputStatus::Running {
                 fps, note: Some(n), ..
-            } => (fps, (format!("Ausgang aktiv, aber: {n}"), theme::WARN)),
-            OutputStatus::Connecting => (0.0, ("Ausgang verbindet".into(), theme::WARN)),
-            OutputStatus::Error(msg) => (0.0, (format!("Ausgang: Fehler – {msg}"), theme::DANGER)),
-            OutputStatus::Stopped => (0.0, ("Ausgang gestoppt".into(), theme::TEXT_DIM)),
+            } => (fps, (tr!("Ausgang aktiv, aber: {n}", n = n), theme::WARN)),
+            OutputStatus::Connecting => (0.0, (t("Ausgang verbindet").into(), theme::WARN)),
+            OutputStatus::Error(msg) => (
+                0.0,
+                (tr!("Ausgang: Fehler – {msg}", msg = msg), theme::DANGER),
+            ),
+            OutputStatus::Stopped => (0.0, (t("Ausgang gestoppt").into(), theme::text_dim())),
         };
         (e.show().name.clone(), fps, status, e.blackout())
     }
@@ -477,6 +476,9 @@ impl DmxCraftApp {
             if let Some(z) = ch.zoom {
                 ctx.set_zoom_factor(z);
             }
+            if ch.theme {
+                theme::apply(ctx);
+            }
             if ch.restart_output {
                 self.restart_output();
             }
@@ -490,10 +492,10 @@ impl DmxCraftApp {
         if self.about_open {
             let mut open = true;
             let logo = self.logo.clone();
-            Dialog::new("Über DMXCraft")
+            Dialog::new(t("Über DMXCraft"))
                 .id("about")
                 .width(340.0)
-                .cancel("Schließen")
+                .cancel(t("Schließen"))
                 .show(ctx, &mut open, |ui, _| {
                     ui.vertical_centered(|ui| {
                         if let Some(tex) = &logo {
@@ -510,14 +512,16 @@ impl DmxCraftApp {
                         );
                         ui.add_space(theme::SP_XS);
                         ui.label(
-                            egui::RichText::new("DMX-Lichtsteuerung für Linux, Windows und macOS.")
-                                .color(theme::TEXT_DIM),
+                            egui::RichText::new(t(
+                                "DMX-Lichtsteuerung für Linux, Windows und macOS.",
+                            ))
+                            .color(theme::text_dim()),
                         );
                         ui.add_space(theme::SP_S);
-                        ui.label(egui::RichText::new("Lizenz: MIT").color(theme::TEXT_DIM));
+                        ui.label(egui::RichText::new(t("Lizenz: MIT")).color(theme::text_dim()));
                         ui.label(
-                            egui::RichText::new("Gerätedaten: Open Fixture Library (MIT)")
-                                .color(theme::TEXT_DIM),
+                            egui::RichText::new(t("Gerätedaten: Open Fixture Library (MIT)"))
+                                .color(theme::text_dim()),
                         );
                         ui.add_space(theme::SP_S);
                         ui.hyperlink_to(
@@ -552,7 +556,7 @@ impl eframe::App for DmxCraftApp {
         let (show_name, fps, status, blackout) = self.title_info();
         let update = match self.updater.state() {
             UpdateState::Available => UpdateBadge::Available,
-            UpdateState::Installing => UpdateBadge::Busy("installiere Update"),
+            UpdateState::Installing => UpdateBadge::Busy(t("installiere Update")),
             UpdateState::Installed(v) => UpdateBadge::Installed(v),
             UpdateState::Error(e) => UpdateBadge::Error(e),
             _ => UpdateBadge::None,
@@ -578,7 +582,7 @@ impl eframe::App for DmxCraftApp {
         let mut actions = Vec::new();
         egui::Panel::top("titlebar")
             .exact_size(titlebar::HEIGHT)
-            .frame(egui::Frame::new().fill(theme::BG))
+            .frame(egui::Frame::new().fill(theme::bg()))
             .show(ui, |ui| {
                 actions = titlebar::show(ui, &info, &mut self.state.mode);
             });
@@ -603,12 +607,12 @@ impl eframe::App for DmxCraftApp {
             };
             self.windows.show(&ctx, &mut cx);
             let area = egui::Frame::new()
-                .fill(theme::SURFACE)
+                .fill(theme::surface())
                 .inner_margin(egui::Margin::same(6));
             match cx.state.mode {
                 Mode::Setup => {
                     egui::CentralPanel::default_margins()
-                        .frame(egui::Frame::new().fill(theme::SURFACE))
+                        .frame(egui::Frame::new().fill(theme::surface()))
                         .show(ui, |ui| self.setup.ui(ui, &mut cx));
                 }
                 Mode::Control => {
@@ -617,7 +621,7 @@ impl eframe::App for DmxCraftApp {
                         .resizable(true)
                         .default_size(400.0)
                         .min_size(220.0)
-                        .frame(egui::Frame::new().fill(theme::SURFACE))
+                        .frame(egui::Frame::new().fill(theme::surface()))
                         .show(ui, |ui| {
                             egui::Panel::right("programmer_panel")
                                 .resizable(true)

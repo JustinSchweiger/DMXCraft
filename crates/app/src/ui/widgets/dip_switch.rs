@@ -24,14 +24,19 @@ impl DipSwitch {
         let p = ui.painter();
         let r = theme::R_M as f32;
         p.rect_filled(rect, r, theme::DIP_BODY);
-        p.rect_stroke(rect, r, Stroke::new(1.0, theme::BORDER), StrokeKind::Inside);
+        p.rect_stroke(
+            rect,
+            r,
+            Stroke::new(1.0, theme::border()),
+            StrokeKind::Inside,
+        );
         if !self.compact {
             p.text(
                 rect.left_top() + Vec2::new(8.0, 5.0),
                 egui::Align2::LEFT_TOP,
                 "ON",
                 theme::caption(),
-                theme::TEXT,
+                theme::text(),
             );
         }
         for (i, on) in sw.iter().enumerate() {
@@ -40,7 +45,7 @@ impl DipSwitch {
                 pos2(x + 4.0, rect.top() + 18.0),
                 Vec2::new(w - 8.0, h - 8.0),
             );
-            p.rect_filled(slot, 3.0, theme::BG);
+            p.rect_filled(slot, 3.0, theme::bg());
             let knob_h = slot.height() * 0.45;
             let knob = if *on {
                 Rect::from_min_size(
@@ -53,13 +58,25 @@ impl DipSwitch {
                     Vec2::new(slot.width() - 3.0, knob_h),
                 )
             };
-            p.rect_filled(knob, 2.0, if *on { theme::ACCENT } else { theme::TEXT_DIM });
+            p.rect_filled(
+                knob,
+                2.0,
+                if *on {
+                    theme::accent()
+                } else {
+                    theme::text_dim()
+                },
+            );
             p.text(
                 pos2(slot.center().x, rect.bottom() - 9.0 * k),
                 egui::Align2::CENTER_CENTER,
                 (i + 1).to_string(),
                 egui::FontId::proportional(if self.compact { 7.5 } else { theme::FS_CAPTION }),
-                if *on { theme::ACCENT } else { theme::TEXT_DIM },
+                if *on {
+                    theme::accent()
+                } else {
+                    theme::text_dim()
+                },
             );
         }
         let on = dip::on_switches(self.address);
@@ -71,10 +88,7 @@ impl DipSwitch {
                 .collect::<Vec<_>>()
                 .join(" + ")
         };
-        resp.on_hover_text(format!(
-            "Adresse {} = Schalter {text}\n(Schalter n hat den Wert 2^(n-1); Schalter 10 bleibt aus)",
-            self.address
-        ))
+        resp.on_hover_text(tr!("Adresse {address} = Schalter {text}\n(Schalter n hat den Wert 2^(n-1); Schalter 10 bleibt aus)", text = text, address = self.address))
     }
 
     /// Flache Leiste mit fester Höhe von 24 px für Kopfzeilen.
@@ -90,7 +104,7 @@ impl DipSwitch {
             let x = rect.left() + 3.0 + i as f32 * W;
             let slot =
                 Rect::from_min_size(pos2(x + 2.0, rect.top() + 3.0), Vec2::new(W - 4.0, 12.0));
-            p.rect_filled(slot, 1.5, theme::BG);
+            p.rect_filled(slot, 1.5, theme::bg());
             let knob = if *on {
                 Rect::from_min_size(slot.min, Vec2::new(slot.width(), 6.0))
             } else {
@@ -99,15 +113,30 @@ impl DipSwitch {
                     Vec2::new(slot.width(), 6.0),
                 )
             };
-            p.rect_filled(knob, 1.0, if *on { theme::ACCENT } else { theme::TEXT_DIM });
+            p.rect_filled(
+                knob,
+                1.0,
+                if *on {
+                    theme::accent()
+                } else {
+                    theme::text_dim()
+                },
+            );
             p.text(
                 pos2(slot.center().x, rect.bottom() - 4.5),
                 egui::Align2::CENTER_CENTER,
                 (i + 1).to_string(),
                 egui::FontId::proportional(7.0),
-                if *on { theme::ACCENT } else { theme::TEXT_DIM },
+                if *on {
+                    theme::accent()
+                } else {
+                    theme::text_dim()
+                },
             );
         }
-        resp.on_hover_text(format!("DIP-Schalter für Adresse {}", self.address))
+        resp.on_hover_text(tr!(
+            "DIP-Schalter für Adresse {address}",
+            address = self.address
+        ))
     }
 }

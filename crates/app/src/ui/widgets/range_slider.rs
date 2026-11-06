@@ -48,15 +48,15 @@ impl RangeSlider<'_> {
             }
         }
         let p = ui.painter();
-        p.rect_filled(track, 3.0, theme::BG);
+        p.rect_filled(track, 3.0, theme::bg());
         let active = Rect::from_min_max(
             pos2(track.left(), y_of(*self.max)),
             pos2(track.right(), y_of(*self.min)),
         );
         let c = if self.enabled {
-            theme::ACCENT
+            theme::accent()
         } else {
-            theme::TEXT_FAINT
+            theme::text_faint()
         };
         p.rect_filled(active, 3.0, c.gamma_multiply(0.6));
         for (v, hovered) in [
@@ -68,15 +68,15 @@ impl RangeSlider<'_> {
                 h,
                 3.0,
                 if hovered {
-                    theme::TEXT
+                    theme::text()
                 } else {
-                    theme::TEXT_DIM
+                    theme::text_dim()
                 },
             );
             p.rect_stroke(
                 h,
                 3.0,
-                Stroke::new(1.0, theme::BG),
+                Stroke::new(1.0, theme::bg()),
                 egui::StrokeKind::Inside,
             );
         }
@@ -86,14 +86,14 @@ impl RangeSlider<'_> {
             egui::Align2::CENTER_CENTER,
             pct(*self.max),
             theme::caption(),
-            theme::TEXT,
+            theme::text(),
         );
         p.text(
             pos2(rect.center().x, rect.bottom() - 8.0),
             egui::Align2::CENTER_CENTER,
             pct(*self.min),
             theme::caption(),
-            theme::TEXT,
+            theme::text(),
         );
         changed
     }

@@ -1,6 +1,7 @@
 //! Programmeinstellungen (nicht Teil der Show), gespeichert als JSON im
 //! Konfigurationsordner des Benutzers.
 
+use crate::i18n::t;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -16,6 +17,8 @@ pub struct Settings {
     pub instance_name: String,
     /// Beim Start direkt im Touch-Modus öffnen.
     pub start_touch: bool,
+    /// Farbschema („navy“ oder „gray“).
+    pub theme: String,
     /// Beim Start nach Updates suchen.
     pub check_updates: bool,
     /// Zuletzt verwendete Show-Datei.
@@ -28,10 +31,6 @@ pub struct Settings {
     pub output: String,
     /// USB-DMX: je Universum (Index) die Seriennummer des Kabels, leer = keins.
     pub open_dmx: Vec<String>,
-    /// Gesalzener Hash des Sperr-Passworts („salz:hash“).
-    pub lock_hash: Option<String>,
-    /// Oberfläche war beim Beenden gesperrt (bleibt nach Neustart gesperrt).
-    pub locked: bool,
 }
 
 impl Default for Settings {
@@ -41,14 +40,13 @@ impl Default for Settings {
             ui_scale: 1.0,
             instance_name: default_instance_name(),
             start_touch: false,
+            theme: "navy".into(),
             check_updates: true,
             last_show: None,
             recent: Vec::new(),
             open_last_show: true,
             output: "simulation".into(),
             open_dmx: Vec::new(),
-            lock_hash: None,
-            locked: false,
         }
     }
 }
@@ -143,7 +141,7 @@ impl Settings {
     }
 
     pub fn save(&self) -> Result<(), String> {
-        let path = Self::path().ok_or("Kein Konfigurationsordner gefunden")?;
+        let path = Self::path().ok_or(t("Kein Konfigurationsordner gefunden"))?;
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }

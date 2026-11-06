@@ -16,9 +16,14 @@ impl XyPad {
         let (rect, resp) = ui.allocate_exact_size(Vec2::splat(self.size), Sense::click_and_drag());
         let p = ui.painter();
         let r = theme::R_M as f32;
-        p.rect_filled(rect, r, theme::BG);
-        p.rect_stroke(rect, r, Stroke::new(1.0, theme::BORDER), StrokeKind::Inside);
-        let faint = Stroke::new(1.0, theme::RAISED);
+        p.rect_filled(rect, r, theme::bg());
+        p.rect_stroke(
+            rect,
+            r,
+            Stroke::new(1.0, theme::border()),
+            StrokeKind::Inside,
+        );
+        let faint = Stroke::new(1.0, theme::raised());
         for i in 1..4 {
             let f = i as f32 / 4.0;
             p.line_segment(
@@ -42,19 +47,19 @@ impl XyPad {
         );
         p.line_segment(
             [pos2(dot.x, rect.top()), pos2(dot.x, rect.bottom())],
-            Stroke::new(1.0, theme::ACCENT_DIM),
+            Stroke::new(1.0, theme::accent_dim()),
         );
         p.line_segment(
             [pos2(rect.left(), dot.y), pos2(rect.right(), dot.y)],
-            Stroke::new(1.0, theme::ACCENT_DIM),
+            Stroke::new(1.0, theme::accent_dim()),
         );
-        p.circle_filled(dot, 7.0, theme::ACCENT);
+        p.circle_filled(dot, 7.0, theme::accent());
         p.text(
             rect.left_top() + Vec2::new(8.0, 6.0),
             egui::Align2::LEFT_TOP,
-            format!("PAN {} · TILT {}", self.x, self.y),
+            tr!("PAN {x} · TILT {y}", x = self.x, y = self.y),
             theme::caption(),
-            theme::TEXT_DIM,
+            theme::text_dim(),
         );
         if resp.dragged() || resp.clicked() {
             let pos = resp.interact_pointer_pos()?;

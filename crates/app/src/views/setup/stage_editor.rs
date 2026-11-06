@@ -1,5 +1,6 @@
 //! EINRICHTEN → Bühnenplan: Geräte anordnen.
 
+use crate::i18n::t;
 use dmxcraft_core::{plan, FixtureId};
 use eframe::egui;
 
@@ -42,20 +43,20 @@ enum Arrange {
 impl View for StageEditorView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut arrange: Option<Arrange> = None;
-        section_header(ui, "Bühnenplan", |ui| {
-            ui.label(egui::RichText::new("Hilfe").color(theme::TEXT_FAINT)).on_hover_text(
-                "Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nRechtsklick = Menü (Form, Größe, Gruppen …)",
+        section_header(ui, t("Bühnenplan"), |ui| {
+            ui.label(egui::RichText::new(t("Hilfe")).color(theme::text_faint())).on_hover_text(
+                t("Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nRechtsklick = Menü (Form, Größe, Gruppen …)"),
             );
             ui.separator();
-            ui.add(Toggle::new(&mut self.labels, "Namen"));
-            ui.add(Toggle::new(&mut self.grid, "Raster"));
+            ui.add(Toggle::new(&mut self.labels, t("Namen")));
+            ui.add(Toggle::new(&mut self.grid, t("Raster")));
             ui.add_enabled(
                 self.snap,
                 egui::DragValue::new(&mut self.cells)
                     .range(4..=64)
-                    .suffix(" Felder"),
+                    .suffix(t(" Felder")),
             );
-            ui.add(Toggle::new(&mut self.snap, "Einrasten"));
+            ui.add(Toggle::new(&mut self.snap, t("Einrasten")));
         });
 
         // Anordnen: Symbol-Knöpfe senkrecht links
@@ -69,21 +70,21 @@ impl View for StageEditorView {
             .show(ui, |ui| {
                 let some = !cx.state.selected.is_empty();
                 for (icon, hint, a) in [
-                    (Icon::ArrangeRow, "In Reihe verteilen", Arrange::Row),
-                    (Icon::ArrangeGrid, "Als Raster anordnen", Arrange::Grid),
+                    (Icon::ArrangeRow, t("In Reihe verteilen"), Arrange::Row),
+                    (Icon::ArrangeGrid, t("Als Raster anordnen"), Arrange::Grid),
                     (
                         Icon::AlignH,
-                        "Waagerecht ausrichten (gleiche Höhe)",
+                        t("Waagerecht ausrichten (gleiche Höhe)"),
                         Arrange::AlignH,
                     ),
                     (
                         Icon::AlignV,
-                        "Senkrecht ausrichten (untereinander)",
+                        t("Senkrecht ausrichten (untereinander)"),
                         Arrange::AlignV,
                     ),
                     (
                         Icon::Reset,
-                        "Position zurücksetzen (nach Patch-Reihenfolge)",
+                        t("Position zurücksetzen (nach Patch-Reihenfolge)"),
                         Arrange::Reset,
                     ),
                 ] {

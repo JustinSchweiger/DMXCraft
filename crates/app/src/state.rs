@@ -1,6 +1,7 @@
 //! Gemeinsamer UI-Zustand, den mehrere Ansichten brauchen. Ansichtsspezifischer
 //! Zustand liegt in den jeweiligen View-Typen.
 
+use crate::i18n::t;
 use std::collections::BTreeSet;
 
 use dmxcraft_core::{FixtureId, FixtureType, SceneId, ZoneId};
@@ -72,7 +73,7 @@ impl AppState {
             rename_request: None,
             edit_scene: None,
             append_target: None,
-            new_scene_name: "Neue Szene".into(),
+            new_scene_name: t("Neue Szene").into(),
             new_scene_zone: None,
             layout_clipboard: None,
             monitor_focus: None,

@@ -1,6 +1,7 @@
 //! STEUERN → Programmer: ausgewählte Geräte live steuern und als Szene/Schritt
 //! speichern.
 
+use crate::i18n::t;
 use dmxcraft_core::{ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, Step, ZoneId};
 use eframe::egui::{self, Color32};
 
@@ -59,7 +60,7 @@ fn kind_color(k: ChannelKind) -> Color32 {
         ChannelKind::White => Color32::from_rgb(0xf2, 0xf2, 0xf2),
         ChannelKind::Amber => Color32::from_rgb(0xff, 0xa8, 0x2e),
         ChannelKind::Uv => Color32::from_rgb(0xa2, 0x5c, 0xff),
-        _ => theme::ACCENT,
+        _ => theme::accent(),
     }
 }
 
@@ -111,17 +112,21 @@ impl View for ProgrammerView {
         let set_count = cx.engine.programmer().len();
         let selected = cx.state.selected.len();
         let mut clear = false;
-        section_header(ui, "Programmer", |ui| {
+        section_header(ui, t("Programmer"), |ui| {
             if ui
-                .add_enabled(set_count > 0, egui::Button::new("Leeren"))
-                .on_hover_text("Alle Programmer-Werte freigeben")
+                .add_enabled(set_count > 0, egui::Button::new(t("Leeren")))
+                .on_hover_text(t("Alle Programmer-Werte freigeben"))
                 .clicked()
             {
                 clear = true;
             }
             ui.label(
-                egui::RichText::new(format!("{selected} Geräte · {set_count} Kanäle gesetzt"))
-                    .color(theme::TEXT_DIM),
+                egui::RichText::new(tr!(
+                    "{selected} Geräte · {set_count} Kanäle gesetzt",
+                    selected = selected,
+                    set_count = set_count
+                ))
+                .color(theme::text_dim()),
             );
         });
         if clear {
@@ -140,7 +145,7 @@ impl View for ProgrammerView {
             .show(ui, |ui| {
                 let dimmed =
                     |c: Category| c != Category::All && !groups.iter().any(|g| c.contains(g.kind));
-                Segmented::new(&Category::ITEMS)
+                Segmented::new(&Category::ITEMS.map(|(c, l)| (c, t(l))))
                     .vertical(116.0)
                     .dimmed(&dimmed)
                     .show(ui, &mut self.category);
@@ -153,9 +158,9 @@ impl View for ProgrammerView {
                     ui.add_space(theme::SP_L);
                     ui.label(
                         egui::RichText::new(
-                            "Im Bühnenplan Geräte auswählen (Klick, Aufziehen, Strg/Shift+Klick) oder eine Gruppe wählen.",
+                            t("Im Bühnenplan Geräte auswählen (Klick, Aufziehen, Strg/Shift+Klick) oder eine Gruppe wählen."),
                         )
-                        .color(theme::TEXT_DIM),
+                        .color(theme::text_dim()),
                     );
                     return;
                 }
@@ -166,8 +171,8 @@ impl View for ProgrammerView {
                 }
                 if visible.is_empty() {
                     ui.label(
-                        egui::RichText::new("Die ausgewählten Geräte haben keine Kanäle in dieser Kategorie.")
-                            .color(theme::TEXT_DIM),
+                        egui::RichText::new(t("Die ausgewählten Geräte haben keine Kanäle in dieser Kategorie."))
+                            .color(theme::text_dim()),
                     );
                     return;
                 }
@@ -211,12 +216,7 @@ fn fader(ui: &mut egui::Ui, e: &mut Engine, grp: &FaderGroup, frame: &DmxFrame, 
         .active(active)
         .color(kind_color(grp.kind))
         .height(height)
-        .hint(format!(
-            "{} · {} – {} Kanal/Kanäle\nZiehen, Mausrad, Doppelklick = 0/voll, Rechtsklick = Menü",
-            grp.name,
-            grp.kind.label(),
-            grp.channels.len()
-        ))
+        .hint(tr!("{v} · {label} – {n} Kanal/Kanäle\nZiehen, Mausrad, Doppelklick = 0/voll, Rechtsklick = Menü", v = grp.name, label = t(grp.kind.label()), n = grp.channels.len()))
         .show(ui);
     match ev {
         FaderEvent::Changed(v) => set_group(e, grp, v),
@@ -260,7 +260,11 @@ fn color_bar(ui: &mut egui::Ui, e: &mut Engine, groups: &[FaderGroup], frame: &D
             ("Weiß", [255, 255, 255]),
         ];
         for (name, c) in PRESETS {
-            if ui.add(Swatch(theme::rgb(c))).on_hover_text(name).clicked() {
+            if ui
+                .add(Swatch(theme::rgb(c)))
+                .on_hover_text(t(name))
+                .clicked()
+            {
                 rgb = c;
                 changed = true;
             }
@@ -299,17 +303,17 @@ fn xy_pad(ui: &mut egui::Ui, e: &mut Engine, groups: &[FaderGroup], frame: &DmxF
 fn save_bar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
     if e.programmer().is_empty() {
         ui.label(
-            egui::RichText::new("Fader bewegen, um Werte in den Programmer zu legen.")
-                .color(theme::TEXT_FAINT),
+            egui::RichText::new(t("Fader bewegen, um Werte in den Programmer zu legen."))
+                .color(theme::text_faint()),
         );
         return;
     }
     let values = programmer_values(e);
     ui.horizontal_wrapped(|ui| {
-        ui.label(egui::RichText::new("Als Szene").color(theme::TEXT_DIM));
+        ui.label(egui::RichText::new(t("Als Szene")).color(theme::text_dim()));
         ui.add(text_field(&mut st.new_scene_name).desired_width(130.0));
         zone_combo(ui, e, &mut st.new_scene_zone, "new_scene_zone");
-        if ui.button("Speichern").clicked() {
+        if ui.button(t("Speichern")).clicked() {
             let name = st.new_scene_name.trim().to_string();
             let id = e.show_mut().add_scene(
                 name.clone(),
@@ -317,14 +321,14 @@ fn save_bar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
                 vec![Step::new(values.clone())],
             );
             st.append_target = Some(id);
-            st.info(format!("Szene „{name}“ angelegt"));
+            st.info(tr!("Szene „{name}“ angelegt", name = name));
         }
         ui.separator();
-        ui.label(egui::RichText::new("Schritt an").color(theme::TEXT_DIM));
+        ui.label(egui::RichText::new(t("Schritt an")).color(theme::text_dim()));
         let name = st
             .append_target
             .and_then(|id| e.show().scene(id))
-            .map_or_else(|| "Szene wählen".into(), |s| s.name.clone());
+            .map_or_else(|| t("Szene wählen").into(), |s| s.name.clone());
         egui::ComboBox::from_id_salt("append_target")
             .selected_text(name)
             .width(120.0)
@@ -333,20 +337,20 @@ fn save_bar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
                     ui.selectable_value(&mut st.append_target, Some(s.id), &s.name);
                 }
             });
-        if ui.button("Anhängen").clicked() {
+        if ui.button(t("Anhängen")).clicked() {
             match st.append_target.and_then(|id| e.show_mut().scene_mut(id)) {
                 Some(scene) => {
                     let mut step = Step::new(values.clone());
                     step.fade_ms = 1000;
                     scene.steps.push(step);
-                    let msg = format!(
-                        "Schritt {} an „{}“ angehängt",
-                        scene.steps.len(),
-                        scene.name
+                    let msg = tr!(
+                        "Schritt {n} an „{v}“ angehängt",
+                        n = scene.steps.len(),
+                        v = scene.name
                     );
                     st.info(msg);
                 }
-                None => st.error("Bitte zuerst eine Szene wählen"),
+                None => st.error(t("Bitte zuerst eine Szene wählen")),
             }
         }
     });
@@ -369,12 +373,12 @@ pub fn programmer_values(e: &Engine) -> Vec<ChannelValue> {
 pub fn zone_combo(ui: &mut egui::Ui, e: &Engine, zone: &mut Option<ZoneId>, id: &str) -> bool {
     let name = zone
         .and_then(|z| e.show().zone(z))
-        .map_or_else(|| "ohne Zone".into(), |z| z.name.clone());
+        .map_or_else(|| t("ohne Zone").into(), |z| z.name.clone());
     let before = *zone;
     egui::ComboBox::from_id_salt(id)
         .selected_text(name)
         .show_ui(ui, |ui| {
-            ui.selectable_value(zone, None, "ohne Zone");
+            ui.selectable_value(zone, None, t("ohne Zone"));
             for z in &e.show().zones {
                 ui.selectable_value(zone, Some(z.id), &z.name);
             }

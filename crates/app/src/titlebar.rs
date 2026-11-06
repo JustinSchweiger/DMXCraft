@@ -3,6 +3,7 @@
 //! Fensterknöpfe rechts. Leere Fläche: Ziehen = Fenster bewegen,
 //! Doppelklick = maximieren.
 
+use crate::i18n::t;
 use eframe::egui::{self, Color32, Sense, ViewportCommand};
 
 use crate::state::Mode;
@@ -91,25 +92,25 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
     let name = egui::text::LayoutJob::simple_singleline(
         "DMXCraft".into(),
         egui::FontId::proportional(theme::FS_TITLE),
-        theme::TEXT,
+        theme::text(),
     );
     let g1 = painter.layout_job(name);
     let g2 = painter.layout_no_wrap(
         format!("  ·  {}", info.show_name),
         theme::body(),
-        theme::TEXT_DIM,
+        theme::text_dim(),
     );
     let w = g1.size().x + g2.size().x;
     let x0 = center.x - w / 2.0;
     painter.galley(
         egui::pos2(x0, center.y - g1.size().y / 2.0),
         g1.clone(),
-        theme::TEXT,
+        theme::text(),
     );
     painter.galley(
         egui::pos2(x0 + g1.size().x, center.y - g2.size().y / 2.0),
         g2,
-        theme::TEXT_DIM,
+        theme::text_dim(),
     );
 
     ui.horizontal_centered(|ui| {
@@ -117,25 +118,28 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
         main_menu(ui, info, &mut actions);
         ui.add_space(theme::SP_XS);
         if info.locked {
-            Segmented::new(&[(Mode::Control, "Steuern")]).show(ui, mode);
+            Segmented::new(&[(Mode::Control, t("Steuern"))]).show(ui, mode);
         } else {
-            Segmented::new(&[(Mode::Setup, "Einrichten"), (Mode::Control, "Steuern")])
-                .show(ui, mode);
+            Segmented::new(&[
+                (Mode::Setup, t("Einrichten")),
+                (Mode::Control, t("Steuern")),
+            ])
+            .show(ui, mode);
         }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             if ui
                 .add(IconButton::new(Icon::Close).size(HEIGHT).flat().danger())
-                .on_hover_text("Schließen")
+                .on_hover_text(t("Schließen"))
                 .clicked()
             {
                 actions.push(MenuAction::Quit);
             }
             let (icon, tip) = if maximized {
-                (Icon::Restore, "Wiederherstellen")
+                (Icon::Restore, t("Wiederherstellen"))
             } else {
-                (Icon::Maximize, "Maximieren")
+                (Icon::Maximize, t("Maximieren"))
             };
             if ui
                 .add(IconButton::new(icon).size(HEIGHT).flat())
@@ -147,7 +151,7 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             }
             if ui
                 .add(IconButton::new(Icon::Minimize).size(HEIGHT).flat())
-                .on_hover_text("Minimieren")
+                .on_hover_text(t("Minimieren"))
                 .clicked()
             {
                 ui.ctx().send_viewport_cmd(ViewportCommand::Minimized(true));
@@ -156,7 +160,7 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             ui.add_space(theme::SP_M);
             if info.blackout {
                 ui.label(
-                    egui::RichText::new("BLACKOUT")
+                    egui::RichText::new(t("BLACKOUT"))
                         .strong()
                         .color(theme::DANGER),
                 );
@@ -164,28 +168,28 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             match &info.update {
                 UpdateBadge::None => {}
                 UpdateBadge::Available => {
-                    let b = egui::Button::new("Update installieren").fill(theme::ACCENT_DIM);
+                    let b = egui::Button::new(t("Update installieren")).fill(theme::accent_dim());
                     if ui
                         .add(b)
-                        .on_hover_text("Neue Version von GitHub laden")
+                        .on_hover_text(t("Neue Version von GitHub laden"))
                         .clicked()
                     {
                         actions.push(MenuAction::InstallUpdate);
                     }
                 }
                 UpdateBadge::Busy(t) => {
-                    ui.label(egui::RichText::new(*t).color(theme::TEXT_DIM));
+                    ui.label(egui::RichText::new(*t).color(theme::text_dim()));
                 }
                 UpdateBadge::Installed(v) => {
                     ui.label(
-                        egui::RichText::new(format!("v{v} installiert – neu starten"))
+                        egui::RichText::new(tr!("v{v} installiert – neu starten", v = v))
                             .color(theme::OK),
                     );
                 }
                 UpdateBadge::Error(e) => {
                     if ui
-                        .small_button("Update-Fehler")
-                        .on_hover_text(format!("{e}\nKlicken für neuen Versuch"))
+                        .small_button(t("Update-Fehler"))
+                        .on_hover_text(tr!("{e}\nKlicken für neuen Versuch", e = e))
                         .clicked()
                     {
                         actions.push(MenuAction::CheckUpdates);
@@ -193,9 +197,9 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                 }
             }
             let (icon, tip) = if info.locked {
-                (Icon::Locked, "Oberfläche entsperren")
+                (Icon::Locked, t("Oberfläche entsperren"))
             } else {
-                (Icon::Unlocked, "Oberfläche sperren (Passwort)")
+                (Icon::Unlocked, t("Oberfläche sperren (Passwort)"))
             };
             if ui
                 .add(IconButton::new(icon).size(28.0).flat().active(info.locked))
@@ -208,7 +212,7 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             load_meter(ui, info);
             if let Some((msg, err)) = info.message {
                 ui.separator();
-                let color = if err { theme::DANGER } else { theme::TEXT };
+                let color = if err { theme::DANGER } else { theme::text() };
                 ui.label(egui::RichText::new(msg).color(color));
             }
         });
@@ -228,15 +232,15 @@ fn load_meter(ui: &mut egui::Ui, info: &TitleInfo<'_>) {
     p.text(
         egui::pos2(rect.left() + 14.0, rect.center().y),
         egui::Align2::LEFT_CENTER,
-        "LAST",
+        t("LAST"),
         theme::heading_font(),
-        theme::TEXT_DIM,
+        theme::text_dim(),
     );
     let bar = egui::Rect::from_min_max(
         egui::pos2(rect.left() + 52.0, rect.center().y - 4.0),
         egui::pos2(rect.right(), rect.center().y + 4.0),
     );
-    p.rect_filled(bar, 2.0, theme::RAISED);
+    p.rect_filled(bar, 2.0, theme::raised());
     let l = info.load.clamp(0.0, 1.0);
     let color = if info.load > 0.85 {
         theme::DANGER
@@ -252,12 +256,12 @@ fn load_meter(ui: &mut egui::Ui, info: &TitleInfo<'_>) {
         );
         p.rect_filled(fill, 2.0, color);
     }
-    resp.on_hover_text(format!(
-        "{}\n{} · {:.0} fps · Auslastung {:.0} %",
-        info.status.0,
-        info.output.label(),
-        info.fps,
-        info.load * 100.0
+    resp.on_hover_text(tr!(
+        "{status}\n{output} · {fps} fps · Auslastung {load} %",
+        status = info.status.0,
+        output = t(info.output.label()),
+        fps = format!("{:.0}", info.fps),
+        load = format!("{:.0}", info.load * 100.0),
     ));
 }
 
@@ -265,35 +269,35 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
     let free = !info.locked;
     let resp = ui
         .add(IconButton::new(Icon::Menu).size(28.0).flat())
-        .on_hover_text("Menü");
+        .on_hover_text(t("Menü"));
     menu::dropdown(&resp, |ui| {
         menu::begin(ui);
-        let soon = "Noch nicht verfügbar";
+        let soon = t("Noch nicht verfügbar");
         let mut act = |ui: &mut egui::Ui, item: MenuItem<'_>, a: MenuAction| {
             if menu::item(ui, item) {
                 actions.push(a);
             }
         };
-        menu::sub(ui, MenuItem::new("Datei").plain(), |ui| {
+        menu::sub(ui, MenuItem::new(t("Datei")).plain(), |ui| {
             act(
                 ui,
-                MenuItem::new("Neu")
+                MenuItem::new(t("Neu"))
                     .icon(Icon::FileNew)
-                    .shortcut(&keys::NEW)
+                    .shortcut(&keys::new())
                     .enabled(free),
                 MenuAction::NewShow,
             );
             act(
                 ui,
-                MenuItem::new("Öffnen …")
+                MenuItem::new(t("Öffnen …"))
                     .icon(Icon::FileOpen)
-                    .shortcut(&keys::OPEN)
+                    .shortcut(&keys::open())
                     .enabled(free),
                 MenuAction::OpenShow,
             );
             menu::sub(
                 ui,
-                MenuItem::new("Zuletzt geöffnet")
+                MenuItem::new(t("Zuletzt geöffnet"))
                     .icon(Icon::Recent)
                     .enabled(free && !info.recent.is_empty()),
                 |ui| {
@@ -313,70 +317,70 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             menu::separator(ui);
             act(
                 ui,
-                MenuItem::new("Speichern")
+                MenuItem::new(t("Speichern"))
                     .icon(Icon::Save)
-                    .shortcut(&keys::SAVE),
+                    .shortcut(&keys::save()),
                 MenuAction::SaveShow,
             );
             act(
                 ui,
-                MenuItem::new("Speichern unter …")
+                MenuItem::new(t("Speichern unter …"))
                     .icon(Icon::SaveAs)
-                    .shortcut(&keys::SAVE_AS)
+                    .shortcut(&keys::save_as())
                     .enabled(free),
                 MenuAction::SaveShowAs,
             );
             menu::separator(ui);
             ui.add(
-                MenuItem::new("Importieren von Daslight …")
+                MenuItem::new(t("Importieren von Daslight …"))
                     .icon(Icon::Import)
                     .enabled(false)
                     .tooltip(soon),
             );
         });
-        menu::sub(ui, MenuItem::new("Bearbeiten").plain(), |ui| {
+        menu::sub(ui, MenuItem::new(t("Bearbeiten")).plain(), |ui| {
             act(
                 ui,
-                MenuItem::new("Rückgängig")
+                MenuItem::new(t("Rückgängig"))
                     .icon(Icon::Undo)
-                    .shortcut(&keys::UNDO)
+                    .shortcut(&keys::undo())
                     .enabled(free && info.can_undo),
                 MenuAction::Undo,
             );
             act(
                 ui,
-                MenuItem::new("Wiederherstellen")
+                MenuItem::new(t("Wiederherstellen"))
                     .icon(Icon::Redo)
-                    .shortcut(&keys::REDO)
+                    .shortcut(&keys::redo())
                     .enabled(free && info.can_redo),
                 MenuAction::Redo,
             );
             menu::separator(ui);
             let (lock_label, lock_icon) = if info.locked {
-                ("Entsperren …", Icon::Unlocked)
+                (t("Entsperren …"), Icon::Unlocked)
             } else {
-                ("Sperren", Icon::Locked)
+                (t("Sperren"), Icon::Locked)
             };
             act(
                 ui,
                 MenuItem::new(lock_label)
                     .icon(lock_icon)
-                    .shortcut(&keys::LOCK),
+                    .shortcut(&keys::lock()),
                 MenuAction::ToggleLock,
             );
             act(
                 ui,
-                MenuItem::new("Einstellungen …")
+                MenuItem::new(t("Einstellungen …"))
                     .icon(Icon::Settings)
-                    .shortcut(&keys::SETTINGS)
+                    .shortcut(&keys::settings())
                     .enabled(free),
                 MenuAction::Settings,
             );
         });
-        menu::sub(ui, MenuItem::new("Ansicht").plain(), |ui| {
+        menu::sub(ui, MenuItem::new(t("Ansicht")).plain(), |ui| {
             act(
                 ui,
-                MenuItem::new("Vollbild")
+                MenuItem::new(t("Vollbild"))
                     .icon(Icon::Fullscreen)
                     .shortcut("F11"),
                 MenuAction::ToggleFullscreen,
@@ -384,66 +388,66 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             menu::separator(ui);
             act(
                 ui,
-                MenuItem::new("Größer")
+                MenuItem::new(t("Größer"))
                     .icon(Icon::ZoomIn)
-                    .shortcut(&keys::ZOOM_IN),
+                    .shortcut(&keys::zoom_in()),
                 MenuAction::Zoom(0.1),
             );
             act(
                 ui,
-                MenuItem::new("Kleiner")
+                MenuItem::new(t("Kleiner"))
                     .icon(Icon::ZoomOut)
-                    .shortcut(&keys::ZOOM_OUT),
+                    .shortcut(&keys::zoom_out()),
                 MenuAction::Zoom(-0.1),
             );
             act(
                 ui,
-                MenuItem::new("Größe wiederherstellen")
+                MenuItem::new(t("Größe wiederherstellen"))
                     .icon(Icon::ZoomReset)
-                    .shortcut(&keys::ZOOM_RESET),
+                    .shortcut(&keys::zoom_reset()),
                 MenuAction::Zoom(0.0),
             );
         });
-        menu::sub(ui, MenuItem::new("Tools").plain(), |ui| {
+        menu::sub(ui, MenuItem::new(t("Tools")).plain(), |ui| {
             ui.add(
-                MenuItem::new("3D-Visualisierer")
+                MenuItem::new(t("3D-Visualisierer"))
                     .icon(Icon::Cube)
                     .enabled(false)
                     .tooltip(soon),
             );
             act(
                 ui,
-                MenuItem::new("DMX-Werte")
+                MenuItem::new(t("DMX-Werte"))
                     .icon(Icon::Levels)
-                    .shortcut(&keys::LEVELS)
+                    .shortcut(&keys::levels())
                     .enabled(free),
                 MenuAction::DmxLevels,
             );
             ui.add(
-                MenuItem::new("Profile Builder")
+                MenuItem::new(t("Profile Builder"))
                     .icon(Icon::Builder)
                     .enabled(false)
                     .tooltip(soon),
             );
         });
-        menu::sub(ui, MenuItem::new("Mappings").plain(), |ui| {
+        menu::sub(ui, MenuItem::new(t("Mappings")).plain(), |ui| {
             for (label, icon) in [
-                ("Tastatur-Mapping", Icon::Keyboard),
-                ("MIDI-Mapping", Icon::Midi),
-                ("Touch-Mapping", Icon::Touch),
+                (t("Tastatur-Mapping"), Icon::Keyboard),
+                (t("MIDI-Mapping"), Icon::Midi),
+                (t("Touch-Mapping"), Icon::Touch),
             ] {
                 ui.add(MenuItem::new(label).icon(icon).enabled(false).tooltip(soon));
             }
         });
-        menu::sub(ui, MenuItem::new("Hilfe").plain(), |ui| {
+        menu::sub(ui, MenuItem::new(t("Hilfe")).plain(), |ui| {
             act(
                 ui,
-                MenuItem::new("Nach Updates suchen").icon(Icon::Update),
+                MenuItem::new(t("Nach Updates suchen")).icon(Icon::Update),
                 MenuAction::CheckUpdates,
             );
             act(
                 ui,
-                MenuItem::new("Über DMXCraft").icon(Icon::Info),
+                MenuItem::new(t("Über DMXCraft")).icon(Icon::Info),
                 MenuAction::About,
             );
         });
@@ -452,30 +456,59 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
 
 /// Beschriftung der Tastenkürzel (Strg unter Windows/Linux, Cmd unter macOS).
 pub mod keys {
-    use std::sync::LazyLock;
+    use crate::i18n::t;
 
-    const MOD: &str = if cfg!(target_os = "macos") {
-        "Cmd"
-    } else {
-        "Strg"
-    };
-
-    fn k(rest: &str) -> String {
-        format!("{MOD}+{rest}")
+    fn modifier() -> &'static str {
+        if cfg!(target_os = "macos") {
+            "Cmd"
+        } else {
+            t("Strg")
+        }
     }
 
-    pub static NEW: LazyLock<String> = LazyLock::new(|| k("N"));
-    pub static OPEN: LazyLock<String> = LazyLock::new(|| k("O"));
-    pub static SAVE: LazyLock<String> = LazyLock::new(|| k("S"));
-    pub static SAVE_AS: LazyLock<String> = LazyLock::new(|| k("Umschalt+S"));
-    pub static UNDO: LazyLock<String> = LazyLock::new(|| k("Z"));
-    pub static REDO: LazyLock<String> = LazyLock::new(|| k("Y"));
-    pub static LOCK: LazyLock<String> = LazyLock::new(|| k("L"));
-    pub static SETTINGS: LazyLock<String> = LazyLock::new(|| k(","));
-    pub static ZOOM_IN: LazyLock<String> = LazyLock::new(|| k("+"));
-    pub static ZOOM_OUT: LazyLock<String> = LazyLock::new(|| k("-"));
-    pub static ZOOM_RESET: LazyLock<String> = LazyLock::new(|| k("0"));
-    pub static LEVELS: LazyLock<String> = LazyLock::new(|| k("D"));
+    fn k(rest: &str) -> String {
+        format!("{}+{rest}", modifier())
+    }
+
+    pub fn new() -> String {
+        k("N")
+    }
+    pub fn open() -> String {
+        k("O")
+    }
+    pub fn save() -> String {
+        k("S")
+    }
+    pub fn save_as() -> String {
+        format!("{}+{}+S", modifier(), t("Umschalt"))
+    }
+    pub fn undo() -> String {
+        k("Z")
+    }
+    pub fn redo() -> String {
+        k("Y")
+    }
+    pub fn lock() -> String {
+        k("L")
+    }
+    pub fn settings() -> String {
+        k(",")
+    }
+    pub fn zoom_in() -> String {
+        k("+")
+    }
+    pub fn zoom_out() -> String {
+        k("-")
+    }
+    pub fn zoom_reset() -> String {
+        k("0")
+    }
+    pub fn levels() -> String {
+        k("D")
+    }
+    pub fn delete() -> &'static str {
+        t("Entf")
+    }
 }
 
 /// Fenstergröße an den Rändern ändern (randloses Fenster).

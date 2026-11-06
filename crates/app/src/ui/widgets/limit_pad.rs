@@ -2,6 +2,7 @@
 //! (waagerecht) und Tilt-Bereich (senkrecht). Griffe an Ecken und Kanten
 //! ändern die Grenzen, Ziehen im Inneren verschiebt den ganzen Bereich.
 
+use crate::i18n::t;
 use eframe::egui::{self, pos2, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 use crate::ui::theme;
@@ -116,8 +117,8 @@ impl LimitPad<'_> {
 
         // Zeichnen
         let p = ui.painter();
-        p.rect_filled(rect, 0.0, theme::BG);
-        let faint = Stroke::new(1.0, theme::RAISED);
+        p.rect_filled(rect, 0.0, theme::bg());
+        let faint = Stroke::new(1.0, theme::raised());
         for i in 1..4 {
             let f = i as f32 / 4.0;
             p.line_segment(
@@ -138,7 +139,7 @@ impl LimitPad<'_> {
         p.rect_stroke(
             rect,
             0.0,
-            Stroke::new(1.0, theme::BORDER),
+            Stroke::new(1.0, theme::border()),
             StrokeKind::Inside,
         );
         let area = Rect::from_min_max(
@@ -146,9 +147,9 @@ impl LimitPad<'_> {
             pos2(to_x(*self.pan.1), to_y(*self.tilt.1)),
         );
         let c = if self.enabled {
-            theme::ACCENT
+            theme::accent()
         } else {
-            theme::TEXT_FAINT
+            theme::text_faint()
         };
         p.rect_filled(area, 0.0, c.gamma_multiply(0.08));
         p.rect_stroke(area, 0.0, Stroke::new(1.5, c), StrokeKind::Middle);
@@ -176,23 +177,27 @@ impl LimitPad<'_> {
                 p.rect_filled(
                     Rect::from_center_size(gp, Vec2::splat(if hot { 10.0 } else { 8.0 })),
                     1.5,
-                    if hot { theme::TEXT } else { theme::TEXT_DIM },
+                    if hot {
+                        theme::text()
+                    } else {
+                        theme::text_dim()
+                    },
                 );
             }
         }
         p.text(
             rect.left_bottom() + Vec2::new(4.0, -4.0),
             egui::Align2::LEFT_BOTTOM,
-            "PAN",
+            t("PAN"),
             theme::caption(),
-            theme::TEXT_FAINT,
+            theme::text_faint(),
         );
         p.text(
             rect.right_top() + Vec2::new(-4.0, 4.0),
             egui::Align2::RIGHT_TOP,
-            "TILT",
+            t("TILT"),
             theme::caption(),
-            theme::TEXT_FAINT,
+            theme::text_faint(),
         );
         changed
     }

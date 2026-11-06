@@ -4,6 +4,7 @@
 //!   auf eine neue Startadresse verschieben, freie Adressen sind sofort sichtbar.
 //! * Modus **Ausgang**: die aktuell gesendeten DMX-Werte.
 
+use crate::i18n::t;
 use dmxcraft_core::{FixtureId, UNIVERSE_SIZE};
 use eframe::egui::{self, pos2, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 
@@ -77,10 +78,13 @@ impl View for PatchGrid {
             .map(|f| (f.address, ()));
         ui.horizontal(|ui| {
             ui.set_min_height(30.0);
-            ui.label(theme::heading_text("Patch"));
+            ui.label(theme::heading_text(t("Patch")));
             ui.add_space(theme::SP_S);
-            Segmented::new(&[(GridMode::Patch, "Patch"), (GridMode::Output, "Ausgang")])
-                .show(ui, &mut self.mode);
+            Segmented::new(&[
+                (GridMode::Patch, t("Patch")),
+                (GridMode::Output, t("Ausgang")),
+            ])
+            .show(ui, &mut self.mode);
             ui.add_space(theme::SP_M);
             if ui
                 .add(IconButton::new(Icon::Prev).enabled(self.universe > 0))
@@ -89,8 +93,12 @@ impl View for PatchGrid {
                 self.universe -= 1;
             }
             ui.label(
-                egui::RichText::new(format!("Universum {} / {universes}", self.universe + 1))
-                    .strong(),
+                egui::RichText::new(tr!(
+                    "Universum {universe_nr} / {universes}",
+                    universes = universes,
+                    universe_nr = self.universe + 1
+                ))
+                .strong(),
             );
             if ui
                 .add(IconButton::new(Icon::Next).enabled(self.universe + 1 < universes))
@@ -99,7 +107,10 @@ impl View for PatchGrid {
                 self.universe += 1;
             }
             ui.add_space(theme::SP_M);
-            ui.label(egui::RichText::new(format!("{free} von 512 frei")).color(theme::TEXT_DIM));
+            ui.label(
+                egui::RichText::new(tr!("{free} von 512 frei", free = free))
+                    .color(theme::text_dim()),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Some((addr, _)) = &dip_address {
                     DipSwitch {
@@ -208,7 +219,7 @@ impl PatchGrid {
                         Some(d.fixture),
                     );
                     let msg = match &check {
-                        Ok(()) => format!("Adresse {}", start + 1),
+                        Ok(()) => tr!("Adresse {start_nr}", start_nr = start + 1),
                         Err(e) => e.to_string(),
                     };
                     ghost = Some((start, *len, check.is_ok(), msg));
@@ -221,7 +232,7 @@ impl PatchGrid {
                 if ok {
                     repatch = Some((d.fixture, start as u16 + 1));
                 } else {
-                    cx.state.error(format!("Nicht verschoben: {msg}"));
+                    cx.state.error(tr!("Nicht verschoben: {msg}", msg = msg));
                 }
             }
             self.drag = None;
@@ -274,9 +285,9 @@ impl PatchGrid {
                         r,
                         3.0,
                         if owner.is_some() {
-                            theme::BG
+                            theme::bg()
                         } else {
-                            theme::RAISED
+                            theme::raised()
                         },
                     );
                     p.text(
@@ -284,19 +295,19 @@ impl PatchGrid {
                         egui::Align2::CENTER_CENTER,
                         (i + 1).to_string(),
                         theme::caption(),
-                        theme::TEXT_FAINT,
+                        theme::text_faint(),
                     );
                 }
                 GridMode::Output => {
                     let v = data.map_or(0, |d| d[i]);
                     let level = f32::from(v) / 255.0;
-                    p.rect_filled(r, 3.0, theme::RAISED);
+                    p.rect_filled(r, 3.0, theme::raised());
                     if v > 0 {
                         let fill = Rect::from_min_max(
                             pos2(r.left(), r.bottom() - r.height() * level),
                             r.max,
                         );
-                        p.rect_filled(fill, 3.0, theme::ACCENT.gamma_multiply(0.35));
+                        p.rect_filled(fill, 3.0, theme::accent().gamma_multiply(0.35));
                     }
                     p.text(
                         r.center(),
@@ -304,9 +315,9 @@ impl PatchGrid {
                         v.to_string(),
                         theme::caption(),
                         if v > 0 {
-                            theme::TEXT
+                            theme::text()
                         } else {
-                            theme::TEXT_FAINT
+                            theme::text_faint()
                         },
                     );
                 }
@@ -335,11 +346,11 @@ impl PatchGrid {
                 match self.mode {
                     GridMode::Patch => {
                         let fill = if selected {
-                            theme::ACCENT_DIM
+                            theme::accent_dim()
                         } else if hovered {
-                            theme::RAISED_HOVER
+                            theme::raised_hover()
                         } else {
-                            theme::FIXTURE_BAR
+                            theme::fixture_bar()
                         };
                         let fill = if dragging {
                             fill.gamma_multiply(0.4)
@@ -353,9 +364,9 @@ impl PatchGrid {
                             Stroke::new(
                                 1.0,
                                 if selected {
-                                    theme::ACCENT
+                                    theme::accent()
                                 } else {
-                                    theme::BORDER
+                                    theme::border()
                                 },
                             ),
                             StrokeKind::Inside,
@@ -369,9 +380,9 @@ impl PatchGrid {
                                 clip(&label, max_chars),
                                 theme::caption(),
                                 if selected {
-                                    theme::TEXT
+                                    theme::text()
                                 } else {
-                                    theme::TEXT_DIM
+                                    theme::text_dim()
                                 },
                             );
                         }
@@ -383,9 +394,9 @@ impl PatchGrid {
                             Stroke::new(
                                 if selected { 2.0 } else { 1.0 },
                                 if selected {
-                                    theme::ACCENT
+                                    theme::accent()
                                 } else {
-                                    theme::ACCENT_DIM
+                                    theme::accent_dim()
                                 },
                             ),
                             StrokeKind::Inside,
@@ -455,15 +466,15 @@ impl PatchGrid {
                         .type_of(f)
                         .and_then(|t| t.channels.get(ch))
                         .map_or(String::new(), |d| d.name.clone());
-                    format!(
-                        "Adresse {} · {} · Kanal {} {}",
-                        c + 1,
-                        f.name,
-                        ch + 1,
-                        ch_name
+                    tr!(
+                        "Adresse {c_nr} · {v} · Kanal {ch_nr} {ch_name}",
+                        c_nr = c + 1,
+                        v = f.name,
+                        ch_nr = ch + 1,
+                        ch_name = ch_name
                     )
                 }
-                None => format!("Adresse {} · frei", c + 1),
+                None => tr!("Adresse {c_nr} · frei", c_nr = c + 1),
             };
             resp.on_hover_text_at_pointer(text);
         }
@@ -480,7 +491,7 @@ impl PatchGrid {
             if let Err(e) = cx.engine.show_mut().repatch_fixture(id, universe, addr) {
                 cx.state.error(e.to_string());
             } else {
-                cx.state.info(format!("Neue Startadresse {addr}"));
+                cx.state.info(tr!("Neue Startadresse {addr}", addr = addr));
             }
         }
         if let Some(a) = action {

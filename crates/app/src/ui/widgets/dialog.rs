@@ -8,6 +8,7 @@ use eframe::egui::{
     TextBuffer, Ui, UiBuilder, Vec2, Widget,
 };
 
+use crate::i18n::t;
 use crate::ui::theme;
 use crate::ui::widgets::{Icon, IconButton};
 
@@ -143,8 +144,8 @@ impl<'a> Dialog<'a> {
         let enter = frame_nr > opened && ctx.input(|i| i.key_pressed(egui::Key::Enter));
 
         let frame = Frame::new()
-            .fill(theme::SURFACE)
-            .stroke(Stroke::new(1.0, theme::BORDER))
+            .fill(theme::surface())
+            .stroke(Stroke::new(1.0, theme::border()))
             .corner_radius(CornerRadius::same(theme::R_M))
             .shadow(ctx.global_style().visuals.window_shadow);
         let mut window = egui::Window::new(self.title)
@@ -191,19 +192,19 @@ impl<'a> Dialog<'a> {
                     sw: 0,
                     se: 0,
                 },
-                theme::BG,
+                theme::bg(),
             );
             ui.painter().hline(
                 head.x_range(),
                 head.bottom() - 0.5,
-                Stroke::new(1.0, theme::BORDER),
+                Stroke::new(1.0, theme::border()),
             );
             ui.painter().text(
                 head.center(),
                 Align2::CENTER_CENTER,
                 title.to_uppercase(),
                 theme::heading_font(),
-                theme::TEXT,
+                theme::text(),
             );
             let close_rect = Rect::from_center_size(
                 head.right_center() - vec2(HEADER_H / 2.0, 0.0),
@@ -211,7 +212,7 @@ impl<'a> Dialog<'a> {
             );
             if ui
                 .put(close_rect, IconButton::new(Icon::Close).flat().danger())
-                .on_hover_text("Schließen")
+                .on_hover_text(t("Schließen"))
                 .clicked()
             {
                 close = true;
@@ -266,12 +267,12 @@ impl<'a> Dialog<'a> {
                         sw: r,
                         se: r,
                     },
-                    theme::BG,
+                    theme::bg(),
                 );
                 ui.painter().hline(
                     foot.x_range(),
                     foot.top() + 0.5,
-                    Stroke::new(1.0, theme::BORDER),
+                    Stroke::new(1.0, theme::border()),
                 );
                 let mut row = ui.new_child(
                     UiBuilder::new()
@@ -315,7 +316,7 @@ impl Widget for FooterButton<'_> {
         let galley = ui.painter().layout_no_wrap(
             self.label.to_uppercase(),
             theme::heading_font(),
-            theme::TEXT,
+            theme::text(),
         );
         let w = (galley.size().x + 2.0 * theme::SP_L).max(96.0);
         let sense = if self.enabled {
@@ -326,11 +327,11 @@ impl Widget for FooterButton<'_> {
         let (rect, resp) = ui.allocate_exact_size(vec2(w, 30.0), sense);
         let hovered = resp.hovered() && self.enabled;
         let (fill, stroke, text) = match (self.primary, self.enabled, hovered) {
-            (_, false, _) => (theme::RAISED, theme::BORDER, theme::TEXT_FAINT),
-            (true, true, false) => (theme::ACCENT, theme::ACCENT, theme::BG),
-            (true, true, true) => (theme::ACCENT_HOVER, theme::ACCENT_HOVER, theme::BG),
-            (false, true, false) => (theme::RAISED, theme::BORDER, theme::TEXT),
-            (false, true, true) => (theme::RAISED_HOVER, theme::ACCENT_DIM, theme::TEXT),
+            (_, false, _) => (theme::raised(), theme::border(), theme::text_faint()),
+            (true, true, false) => (theme::accent(), theme::accent(), theme::bg()),
+            (true, true, true) => (theme::accent_hover(), theme::accent_hover(), theme::bg()),
+            (false, true, false) => (theme::raised(), theme::border(), theme::text()),
+            (false, true, true) => (theme::raised_hover(), theme::accent_dim(), theme::text()),
         };
         let p = ui.painter();
         p.rect(
@@ -357,7 +358,7 @@ pub fn text_field<'t>(text: &'t mut dyn TextBuffer) -> egui::TextEdit<'t> {
         .align(Align2::LEFT_CENTER)
         .min_size(vec2(0.0, INPUT_H))
         .margin(vec2(theme::SP_S, 0.0))
-        .background_color(theme::BG)
+        .background_color(theme::bg())
 }
 
 /// Formular: Beschriftung links, Bedienelement rechts, Zeilen bündig.
@@ -378,7 +379,7 @@ impl Form<'_> {
     /// Eine Zeile; das Bedienelement füllt die restliche Breite.
     pub fn row<R>(&mut self, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
         self.ui
-            .label(egui::RichText::new(label).color(theme::TEXT_DIM));
+            .label(egui::RichText::new(label).color(theme::text_dim()));
         let r = self
             .ui
             .with_layout(Layout::left_to_right(Align::Center), |ui| add(ui))

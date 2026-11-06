@@ -25,14 +25,26 @@ Farbschemata anderer Programme übernehmen).
 Farben, Abstände, Radien und Schriftgrößen kommen **ausschließlich** aus
 `ui::theme`. Keine `Color32::from_rgb(..)`-Literale in Views.
 
+Flächen- und Textfarben hängen vom gewählten **Theme** ab (Dunkelblau, Grau –
+Einstellungen → Allgemein) und werden als Funktion gelesen: `theme::bg()`,
+`theme::surface()`, `theme::text()` … Neue Themes sind ein weiterer
+`Palette`-Eintrag in `theme.rs`. Signalfarben (`DANGER`, `OK`, `WARN`) und der
+Akzent bleiben in allen Themes gleich erkennbar.
+
+**Sprache:** Jeder sichtbare Text läuft über `t("…")` oder
+`tr!("… {name}", name = x)` (deutsche Quelle, Übersetzung in
+`i18n/en.rs`). Keine Texte per `format!` zusammensetzen, die übersetzt werden
+müssen – Platzhalter benennen, damit die Übersetzung die Reihenfolge ändern
+kann. Showdaten (Gerätenamen, Szenen, Zonen) werden nicht übersetzt.
+
 | Token | Verwendung |
 |---|---|
-| `BG` | Fensterhintergrund, Canvas |
-| `SURFACE` | Panels |
-| `RAISED` | Karten, Fader-Spuren, Buttons |
-| `RAISED_HOVER` | Hover-Zustand |
-| `BORDER` | 1-px-Kanten von Karten/Panels |
-| `ACCENT` | Auswahl, aktive Werte, Fokus (Cyan aus dem Logo) |
+| `bg()` | Fensterhintergrund, Canvas |
+| `surface()` | Panels |
+| `raised()` | Karten, Fader-Spuren, Buttons |
+| `raised_hover()` | Hover-Zustand |
+| `border()` | 1-px-Kanten von Karten/Panels |
+| `accent()` | Auswahl, aktive Werte, Fokus (Cyan aus dem Logo) |
 | `TEXT` / `TEXT_DIM` / `TEXT_FAINT` | Primär-, Sekundär-, deaktivierter Text |
 | `DANGER`, `OK`, `WARN` | Blackout/Fehler, Ausgang aktiv, Warnung |
 

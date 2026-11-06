@@ -1,6 +1,7 @@
 //! EINRICHTEN → Seitenleiste „Bibliothek“: Gerätetypen suchen (eingebaut,
 //! in der Show, Open Fixture Library) und patchen.
 
+use crate::i18n::t;
 use std::collections::BTreeMap;
 
 use dmxcraft_core::library::builtin_fixture_types;
@@ -27,10 +28,12 @@ pub struct LibraryPanel {
 
 impl View for LibraryPanel {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        section_header(ui, "Bibliothek", |ui| {
+        section_header(ui, t("Bibliothek"), |ui| {
             if ui
-                .small_button("OFL-Datei")
-                .on_hover_text("Eigene Gerätedatei im Open-Fixture-Library-Format importieren")
+                .small_button(t("OFL-Datei"))
+                .on_hover_text(t(
+                    "Eigene Gerätedatei im Open-Fixture-Library-Format importieren",
+                ))
                 .clicked()
             {
                 self.show_import = !self.show_import;
@@ -40,17 +43,17 @@ impl View for LibraryPanel {
             ui.horizontal(|ui| {
                 ui.add(
                     text_field(&mut self.import_path)
-                        .hint_text("/pfad/hersteller/geraet.json")
+                        .hint_text(t("/pfad/hersteller/geraet.json"))
                         .desired_width(ui.available_width() - 80.0),
                 );
-                if ui.button("Laden").clicked() {
+                if ui.button(t("Laden")).clicked() {
                     self.import(cx.state);
                 }
             });
         }
         ui.add(
             text_field(&mut self.query)
-                .hint_text("Geräte suchen (Hersteller, Modell, Kategorie)")
+                .hint_text(t("Geräte suchen (Hersteller, Modell, Kategorie)"))
                 .desired_width(f32::INFINITY),
         );
         ui.add_space(theme::SP_XS);
@@ -63,7 +66,7 @@ impl View for LibraryPanel {
         egui::CentralPanel::default_margins()
             .frame(
                 egui::Frame::new()
-                    .fill(theme::BG)
+                    .fill(theme::bg())
                     .inner_margin(egui::Margin::same(4)),
             )
             .show(ui, |ui| {
@@ -96,9 +99,9 @@ impl LibraryPanel {
             .cloned()
             .collect();
         for (title, types) in [
-            ("_Generisch", builtin),
-            ("_Importiert", imported.to_vec()),
-            ("_In dieser Show", in_show),
+            (t("_Generisch"), builtin),
+            (t("_Importiert"), imported.to_vec()),
+            (t("_In dieser Show"), in_show),
         ] {
             let list: Vec<FixtureType> = types
                 .into_iter()
@@ -135,7 +138,8 @@ impl LibraryPanel {
             self.group(ui, &man, searching, |me, ui| {
                 for f in fixtures {
                     if f.modes.len() == 1 {
-                        let label = format!("{} ({} Kan.)", f.name, f.modes[0].channels.len());
+                        let label =
+                            tr!("{v} ({n} Kan.)", v = f.name, n = f.modes[0].channels.len());
                         me.type_row(ui, &label, &f.modes[0]);
                     } else {
                         let id = ui.make_persistent_id(("ofl", &f.manufacturer_key, &f.key));
@@ -149,7 +153,8 @@ impl LibraryPanel {
                         })
                         .body(|ui| {
                             for m in &f.modes {
-                                let label = format!("{} ({} Kan.)", m.mode, m.channels.len());
+                                let label =
+                                    tr!("{mode} ({n} Kan.)", mode = m.mode, n = m.channels.len());
                                 me.type_row(ui, &label, m);
                             }
                         });
@@ -159,7 +164,8 @@ impl LibraryPanel {
         }
         if searching && count >= MAX_FIXTURES_PER_SEARCH {
             ui.label(
-                egui::RichText::new("Weitere Treffer – Suche eingrenzen").color(theme::TEXT_FAINT),
+                egui::RichText::new(t("Weitere Treffer – Suche eingrenzen"))
+                    .color(theme::text_faint()),
             );
         }
     }
@@ -203,8 +209,8 @@ impl LibraryPanel {
     fn patch_form(&mut self, ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
         let Some(ty) = self.chosen.clone() else {
             ui.label(
-                egui::RichText::new("Gerät in der Liste wählen, dann patchen.")
-                    .color(theme::TEXT_DIM),
+                egui::RichText::new(t("Gerät in der Liste wählen, dann patchen."))
+                    .color(theme::text_dim()),
             );
             return;
         };
@@ -215,41 +221,45 @@ impl LibraryPanel {
             .num_columns(2)
             .spacing([8.0, 4.0])
             .show(ui, |ui| {
-                ui.label("Name");
+                ui.label(t("Name"));
                 if st.patch.name.is_empty() {
                     st.patch.name = ty.model.clone();
                 }
                 ui.text_edit_singleline(&mut st.patch.name);
                 ui.end_row();
-                ui.label("Universum");
+                ui.label(t("Universum"));
                 ui.add(egui::DragValue::new(&mut st.patch.universe).range(1..=universes));
                 ui.end_row();
-                ui.label("Startadresse");
+                ui.label(t("Startadresse"));
                 ui.horizontal(|ui| {
                     ui.add(egui::DragValue::new(&mut st.patch.address).range(1..=512));
                     if ui
                         .small_button("frei")
-                        .on_hover_text("Erste passende freie Adresse")
+                        .on_hover_text(t("Erste passende freie Adresse"))
                         .clicked()
                     {
                         match e.show().next_free_address(st.patch.universe - 1, channels) {
                             Some(a) => st.patch.address = a,
-                            None => st.error("Kein Platz mehr in diesem Universum"),
+                            None => st.error(t("Kein Platz mehr in diesem Universum")),
                         }
                     }
                 });
                 ui.end_row();
-                ui.label("Anzahl");
+                ui.label(t("Anzahl"));
                 ui.add(egui::DragValue::new(&mut st.patch.count).range(1..=128));
                 ui.end_row();
             });
         let total = u32::from(channels) * u32::from(st.patch.count);
         ui.label(
-            egui::RichText::new(format!("{channels} Kanäle je Gerät · zusammen {total}"))
-                .color(theme::TEXT_FAINT),
+            egui::RichText::new(tr!(
+                "{channels} Kanäle je Gerät · zusammen {total}",
+                total = total,
+                channels = channels
+            ))
+            .color(theme::text_faint()),
         );
-        let b = egui::Button::new(egui::RichText::new("Patchen").strong())
-            .fill(theme::ACCENT_DIM)
+        let b = egui::Button::new(egui::RichText::new(t("Patchen")).strong())
+            .fill(theme::accent_dim())
             .min_size(egui::vec2(ui.available_width(), 30.0));
         if ui.add(b).clicked() {
             patch(e, st, &ty);
@@ -274,7 +284,7 @@ impl LibraryPanel {
             .map_or("eigene".into(), |s| s.to_string_lossy().to_string());
         match convert_fixture(&man, &man, &key, &json) {
             Ok(f) => {
-                st.info(format!("„{}“ geladen – Modus wählen und patchen", f.name));
+                st.info(tr!("„{v}“ geladen – Modus wählen und patchen", v = f.name));
                 self.query = f.name.clone();
                 self.chosen = f.modes.first().cloned();
                 st.imported_types.extend(f.modes);
@@ -303,7 +313,7 @@ fn patch(e: &mut Engine, st: &mut AppState, ty: &FixtureType) {
                 address = address.saturating_add(ty.channel_count());
             }
             Err(err) => {
-                st.error(format!("Gerät {}: {err}", i + 1));
+                st.error(tr!("Gerät {i_nr}: {err}", err = err, i_nr = i + 1));
                 break;
             }
         }
@@ -312,7 +322,7 @@ fn patch(e: &mut Engine, st: &mut AppState, ty: &FixtureType) {
         st.patch.address = address.min(512);
         st.selected = added.iter().copied().collect();
         if added.len() == usize::from(count) {
-            st.info(format!("{} Gerät(e) gepatcht", added.len()));
+            st.info(tr!("{n} Gerät(e) gepatcht", n = added.len()));
         }
     }
 }

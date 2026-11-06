@@ -28,7 +28,7 @@ impl Widget for Toggle<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let galley =
             ui.painter()
-                .layout_no_wrap(self.label.to_string(), theme::body(), theme::TEXT);
+                .layout_no_wrap(self.label.to_string(), theme::body(), theme::text());
         let track = Vec2::new(30.0, 16.0);
         let gap = if self.label.is_empty() {
             0.0
@@ -51,31 +51,31 @@ impl Widget for Toggle<'_> {
         let tr =
             egui::Rect::from_min_size(pos2(rect.left(), rect.center().y - track.y / 2.0), track);
         let on_color = if self.enabled {
-            theme::ACCENT_DIM
+            theme::accent_dim()
         } else {
-            theme::RAISED
+            theme::raised()
         };
         let bg = if t > 0.5 {
             on_color
         } else if resp.hovered() {
-            theme::RAISED_HOVER
+            theme::raised_hover()
         } else {
-            theme::RAISED
+            theme::raised()
         };
         p.rect_filled(tr, track.y / 2.0, bg);
         p.rect_stroke(
             tr,
             track.y / 2.0,
-            egui::Stroke::new(1.0, theme::BORDER),
+            egui::Stroke::new(1.0, theme::border()),
             egui::StrokeKind::Inside,
         );
         let x = tr.left() + track.y / 2.0 + t * (track.x - track.y);
         let knob = if !self.enabled {
-            theme::TEXT_FAINT
+            theme::text_faint()
         } else if *self.value {
-            theme::ACCENT
+            theme::accent()
         } else {
-            theme::TEXT_DIM
+            theme::text_dim()
         };
         p.circle_filled(pos2(x, tr.center().y), track.y / 2.0 - 2.5, knob);
         if !self.label.is_empty() {
@@ -83,9 +83,9 @@ impl Widget for Toggle<'_> {
                 pos2(tr.right() + gap, rect.center().y - galley.size().y / 2.0),
                 galley,
                 if self.enabled {
-                    theme::TEXT
+                    theme::text()
                 } else {
-                    theme::TEXT_FAINT
+                    theme::text_faint()
                 },
             );
         }

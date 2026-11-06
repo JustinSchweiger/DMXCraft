@@ -13,7 +13,7 @@ impl Widget for Swatch {
         let stroke = if resp.hovered() {
             Stroke::new(2.0, Color32::WHITE)
         } else {
-            Stroke::new(1.0, theme::BORDER)
+            Stroke::new(1.0, theme::border())
         };
         p.rect_stroke(rect, theme::R_S as f32, stroke, StrokeKind::Outside);
         resp

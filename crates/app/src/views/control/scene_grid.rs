@@ -1,5 +1,6 @@
 //! STEUERN → Szenen-Raster: Zonen als Spalten, Szenen als Karten.
 
+use crate::i18n::t;
 use dmxcraft_core::{Engine, SceneId, Step, ZoneId};
 use eframe::egui::{self, Color32, Sense, Stroke, StrokeKind, Vec2};
 
@@ -52,7 +53,7 @@ impl View for SceneGridView {
             .iter()
             .map(|z| (Some(z.id), z.name.clone()))
             .collect();
-        columns.push((None, "Frei".into()));
+        columns.push((None, t("Frei").into()));
         columns.retain(|(z, _)| match self.page {
             PageFilter::All => true,
             PageFilter::Zone(id) => *z == Some(id),
@@ -82,8 +83,8 @@ impl SceneGridView {
                 ui,
                 &mut self.page,
                 PageFilter::All,
-                "Alle",
-                theme::TEXT,
+                t("Alle"),
+                theme::text(),
                 false,
             );
             for z in &e.show().zones {
@@ -95,14 +96,14 @@ impl SceneGridView {
                 ui,
                 &mut self.page,
                 PageFilter::Free,
-                "Frei",
-                theme::TEXT_DIM,
+                t("Frei"),
+                theme::text_dim(),
                 false,
             );
             if !st.locked
                 && ui
                     .add(IconButton::new(Icon::Edit).flat())
-                    .on_hover_text("Zonen & Gruppen bearbeiten")
+                    .on_hover_text(t("Zonen & Gruppen bearbeiten"))
                     .clicked()
             {
                 st.zones_open = true;
@@ -114,19 +115,19 @@ impl SceneGridView {
 /// Master, Speed, Blackout und Alle aus (rechts neben den Zonen-Chips).
 fn playback_controls(ui: &mut egui::Ui, e: &mut Engine) {
     let bo = e.blackout();
-    let bo_btn = egui::Button::new(egui::RichText::new("Blackout").strong().color(if bo {
+    let bo_btn = egui::Button::new(egui::RichText::new(t("Blackout")).strong().color(if bo {
         Color32::WHITE
     } else {
-        theme::TEXT
+        theme::text()
     }))
-    .fill(if bo { theme::DANGER } else { theme::RAISED })
+    .fill(if bo { theme::DANGER } else { theme::raised() })
     .min_size(Vec2::new(88.0, 28.0));
-    if ui.add(bo_btn).on_hover_text("Taste B").clicked() {
+    if ui.add(bo_btn).on_hover_text(t("Taste B")).clicked() {
         e.set_blackout(!bo);
     }
     if ui
-        .button("Alle aus")
-        .on_hover_text("Alle Szenen stoppen")
+        .button(t("Alle aus"))
+        .on_hover_text(t("Alle Szenen stoppen"))
         .clicked()
     {
         e.release_all();
@@ -140,12 +141,12 @@ fn playback_controls(ui: &mut egui::Ui, e: &mut Engine) {
                 .fixed_decimals(2)
                 .suffix("x"),
         )
-        .on_hover_text("Wiedergabegeschwindigkeit")
+        .on_hover_text(t("Wiedergabegeschwindigkeit"))
         .changed()
     {
         e.set_speed(speed);
     }
-    ui.label(egui::RichText::new("Speed").color(theme::TEXT_DIM));
+    ui.label(egui::RichText::new(t("Speed")).color(theme::text_dim()));
     let mut master = e.master() * 100.0;
     if ui
         .add(
@@ -157,7 +158,7 @@ fn playback_controls(ui: &mut egui::Ui, e: &mut Engine) {
     {
         e.set_master(master / 100.0);
     }
-    ui.label(egui::RichText::new("Master").color(theme::TEXT_DIM));
+    ui.label(egui::RichText::new(t("Master")).color(theme::text_dim()));
 }
 
 /// Filter-Chip; ein Punkt zeigt an, dass in der Zone etwas läuft.
@@ -183,15 +184,15 @@ fn chip(
         if selected {
             color.gamma_multiply(0.22)
         } else if resp.hovered() {
-            theme::RAISED_HOVER
+            theme::raised_hover()
         } else {
-            theme::RAISED
+            theme::raised()
         },
     );
     p.rect_stroke(
         rect,
         r,
-        Stroke::new(1.0, if selected { color } else { theme::BORDER }),
+        Stroke::new(1.0, if selected { color } else { theme::border() }),
         StrokeKind::Inside,
     );
     let mut x = rect.left() + theme::SP_M;
@@ -204,7 +205,7 @@ fn chip(
         egui::Align2::LEFT_CENTER,
         label,
         theme::body(),
-        if selected { theme::TEXT } else { color },
+        if selected { theme::text() } else { color },
     );
     if resp.clicked() {
         *page = value;
@@ -241,8 +242,8 @@ fn column(
     ui.vertical(|ui| {
         ui.set_width(COLUMN_W);
         egui::Frame::new()
-            .fill(theme::RAISED)
-            .stroke(Stroke::new(1.0, theme::BORDER))
+            .fill(theme::raised())
+            .stroke(Stroke::new(1.0, theme::border()))
             .corner_radius(theme::R_M)
             .inner_margin(theme::SP_S)
             .show(ui, |ui| {
@@ -253,36 +254,36 @@ fn column(
                 ui.label(egui::RichText::new(name).strong().color(color));
                 ui.horizontal(|ui| {
                     let on = target.is_some();
-                    let t = target.unwrap_or(SceneId(0));
+                    let sid = target.unwrap_or(SceneId(0));
                     if ui
                         .add(
                             IconButton::new(if paused { Icon::Play } else { Icon::Pause })
                                 .enabled(on)
                                 .active(paused),
                         )
-                        .on_hover_text("Pause / Weiter")
+                        .on_hover_text(t("Pause / Weiter"))
                         .clicked()
                     {
-                        actions.push(Action::Pause(t));
+                        actions.push(Action::Pause(sid));
                     }
                     if ui
                         .add(IconButton::new(Icon::Prev).enabled(on))
-                        .on_hover_text("Vorheriger Schritt")
+                        .on_hover_text(t("Vorheriger Schritt"))
                         .clicked()
                     {
-                        actions.push(Action::Jump(t, -1));
+                        actions.push(Action::Jump(sid, -1));
                     }
                     if ui
                         .add(IconButton::new(Icon::Next).enabled(on))
-                        .on_hover_text("Nächster Schritt")
+                        .on_hover_text(t("Nächster Schritt"))
                         .clicked()
                     {
-                        actions.push(Action::Jump(t, 1));
+                        actions.push(Action::Jump(sid, 1));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
                             .add(IconButton::new(Icon::Plus))
-                            .on_hover_text("Neue Szene aus dem Programmer")
+                            .on_hover_text(t("Neue Szene aus dem Programmer"))
                             .clicked()
                             && !locked
                         {
@@ -312,9 +313,13 @@ fn scene_card(
     };
     let progress = e.progress(id);
     let kind = match (scene.steps.len(), progress) {
-        (_, Some(p)) if p.step_count > 1 => format!("ABLAUF · {}/{}", p.step + 1, p.step_count),
-        (n, _) if n > 1 => format!("ABLAUF · {n} SCHRITTE"),
-        _ => "STATISCH".to_string(),
+        (_, Some(p)) if p.step_count > 1 => tr!(
+            "ABLAUF · {step_nr}/{step_count}",
+            step_nr = p.step + 1,
+            step_count = p.step_count
+        ),
+        (n, _) if n > 1 => tr!("ABLAUF · {n} SCHRITTE", n = n),
+        _ => t("STATISCH").to_string(),
     };
     let card = SceneCard {
         name: &scene.name,
@@ -336,14 +341,14 @@ fn scene_card(
     }
     crate::ui::widgets::menu::context(&resp, |ui| {
         menu::begin(ui);
-        if menu::item(ui, MenuItem::new("Bearbeiten …").icon(Icon::Edit)) {
+        if menu::item(ui, MenuItem::new(t("Bearbeiten …")).icon(Icon::Edit)) {
             actions.push(Action::Edit(id));
         }
         menu::separator(ui);
-        menu::sub(ui, MenuItem::new("Löschen").icon(Icon::Trash), |ui| {
+        menu::sub(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash), |ui| {
             if menu::item(
                 ui,
-                MenuItem::new("Szene wirklich löschen")
+                MenuItem::new(t("Szene wirklich löschen"))
                     .icon(Icon::Trash)
                     .danger(),
             ) {
@@ -362,16 +367,19 @@ fn apply(e: &mut Engine, st: &mut AppState, actions: Vec<Action>) {
             Action::NewScene(zone) => {
                 let values = programmer_values(e);
                 if values.is_empty() {
-                    st.error("Programmer ist leer – erst Geräte auswählen und Werte setzen");
+                    st.error(t(
+                        "Programmer ist leer – erst Geräte auswählen und Werte setzen",
+                    ));
                     continue;
                 }
-                let name = format!("Szene {}", e.show().scenes.len() + 1);
+                let name = tr!("Szene {n}", n = e.show().scenes.len() + 1);
                 let id = e
                     .show_mut()
                     .add_scene(name.clone(), zone, vec![Step::new(values)]);
                 st.append_target = Some(id);
-                st.info(format!(
-                    "„{name}“ angelegt (Rechtsklick → Bearbeiten zum Umbenennen)"
+                st.info(tr!(
+                    "„{name}“ angelegt (Rechtsklick → Bearbeiten zum Umbenennen)",
+                    name = name
                 ));
             }
             Action::Edit(id) => st.open_scene_editor(id),

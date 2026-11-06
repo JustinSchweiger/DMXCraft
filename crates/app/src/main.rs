@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[macro_use]
+mod i18n;
 mod app;
 mod demo;
 mod desktop;
@@ -19,6 +21,8 @@ mod views;
 fn main() -> eframe::Result {
     desktop::ensure_linux_menu_entry();
     let settings = settings::Settings::load();
+    i18n::set_lang(i18n::Lang::from_key(&settings.language));
+    ui::theme::set_theme(ui::theme::Theme::from_key(&settings.theme));
     let show_path = std::env::args().nth(1).or_else(|| {
         settings
             .open_last_show

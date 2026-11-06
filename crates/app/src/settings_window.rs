@@ -4,12 +4,14 @@
 //! [`SettingsChanges`], was die App danach tun muss (speichern, Ausgang
 //! neu starten, Zoom setzen).
 
+use crate::i18n::t;
 use dmxcraft_core::{Engine, UNIVERSES};
 use dmxcraft_output::UsbDmxPort;
 use eframe::egui::{self, pos2, vec2, Align2, Sense, Stroke, Ui};
 
+use crate::i18n::{self, Lang};
 use crate::settings::Settings;
-use crate::ui::theme;
+use crate::ui::theme::{self, Theme};
 use crate::ui::widgets::dialog::INPUT_H;
 use crate::ui::widgets::{form, text_field, Dialog, Icon, IconButton, Toggle};
 
@@ -28,25 +30,17 @@ pub enum Tab {
     Outputs,
     Midi,
     Project,
-    Lock,
 }
 
 impl Tab {
-    const ALL: [Tab; 5] = [
-        Tab::General,
-        Tab::Outputs,
-        Tab::Midi,
-        Tab::Project,
-        Tab::Lock,
-    ];
+    const ALL: [Tab; 4] = [Tab::General, Tab::Outputs, Tab::Midi, Tab::Project];
 
     fn label(self) -> &'static str {
         match self {
-            Tab::General => "Allgemein",
-            Tab::Outputs => "Ausgänge",
-            Tab::Midi => "MIDI",
-            Tab::Project => "Projekt",
-            Tab::Lock => "Sperre",
+            Tab::General => t("Allgemein"),
+            Tab::Outputs => t("Ausgänge"),
+            Tab::Midi => t("MIDI"),
+            Tab::Project => t("Projekt"),
         }
     }
 
@@ -56,7 +50,6 @@ impl Tab {
             Tab::Outputs => Icon::Levels,
             Tab::Midi => Icon::Midi,
             Tab::Project => Icon::FileOpen,
-            Tab::Lock => Icon::Locked,
         }
     }
 }
@@ -67,6 +60,8 @@ pub struct SettingsChanges {
     pub save: bool,
     pub restart_output: bool,
     pub zoom: Option<f32>,
+    /// Theme gewechselt – egui-Stil neu setzen.
+    pub theme: bool,
 }
 
 #[derive(Default)]
@@ -91,12 +86,12 @@ impl SettingsWindow {
     ) -> SettingsChanges {
         let mut ch = SettingsChanges::default();
         let tab = &mut self.tab;
-        Dialog::new("Einstellungen")
+        Dialog::new(t("Einstellungen"))
             .id("settings")
             .width(WIDTH)
             .height(HEIGHT)
             .flush()
-            .cancel("Schließen")
+            .cancel(t("Schließen"))
             .show(ctx, open, |ui, _| {
                 // Feste Aufteilung: Reiterleiste links, Inhalt rechts
                 let area = egui::Rect::from_min_size(ui.cursor().min, vec2(WIDTH, HEIGHT));
@@ -125,7 +120,6 @@ impl SettingsWindow {
                             }
                             Tab::Midi => midi(ui),
                             Tab::Project => project(ui, cx.engine, cx.show_path),
-                            Tab::Lock => lock(ui, cx.settings, &mut ch),
                         }
                     });
             });
@@ -136,11 +130,11 @@ impl SettingsWindow {
 /// Reiterleiste links.
 fn sidebar(ui: &mut Ui, rect: egui::Rect, tab: &mut Tab) {
     let p = ui.painter();
-    p.rect_filled(rect, 0.0, theme::BG);
+    p.rect_filled(rect, 0.0, theme::bg());
     p.vline(
         rect.right() - 0.5,
         rect.y_range(),
-        Stroke::new(1.0, theme::BORDER),
+        Stroke::new(1.0, theme::border()),
     );
     for (i, t) in Tab::ALL.into_iter().enumerate() {
         let r = egui::Rect::from_min_size(
@@ -151,16 +145,20 @@ fn sidebar(ui: &mut Ui, rect: egui::Rect, tab: &mut Tab) {
         let active = *tab == t;
         let p = ui.painter();
         if active {
-            p.rect_filled(r, 0.0, theme::SURFACE);
+            p.rect_filled(r, 0.0, theme::surface());
             p.rect_filled(
                 egui::Rect::from_min_size(r.min, vec2(3.0, r.height())),
                 0.0,
-                theme::ACCENT,
+                theme::accent(),
             );
         } else if resp.hovered() {
-            p.rect_filled(r, 0.0, theme::RAISED_HOVER);
+            p.rect_filled(r, 0.0, theme::raised_hover());
         }
-        let color = if active { theme::TEXT } else { theme::TEXT_DIM };
+        let color = if active {
+            theme::text()
+        } else {
+            theme::text_dim()
+        };
         let icon = egui::Rect::from_center_size(
             pos2(r.left() + 24.0, r.center().y),
             egui::Vec2::splat(18.0),
@@ -186,7 +184,7 @@ fn section(ui: &mut Ui, title: &str) {
 }
 
 fn hint(ui: &mut Ui, text: &str) {
-    ui.label(egui::RichText::new(text).small().color(theme::TEXT_FAINT));
+    ui.label(egui::RichText::new(text).small().color(theme::text_faint()));
 }
 
 fn full_combo(
@@ -203,16 +201,39 @@ fn full_combo(
 }
 
 fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
-    section(ui, "Optionen");
+    section(ui, t("Optionen"));
     form(ui, "settings_general", |f| {
-        f.row("Sprache", |ui| {
-            full_combo(ui, "settings_lang", "Deutsch", |ui| {
-                ui.selectable_value(&mut s.language, "de".to_string(), "Deutsch");
-                ui.add_enabled(false, egui::Button::selectable(false, "English"))
-                    .on_disabled_hover_text("Noch nicht verfügbar");
+        f.row(t("Sprache"), |ui| {
+            let current = Lang::from_key(&s.language);
+            let mut picked = current;
+            // Sprachnamen in der jeweiligen Sprache, damit man sie immer findet
+            full_combo(ui, "settings_lang", current.native_name(), |ui| {
+                for l in Lang::ALL {
+                    ui.selectable_value(&mut picked, l, l.native_name());
+                }
             });
+            if picked != current {
+                s.language = picked.key().into();
+                i18n::set_lang(picked);
+                ch.save = true;
+            }
         });
-        f.row("Darstellungsgröße", |ui| {
+        f.row(t("Theme"), |ui| {
+            let current = Theme::from_key(&s.theme);
+            let mut picked = current;
+            full_combo(ui, "settings_theme", t(current.label()), |ui| {
+                for th in Theme::ALL {
+                    ui.selectable_value(&mut picked, th, t(th.label()));
+                }
+            });
+            if picked != current {
+                s.theme = picked.key().into();
+                theme::set_theme(picked);
+                ch.theme = true;
+                ch.save = true;
+            }
+        });
+        f.row(t("Darstellungsgröße"), |ui| {
             let current = (s.ui_scale * 100.0).round() as u32;
             let mut picked = current;
             full_combo(ui, "settings_scale", format!("{current} %"), |ui| {
@@ -226,36 +247,38 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
                 ch.save = true;
             }
         });
-        f.row("Instanzname", |ui| {
+        f.row(t("Instanzname"), |ui| {
             let r = ui
                 .add(text_field(&mut s.instance_name).desired_width(f32::INFINITY))
-                .on_hover_text("Name dieses Rechners, z. B. für Fernsteuerung im Netz");
+                .on_hover_text(t("Name dieses Rechners, z. B. für Fernsteuerung im Netz"));
             if r.lost_focus() {
                 ch.save = true;
             }
         });
     });
     ui.add_space(theme::SP_M);
-    section(ui, "Startup");
+    section(ui, t("Startup"));
     ch.save |= ui
         .add(Toggle::new(
             &mut s.open_last_show,
-            "Letzte Datei automatisch laden",
+            t("Letzte Datei automatisch laden"),
         ))
         .changed();
     ch.save |= ui
-        .add(Toggle::new(&mut s.start_touch, "Im Touch-Modus starten"))
-        .on_hover_text("Der Touch-Modus folgt – die Einstellung wird schon gespeichert")
+        .add(Toggle::new(&mut s.start_touch, t("Im Touch-Modus starten")))
+        .on_hover_text(t(
+            "Der Touch-Modus folgt – die Einstellung wird schon gespeichert",
+        ))
         .changed();
     ch.save |= ui
         .add(Toggle::new(
             &mut s.check_updates,
-            "Beim Start nach Updates suchen",
+            t("Beim Start nach Updates suchen"),
         ))
         .changed();
     ui.add_space(theme::SP_L);
     if let Some(p) = Settings::path() {
-        hint(ui, &format!("Gespeichert in {}", p.display()));
+        hint(ui, &tr!("Gespeichert in {v}", v = p.display()));
     }
 }
 
@@ -267,14 +290,14 @@ fn outputs(
     ch: &mut SettingsChanges,
 ) {
     ui.horizontal(|ui| {
-        ui.label(theme::heading_text("Universen")).on_hover_text(
+        ui.label(theme::heading_text(t("Universen"))).on_hover_text(
             "Ein USB-DMX-Kabel (Open DMX / FTDI) je Universum. Die Zuordnung hängt an der \
              Seriennummer des Kabels und bleibt beim Umstecken erhalten.",
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
                 .add(IconButton::new(Icon::Reset).flat())
-                .on_hover_text("Geräte neu suchen")
+                .on_hover_text(t("Geräte neu suchen"))
                 .clicked()
             {
                 *ports = dmxcraft_output::list_ports();
@@ -282,11 +305,11 @@ fn outputs(
             let n = ports.iter().filter(|p| p.ftdi).count();
             ui.label(
                 egui::RichText::new(match n {
-                    0 => "kein USB-DMX-Kabel gefunden".to_string(),
-                    1 => "1 Kabel gefunden".to_string(),
-                    n => format!("{n} Kabel gefunden"),
+                    0 => t("kein USB-DMX-Kabel gefunden").to_string(),
+                    1 => t("1 Kabel gefunden").to_string(),
+                    n => tr!("{n} Kabel gefunden", n = n),
                 })
-                .color(theme::TEXT_DIM),
+                .color(theme::text_dim()),
             );
         });
     });
@@ -308,32 +331,32 @@ fn outputs(
                 // Zustandspunkt
                 let (dot, tip) = match (&current, port) {
                     (None, _) => (
-                        theme::TEXT_FAINT,
-                        "Kein Gerät – wird nicht ausgegeben".to_string(),
+                        theme::text_faint(),
+                        t("Kein Gerät – wird nicht ausgegeben").to_string(),
                     ),
-                    (Some(_), Some(_)) => (theme::OK, "Gerät angeschlossen".to_string()),
-                    (Some(k), None) => (theme::WARN, format!("{k} ist nicht angeschlossen")),
+                    (Some(_), Some(_)) => (theme::OK, t("Gerät angeschlossen").to_string()),
+                    (Some(k), None) => (theme::WARN, tr!("{k} ist nicht angeschlossen", k = k)),
                 };
                 let (r, resp) = ui.allocate_exact_size(vec2(10.0, INPUT_H), Sense::hover());
                 ui.painter().circle_filled(r.center(), 4.0, dot);
                 resp.on_hover_text(tip);
 
-                ui.label(format!("Universum {}", u + 1));
+                ui.label(tr!("Universum {u_nr}", u_nr = u + 1));
 
                 let text = match (&current, port) {
-                    (None, _) => "– kein Gerät –".to_string(),
+                    (None, _) => t("– kein Gerät –").to_string(),
                     (Some(_), Some(p)) => p.label.clone(),
-                    (Some(k), None) => format!("{k} (nicht angeschlossen)"),
+                    (Some(k), None) => tr!("{k} (nicht angeschlossen)", k = k),
                 };
                 let mut picked = current.clone();
                 ui.allocate_ui(vec2(360.0, INPUT_H), |ui| {
                     full_combo(ui, ("settings_universe", u), text, |ui| {
-                        ui.selectable_value(&mut picked, None, "– kein Gerät –");
+                        ui.selectable_value(&mut picked, None, t("– kein Gerät –"));
                         for p in ports.iter() {
                             let label = if p.ftdi {
                                 p.label.clone()
                             } else {
-                                format!("{} (kein FTDI)", p.label)
+                                tr!("{label} (kein FTDI)", label = p.label)
                             };
                             ui.selectable_value(&mut picked, Some(p.key.clone()), label);
                         }
@@ -353,10 +376,10 @@ fn outputs(
                 ui.label(
                     egui::RichText::new(match n {
                         0 => String::new(),
-                        1 => "1 Gerät".to_string(),
-                        n => format!("{n} Geräte"),
+                        1 => t("1 Gerät").to_string(),
+                        n => tr!("{n} Geräte", n = n),
                     })
-                    .color(theme::TEXT_DIM),
+                    .color(theme::text_dim()),
                 );
                 ui.end_row();
             }
@@ -364,73 +387,47 @@ fn outputs(
 }
 
 fn midi(ui: &mut Ui) {
-    section(ui, "MIDI-Eingang");
+    section(ui, t("MIDI-Eingang"));
     form(ui, "settings_midi", |f| {
-        f.row("Gerät", |ui| {
+        f.row(t("Gerät"), |ui| {
             ui.add_enabled_ui(false, |ui| {
-                full_combo(ui, "settings_midi_dev", "– kein Gerät –", |_| {});
+                full_combo(ui, "settings_midi_dev", t("– kein Gerät –"), |_| {});
             })
             .response
-            .on_disabled_hover_text(
+            .on_disabled_hover_text(t(
                 "Hier wählst du später den MIDI-Controller für das MIDI-Mapping",
-            );
+            ));
         });
     });
 }
 
 fn project(ui: &mut Ui, e: &mut Engine, show_path: &str) {
-    section(ui, "Show");
+    section(ui, t("Show"));
     form(ui, "settings_project", |f| {
-        f.row("Name", |ui| {
+        f.row(t("Name"), |ui| {
             ui.add(text_field(&mut e.show_mut().name).desired_width(f32::INFINITY));
         });
-        f.row("Datei", |ui| {
+        f.row(t("Datei"), |ui| {
             let text = if show_path.is_empty() {
-                "noch nicht gespeichert"
+                t("noch nicht gespeichert")
             } else {
                 show_path
             };
-            ui.add(egui::Label::new(egui::RichText::new(text).color(theme::TEXT_DIM)).truncate())
+            ui.add(egui::Label::new(egui::RichText::new(text).color(theme::text_dim())).truncate())
                 .on_hover_text(text);
         });
         let show = e.show();
-        f.row("Inhalt", |ui| {
+        f.row(t("Inhalt"), |ui| {
             ui.label(
-                egui::RichText::new(format!(
-                    "{} Geräte · {} Szenen · {} Zonen · {} Gruppen",
-                    show.fixtures.len(),
-                    show.scenes.len(),
-                    show.zones.len(),
-                    show.groups.len()
+                egui::RichText::new(tr!(
+                    "{n} Geräte · {n1} Szenen · {n2} Zonen · {n3} Gruppen",
+                    n = show.fixtures.len(),
+                    n1 = show.scenes.len(),
+                    n2 = show.zones.len(),
+                    n3 = show.groups.len()
                 ))
-                .color(theme::TEXT_DIM),
+                .color(theme::text_dim()),
             );
-        });
-    });
-}
-
-fn lock(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
-    ui.label(theme::heading_text("Oberfläche sperren"))
-        .on_hover_text(
-            "Gesperrt (Bearbeiten → Sperren, Strg+L) bleibt nur STEUERN bedienbar: Patch, Szenen \
-         und Einstellungen lassen sich nicht ändern. Die Sperre bleibt nach einem Neustart.",
-        );
-    ui.add_space(theme::SP_XS);
-    form(ui, "settings_lock", |f| {
-        f.row("Passwort", |ui| {
-            if s.lock_hash.is_some() {
-                ui.label("festgelegt");
-                if ui
-                    .button("Entfernen")
-                    .on_hover_text("Beim nächsten Sperren wird ein neues festgelegt")
-                    .clicked()
-                {
-                    s.lock_hash = None;
-                    ch.save = true;
-                }
-            } else {
-                ui.label(egui::RichText::new("nicht festgelegt").color(theme::TEXT_DIM));
-            }
         });
     });
 }

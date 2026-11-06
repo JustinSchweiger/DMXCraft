@@ -3,6 +3,7 @@
 //! Bedienung: Ziehen/Klicken = setzen, Mausrad = ±1 (Shift ±10),
 //! Doppelklick = 0 ↔ voll, Rechtsklick = Menü (Freigeben, 0, Voll).
 
+use crate::i18n::t;
 use eframe::egui::{self, pos2, Color32, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 use crate::ui::theme;
@@ -34,7 +35,7 @@ impl<'a> Fader<'a> {
             label,
             hint: None,
             active: false,
-            color: theme::ACCENT,
+            color: theme::accent(),
             width: 56.0,
             height: None,
         }
@@ -109,14 +110,17 @@ impl<'a> Fader<'a> {
         crate::ui::widgets::menu::context(&resp, |ui| {
             use crate::ui::widgets::menu::{self, MenuItem};
             menu::begin(ui);
-            if menu::item(ui, MenuItem::new("Freigeben").icon(super::Icon::Reset)) {
+            if menu::item(ui, MenuItem::new(t("Freigeben")).icon(super::Icon::Reset)) {
                 event = FaderEvent::Release;
             }
             menu::separator(ui);
-            if menu::item(ui, MenuItem::new("Aus (0)").icon(super::Icon::LightOff)) {
+            if menu::item(ui, MenuItem::new(t("Aus (0)")).icon(super::Icon::LightOff)) {
                 event = FaderEvent::Changed(0);
             }
-            if menu::item(ui, MenuItem::new("Voll (255)").icon(super::Icon::LightOn)) {
+            if menu::item(
+                ui,
+                MenuItem::new(t("Voll (255)")).icon(super::Icon::LightOn),
+            ) {
                 event = FaderEvent::Changed(255);
             }
         });
@@ -124,7 +128,7 @@ impl<'a> Fader<'a> {
         // Zeichnen
         let p = ui.painter();
         let r = theme::R_M as f32;
-        p.rect_filled(track, r, theme::BG);
+        p.rect_filled(track, r, theme::bg());
         let level_color = if self.active {
             self.color
         } else {
@@ -145,16 +149,16 @@ impl<'a> Fader<'a> {
             );
         }
         let border = if resp.hovered() || resp.dragged() {
-            theme::ACCENT_DIM
+            theme::accent_dim()
         } else {
-            theme::BORDER
+            theme::border()
         };
         p.rect_stroke(track, r, Stroke::new(1.0, border), StrokeKind::Inside);
 
         let label_color = if self.active {
-            theme::ACCENT
+            theme::accent()
         } else {
-            theme::TEXT_DIM
+            theme::text_dim()
         };
         p.text(
             pos2(outer.center().x, outer.top() + LABEL_H / 2.0),
@@ -170,9 +174,9 @@ impl<'a> Fader<'a> {
             format!("{value} · {pct}%"),
             theme::caption(),
             if self.active {
-                theme::TEXT
+                theme::text()
             } else {
-                theme::TEXT_FAINT
+                theme::text_faint()
             },
         );
         if let Some(h) = self.hint {

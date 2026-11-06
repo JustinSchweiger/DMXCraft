@@ -158,7 +158,7 @@ impl Icon {
                     },
                 ));
                 painter.add(Shape::line(legs, Stroke::new(1.6, color)));
-                painter.circle_filled(body.center(), s * 0.1, theme::BG);
+                painter.circle_filled(body.center(), s * 0.1, theme::bg());
             }
             Icon::ArrangeRow => {
                 for k in -1..=1 {
@@ -249,7 +249,7 @@ impl Icon {
                     Vec2::splat(s * 0.8),
                 );
                 painter.rect_stroke(back, 1.0, stroke, egui::StrokeKind::Middle);
-                painter.rect_filled(front, 1.0, theme::BG);
+                painter.rect_filled(front, 1.0, theme::bg());
                 painter.rect_stroke(front, 1.0, stroke, egui::StrokeKind::Middle);
             }
             Icon::Close => {
@@ -498,7 +498,7 @@ impl Icon {
                 );
                 let front = back.translate(Vec2::new(-s * 0.3, s * 0.3));
                 painter.rect_stroke(back, 1.5, stroke, egui::StrokeKind::Middle);
-                painter.rect_filled(front, 1.5, theme::RAISED);
+                painter.rect_filled(front, 1.5, theme::raised());
                 painter.rect_stroke(front, 1.5, stroke, egui::StrokeKind::Middle);
                 if self == Icon::Paste {
                     painter.rect_filled(front.shrink(s * 0.2), 1.0, color);
@@ -554,7 +554,7 @@ fn file_icons(
         painter.rect_filled(label, 0.0, color);
         painter.circle_stroke(c + Vec2::new(0.0, s * 0.25), s * 0.18, stroke);
         if icon == Icon::SaveAs {
-            painter.circle_filled(body.right_bottom(), s * 0.3, theme::RAISED);
+            painter.circle_filled(body.right_bottom(), s * 0.3, theme::raised());
             painter.line_segment(
                 [
                     body.right_bottom() + Vec2::new(-s * 0.18, s * 0.18),
@@ -665,24 +665,24 @@ impl Widget for IconButton {
         let (rect, resp) = ui.allocate_exact_size(Vec2::splat(self.size), sense);
         let hovered = resp.hovered() && self.enabled;
         let bg = if self.active {
-            theme::ACCENT_DIM
+            theme::accent_dim()
         } else if hovered && self.danger {
             theme::DANGER
         } else if hovered {
-            theme::RAISED_HOVER
+            theme::raised_hover()
         } else if self.flat {
             egui::Color32::TRANSPARENT
         } else {
-            theme::RAISED
+            theme::raised()
         };
         let p = ui.painter();
         p.rect_filled(rect, theme::R_S as f32, bg);
         let color = if !self.enabled {
-            theme::TEXT_FAINT
+            theme::text_faint()
         } else if self.active {
-            theme::ACCENT
+            theme::accent()
         } else {
-            theme::TEXT
+            theme::text()
         };
         self.icon.paint(p, rect.shrink(6.0), color);
         resp
