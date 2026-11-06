@@ -20,6 +20,19 @@ pub struct TitleInfo<'a> {
     pub stats: String,
     pub output: OutputKind,
     pub blackout: bool,
+    /// Kurzzeitige Meldung (Text, ist Fehler).
+    pub message: Option<(&'a str, bool)>,
+    pub update: UpdateBadge,
+}
+
+/// Update-Hinweis in der Titelleiste.
+#[derive(Clone, Debug, PartialEq)]
+pub enum UpdateBadge {
+    None,
+    Available,
+    Busy(&'static str),
+    Installed(String),
+    Error(String),
 }
 
 /// Menübefehle, die der App-Rahmen ausführt.
@@ -42,6 +55,7 @@ pub enum MenuAction {
     Output(OutputKind),
     Settings,
     CheckUpdates,
+    InstallUpdate,
     About,
 }
 
@@ -141,8 +155,44 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                 );
             }
             ui.label(egui::RichText::new(&info.stats).color(theme::TEXT_DIM));
+            match &info.update {
+                UpdateBadge::None => {}
+                UpdateBadge::Available => {
+                    let b = egui::Button::new("Update installieren").fill(theme::ACCENT_DIM);
+                    if ui
+                        .add(b)
+                        .on_hover_text("Neue Version von GitHub laden")
+                        .clicked()
+                    {
+                        actions.push(MenuAction::InstallUpdate);
+                    }
+                }
+                UpdateBadge::Busy(t) => {
+                    ui.label(egui::RichText::new(*t).color(theme::TEXT_DIM));
+                }
+                UpdateBadge::Installed(v) => {
+                    ui.label(
+                        egui::RichText::new(format!("v{v} installiert – neu starten"))
+                            .color(theme::OK),
+                    );
+                }
+                UpdateBadge::Error(e) => {
+                    if ui
+                        .small_button("Update-Fehler")
+                        .on_hover_text(format!("{e}\nKlicken für neuen Versuch"))
+                        .clicked()
+                    {
+                        actions.push(MenuAction::CheckUpdates);
+                    }
+                }
+            }
             ui.label(egui::RichText::new(&info.status.0).color(info.status.1))
                 .on_hover_text(format!("Ausgang: {}", info.output.label()));
+            if let Some((msg, err)) = info.message {
+                ui.separator();
+                let color = if err { theme::DANGER } else { theme::TEXT };
+                ui.label(egui::RichText::new(msg).color(color));
+            }
         });
     });
     actions

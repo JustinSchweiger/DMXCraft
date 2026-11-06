@@ -8,6 +8,7 @@ use dmxcraft_core::{plan, Engine, FixtureId, GroupId, PlanShape, Show};
 use eframe::egui;
 
 use crate::state::{AppState, Mode};
+use crate::ui::widgets::shape_menu_row;
 use crate::ui::widgets::stage_canvas::fixture_pos;
 
 /// Größenstufen für Menüs und Werkzeugleiste.
@@ -60,6 +61,8 @@ pub fn menu(
     has_layout_clipboard: bool,
 ) -> Option<FixtureAction> {
     let mut out = None;
+    // Formauswahl separat, weil `item` `out` bereits ausleiht
+    let mut picked_shape: Option<FixtureAction> = None;
     let mut item = |ui: &mut egui::Ui, enabled: bool, label: &str, a: FixtureAction| {
         if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
             out = Some(a);
@@ -123,15 +126,16 @@ pub fn menu(
         ui.separator();
         ui.add_enabled_ui(some, |ui| {
             ui.menu_button("Form", |ui| {
-                item(
-                    ui,
-                    true,
-                    "Automatisch (nach Typ)",
-                    FixtureAction::SetShape(None),
-                );
+                if shape_menu_row(ui, None, "Automatisch (nach Typ)").clicked() {
+                    picked_shape = Some(FixtureAction::SetShape(None));
+                    ui.close();
+                }
                 ui.separator();
                 for s in PlanShape::ALL {
-                    item(ui, true, s.label(), FixtureAction::SetShape(Some(s)));
+                    if shape_menu_row(ui, Some(s), s.label()).clicked() {
+                        picked_shape = Some(FixtureAction::SetShape(Some(s)));
+                        ui.close();
+                    }
                 }
             });
             ui.menu_button("Größe", |ui| {
@@ -194,7 +198,7 @@ pub fn menu(
             });
         });
     }
-    out
+    out.or(picked_shape)
 }
 
 /// Führt eine Menüaktion aus.

@@ -247,14 +247,14 @@ impl StageCanvas<'_> {
             painter.rect_filled(l, 2.0, theme::ACCENT.gamma_multiply(0.07));
             painter.rect_stroke(l, 2.0, Stroke::new(1.0, theme::ACCENT), StrokeKind::Inside);
         }
+        // Nur setzen, wenn nötig – sonst würde z. B. der Größenänderungs-Cursor
+        // der Bereichsgrenzen überschrieben.
         if self.mode == CanvasMode::Edit {
-            ui.ctx().set_cursor_icon(if state.moving {
-                egui::CursorIcon::Grabbing
+            if state.moving {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             } else if hovered.is_some() {
-                egui::CursorIcon::Grab
-            } else {
-                egui::CursorIcon::Default
-            });
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+            }
         }
         moves
     }
@@ -467,4 +467,143 @@ fn paint_fixture(
             p.add(egui::Shape::convex_polygon(pts, fill(c0, l0), stroke));
         }
     }
+}
+
+/// Kleines Symbol einer Geräteform (für Menüs und Knöpfe). `None` = automatisch.
+pub fn paint_shape_icon(p: &egui::Painter, shape: Option<PlanShape>, r: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4, color);
+    let c = r.center();
+    let s = r.width().min(r.height());
+    match shape {
+        None => {
+            p.circle_stroke(c, s * 0.42, Stroke::new(1.2, color.gamma_multiply(0.6)));
+            p.text(
+                c,
+                egui::Align2::CENTER_CENTER,
+                "A",
+                egui::FontId::proportional(s * 0.55),
+                color,
+            );
+        }
+        Some(PlanShape::Round) => {
+            p.circle_filled(c, s * 0.42, color);
+        }
+        Some(PlanShape::Square) => {
+            p.rect_filled(Rect::from_center_size(c, Vec2::splat(s * 0.8)), 1.5, color);
+        }
+        Some(PlanShape::MovingHead) => {
+            let rad = s * 0.42;
+            for i in 0..6 {
+                let a0 = std::f32::consts::TAU * i as f32 / 6.0;
+                let a1 = std::f32::consts::TAU * (i as f32 + 0.8) / 6.0;
+                let mut pts = vec![c];
+                for k in 0..=4 {
+                    let a = a0 + (a1 - a0) * k as f32 / 4.0;
+                    pts.push(c + Vec2::angled(a) * rad);
+                }
+                p.add(egui::Shape::convex_polygon(pts, color, Stroke::NONE));
+            }
+        }
+        Some(PlanShape::Matrix) => {
+            let cell = s * 0.8 / 3.0;
+            let origin = c - Vec2::splat(s * 0.4);
+            for i in 0..9 {
+                let rr = Rect::from_min_size(
+                    origin + Vec2::new(cell * (i % 3) as f32, cell * (i / 3) as f32),
+                    Vec2::splat(cell),
+                );
+                p.rect_filled(rr.shrink(0.8), 0.5, color);
+            }
+        }
+        Some(PlanShape::BarHorizontal) => {
+            let bar = Rect::from_center_size(c, Vec2::new(s * 0.95, s * 0.3));
+            for i in 0..4 {
+                let w = bar.width() / 4.0;
+                let seg = Rect::from_min_size(
+                    egui::pos2(bar.left() + w * i as f32, bar.top()),
+                    Vec2::new(w, bar.height()),
+                );
+                p.rect_filled(seg.shrink(0.6), 0.5, color);
+            }
+        }
+        Some(PlanShape::BarVertical) => {
+            let bar = Rect::from_center_size(c, Vec2::new(s * 0.3, s * 0.95));
+            for i in 0..4 {
+                let h = bar.height() / 4.0;
+                let seg = Rect::from_min_size(
+                    egui::pos2(bar.left(), bar.top() + h * i as f32),
+                    Vec2::new(bar.width(), h),
+                );
+                p.rect_filled(seg.shrink(0.6), 0.5, color);
+            }
+        }
+        Some(PlanShape::Effect) => {
+            let pts = vec![
+                egui::pos2(c.x, c.y - s * 0.42),
+                egui::pos2(c.x + s * 0.45, c.y + s * 0.38),
+                egui::pos2(c.x - s * 0.45, c.y + s * 0.38),
+            ];
+            p.add(egui::Shape::convex_polygon(pts, color, stroke));
+        }
+    }
+}
+
+/// Knopf mit Formsymbol.
+pub struct ShapeButton {
+    pub shape: Option<PlanShape>,
+    pub selected: bool,
+}
+
+impl egui::Widget for ShapeButton {
+    fn ui(self, ui: &mut Ui) -> egui::Response {
+        let (rect, resp) = ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
+        let p = ui.painter();
+        let bg = if self.selected {
+            theme::ACCENT_DIM
+        } else if resp.hovered() {
+            theme::RAISED_HOVER
+        } else {
+            theme::RAISED
+        };
+        p.rect_filled(rect, theme::R_S as f32, bg);
+        if self.selected {
+            p.rect_stroke(
+                rect,
+                theme::R_S as f32,
+                Stroke::new(1.0, theme::ACCENT),
+                StrokeKind::Inside,
+            );
+        }
+        let color = if self.selected {
+            theme::ACCENT
+        } else {
+            theme::TEXT
+        };
+        paint_shape_icon(p, self.shape, rect.shrink(7.0), color);
+        let tip = self
+            .shape
+            .map_or("Automatisch (nach Gerätetyp)", |s| s.label());
+        resp.on_hover_text(tip)
+    }
+}
+
+/// Menüzeile mit Formsymbol und Text (für Kontextmenüs).
+pub fn shape_menu_row(ui: &mut Ui, shape: Option<PlanShape>, label: &str) -> egui::Response {
+    let h = 24.0;
+    let w = ui.available_width().max(190.0);
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
+    let p = ui.painter();
+    if resp.hovered() {
+        p.rect_filled(rect, theme::R_S as f32, theme::RAISED_HOVER);
+    }
+    let icon = Rect::from_min_size(rect.min + Vec2::new(6.0, 4.0), Vec2::splat(h - 8.0));
+    paint_shape_icon(p, shape, icon, theme::TEXT);
+    p.text(
+        egui::pos2(icon.right() + 8.0, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        label,
+        theme::body(),
+        theme::TEXT,
+    );
+    resp
 }

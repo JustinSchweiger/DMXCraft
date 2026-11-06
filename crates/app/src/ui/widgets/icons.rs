@@ -14,6 +14,11 @@ pub enum Icon {
     LightOff,
     LightOn,
     Center,
+    ArrangeRow,
+    ArrangeGrid,
+    AlignH,
+    AlignV,
+    Reset,
     Menu,
     Minimize,
     Maximize,
@@ -92,6 +97,66 @@ impl Icon {
                 for dir in [Vec2::X, -Vec2::X, Vec2::Y, -Vec2::Y] {
                     painter.line_segment([c + dir * r * 0.55, c + dir * r * 1.45], stroke);
                 }
+            }
+            Icon::ArrangeRow => {
+                for k in -1..=1 {
+                    painter.circle_filled(c + Vec2::new(k as f32 * s * 0.6, 0.0), s * 0.2, color);
+                }
+            }
+            Icon::ArrangeGrid => {
+                for (dx, dy) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                    painter.circle_filled(
+                        c + Vec2::new(dx * s * 0.38, dy * s * 0.38),
+                        s * 0.2,
+                        color,
+                    );
+                }
+            }
+            Icon::AlignH => {
+                painter.line_segment(
+                    [pos2(c.x - s * 0.8, c.y), pos2(c.x + s * 0.8, c.y)],
+                    Stroke::new(1.0, color),
+                );
+                for (k, dy) in [(-1.0, -0.25), (0.0, 0.2), (1.0, -0.1)] {
+                    let r = Rect::from_center_size(
+                        c + Vec2::new(k * s * 0.55, dy * s * 0.0),
+                        Vec2::new(s * 0.3, s * 0.5 + dy.abs() * s),
+                    );
+                    painter.rect_filled(r, 1.0, color);
+                }
+            }
+            Icon::AlignV => {
+                painter.line_segment(
+                    [pos2(c.x, c.y - s * 0.8), pos2(c.x, c.y + s * 0.8)],
+                    Stroke::new(1.0, color),
+                );
+                for (k, dx) in [(-1.0, 0.25), (0.0, -0.2), (1.0, 0.1)] {
+                    let r = Rect::from_center_size(
+                        c + Vec2::new(0.0, k * s * 0.55),
+                        Vec2::new(s * 0.5 + f32::abs(dx) * s, s * 0.3),
+                    );
+                    painter.rect_filled(r, 1.0, color);
+                }
+            }
+            Icon::Reset => {
+                // Kreisbogen mit Pfeilspitze
+                let r = s * 0.55;
+                let n = 20;
+                let (a0, a1) = (-0.6f32, std::f32::consts::TAU - 1.4);
+                let pts: Vec<_> = (0..=n)
+                    .map(|i| c + Vec2::angled(a0 + (a1 - a0) * i as f32 / n as f32) * r)
+                    .collect();
+                painter.add(Shape::line(pts, stroke));
+                let tip = c + Vec2::angled(a0) * r;
+                painter.add(Shape::convex_polygon(
+                    vec![
+                        tip + Vec2::new(-s * 0.35, -s * 0.05),
+                        tip + Vec2::new(s * 0.1, -s * 0.4),
+                        tip + Vec2::new(s * 0.15, s * 0.1),
+                    ],
+                    color,
+                    Stroke::NONE,
+                ));
             }
             Icon::Menu => {
                 for dy in [-0.45, 0.0, 0.45] {

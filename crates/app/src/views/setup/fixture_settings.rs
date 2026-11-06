@@ -7,7 +7,9 @@ use dmxcraft_core::{
 use eframe::egui;
 
 use crate::ui::theme;
-use crate::ui::widgets::{section_header, Icon, IconButton, LimitPad, RangeSlider, Toggle};
+use crate::ui::widgets::{
+    section_header, Icon, IconButton, LimitPad, RangeSlider, ShapeButton, Toggle,
+};
 use crate::views::{View, ViewCtx};
 
 #[derive(Default)]
@@ -90,22 +92,29 @@ impl View for FixtureSettings {
 
         // Darstellung
         ui.horizontal(|ui| {
-            egui::ComboBox::from_id_salt("fs_shape")
-                .width(170.0)
-                .selected_text(shape.map_or("Form: automatisch", |s| s.label()))
-                .show_ui(ui, |ui| {
-                    if ui
-                        .selectable_label(shape.is_none(), "Automatisch (nach Typ)")
-                        .clicked()
-                    {
-                        new_shape = Some(None);
-                    }
-                    for s in PlanShape::ALL {
-                        if ui.selectable_label(shape == Some(s), s.label()).clicked() {
-                            new_shape = Some(Some(s));
-                        }
-                    }
-                });
+            ui.spacing_mut().item_spacing.x = 3.0;
+            if ui
+                .add(ShapeButton {
+                    shape: None,
+                    selected: shape.is_none(),
+                })
+                .clicked()
+            {
+                new_shape = Some(None);
+            }
+            for s in PlanShape::ALL {
+                if ui
+                    .add(ShapeButton {
+                        shape: Some(s),
+                        selected: shape == Some(s),
+                    })
+                    .clicked()
+                {
+                    new_shape = Some(Some(s));
+                }
+            }
+            ui.spacing_mut().item_spacing.x = theme::SP_S;
+            ui.add_space(theme::SP_S);
             ui.spacing_mut().slider_width = (ui.available_width() - 60.0).max(60.0);
             size_changed = ui
                 .add(

@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/app.rs": {
-    "mtime": 1793993865.2440536,
-    "seen": 1793993904.81183,
-    "ast_hash": "849e0f85c8ca9e5a8b52ecbb466d5cfd",
+    "mtime": 1793994766.679296,
+    "seen": 1793994799.8306143,
+    "ast_hash": "4af3f4415f4bc4e2d8c352fea20dac06",
     "semantic_hash": ""
   },
   "crates/app/src/demo.rs": {
@@ -186,9 +186,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/state.rs": {
-    "mtime": 1793992505.1587176,
-    "seen": 1793992653.581361,
-    "ast_hash": "6eb5e7e313df40a38c2995f66f69c2db",
+    "mtime": 1793994688.6669295,
+    "seen": 1793994799.8306243,
+    "ast_hash": "ed4ec46b8fb6734baee867461ae22bea",
     "semantic_hash": ""
   },
   "crates/app/src/ui/mod.rs": {
@@ -210,15 +210,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/icons.rs": {
-    "mtime": 1793993865.2560537,
-    "seen": 1793993904.8118477,
-    "ast_hash": "a26e9a02b11fc9e657c46692eee0f11f",
+    "mtime": 1793994766.699296,
+    "seen": 1793994799.8306327,
+    "ast_hash": "35cd3e522fe9e625193192d70011714f",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/mod.rs": {
-    "mtime": 1793993716.62129,
-    "seen": 1793993904.8118503,
-    "ast_hash": "3ce8b4a99ffe69b270e96afe0a02619a",
+    "mtime": 1793994604.806102,
+    "seen": 1793994799.8306355,
+    "ast_hash": "33d94c26d181e8aaaf656625c1295f1a",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/scene_card.rs": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/stage_canvas.rs": {
-    "mtime": 1793992620.6871696,
-    "seen": 1793992653.5813773,
-    "ast_hash": "86325ae3d73ca2e427966a3651267cf6",
+    "mtime": 1793994766.711296,
+    "seen": 1793994799.8306417,
+    "ast_hash": "cd5cff5beb10a56da9345ae1318221ae",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/swatch.rs": {
@@ -294,9 +294,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/stage_editor.rs": {
-    "mtime": 1793993865.3040538,
-    "seen": 1793993904.8118744,
-    "ast_hash": "1f522726a51eb3912da9b9e4f3ce7e13",
+    "mtime": 1793994766.747296,
+    "seen": 1793994799.8306608,
+    "ast_hash": "2cc759129f82de2c896eac4061877b09",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/zones.rs": {
@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "docs/UI-GUIDELINES.md": {
-    "mtime": 1793993902.1552508,
-    "seen": 1793993904.8118994,
-    "ast_hash": "29c1178a74395f320cdb3e201ea9cb31",
+    "mtime": 1793994796.891421,
+    "seen": 1793994799.830686,
+    "ast_hash": "9ba147ce2579165e5d1fc94b13da922f",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/dip_switch.rs": {
@@ -330,9 +330,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/fixture_menu.rs": {
-    "mtime": 1793992620.7031693,
-    "seen": 1793992653.5813866,
-    "ast_hash": "3dc1fcf0ff2af0803ca8a3f220c96195",
+    "mtime": 1793994623.1274762,
+    "seen": 1793994799.830653,
+    "ast_hash": "1c93fffb15e61bc957f0667526898d25",
     "semantic_hash": ""
   },
   "crates/core/src/dip.rs": {
@@ -348,15 +348,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/titlebar.rs": {
-    "mtime": 1793992620.6711695,
-    "seen": 1793992653.581363,
-    "ast_hash": "61ceeb5b3118a806570aafa0203ee917",
+    "mtime": 1793994766.695296,
+    "seen": 1793994799.8306255,
+    "ast_hash": "d8a5c5dac1bbad5ce4aaa8b4e21933bb",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/fixture_settings.rs": {
-    "mtime": 1793993865.2880538,
-    "seen": 1793993904.8118684,
-    "ast_hash": "e9af0c63c0bf2a986b0d3918b8daee47",
+    "mtime": 1793994766.731296,
+    "seen": 1793994799.8306553,
+    "ast_hash": "7e52d7ac0f665ae707417a5b96736bd3",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/library_panel.rs": {

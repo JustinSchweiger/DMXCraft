@@ -5,7 +5,9 @@ use eframe::egui;
 
 use crate::ui::theme;
 use crate::ui::widgets::stage_canvas::fixture_pos;
-use crate::ui::widgets::{section_header, CanvasMode, StageCanvas, StageInteraction, Toggle};
+use crate::ui::widgets::{
+    section_header, CanvasMode, Icon, IconButton, StageCanvas, StageInteraction, Toggle,
+};
 use crate::views::fixture_menu::{self, MenuPlace};
 use crate::views::{View, ViewCtx};
 
@@ -44,69 +46,55 @@ impl View for StageEditorView {
             ui.label(egui::RichText::new("Hilfe").color(theme::TEXT_FAINT)).on_hover_text(
                 "Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nRechtsklick = Menü (Form, Größe, Gruppen …)",
             );
+            ui.separator();
+            ui.add(Toggle::new(&mut self.labels, "Namen"));
+            ui.add(Toggle::new(&mut self.grid, "Raster"));
+            ui.add_enabled(
+                self.snap,
+                egui::DragValue::new(&mut self.cells)
+                    .range(4..=64)
+                    .suffix(" Felder"),
+            );
+            ui.add(Toggle::new(&mut self.snap, "Einrasten"));
         });
 
-        // Werkzeuge senkrecht links
+        // Anordnen: Symbol-Knöpfe senkrecht links
         egui::Panel::left("stage_tools")
             .resizable(false)
-            .exact_size(132.0)
+            .exact_size(34.0)
             .frame(egui::Frame::new().inner_margin(egui::Margin {
                 right: 6,
                 ..Default::default()
             }))
             .show(ui, |ui| {
                 let some = !cx.state.selected.is_empty();
-                let w = ui.available_width();
-                let mut tool = |ui: &mut egui::Ui, label: &str, hint: &str, a: Arrange| {
+                for (icon, hint, a) in [
+                    (Icon::ArrangeRow, "In Reihe verteilen", Arrange::Row),
+                    (Icon::ArrangeGrid, "Als Raster anordnen", Arrange::Grid),
+                    (
+                        Icon::AlignH,
+                        "Waagerecht ausrichten (gleiche Höhe)",
+                        Arrange::AlignH,
+                    ),
+                    (
+                        Icon::AlignV,
+                        "Senkrecht ausrichten (untereinander)",
+                        Arrange::AlignV,
+                    ),
+                    (
+                        Icon::Reset,
+                        "Position zurücksetzen (nach Patch-Reihenfolge)",
+                        Arrange::Reset,
+                    ),
+                ] {
                     if ui
-                        .add_enabled(some, egui::Button::new(label).min_size(egui::vec2(w, 26.0)))
+                        .add(IconButton::new(icon).size(28.0).enabled(some))
                         .on_hover_text(hint)
                         .clicked()
                     {
                         arrange = Some(a);
                     }
-                };
-                tool(
-                    ui,
-                    "In Reihe",
-                    "Auswahl gleichmäßig in einer Reihe verteilen",
-                    Arrange::Row,
-                );
-                tool(
-                    ui,
-                    "Als Raster",
-                    "Auswahl als Raster anordnen",
-                    Arrange::Grid,
-                );
-                tool(
-                    ui,
-                    "Waagerecht",
-                    "Auswahl auf eine Höhe bringen",
-                    Arrange::AlignH,
-                );
-                tool(
-                    ui,
-                    "Senkrecht",
-                    "Auswahl untereinander ausrichten",
-                    Arrange::AlignV,
-                );
-                tool(
-                    ui,
-                    "Zurücksetzen",
-                    "Automatische Position nach Patch-Reihenfolge",
-                    Arrange::Reset,
-                );
-                ui.add_space(theme::SP_S);
-                ui.separator();
-                ui.add(Toggle::new(&mut self.snap, "Einrasten"));
-                ui.add_enabled(
-                    self.snap,
-                    egui::DragValue::new(&mut self.cells)
-                        .range(4..=64)
-                        .suffix(" Felder"),
-                );
-                ui.add(Toggle::new(&mut self.grid, "Raster"));
-                ui.add(Toggle::new(&mut self.labels, "Namen"));
+                }
             });
 
         egui::CentralPanel::default_margins()

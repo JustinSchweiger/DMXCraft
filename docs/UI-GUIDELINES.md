@@ -48,6 +48,9 @@ Schrift: `FS_CAPTION=10.5` (Sektionstitel, GROSS), `FS_BODY=13`,
   Mitte „DmxCraft · Showname“; rechts Ausgangsstatus, Statistik, Fensterknöpfe.
   Keine Bedienelemente der Wiedergabe (Master, Speed, Blackout) in der
   Titelleiste – die liegen unter STEUERN über dem Szenen-Raster.
+* **Keine Statusleiste.** Kurze Meldungen (`AppState::info/error`) erscheinen
+  rechts in der Titelleiste und blenden nach 5 s (Fehler 10 s) aus; Update-
+  Hinweise ebenfalls dort.
 * **Randlos:** Bereiche stoßen aneinander und sind nur durch 1-px-Trennlinien
   (Panel-Grenzen) getrennt. Innenabstand eines Bereichs `SP_XS`–`SP_S`,
   keine äußeren Rahmen oder Rundungen um ganze Bereiche (Canvas, Raster).
@@ -93,6 +96,12 @@ keinen App-Zustand – nur ihre Eingabewerte.
 * Elemente, die abhängig von der Auswahl erscheinen (z. B. DIP-Schalter), dürfen
   die Höhe ihrer Zeile nicht verändern.
 * Alle Bereiche einer Seite sind an ihren Trennlinien in der Größe veränderbar.
+  Widgets setzen den Mauszeiger nur, wenn sie ihn wirklich brauchen (z. B.
+  Greifen beim Verschieben) – nie pauschal `Default`, sonst verschwindet der
+  Größenänderungs-Cursor der Trennlinien.
+* Werkzeuge und Auswahlen mit wenigen festen Optionen (Formen, Anordnen)
+  als Symbol-Knöpfe mit Tooltip statt Auswahllisten; Symbole immer selbst
+  gezeichnet (`widgets::icons`, `stage_canvas::paint_shape_icon`).
 
 ## 6. Text & Symbole
 

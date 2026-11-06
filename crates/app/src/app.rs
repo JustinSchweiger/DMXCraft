@@ -10,7 +10,7 @@ use eframe::egui;
 use crate::demo;
 use crate::settings::Settings;
 use crate::state::{AppState, Mode};
-use crate::titlebar::{self, MenuAction, TitleInfo};
+use crate::titlebar::{self, MenuAction, TitleInfo, UpdateBadge};
 use crate::ui::theme;
 use crate::ui::widgets::Toggle;
 use crate::updater::{UpdateState, Updater};
@@ -197,6 +197,7 @@ impl DmxCraftApp {
             MenuAction::Output(k) => self.switch_output(k),
             MenuAction::Settings => self.settings_open = true,
             MenuAction::CheckUpdates => self.updater.check(ctx.clone()),
+            MenuAction::InstallUpdate => self.updater.install(ctx.clone()),
             MenuAction::About => self.about_open = true,
         }
     }
@@ -236,29 +237,6 @@ impl DmxCraftApp {
             OutputStatus::Stopped => ("Ausgang gestoppt".into(), theme::TEXT_DIM),
         };
         (e.show().name.clone(), stats, status, e.blackout())
-    }
-
-    fn status_bar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            match &self.state.message {
-                Some((msg, true)) => {
-                    ui.label(egui::RichText::new(msg).color(theme::DANGER));
-                }
-                Some((msg, false)) => {
-                    ui.label(msg);
-                }
-                None => {
-                    ui.label(egui::RichText::new("Bereit").color(theme::TEXT_FAINT));
-                }
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                update_widget(ui, &self.updater);
-                ui.label(
-                    egui::RichText::new(format!("DmxCraft v{}", Updater::current_version()))
-                        .color(theme::TEXT_FAINT),
-                );
-            });
-        });
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
@@ -442,6 +420,17 @@ impl eframe::App for DmxCraftApp {
 
         // ----- Titelleiste -----
         let (show_name, stats, status, blackout) = self.title_info();
+        let update = match self.updater.state() {
+            UpdateState::Available => UpdateBadge::Available,
+            UpdateState::Installing => UpdateBadge::Busy("installiere Update"),
+            UpdateState::Installed(v) => UpdateBadge::Installed(v),
+            UpdateState::Error(e) => UpdateBadge::Error(e),
+            _ => UpdateBadge::None,
+        };
+        let message = self
+            .state
+            .current_message()
+            .map(|(m, e)| (m.to_string(), e));
         let info = TitleInfo {
             logo: self.logo.as_ref().map(|t| t.id()),
             show_name: &show_name,
@@ -449,6 +438,8 @@ impl eframe::App for DmxCraftApp {
             stats,
             output: self.output_kind,
             blackout,
+            message: message.as_ref().map(|(m, e)| (m.as_str(), *e)),
+            update,
         };
         let mut actions = Vec::new();
         egui::Panel::top("titlebar")
@@ -461,14 +452,6 @@ impl eframe::App for DmxCraftApp {
         for a in actions {
             self.apply_menu(&ctx, a);
         }
-
-        egui::Panel::bottom("status")
-            .frame(
-                egui::Frame::new()
-                    .fill(theme::BG)
-                    .inner_margin(egui::Margin::symmetric(8, 3)),
-            )
-            .show(ui, |ui| self.status_bar(ui));
 
         // ----- Inhalt (randlos, Bereiche nur durch Trennlinien getrennt) -----
         let frame = self.runtime.last_frame();
@@ -516,57 +499,5 @@ impl eframe::App for DmxCraftApp {
         }
         self.dialogs(&ctx);
         titlebar::resize_handles(&ctx);
-    }
-}
-
-fn update_widget(ui: &mut egui::Ui, updater: &Updater) {
-    let ctx = ui.ctx().clone();
-    match updater.state() {
-        UpdateState::Idle | UpdateState::UpToDate => {
-            if ui
-                .small_button("Updates")
-                .on_hover_text("Nach neuer Version suchen")
-                .clicked()
-            {
-                updater.check(ctx);
-            }
-        }
-        UpdateState::Checking => {
-            ui.label(egui::RichText::new("suche Updates").color(theme::TEXT_DIM));
-        }
-        UpdateState::Available => {
-            let b = egui::Button::new("Update installieren").fill(theme::ACCENT_DIM);
-            if ui
-                .add(b)
-                .on_hover_text("Neue Version von GitHub laden")
-                .clicked()
-            {
-                updater.install(ctx);
-            }
-        }
-        UpdateState::Installing => {
-            ui.label(egui::RichText::new("installiere Update").color(theme::TEXT_DIM));
-        }
-        UpdateState::Installed(v) => {
-            ui.label(
-                egui::RichText::new(format!("v{v} installiert – bitte neu starten"))
-                    .color(theme::OK),
-            );
-        }
-        UpdateState::NotInstalled => {
-            ui.label(egui::RichText::new("(Entwickler-Build)").color(theme::TEXT_FAINT))
-                .on_hover_text(
-                    "Updates gibt es nur für Installationen über die offiziellen Installer.",
-                );
-        }
-        UpdateState::Error(e) => {
-            if ui
-                .small_button("Update-Fehler")
-                .on_hover_text(format!("{e}\nKlicken für neuen Versuch"))
-                .clicked()
-            {
-                updater.check(ctx);
-            }
-        }
     }
 }
