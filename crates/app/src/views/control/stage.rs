@@ -32,12 +32,17 @@ impl View for StageView {
         };
         let mut action = None;
         let clip = cx.state.layout_clipboard.is_some();
+        let locked = cx.state.locked;
         // Im Auswahlmodus entstehen keine Verschiebungen.
         let _ = canvas.show(
             ui,
             &mut self.interaction,
             &mut cx.state.selected,
             &mut |ui, target, sel| {
+                if locked {
+                    ui.label("Oberfläche ist gesperrt");
+                    return;
+                }
                 if let Some(a) = fixture_menu::menu(ui, show, sel, target, MenuPlace::Stage, clip) {
                     action = Some(a);
                 }

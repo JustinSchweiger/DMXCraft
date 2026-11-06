@@ -23,6 +23,8 @@ pub struct PatchForm {
 
 pub struct AppState {
     pub mode: Mode,
+    /// Oberfläche gesperrt: nur Steuern, keine Änderungen an Patch und Szenen.
+    pub locked: bool,
     pub show_path: String,
     pub message: Option<(String, bool)>,
     /// Zeitpunkt der letzten Meldung (Meldungen blenden nach einigen Sekunden aus).
@@ -51,6 +53,7 @@ impl AppState {
     pub fn new(show_path: String) -> Self {
         Self {
             mode: Mode::Control,
+            locked: false,
             show_path,
             message: None,
             message_time: None,

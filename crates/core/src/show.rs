@@ -12,6 +12,9 @@ use crate::fixture::{ChannelDef, FixtureType};
 
 pub const SHOW_FORMAT_VERSION: u32 = 1;
 
+/// Feste Anzahl DMX-Universen jeder Show.
+pub const UNIVERSES: u8 = 8;
+
 macro_rules! id_type {
     ($name:ident) => {
         #[derive(
@@ -315,7 +318,7 @@ pub enum ShowError {
 pub struct Show {
     pub format_version: u32,
     pub name: String,
-    /// Anzahl DMX-Universen (DVC Gold: 2).
+    /// Anzahl DMX-Universen – immer [`UNIVERSES`] (ältere Dateien werden beim Laden angepasst).
     pub universes: u8,
     pub fixture_types: Vec<FixtureType>,
     pub fixtures: Vec<Fixture>,
@@ -332,11 +335,12 @@ impl Default for Show {
 }
 
 impl Show {
-    pub fn new(name: impl Into<String>, universes: u8) -> Self {
+    /// Neue Show. `_universes` wird ignoriert; jede Show hat [`UNIVERSES`] Universen.
+    pub fn new(name: impl Into<String>, _universes: u8) -> Self {
         Self {
             format_version: SHOW_FORMAT_VERSION,
             name: name.into(),
-            universes: universes.max(1),
+            universes: UNIVERSES,
             fixture_types: Vec::new(),
             fixtures: Vec::new(),
             zones: Vec::new(),
@@ -352,10 +356,11 @@ impl Show {
     }
 
     pub fn from_json(json: &str) -> Result<Self, ShowError> {
-        let show: Show = serde_json::from_str(json)?;
+        let mut show: Show = serde_json::from_str(json)?;
         if show.format_version > SHOW_FORMAT_VERSION {
             return Err(ShowError::Version(show.format_version));
         }
+        show.universes = UNIVERSES;
         Ok(show)
     }
 
@@ -653,9 +658,10 @@ mod tests {
             Err(PatchError::OutOfRange { .. })
         ));
         assert!(s.add_fixture("X", "generic/rgbw-par-6ch", 0, 507).is_ok());
+        assert!(s.add_fixture("X", "generic/dimmer-1ch", 7, 1).is_ok());
         assert!(matches!(
-            s.add_fixture("X", "generic/dimmer-1ch", 2, 1),
-            Err(PatchError::BadUniverse(3, 2))
+            s.add_fixture("X", "generic/dimmer-1ch", 8, 1),
+            Err(PatchError::BadUniverse(9, 8))
         ));
         assert!(matches!(
             s.add_fixture("X", "nope", 0, 100),

@@ -1,6 +1,6 @@
 //! Echtzeit-Thread: taktet die Engine, rendert Frames und sendet sie.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -31,6 +31,8 @@ pub struct Runtime {
     engine: Arc<Mutex<Engine>>,
     last_frame: Arc<Mutex<DmxFrame>>,
     status: Arc<Mutex<OutputStatus>>,
+    /// Auslastung des Ausgabe-Takts in Promille (Rechenzeit / Taktdauer, geglättet).
+    load: Arc<AtomicU32>,
     stop: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
 }
@@ -44,12 +46,14 @@ impl Runtime {
         let last_frame = Arc::new(Mutex::new(DmxFrame::new(universes)));
         let status = Arc::new(Mutex::new(OutputStatus::Connecting));
         let stop = Arc::new(AtomicBool::new(false));
+        let load = Arc::new(AtomicU32::new(0));
 
-        let (t_engine, t_frame, t_status, t_stop) = (
+        let (t_engine, t_frame, t_status, t_stop, t_load) = (
             engine.clone(),
             last_frame.clone(),
             status.clone(),
             stop.clone(),
+            load.clone(),
         );
 
         let handle = std::thread::Builder::new()
@@ -81,6 +85,7 @@ impl Runtime {
 
                     // Engine immer takten, auch ohne Gerät – die Oberfläche
                     // zeigt die Werte dann im Monitor.
+                    let work_start = Instant::now();
                     let dt = now - last_tick;
                     last_tick = now;
                     if let Ok(mut e) = t_engine.lock() {
@@ -90,6 +95,9 @@ impl Runtime {
                     if let Ok(mut lf) = t_frame.lock() {
                         lf.clone_from(&frame);
                     }
+
+                    // Rechenzeit der Engine relativ zur Taktdauer
+                    record_load(&t_load, work_start.elapsed(), period);
 
                     if !connected {
                         if now < retry_at {
@@ -143,6 +151,7 @@ impl Runtime {
             engine,
             last_frame,
             status,
+            load,
             stop,
             handle: Some(handle),
         }
@@ -167,12 +176,25 @@ impl Runtime {
             .unwrap_or(OutputStatus::Error("Status nicht lesbar".into()))
     }
 
+    /// Auslastung des Ausgabe-Takts, 0.0..=1.0 (über 1.0 = Takt wird nicht gehalten).
+    pub fn load(&self) -> f32 {
+        self.load.load(Ordering::Relaxed) as f32 / 1000.0
+    }
+
     pub fn stop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(h) = self.handle.take() {
             let _ = h.join();
         }
     }
+}
+
+/// Gleitender Mittelwert der Auslastung (Promille).
+fn record_load(load: &AtomicU32, work: Duration, period: Duration) {
+    let sample = (work.as_secs_f64() / period.as_secs_f64() * 1000.0).min(5000.0) as u32;
+    let old = load.load(Ordering::Relaxed);
+    let new = (old * 9 + sample) / 10;
+    load.store(new, Ordering::Relaxed);
 }
 
 impl Drop for Runtime {
@@ -216,6 +238,11 @@ mod tests {
         assert!(frames.len() >= 3, "nur {} Frames", frames.len());
         assert_eq!(frames.last().unwrap().get(0, 5), Some(222));
         assert_eq!(rt.status(), OutputStatus::Stopped);
+        assert!(
+            rt.load() < 1.0,
+            "Auslastung {} bei winziger Show",
+            rt.load()
+        );
     }
 
     struct Failing;

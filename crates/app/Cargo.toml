@@ -28,6 +28,7 @@ dmxcraft-output.workspace = true
 dmxcraft-ofl.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.11"
 axoupdater = { version = "0.10", features = ["blocking"] }
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 

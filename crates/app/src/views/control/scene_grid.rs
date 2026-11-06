@@ -65,7 +65,7 @@ impl View for SceneGridView {
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
                     for (zone, name) in &columns {
-                        column(ui, cx.engine, *zone, name, &mut actions);
+                        column(ui, cx.engine, *zone, name, cx.state.locked, &mut actions);
                         ui.add_space(theme::SP_S);
                     }
                 });
@@ -207,6 +207,7 @@ fn column(
     e: &Engine,
     zone: Option<ZoneId>,
     name: &str,
+    locked: bool,
     actions: &mut Vec<Action>,
 ) {
     let color = theme::zone_color(e.show(), zone);
@@ -274,6 +275,7 @@ fn column(
                             .add(IconButton::new(Icon::Plus))
                             .on_hover_text("Neue Szene aus dem Programmer")
                             .clicked()
+                            && !locked
                         {
                             actions.push(Action::NewScene(zone));
                         }
@@ -282,7 +284,7 @@ fn column(
             });
         ui.add_space(theme::SP_XS);
         for id in scenes {
-            scene_card(ui, e, id, color, actions);
+            scene_card(ui, e, id, color, locked, actions);
             ui.add_space(theme::SP_XS);
         }
     });
@@ -293,6 +295,7 @@ fn scene_card(
     e: &Engine,
     id: SceneId,
     color: Color32,
+    locked: bool,
     actions: &mut Vec<Action>,
 ) {
     let Some(scene) = e.show().scene(id) else {
@@ -318,6 +321,9 @@ fn scene_card(
     let resp = ui.add(card);
     if resp.clicked() {
         actions.push(Action::Toggle(id));
+    }
+    if locked {
+        return;
     }
     resp.context_menu(|ui| {
         if ui.button("Bearbeiten").clicked() {

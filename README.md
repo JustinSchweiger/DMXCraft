@@ -84,8 +84,16 @@ trotzdem, und im Tab **DMX-Monitor** siehst du, was an die Box gehen würde.
 
 DmxCraft hat eine eigene Titelleiste: links das Menü (Datei, Einrichten, Wiedergabe, Ausgang,
 Ansicht, Einstellungen, Hilfe) und der Umschalter **Einrichten/Steuern**, in der Mitte Programm-
-und Showname, rechts Ausgangsstatus, Statistik und die Fensterknöpfe. Ziehen an der Leiste
+und Showname, rechts die Auslastungsleiste (Ausgangsstatus und Details im Tooltip), das Schloss und die
+Fensterknöpfe. Ziehen an der Leiste
 verschiebt das Fenster, Doppelklick maximiert. Tastenkürzel: Strg+S, Strg+O, F11, B (Blackout).
+
+Das **Schloss** sperrt die Oberfläche mit einem Passwort (beim ersten Mal festlegen, mindestens
+4 Zeichen; gespeichert wird nur ein gesalzener SHA-256-Hash). Gesperrt bleibt nur STEUERN:
+Patch, Szenen und Einstellungen lassen sich nicht ändern. Die Sperre bleibt nach einem Neustart
+bestehen; das Passwort lässt sich entsperrt unter Einstellungen → Sperre entfernen.
+
+Eine Show hat fest **8 Universen** à 512 Kanäle.
 
 Die Oberfläche hat zwei Bereiche:
 

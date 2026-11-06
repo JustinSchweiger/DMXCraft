@@ -14,6 +14,8 @@ pub enum Icon {
     LightOff,
     LightOn,
     Center,
+    Locked,
+    Unlocked,
     ArrangeRow,
     ArrangeGrid,
     AlignH,
@@ -97,6 +99,40 @@ impl Icon {
                 for dir in [Vec2::X, -Vec2::X, Vec2::Y, -Vec2::Y] {
                     painter.line_segment([c + dir * r * 0.55, c + dir * r * 1.45], stroke);
                 }
+            }
+            Icon::Locked | Icon::Unlocked => {
+                let body = Rect::from_center_size(
+                    c + Vec2::new(0.0, s * 0.25),
+                    Vec2::new(s * 1.1, s * 0.8),
+                );
+                painter.rect_filled(body, 1.5, color);
+                let r = s * 0.32;
+                let lift = if self == Icon::Unlocked {
+                    s * 0.25
+                } else {
+                    0.0
+                };
+                let shift = if self == Icon::Unlocked { s * 0.3 } else { 0.0 };
+                let top = body.top() - lift;
+                let n = 12;
+                let pts: Vec<_> = (0..=n)
+                    .map(|i| {
+                        let a = std::f32::consts::PI + std::f32::consts::PI * i as f32 / n as f32;
+                        pos2(c.x + shift + a.cos() * r, top - r * 0.6 + a.sin() * r)
+                    })
+                    .collect();
+                let mut legs = vec![pos2(c.x + shift - r, top)];
+                legs.extend(pts);
+                legs.push(pos2(
+                    c.x + shift + r,
+                    if self == Icon::Unlocked {
+                        top - r * 0.3
+                    } else {
+                        top
+                    },
+                ));
+                painter.add(Shape::line(legs, Stroke::new(1.6, color)));
+                painter.circle_filled(body.center(), s * 0.1, theme::BG);
             }
             Icon::ArrangeRow => {
                 for k in -1..=1 {

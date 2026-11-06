@@ -37,6 +37,14 @@ enum PathDialog {
     SaveAs,
 }
 
+/// Dialog zum Sperren (Passwort festlegen) oder Entsperren.
+struct LockDialog {
+    set_password: bool,
+    pw: String,
+    pw2: String,
+    error: Option<String>,
+}
+
 pub struct DmxCraftApp {
     engine: Arc<Mutex<Engine>>,
     runtime: Runtime,
@@ -48,6 +56,7 @@ pub struct DmxCraftApp {
     settings_open: bool,
     about_open: bool,
     path_dialog: Option<(PathDialog, String)>,
+    lock_dialog: Option<LockDialog>,
     state: AppState,
     control: ControlViews,
     setup: SetupView,
@@ -76,6 +85,8 @@ impl DmxCraftApp {
         let runtime = Runtime::start(engine.clone(), output_kind.create(), OUTPUT_HZ);
         let mut state = AppState::new(show_path.unwrap_or_else(|| "show.json".into()));
         state.message = message;
+        // Gesperrt bleibt gesperrt – auch nach einem Neustart
+        state.locked = settings.locked && settings.lock_hash.is_some();
         Self {
             engine,
             runtime,
@@ -87,6 +98,7 @@ impl DmxCraftApp {
             settings_open: false,
             about_open: false,
             path_dialog: None,
+            lock_dialog: None,
             state,
             control: ControlViews::default(),
             setup: SetupView::default(),
@@ -199,6 +211,112 @@ impl DmxCraftApp {
             MenuAction::CheckUpdates => self.updater.check(ctx.clone()),
             MenuAction::InstallUpdate => self.updater.install(ctx.clone()),
             MenuAction::About => self.about_open = true,
+            MenuAction::ToggleLock => {
+                if self.state.locked {
+                    self.lock_dialog = Some(LockDialog {
+                        set_password: false,
+                        pw: String::new(),
+                        pw2: String::new(),
+                        error: None,
+                    });
+                } else if self.settings.lock_hash.is_some() {
+                    self.lock_ui();
+                } else {
+                    self.lock_dialog = Some(LockDialog {
+                        set_password: true,
+                        pw: String::new(),
+                        pw2: String::new(),
+                        error: None,
+                    });
+                }
+            }
+        }
+    }
+
+    fn lock_ui(&mut self) {
+        self.state.locked = true;
+        self.state.mode = Mode::Control;
+        self.state.scene_editor_open = false;
+        self.state.zones_open = false;
+        self.settings_open = false;
+        self.path_dialog = None;
+        self.settings.locked = true;
+        self.save_settings();
+        self.state.info("Oberfläche gesperrt");
+    }
+
+    fn unlock_ui(&mut self) {
+        self.state.locked = false;
+        self.settings.locked = false;
+        self.save_settings();
+        self.state.info("Oberfläche entsperrt");
+    }
+
+    fn lock_window(&mut self, ctx: &egui::Context) {
+        let Some(mut d) = self.lock_dialog.take() else {
+            return;
+        };
+        let mut open = true;
+        let mut confirm = false;
+        let title = if d.set_password {
+            "Oberfläche sperren"
+        } else {
+            "Oberfläche entsperren"
+        };
+        egui::Window::new(title)
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                if d.set_password {
+                    ui.label("Passwort festlegen. Gesperrt sind Einrichten, Szenen bearbeiten und Einstellungen.");
+                } else {
+                    ui.label("Passwort eingeben:");
+                }
+                let r = ui.add(egui::TextEdit::singleline(&mut d.pw).password(true).desired_width(260.0));
+                r.request_focus();
+                if d.set_password {
+                    ui.label("Wiederholen:");
+                    ui.add(egui::TextEdit::singleline(&mut d.pw2).password(true).desired_width(260.0));
+                }
+                if let Some(e) = &d.error {
+                    ui.label(egui::RichText::new(e).color(theme::DANGER));
+                }
+                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    confirm = true;
+                }
+                let label = if d.set_password { "Sperren" } else { "Entsperren" };
+                if ui.button(label).clicked() {
+                    confirm = true;
+                }
+            });
+        if confirm {
+            if d.set_password {
+                if d.pw.chars().count() < 4 {
+                    d.error = Some("Mindestens 4 Zeichen".into());
+                } else if d.pw != d.pw2 {
+                    d.error = Some("Passwörter stimmen nicht überein".into());
+                } else {
+                    self.settings.lock_hash = Some(crate::lock::hash_password(&d.pw));
+                    self.lock_ui();
+                    return;
+                }
+            } else if self
+                .settings
+                .lock_hash
+                .as_deref()
+                .is_some_and(|h| crate::lock::verify(h, &d.pw))
+            {
+                self.unlock_ui();
+                return;
+            } else {
+                d.error = Some("Falsches Passwort".into());
+                d.pw.clear();
+            }
+        }
+        if open {
+            self.lock_dialog = Some(d);
         }
     }
 
@@ -209,7 +327,7 @@ impl DmxCraftApp {
             if i.consume_key(egui::Modifiers::COMMAND, egui::Key::S) {
                 out.push(MenuAction::SaveShow);
             }
-            if i.consume_key(egui::Modifiers::COMMAND, egui::Key::O) {
+            if !self.state.locked && i.consume_key(egui::Modifiers::COMMAND, egui::Key::O) {
                 out.push(MenuAction::OpenShow);
             }
             if i.consume_key(egui::Modifiers::NONE, egui::Key::F11) {
@@ -222,21 +340,15 @@ impl DmxCraftApp {
         })
     }
 
-    fn title_info(&self) -> (String, String, (String, egui::Color32), bool) {
+    fn title_info(&self) -> (String, f32, (String, egui::Color32), bool) {
         let e = Self::lock(&self.engine);
-        let stats = format!(
-            "{} Geräte · {} Szenen · {} aktiv",
-            e.show().fixtures.len(),
-            e.show().scenes.len(),
-            e.active_scenes().len()
-        );
-        let status = match self.runtime.status() {
-            OutputStatus::Running { fps, .. } => (format!("Ausgang {fps:.0} fps"), theme::OK),
-            OutputStatus::Connecting => ("Ausgang verbindet".into(), theme::WARN),
-            OutputStatus::Error(_) => ("Ausgang: Fehler".into(), theme::DANGER),
-            OutputStatus::Stopped => ("Ausgang gestoppt".into(), theme::TEXT_DIM),
+        let (fps, status) = match self.runtime.status() {
+            OutputStatus::Running { fps, .. } => (fps, ("Ausgang aktiv".to_string(), theme::OK)),
+            OutputStatus::Connecting => (0.0, ("Ausgang verbindet".into(), theme::WARN)),
+            OutputStatus::Error(msg) => (0.0, (format!("Ausgang: Fehler – {msg}"), theme::DANGER)),
+            OutputStatus::Stopped => (0.0, ("Ausgang gestoppt".into(), theme::TEXT_DIM)),
         };
-        (e.show().name.clone(), stats, status, e.blackout())
+        (e.show().name.clone(), fps, status, e.blackout())
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
@@ -298,25 +410,6 @@ impl DmxCraftApp {
                             ui.label("Name");
                             ui.text_edit_singleline(&mut e.show_mut().name);
                             ui.end_row();
-                            ui.label("DMX-Universen");
-                            let mut u = e.show().universes;
-                            let max_used = e
-                                .show()
-                                .fixtures
-                                .iter()
-                                .map(|f| f.universe + 1)
-                                .max()
-                                .unwrap_or(1);
-                            if ui
-                                .add(egui::DragValue::new(&mut u).range(max_used.max(1)..=8))
-                                .on_hover_text(
-                                    "Kann nicht unter das höchste belegte Universum gesetzt werden",
-                                )
-                                .changed()
-                            {
-                                e.show_mut().universes = u;
-                            }
-                            ui.end_row();
                         });
                     drop(e);
                     ui.separator();
@@ -357,6 +450,24 @@ impl DmxCraftApp {
                             "Beim Start nach Updates suchen",
                         ))
                         .changed();
+                    ui.separator();
+                    ui.heading("Sperre");
+                    ui.horizontal(|ui| {
+                        if self.settings.lock_hash.is_some() {
+                            ui.label("Passwort ist festgelegt.");
+                            if ui.button("Passwort entfernen").clicked() {
+                                self.settings.lock_hash = None;
+                                changed = true;
+                            }
+                        } else {
+                            ui.label(
+                                egui::RichText::new(
+                                    "Noch kein Passwort – wird beim ersten Sperren festgelegt.",
+                                )
+                                .color(theme::TEXT_DIM),
+                            );
+                        }
+                    });
                     ui.separator();
                     if let Some(p) = Settings::path() {
                         ui.label(
@@ -419,7 +530,7 @@ impl eframe::App for DmxCraftApp {
         }
 
         // ----- Titelleiste -----
-        let (show_name, stats, status, blackout) = self.title_info();
+        let (show_name, fps, status, blackout) = self.title_info();
         let update = match self.updater.state() {
             UpdateState::Available => UpdateBadge::Available,
             UpdateState::Installing => UpdateBadge::Busy("installiere Update"),
@@ -435,7 +546,9 @@ impl eframe::App for DmxCraftApp {
             logo: self.logo.as_ref().map(|t| t.id()),
             show_name: &show_name,
             status,
-            stats,
+            load: self.runtime.load(),
+            fps,
+            locked: self.state.locked,
             output: self.output_kind,
             blackout,
             message: message.as_ref().map(|(m, e)| (m.as_str(), *e)),
@@ -498,6 +611,7 @@ impl eframe::App for DmxCraftApp {
             }
         }
         self.dialogs(&ctx);
+        self.lock_window(&ctx);
         titlebar::resize_handles(&ctx);
     }
 }

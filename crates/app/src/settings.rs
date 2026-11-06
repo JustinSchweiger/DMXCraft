@@ -18,6 +18,10 @@ pub struct Settings {
     pub open_last_show: bool,
     /// Gewählter Ausgang: "simulation" oder "dvc_gold".
     pub output: String,
+    /// Gesalzener Hash des Sperr-Passworts („salz:hash“).
+    pub lock_hash: Option<String>,
+    /// Oberfläche war beim Beenden gesperrt (bleibt nach Neustart gesperrt).
+    pub locked: bool,
 }
 
 impl Default for Settings {
@@ -28,6 +32,8 @@ impl Default for Settings {
             last_show: None,
             open_last_show: true,
             output: "simulation".into(),
+            lock_hash: None,
+            locked: false,
         }
     }
 }

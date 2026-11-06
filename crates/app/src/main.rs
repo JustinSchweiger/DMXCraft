@@ -4,6 +4,7 @@ mod app;
 mod demo;
 mod desktop;
 mod icon;
+mod lock;
 mod settings;
 mod state;
 mod titlebar;

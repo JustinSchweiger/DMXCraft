@@ -56,8 +56,48 @@ pub fn body() -> FontId {
     FontId::proportional(FS_BODY)
 }
 
+/// Schriftfamilie für Bereichsüberschriften (Noto Sans SemiBold, OFL).
+pub const HEADING_FAMILY: &str = "heading";
+/// Größe der Bereichsüberschriften.
+pub const FS_HEADING: f32 = 12.0;
+
+pub fn heading_font() -> FontId {
+    FontId::new(FS_HEADING, egui::FontFamily::Name(HEADING_FAMILY.into()))
+}
+
+/// Text einer Bereichsüberschrift – überall gleich: Großbuchstaben, halbfett.
+pub fn heading_text(text: &str) -> egui::RichText {
+    egui::RichText::new(text.to_uppercase())
+        .font(heading_font())
+        .color(TEXT)
+}
+
+fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        HEADING_FAMILY.into(),
+        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+            "../../assets/fonts/NotoSans-SemiBold.ttf"
+        ))),
+    );
+    let mut family = vec![HEADING_FAMILY.to_string()];
+    // Fallback für Zeichen, die die Überschriftenschrift nicht hat
+    family.extend(
+        fonts
+            .families
+            .get(&egui::FontFamily::Proportional)
+            .cloned()
+            .unwrap_or_default(),
+    );
+    fonts
+        .families
+        .insert(egui::FontFamily::Name(HEADING_FAMILY.into()), family);
+    ctx.set_fonts(fonts);
+}
+
 pub fn apply(ctx: &egui::Context) {
     ctx.set_theme(egui::Theme::Dark);
+    install_fonts(ctx);
     let mut v = Visuals::dark();
     v.panel_fill = SURFACE;
     v.window_fill = SURFACE;

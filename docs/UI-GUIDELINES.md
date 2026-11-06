@@ -45,7 +45,8 @@ Schrift: `FS_CAPTION=10.5` (Sektionstitel, GROSS), `FS_BODY=13`,
 
 * **Eigene Titelleiste** (`titlebar.rs`, Fenster ohne Betriebssystem-Leiste):
   links Logo · Menü (alle Befehle, Einstellungen) · Modus Einrichten/Steuern;
-  Mitte „DmxCraft · Showname“; rechts Ausgangsstatus, Statistik, Fensterknöpfe.
+  Mitte „DmxCraft · Showname“; rechts Auslastungsleiste „LAST“ (Statuspunkt, Details im Tooltip),
+  Sperre-Knopf, Fensterknöpfe. Keine fps- oder Geräte-/Szenenzahlen.
   Keine Bedienelemente der Wiedergabe (Master, Speed, Blackout) in der
   Titelleiste – die liegen unter STEUERN über dem Szenen-Raster.
 * **Keine Statusleiste.** Kurze Meldungen (`AppState::info/error`) erscheinen
@@ -57,7 +58,13 @@ Schrift: `FS_CAPTION=10.5` (Sektionstitel, GROSS), `FS_BODY=13`,
 * STEUERN: oben Szenen-Raster (flexibel), unten Bühnenplan + Programmer
   (Höhe per Splitter, Standard 40 %).
 * Jeder Bereich beginnt mit einem **Sektionskopf** (`widgets::section_header`):
-  Titel in GROSSBUCHSTABEN (`FS_CAPTION`, `TEXT_DIM`) links, Aktionen rechts.
+  Titel links, Aktionen rechts. Bereichsüberschriften **immer** über
+  `theme::heading_text()` (Noto Sans SemiBold, `FS_HEADING`, GROSSBUCHSTABEN) –
+  nie eigene `RichText` für Überschriften, damit sie überall gleich aussehen.
+* **Sperre:** Ist die Oberfläche gesperrt (`AppState::locked`), gibt es nur
+  STEUERN; Einrichten, Szenen-/Zonenbearbeitung, Kontextmenüs zum Ändern,
+  Einstellungen und Show öffnen sind aus. Neue Bedienelemente, die etwas am
+  Patch oder an Szenen ändern, müssen `locked` beachten.
 * Inhalte haben `SP_S` Innenabstand; zwischen Karten `SP_XS`.
 
 ## 4. Komponenten (`ui/widgets/`)

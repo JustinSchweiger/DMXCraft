@@ -74,12 +74,7 @@ impl View for PatchGrid {
             .map(|f| (f.address, ()));
         ui.horizontal(|ui| {
             ui.set_min_height(30.0);
-            ui.label(
-                egui::RichText::new("PATCH")
-                    .font(theme::caption())
-                    .color(theme::TEXT_DIM)
-                    .strong(),
-            );
+            ui.label(theme::heading_text("Patch"));
             ui.add_space(theme::SP_S);
             Segmented::new(&[(GridMode::Patch, "Patch"), (GridMode::Output, "Ausgang")])
                 .show(ui, &mut self.mode);

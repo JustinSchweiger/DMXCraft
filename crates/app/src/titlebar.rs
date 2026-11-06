@@ -16,8 +16,12 @@ pub const HEIGHT: f32 = 36.0;
 pub struct TitleInfo<'a> {
     pub logo: Option<egui::TextureId>,
     pub show_name: &'a str,
+    /// Ausgangsstatus als Text und Farbe (für den Punkt und den Tooltip).
     pub status: (String, Color32),
-    pub stats: String,
+    /// Auslastung des Ausgabe-Takts 0..1.
+    pub load: f32,
+    pub fps: f32,
+    pub locked: bool,
     pub output: OutputKind,
     pub blackout: bool,
     /// Kurzzeitige Meldung (Text, ist Fehler).
@@ -56,10 +60,14 @@ pub enum MenuAction {
     Settings,
     CheckUpdates,
     InstallUpdate,
+    ToggleLock,
     About,
 }
 
 pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<MenuAction> {
+    if info.locked {
+        *mode = Mode::Control;
+    }
     let mut actions = Vec::new();
     let full = ui.max_rect();
     // Hintergrundfläche zum Ziehen (zuerst anlegen, damit Knöpfe darüber liegen)
@@ -114,7 +122,12 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
         }
         main_menu(ui, info, &mut actions);
         ui.add_space(theme::SP_XS);
-        Segmented::new(&[(Mode::Setup, "Einrichten"), (Mode::Control, "Steuern")]).show(ui, mode);
+        if info.locked {
+            Segmented::new(&[(Mode::Control, "Steuern")]).show(ui, mode);
+        } else {
+            Segmented::new(&[(Mode::Setup, "Einrichten"), (Mode::Control, "Steuern")])
+                .show(ui, mode);
+        }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
@@ -154,7 +167,6 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                         .color(theme::DANGER),
                 );
             }
-            ui.label(egui::RichText::new(&info.stats).color(theme::TEXT_DIM));
             match &info.update {
                 UpdateBadge::None => {}
                 UpdateBadge::Available => {
@@ -186,8 +198,20 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                     }
                 }
             }
-            ui.label(egui::RichText::new(&info.status.0).color(info.status.1))
-                .on_hover_text(format!("Ausgang: {}", info.output.label()));
+            let (icon, tip) = if info.locked {
+                (Icon::Locked, "Oberfläche entsperren")
+            } else {
+                (Icon::Unlocked, "Oberfläche sperren (Passwort)")
+            };
+            if ui
+                .add(IconButton::new(icon).size(28.0).flat().active(info.locked))
+                .on_hover_text(tip)
+                .clicked()
+            {
+                actions.push(MenuAction::ToggleLock);
+            }
+            ui.add_space(theme::SP_XS);
+            load_meter(ui, info);
             if let Some((msg, err)) = info.message {
                 ui.separator();
                 let color = if err { theme::DANGER } else { theme::TEXT };
@@ -198,15 +222,78 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
     actions
 }
 
+/// Auslastungsanzeige: Statuspunkt des Ausgangs und Balken.
+fn load_meter(ui: &mut egui::Ui, info: &TitleInfo<'_>) {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(96.0, 18.0), Sense::hover());
+    let p = ui.painter();
+    p.circle_filled(
+        egui::pos2(rect.left() + 5.0, rect.center().y),
+        4.0,
+        info.status.1,
+    );
+    p.text(
+        egui::pos2(rect.left() + 14.0, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        "LAST",
+        theme::heading_font(),
+        theme::TEXT_DIM,
+    );
+    let bar = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + 52.0, rect.center().y - 4.0),
+        egui::pos2(rect.right(), rect.center().y + 4.0),
+    );
+    p.rect_filled(bar, 2.0, theme::RAISED);
+    let l = info.load.clamp(0.0, 1.0);
+    let color = if info.load > 0.85 {
+        theme::DANGER
+    } else if info.load > 0.6 {
+        theme::WARN
+    } else {
+        theme::OK
+    };
+    if l > 0.0 {
+        let fill = egui::Rect::from_min_size(
+            bar.min,
+            egui::vec2((bar.width() * l).max(2.0), bar.height()),
+        );
+        p.rect_filled(fill, 2.0, color);
+    }
+    resp.on_hover_text(format!(
+        "{}\n{} · {:.0} fps · Auslastung {:.0} %",
+        info.status.0,
+        info.output.label(),
+        info.fps,
+        info.load * 100.0
+    ));
+}
+
 fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuAction>) {
+    let free = !info.locked;
     let resp = ui
         .add(IconButton::new(Icon::Menu).size(28.0).flat())
         .on_hover_text("Menü");
     egui::Popup::menu(&resp).show(|ui| {
         ui.set_min_width(220.0);
         let mut item = |ui: &mut egui::Ui, label: &str, hint: &str, a: MenuAction| {
+            // Bei gesperrter Oberfläche nur Wiedergabe, Ansicht, Speichern, Entsperren und Hilfe
+            let allowed = free
+                || matches!(
+                    a,
+                    MenuAction::SaveShow
+                        | MenuAction::Quit
+                        | MenuAction::ReleaseAll
+                        | MenuAction::ToggleBlackout
+                        | MenuAction::ClearProgrammer
+                        | MenuAction::ToggleFullscreen
+                        | MenuAction::Zoom(_)
+                        | MenuAction::SetMode(Mode::Control)
+                        | MenuAction::ToggleLock
+                        | MenuAction::CheckUpdates
+                        | MenuAction::InstallUpdate
+                        | MenuAction::About
+                );
             let b = egui::Button::new(label).shortcut_text(hint);
-            if ui.add(b).clicked() {
+            if ui.add_enabled(allowed, b).clicked() {
                 actions.push(a);
                 ui.close();
             }
@@ -261,6 +348,12 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             item(ui, "Normale Größe", "Strg+0", MenuAction::Zoom(0.0));
         });
         ui.separator();
+        let lock_label = if info.locked {
+            "Entsperren …"
+        } else {
+            "Oberfläche sperren"
+        };
+        item(ui, lock_label, "", MenuAction::ToggleLock);
         item(ui, "Einstellungen …", "", MenuAction::Settings);
         ui.menu_button("Hilfe", |ui| {
             item(ui, "Nach Updates suchen", "", MenuAction::CheckUpdates);
