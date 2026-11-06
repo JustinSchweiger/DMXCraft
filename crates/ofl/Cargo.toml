@@ -1,17 +1,23 @@
 [package]
-name = "lightcraft-ofl"
-description = "Import der Open Fixture Library (OFL) in LightCraft-Gerätetypen"
+name = "dmxcraft-ofl"
+description = "Import der Open Fixture Library (OFL) in DmxCraft-Gerätetypen"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
 
 [dependencies]
-lightcraft-core.workspace = true
+dmxcraft-core.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
 thiserror.workspace = true
 flate2 = "1"
+
+[package.metadata.dist]
+dist = false
 
 [[bin]]
 name = "ofl-bundle"

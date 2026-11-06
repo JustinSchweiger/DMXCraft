@@ -1,7 +1,7 @@
 //! Demo-Show, damit man ohne Gerät und ohne eigene Datei loslegen kann.
 
-use lightcraft_core::library::builtin_fixture_types;
-use lightcraft_core::{ChannelValue, FixtureId, Show, Step};
+use dmxcraft_core::library::builtin_fixture_types;
+use dmxcraft_core::{ChannelValue, FixtureId, Show, Step};
 
 fn cv(fixture: FixtureId, channel: u16, value: u8) -> ChannelValue {
     ChannelValue {
@@ -139,6 +139,6 @@ mod tests {
         assert_eq!(s.fixtures.len(), 6);
         assert!(s.scenes.len() >= 6);
         let json = s.to_json().unwrap();
-        assert_eq!(lightcraft_core::Show::from_json(&json).unwrap(), s);
+        assert_eq!(dmxcraft_core::Show::from_json(&json).unwrap(), s);
     }
 }

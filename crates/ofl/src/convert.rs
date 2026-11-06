@@ -1,4 +1,4 @@
-//! Umwandlung einer OFL-Gerätedatei in LightCraft-Gerätetypen.
+//! Umwandlung einer OFL-Gerätedatei in DmxCraft-Gerätetypen.
 //!
 //! Unterstützt: Kanäle mit `capability`/`capabilities`, feine Kanäle
 //! (`fineChannelAliases`), Standardwerte (Zahl oder Prozent), Matrix-Geräte
@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use lightcraft_core::{ChannelDef, ChannelKind, FixtureType};
+use dmxcraft_core::{ChannelDef, ChannelKind, FixtureType};
 use serde_json::{Map, Value};
 use thiserror::Error;
 

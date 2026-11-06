@@ -1,8 +1,8 @@
 //! Programmer: ausgewählte Geräte live per Fader steuern und das Ergebnis als
 //! Szene oder Schritt speichern.
 
+use dmxcraft_core::{ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, Step};
 use eframe::egui;
-use lightcraft_core::{ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, Step};
 
 use crate::app::UiState;
 
@@ -223,7 +223,7 @@ pub fn programmer_values(e: &Engine) -> Vec<ChannelValue> {
 pub fn zone_combo(
     ui: &mut egui::Ui,
     e: &Engine,
-    zone: &mut Option<lightcraft_core::ZoneId>,
+    zone: &mut Option<dmxcraft_core::ZoneId>,
     id: &str,
 ) -> bool {
     let name = zone

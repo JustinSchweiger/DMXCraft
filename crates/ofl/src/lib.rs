@@ -1,6 +1,6 @@
 //! Open Fixture Library (<https://open-fixture-library.org>).
 //!
-//! * [`convert`] wandelt eine OFL-Gerätedatei (JSON) in LightCraft-Gerätetypen
+//! * [`convert`] wandelt eine OFL-Gerätedatei (JSON) in DmxCraft-Gerätetypen
 //!   um – ein [`FixtureType`] pro DMX-Modus.
 //! * [`Library`] ist die eingebettete, vorkonvertierte Gesamtbibliothek
 //!   (`data/ofl-library.json.gz`, erzeugt mit dem Tool `ofl-bundle`).
@@ -12,7 +12,7 @@ pub mod convert;
 use std::io::Read;
 use std::sync::OnceLock;
 
-use lightcraft_core::FixtureType;
+use dmxcraft_core::FixtureType;
 use serde::{Deserialize, Serialize};
 
 pub use convert::{convert_fixture, OflError};

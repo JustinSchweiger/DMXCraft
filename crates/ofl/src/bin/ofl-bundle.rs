@@ -3,13 +3,13 @@
 //!
 //! ```sh
 //! git clone --depth 1 https://github.com/OpenLightingProject/open-fixture-library ofl
-//! cargo run -p lightcraft-ofl --bin ofl-bundle -- ofl crates/ofl/data/ofl-library.json.gz
+//! cargo run -p dmxcraft-ofl --bin ofl-bundle -- ofl crates/ofl/data/ofl-library.json.gz
 //! ```
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use lightcraft_ofl::{convert_fixture, Library, OflError};
+use dmxcraft_ofl::{convert_fixture, Library, OflError};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -93,7 +93,7 @@ fn run(root: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
         failed,
         out.display(),
         bytes.len() / 1024,
-        &lib.source_commit.get(..10).unwrap_or(""),
+        lib.source_commit.get(..10).unwrap_or(""),
         lib.source_date
     );
     Ok(())

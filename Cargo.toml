@@ -5,13 +5,22 @@ members = ["crates/core", "crates/output", "crates/ofl", "crates/app"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "MIT OR Apache-2.0"
+license = "MIT"
+repository = "https://github.com/JustinSchweiger/DmxCraft"
+homepage = "https://github.com/JustinSchweiger/DmxCraft"
+authors = ["Justin Schweiger"]
 rust-version = "1.85"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-lightcraft-core = { path = "crates/core" }
-lightcraft-output = { path = "crates/output" }
-lightcraft-ofl = { path = "crates/ofl" }
+dmxcraft-core = { path = "crates/core" }
+dmxcraft-output = { path = "crates/output" }
+dmxcraft-ofl = { path = "crates/ofl" }
+
+# Release-Profil für die Installer (von dist genutzt)
+[profile.dist]
+inherits = "release"
+lto = "thin"
+strip = true

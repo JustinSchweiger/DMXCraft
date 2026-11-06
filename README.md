@@ -1,4 +1,4 @@
-# LightCraft
+# DmxCraft
 
 Eine freie, in Rust geschriebene DMX-Lichtsteuerung nach dem Vorbild von
 Daslight 5. Sie läuft auf Linux, Windows und macOS und soll später die
@@ -23,7 +23,47 @@ vorhandene **Daslight DVC Gold** per USB ansteuern.
 | Show-Datei (JSON) laden/speichern | ✅ |
 | Ausgabe-Thread mit 40 Hz, automatischer Reconnect | ✅ |
 | **USB-Ausgang DVC Gold** | ⏳ Platzhalter – Protokoll wird noch entschlüsselt |
-| Effekt-Generator, 3D-Ansicht, MIDI, Import aus Open Fixture Library | ❌ geplant |
+| Gerätebibliothek: 650+ Geräte aus der Open Fixture Library, eigene OFL-Dateien importieren | ✅ |
+| Installer für Linux/macOS/Windows, Auto-Update | ✅ |
+| Effekt-Generator, 3D-Ansicht, MIDI | ❌ geplant |
+
+## Installieren
+
+**Linux / macOS** (Terminal):
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/JustinSchweiger/DmxCraft/releases/latest/download/dmxcraft-installer.sh | sh
+```
+
+**Windows**: Unter [Releases](https://github.com/JustinSchweiger/DmxCraft/releases/latest) die
+`dmxcraft-x86_64-pc-windows-msvc.msi` herunterladen und ausführen. Dabei werden auch eine
+Startmenü- und eine Desktop-Verknüpfung angelegt. Alternativ in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/JustinSchweiger/DmxCraft/releases/latest/download/dmxcraft-installer.ps1 | iex"
+```
+
+Gebaut wird für Linux (x86_64, ARM64 z. B. Raspberry Pi), macOS (Apple Silicon und Intel)
+und Windows (x86_64). Unter Linux legt DmxCraft beim ersten Start einen Eintrag im
+Anwendungsmenü an.
+
+**Updates**: DmxCraft prüft beim Start, ob es eine neue Version gibt. Ist eine da, erscheint
+oben der Button *Update installieren*. Alternativ geht es im Terminal mit `dmxcraft-update`.
+
+## Neue Version veröffentlichen
+
+1. Version in `Cargo.toml` (`[workspace.package] version`) erhöhen und committen.
+2. Tag setzen und pushen: `git tag v0.2.0 && git push origin v0.2.0`
+3. GitHub Actions (`.github/workflows/release.yml`, erzeugt mit
+   [dist](https://opensource.axo.dev/cargo-dist/)) baut alle Plattformen und legt das
+   Release mit den Installern an. Installierte Programme bieten das Update dann automatisch an.
+
+Die Gerätebibliothek aktualisieren (Open Fixture Library):
+
+```sh
+git clone --depth 1 https://github.com/OpenLightingProject/open-fixture-library /tmp/ofl
+cargo run --release -p dmxcraft-ofl --bin ofl-bundle -- /tmp/ofl crates/ofl/data/ofl-library.json.gz
+```
 
 ## Bauen und starten
 
@@ -32,8 +72,8 @@ Voraussetzung: Rust ≥ 1.85 (`rustup`). Unter Linux werden zur Laufzeit die
 Die sind auf Desktop-Systemen normalerweise schon installiert.
 
 ```sh
-cargo run --release -p lightcraft-app            # startet mit Demo-Show
-cargo run --release -p lightcraft-app -- show.json  # lädt eine Show
+cargo run --release -p dmxcraft            # startet mit Demo-Show
+cargo run --release -p dmxcraft -- show.json  # lädt eine Show
 cargo test --workspace                          # Tests
 ```
 
@@ -60,7 +100,8 @@ crates/
            engine.rs  Wiedergabe, Fades, HTP/LTP, Master, Programmer
   output/  DmxOutput-Trait, Ausgabe-Thread (runtime.rs), Backends
            dvc_gold.rs  ← hier kommt die USB-Anbindung hinein
-  app/     Oberfläche mit egui/eframe
+  ofl/     Open-Fixture-Library-Konverter + eingebettete Bibliothek (data/)
+  app/     Oberfläche mit egui/eframe, Updater
 ```
 
 Die USB-Anbindung ist genau ein Backend: Man implementiert `DmxOutput`

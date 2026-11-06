@@ -1,7 +1,7 @@
 //! Patch: Geräte hinzufügen, umpatchen, entfernen, auswählen.
 
+use dmxcraft_core::{Engine, FixtureId};
 use eframe::egui;
-use lightcraft_core::{Engine, FixtureId};
 
 use crate::app::UiState;
 

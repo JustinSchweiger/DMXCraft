@@ -1,7 +1,7 @@
 //! Szenen bearbeiten: Name, Zone, Wiedergabe, Schritte mit Zeiten.
 
+use dmxcraft_core::{Engine, LoopMode, SceneId};
 use eframe::egui;
-use lightcraft_core::{Engine, LoopMode, SceneId};
 
 use crate::app::UiState;
 use crate::views::programmer::{programmer_values, zone_combo};

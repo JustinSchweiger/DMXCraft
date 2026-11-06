@@ -10,7 +10,7 @@ pub mod backends;
 pub mod dvc_gold;
 pub mod runtime;
 
-use lightcraft_core::DmxFrame;
+use dmxcraft_core::DmxFrame;
 use thiserror::Error;
 
 pub use backends::{NullOutput, RecordingOutput};

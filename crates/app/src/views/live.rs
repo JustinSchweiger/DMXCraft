@@ -1,7 +1,7 @@
 //! Live-Ansicht: Szenen-Buttons gruppiert nach Zonen.
 
+use dmxcraft_core::{Engine, SceneId, ZoneId};
 use eframe::egui;
-use lightcraft_core::{Engine, SceneId, ZoneId};
 
 use crate::app::UiState;
 

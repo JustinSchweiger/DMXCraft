@@ -1,10 +1,13 @@
 [package]
-name = "lightcraft-core"
+name = "dmxcraft-core"
 description = "Datenmodell und Lichtengine (Patch, Szenen, Zonen, Fades, DMX-Rendering)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
 
 [dependencies]
 serde.workspace = true

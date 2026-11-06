@@ -1,9 +1,9 @@
 //! Fenster „Gerätebibliothek“: Open Fixture Library durchsuchen und
 //! Gerätetypen in die Show übernehmen.
 
+use dmxcraft_core::Engine;
+use dmxcraft_ofl::{convert_fixture, Library, LibraryFixture};
 use eframe::egui;
-use lightcraft_core::Engine;
-use lightcraft_ofl::{convert_fixture, Library, LibraryFixture};
 
 use crate::app::UiState;
 
@@ -125,7 +125,7 @@ fn contents(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
     ui.weak("Gerätedaten: Open Fixture Library, MIT-Lizenz – open-fixture-library.org");
 }
 
-fn take_type(e: &mut Engine, st: &mut UiState, ty: lightcraft_core::FixtureType, name: &str) {
+fn take_type(e: &mut Engine, st: &mut UiState, ty: dmxcraft_core::FixtureType, name: &str) {
     let key = ty.key.clone();
     let channels = ty.channel_count();
     let display = ty.display_name();

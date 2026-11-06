@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use lightcraft_core::{DmxFrame, Engine};
+use dmxcraft_core::{DmxFrame, Engine};
 
 use crate::DmxOutput;
 
@@ -53,7 +53,7 @@ impl Runtime {
         );
 
         let handle = std::thread::Builder::new()
-            .name("lightcraft-output".into())
+            .name("dmxcraft-output".into())
             .spawn(move || {
                 let set_status = |s: OutputStatus| {
                     if let Ok(mut g) = t_status.lock() {
@@ -185,8 +185,8 @@ impl Drop for Runtime {
 mod tests {
     use super::*;
     use crate::{OutputError, RecordingOutput};
-    use lightcraft_core::library::builtin_fixture_types;
-    use lightcraft_core::{ChannelValue, Show, Step};
+    use dmxcraft_core::library::builtin_fixture_types;
+    use dmxcraft_core::{ChannelValue, Show, Step};
 
     #[test]
     fn runtime_sends_rendered_frames() {

@@ -2,11 +2,12 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use dmxcraft_core::{Engine, FixtureId, SceneId, Show, ZoneId};
+use dmxcraft_output::{OutputKind, OutputStatus, Runtime};
 use eframe::egui;
-use lightcraft_core::{Engine, FixtureId, SceneId, Show, ZoneId};
-use lightcraft_output::{OutputKind, OutputStatus, Runtime};
 
 use crate::demo;
+use crate::updater::{UpdateState, Updater};
 use crate::views;
 
 /// DMX-Wiederholrate des Ausgabe-Threads.
@@ -67,14 +68,16 @@ impl UiState {
     }
 }
 
-pub struct LightCraftApp {
+pub struct DmxCraftApp {
     engine: Arc<Mutex<Engine>>,
     runtime: Runtime,
     output_kind: OutputKind,
+    updater: Updater,
+    update_checked: bool,
     pub ui: UiState,
 }
 
-impl LightCraftApp {
+impl DmxCraftApp {
     pub fn new(show_path: Option<String>) -> Self {
         let mut message = None;
         let show = match &show_path {
@@ -103,6 +106,8 @@ impl LightCraftApp {
             engine,
             runtime,
             output_kind,
+            updater: Updater::default(),
+            update_checked: false,
             ui: UiState {
                 tab: Tab::Live,
                 show_path: show_path.unwrap_or_else(|| "show.json".into()),
@@ -149,7 +154,9 @@ impl LightCraftApp {
         let st = &mut self.ui;
 
         ui.horizontal_wrapped(|ui| {
-            ui.strong("LightCraft");
+            ui.strong("DmxCraft");
+            ui.weak(format!("v{}", Updater::current_version()));
+            update_widget(ui, &self.updater);
             ui.separator();
 
             // Datei
@@ -258,10 +265,14 @@ impl LightCraftApp {
     }
 }
 
-impl eframe::App for LightCraftApp {
+impl eframe::App for DmxCraftApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Laufende Szenen/Monitor flüssig anzeigen.
         ui.ctx().request_repaint_after(Duration::from_millis(33));
+        if !self.update_checked {
+            self.update_checked = true;
+            self.updater.check(ui.ctx().clone());
+        }
 
         egui::Panel::top("top_bar").show(ui, |ui| {
             ui.add_space(4.0);
@@ -324,5 +335,57 @@ impl eframe::App for LightCraftApp {
                 Tab::Monitor => views::monitor::ui(ui, &e, &mut self.ui, &frame),
             }
         });
+    }
+}
+
+fn update_widget(ui: &mut egui::Ui, updater: &Updater) {
+    let ctx = ui.ctx().clone();
+    match updater.state() {
+        UpdateState::Idle | UpdateState::UpToDate => {
+            if ui
+                .small_button("Updates")
+                .on_hover_text("Nach neuer Version suchen")
+                .clicked()
+            {
+                updater.check(ctx);
+            }
+        }
+        UpdateState::Checking => {
+            ui.weak("suche Updates...");
+        }
+        UpdateState::Available => {
+            let b =
+                egui::Button::new("Update installieren").fill(egui::Color32::from_rgb(40, 120, 70));
+            if ui
+                .add(b)
+                .on_hover_text("Neue Version von GitHub laden")
+                .clicked()
+            {
+                updater.install(ctx);
+            }
+        }
+        UpdateState::Installing => {
+            ui.weak("installiere Update...");
+        }
+        UpdateState::Installed(v) => {
+            ui.colored_label(
+                egui::Color32::from_rgb(80, 200, 120),
+                format!("v{v} installiert - bitte neu starten"),
+            );
+        }
+        UpdateState::NotInstalled => {
+            ui.weak("(Entwickler-Build)").on_hover_text(
+                "Updates gibt es nur für Installationen über die offiziellen Installer.",
+            );
+        }
+        UpdateState::Error(e) => {
+            if ui
+                .small_button("Update-Fehler")
+                .on_hover_text(format!("{e}\nKlicken für neuen Versuch"))
+                .clicked()
+            {
+                updater.check(ctx);
+            }
+        }
     }
 }

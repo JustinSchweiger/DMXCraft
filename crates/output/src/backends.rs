@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use lightcraft_core::DmxFrame;
+use dmxcraft_core::DmxFrame;
 
 use crate::{DmxOutput, OutputError};
 

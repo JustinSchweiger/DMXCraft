@@ -1,17 +1,30 @@
 [package]
-name = "lightcraft-app"
-description = "Desktop-Oberfläche (egui) für LightCraft"
+name = "dmxcraft"
+description = "Desktop-Oberfläche (egui) für DmxCraft"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[package.metadata.dist]
+dist = true
+
+[package.metadata.wix]
+upgrade-guid = "CB2B5339-63EE-43B8-B89A-B8D9AB9C73FA"
+path-guid = "7F85799B-9B06-4165-9EB6-224E0AFA4AE8"
+license = false
+eula = false
 
 [[bin]]
-name = "lightcraft"
+name = "dmxcraft"
 path = "src/main.rs"
 
 [dependencies]
-lightcraft-core.workspace = true
-lightcraft-output.workspace = true
-lightcraft-ofl.workspace = true
+dmxcraft-core.workspace = true
+dmxcraft-output.workspace = true
+dmxcraft-ofl.workspace = true
+axoupdater = { version = "0.10", features = ["blocking"] }
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
