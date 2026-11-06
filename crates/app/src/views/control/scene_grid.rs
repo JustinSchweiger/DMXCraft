@@ -5,6 +5,7 @@ use eframe::egui::{self, Color32, Sense, Stroke, StrokeKind, Vec2};
 
 use crate::state::AppState;
 use crate::ui::theme;
+use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::{Icon, IconButton, SceneCard};
 use crate::views::control::programmer::programmer_values;
 use crate::views::{View, ViewCtx};
@@ -37,7 +38,7 @@ pub struct SceneGridView {
 impl View for SceneGridView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         ui.horizontal(|ui| {
-            self.page_bar(ui, cx.engine);
+            self.page_bar(ui, cx.engine, cx.state);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 playback_controls(ui, cx.engine);
             });
@@ -75,7 +76,7 @@ impl View for SceneGridView {
 }
 
 impl SceneGridView {
-    fn page_bar(&mut self, ui: &mut egui::Ui, e: &Engine) {
+    fn page_bar(&mut self, ui: &mut egui::Ui, e: &Engine, st: &mut AppState) {
         ui.horizontal(|ui| {
             chip(
                 ui,
@@ -98,6 +99,14 @@ impl SceneGridView {
                 theme::TEXT_DIM,
                 false,
             );
+            if !st.locked
+                && ui
+                    .add(IconButton::new(Icon::Edit).flat())
+                    .on_hover_text("Zonen & Gruppen bearbeiten")
+                    .clicked()
+            {
+                st.zones_open = true;
+            }
         });
     }
 }
@@ -326,14 +335,21 @@ fn scene_card(
         return;
     }
     resp.context_menu(|ui| {
-        if ui.button("Bearbeiten").clicked() {
+        menu::begin(ui);
+        if menu::item(ui, MenuItem::new("Bearbeiten …").icon(Icon::Edit)) {
             actions.push(Action::Edit(id));
-            ui.close();
         }
-        if ui.button("Löschen").clicked() {
-            actions.push(Action::Delete(id));
-            ui.close();
-        }
+        menu::separator(ui);
+        menu::sub(ui, MenuItem::new("Löschen").icon(Icon::Trash), |ui| {
+            if menu::item(
+                ui,
+                MenuItem::new("Szene wirklich löschen")
+                    .icon(Icon::Trash)
+                    .danger(),
+            ) {
+                actions.push(Action::Delete(id));
+            }
+        });
     });
 }
 

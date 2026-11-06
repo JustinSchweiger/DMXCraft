@@ -8,6 +8,7 @@ use dmxcraft_output::{OutputKind, OutputStatus, Runtime};
 use eframe::egui;
 
 use crate::demo;
+use crate::history::History;
 use crate::settings::Settings;
 use crate::state::{AppState, Mode};
 use crate::titlebar::{self, MenuAction, TitleInfo, UpdateBadge};
@@ -62,6 +63,7 @@ pub struct DmxCraftApp {
     control: ControlViews,
     setup: SetupView,
     windows: Windows,
+    history: History,
 }
 
 impl DmxCraftApp {
@@ -104,6 +106,7 @@ impl DmxCraftApp {
             control: ControlViews::default(),
             setup: SetupView::default(),
             windows: Windows::default(),
+            history: History::default(),
         }
     }
 
@@ -137,10 +140,11 @@ impl DmxCraftApp {
                 demo::ensure_builtin_types(&mut s);
                 let name = s.name.clone();
                 Self::lock(&self.engine).replace_show(s);
+                self.history.reset(Self::lock(&self.engine).show());
                 self.state.reset_for_new_show();
                 self.state.show_path = path.to_string();
                 self.state.info(format!("Show „{name}“ geladen"));
-                self.settings.last_show = Some(path.to_string());
+                self.settings.remember(path);
                 self.save_settings();
             }
             Err(err) => self.state.error(format!("{path}: {err}")),
@@ -153,7 +157,7 @@ impl DmxCraftApp {
             Ok(()) => {
                 self.state.show_path = path.to_string();
                 self.state.info(format!("Gespeichert: {path}"));
-                self.settings.last_show = Some(path.to_string());
+                self.settings.remember(path);
                 self.save_settings();
             }
             Err(err) => self.state.error(err.to_string()),
@@ -164,13 +168,9 @@ impl DmxCraftApp {
         match action {
             MenuAction::NewShow => {
                 Self::lock(&self.engine).replace_show(demo::empty_show());
+                self.history.reset(Self::lock(&self.engine).show());
                 self.state.reset_for_new_show();
                 self.state.info("Neue, leere Show");
-            }
-            MenuAction::DemoShow => {
-                Self::lock(&self.engine).replace_show(demo::demo_show());
-                self.state.reset_for_new_show();
-                self.state.info("Demo-Show geladen");
             }
             MenuAction::OpenShow => {
                 self.path_dialog = Some((PathDialog::Open, self.state.show_path.clone()))
@@ -182,10 +182,42 @@ impl DmxCraftApp {
             MenuAction::SaveShowAs => {
                 self.path_dialog = Some((PathDialog::SaveAs, self.state.show_path.clone()))
             }
+            MenuAction::OpenRecent(path) => {
+                if std::path::Path::new(&path).exists() {
+                    self.open_show(&path);
+                } else {
+                    self.settings.recent.retain(|p| *p != path);
+                    self.save_settings();
+                    self.state.error(format!("Nicht gefunden: {path}"));
+                }
+            }
+            MenuAction::Undo | MenuAction::Redo => {
+                let mut e = Self::lock(&self.engine);
+                let current = e.show().clone();
+                let restored = if action == MenuAction::Undo {
+                    self.history.undo(&current)
+                } else {
+                    self.history.redo(&current)
+                };
+                match restored {
+                    Some(show) => {
+                        *e.show_mut() = show;
+                        e.sync();
+                        self.state
+                            .selected
+                            .retain(|id| e.show().fixture(*id).is_some());
+                    }
+                    None => {
+                        drop(e);
+                        self.state.info("Nichts rückgängig zu machen");
+                    }
+                }
+            }
+            MenuAction::DmxLevels => {
+                self.state.mode = Mode::Setup;
+                self.state.show_dmx_levels = true;
+            }
             MenuAction::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
-            MenuAction::SetMode(m) => self.state.mode = m,
-            MenuAction::SceneEditor => self.state.scene_editor_open = true,
-            MenuAction::Zones => self.state.zones_open = true,
             MenuAction::ToggleFullscreen => {
                 let fs = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fs));
@@ -200,14 +232,11 @@ impl DmxCraftApp {
                 self.settings.ui_scale = z;
                 self.save_settings();
             }
-            MenuAction::ReleaseAll => Self::lock(&self.engine).release_all(),
             MenuAction::ToggleBlackout => {
                 let mut e = Self::lock(&self.engine);
                 let bo = e.blackout();
                 e.set_blackout(!bo);
             }
-            MenuAction::ClearProgrammer => Self::lock(&self.engine).clear_programmer(),
-            MenuAction::Output(k) => self.switch_output(k),
             MenuAction::Settings => self.settings_open = true,
             MenuAction::CheckUpdates => self.updater.check(ctx.clone()),
             MenuAction::InstallUpdate => self.updater.install(ctx.clone()),
@@ -332,21 +361,48 @@ impl DmxCraftApp {
     }
 
     fn shortcuts(&mut self, ctx: &egui::Context) -> Vec<MenuAction> {
+        use egui::{Key, Modifiers};
         let typing = ctx.memory(|m| m.focused().is_some());
+        let free = !self.state.locked;
+        let cmd = Modifiers::COMMAND;
+        let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
         ctx.input_mut(|i| {
             let mut out = Vec::new();
-            if i.consume_key(egui::Modifiers::COMMAND, egui::Key::S) {
-                out.push(MenuAction::SaveShow);
-            }
-            if !self.state.locked && i.consume_key(egui::Modifiers::COMMAND, egui::Key::O) {
-                out.push(MenuAction::OpenShow);
-            }
-            if i.consume_key(egui::Modifiers::NONE, egui::Key::F11) {
-                out.push(MenuAction::ToggleFullscreen);
-            }
-            if !typing && i.consume_key(egui::Modifiers::NONE, egui::Key::B) {
-                out.push(MenuAction::ToggleBlackout);
-            }
+            let mut key =
+                |i: &mut egui::InputState, m: Modifiers, k: Key, ok: bool, a: MenuAction| {
+                    if ok && i.consume_key(m, k) {
+                        out.push(a);
+                    }
+                };
+            // Umschalt-Varianten zuerst, sonst greift Strg+S
+            key(i, cmd_shift, Key::S, free, MenuAction::SaveShowAs);
+            key(i, cmd_shift, Key::Z, free && !typing, MenuAction::Redo);
+            key(i, cmd, Key::N, free, MenuAction::NewShow);
+            key(i, cmd, Key::O, free, MenuAction::OpenShow);
+            key(i, cmd, Key::S, true, MenuAction::SaveShow);
+            key(i, cmd, Key::Z, free && !typing, MenuAction::Undo);
+            key(i, cmd, Key::Y, free && !typing, MenuAction::Redo);
+            key(i, cmd, Key::L, true, MenuAction::ToggleLock);
+            key(i, cmd, Key::Comma, free, MenuAction::Settings);
+            key(i, cmd, Key::D, free, MenuAction::DmxLevels);
+            key(i, cmd, Key::Plus, true, MenuAction::Zoom(0.1));
+            key(i, cmd, Key::Equals, true, MenuAction::Zoom(0.1));
+            key(i, cmd, Key::Minus, true, MenuAction::Zoom(-0.1));
+            key(i, cmd, Key::Num0, true, MenuAction::Zoom(0.0));
+            key(
+                i,
+                Modifiers::NONE,
+                Key::F11,
+                true,
+                MenuAction::ToggleFullscreen,
+            );
+            key(
+                i,
+                Modifiers::NONE,
+                Key::B,
+                !typing,
+                MenuAction::ToggleBlackout,
+            );
             out
         })
     }
@@ -514,7 +570,7 @@ impl DmxCraftApp {
         if self.about_open {
             let mut open = true;
             let logo = self.logo.clone();
-            Dialog::new("Über DmxCraft")
+            Dialog::new("Über DMXCraft")
                 .id("about")
                 .width(340.0)
                 .cancel("Schließen")
@@ -528,7 +584,7 @@ impl DmxCraftApp {
                             ui.add_space(theme::SP_S);
                         }
                         ui.label(
-                            egui::RichText::new(format!("DmxCraft {}", Updater::current_version()))
+                            egui::RichText::new(format!("DMXCraft {}", Updater::current_version()))
                                 .font(theme::heading_font())
                                 .size(theme::FS_TITLE),
                         );
@@ -563,6 +619,8 @@ impl eframe::App for DmxCraftApp {
         if !self.started {
             self.started = true;
             theme::apply(&ctx);
+            // Zoom-Tasten selbst behandeln, damit die Größe gespeichert wird.
+            ctx.options_mut(|o| o.zoom_with_keyboard = false);
             ctx.set_zoom_factor(self.settings.ui_scale.clamp(0.6, 2.0));
             self.logo = crate::icon::texture(&ctx);
             if self.settings.check_updates {
@@ -584,7 +642,6 @@ impl eframe::App for DmxCraftApp {
             .current_message()
             .map(|(m, e)| (m.to_string(), e));
         let info = TitleInfo {
-            logo: self.logo.as_ref().map(|t| t.id()),
             show_name: &show_name,
             status,
             load: self.runtime.load(),
@@ -592,6 +649,9 @@ impl eframe::App for DmxCraftApp {
             locked: self.state.locked,
             output: self.output_kind,
             blackout,
+            recent: &self.settings.recent,
+            can_undo: self.history.can_undo(),
+            can_redo: self.history.can_redo(),
             message: message.as_ref().map(|(m, e)| (m.as_str(), *e)),
             update,
         };
@@ -654,5 +714,9 @@ impl eframe::App for DmxCraftApp {
         self.dialogs(&ctx);
         self.lock_window(&ctx);
         titlebar::resize_handles(&ctx);
+
+        // Rückgängig: Änderungen erst übernehmen, wenn Ziehen/Tippen beendet ist.
+        let busy = ctx.input(|i| i.pointer.any_down()) || ctx.memory(|m| m.focused().is_some());
+        self.history.track(Self::lock(&self.engine).show(), busy);
     }
 }

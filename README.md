@@ -1,4 +1,4 @@
-# DmxCraft
+# DMXCraft
 
 Eine freie, in Rust geschriebene DMX-Lichtsteuerung nach dem Vorbild von
 Daslight 5. Sie läuft auf Linux, Windows und macOS und soll später die
@@ -44,10 +44,10 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/JustinSchweiger/Dm
 ```
 
 Gebaut wird für Linux (x86_64, ARM64 z. B. Raspberry Pi), macOS (Apple Silicon und Intel)
-und Windows (x86_64). Unter Linux legt DmxCraft beim ersten Start einen Eintrag im
+und Windows (x86_64). Unter Linux legt DMXCraft beim ersten Start einen Eintrag im
 Anwendungsmenü an.
 
-**Updates**: DmxCraft prüft beim Start, ob es eine neue Version gibt. Ist eine da, erscheint
+**Updates**: DMXCraft prüft beim Start, ob es eine neue Version gibt. Ist eine da, erscheint
 oben der Button *Update installieren*. Alternativ geht es im Terminal mit `dmxcraft-update`.
 
 ## Neue Version veröffentlichen
@@ -82,11 +82,22 @@ trotzdem, und im Tab **DMX-Monitor** siehst du, was an die Box gehen würde.
 
 ## Oberfläche
 
-DmxCraft hat eine eigene Titelleiste: links das Menü (Datei, Einrichten, Wiedergabe, Ausgang,
-Ansicht, Einstellungen, Hilfe) und der Umschalter **Einrichten/Steuern**, in der Mitte Programm-
-und Showname, rechts die Auslastungsleiste (Ausgangsstatus und Details im Tooltip), das Schloss und die
-Fensterknöpfe. Ziehen an der Leiste
-verschiebt das Fenster, Doppelklick maximiert. Tastenkürzel: Strg+S, Strg+O, F11, B (Blackout).
+DMXCraft hat eine eigene Titelleiste: links das Menü und der Umschalter **Einrichten/Steuern**,
+in der Mitte Programm- und Showname, rechts die Auslastungsleiste (Ausgangsstatus und Details im
+Tooltip), das Schloss und die Fensterknöpfe. Ziehen an der Leiste verschiebt das Fenster,
+Doppelklick maximiert.
+
+| Menü | Einträge |
+|---|---|
+| Datei | Neu (Strg+N), Öffnen (Strg+O), Zuletzt geöffnet, Speichern (Strg+S), Speichern unter (Strg+Umschalt+S), Importieren von Daslight *(folgt)* |
+| Bearbeiten | Rückgängig (Strg+Z), Wiederherstellen (Strg+Y), Sperren (Strg+L), Einstellungen (Strg+,) |
+| Ansicht | Vollbild (F11), Größer (Strg++), Kleiner (Strg+-), Größe wiederherstellen (Strg+0) |
+| Tools | 3D-Visualisierer *(folgt)*, DMX-Werte (Strg+D, Patch-Raster im Modus „Ausgang“), Profile Builder *(folgt)* |
+| Mappings | Tastatur, MIDI, Touch *(folgen)* |
+| Hilfe | Nach Updates suchen, Über DMXCraft |
+
+Außerdem: B schaltet Blackout. Unter macOS steht Cmd statt Strg. Zonen und Gruppen bearbeitet man
+über das Stift-Symbol neben den Zonen-Chips in STEUERN.
 
 Das **Schloss** sperrt die Oberfläche mit einem Passwort (beim ersten Mal festlegen, mindestens
 4 Zeichen; gespeichert wird nur ein gesalzener SHA-256-Hash). Gesperrt bleibt nur STEUERN:

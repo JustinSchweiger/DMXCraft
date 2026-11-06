@@ -1,6 +1,6 @@
 [package]
 name = "dmxcraft"
-description = "Desktop-Oberfläche (egui) für DmxCraft"
+description = "Desktop-Oberfläche (egui) für DMXCraft"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

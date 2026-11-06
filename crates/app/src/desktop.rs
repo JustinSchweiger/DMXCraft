@@ -1,6 +1,6 @@
 //! Startmenü-Eintrag unter Linux anlegen bzw. aktualisieren.
 //!
-//! Die Installer legen nur die Programmdatei ab. Damit DmxCraft im
+//! Die Installer legen nur die Programmdatei ab. Damit DMXCraft im
 //! Anwendungsmenü erscheint, schreibt das Programm beim Start eine
 //! `.desktop`-Datei nach `~/.local/share/applications` – aber nur, wenn es
 //! aus einer installierten Version läuft (nicht aus `target/`).
@@ -33,7 +33,7 @@ pub fn ensure_linux_menu_entry() {
     let content = format!(
         "[Desktop Entry]\n\
          Type=Application\n\
-         Name=DmxCraft\n\
+         Name=DMXCraft\n\
          Comment=DMX-Lichtsteuerung\n\
          Exec=\"{}\" %f\n\
          Icon=dmxcraft\n\

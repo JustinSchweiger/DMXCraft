@@ -1,4 +1,4 @@
-# DmxCraft – Hinweise für KI-Assistenten
+# DMXCraft – Hinweise für KI-Assistenten
 
 DMX-Lichtsteuerung in Rust (egui), Ziel: Daslight-5-Arbeitsablauf auf Linux,
 Windows und macOS, Ausgabe später über USB an eine Daslight DVC Gold.

@@ -1,4 +1,4 @@
-//! Design-Tokens von DmxCraft (siehe docs/UI-GUIDELINES.md).
+//! Design-Tokens von DMXCraft (siehe docs/UI-GUIDELINES.md).
 //! Farben, Abstände, Radien und Schriftgrößen nur von hier verwenden.
 
 use dmxcraft_core::{Show, ZoneId};
@@ -101,7 +101,9 @@ pub fn apply(ctx: &egui::Context) {
     install_fonts(ctx);
     let mut v = Visuals::dark();
     v.panel_fill = SURFACE;
-    v.window_fill = SURFACE;
+    // Menüs, Aufklapplisten und Tooltips schweben eine Stufe heller;
+    // Dialoge setzen ihren Rahmen selbst (SURFACE).
+    v.window_fill = RAISED;
     v.window_stroke = Stroke::new(1.0, BORDER);
     v.extreme_bg_color = BG;
     v.faint_bg_color = RAISED;
@@ -130,6 +132,7 @@ pub fn apply(ctx: &egui::Context) {
     ctx.set_visuals(v);
 
     ctx.global_style_mut(|s| {
+        crate::ui::widgets::menu::style(s);
         s.spacing.item_spacing = egui::vec2(SP_S, SP_XS + 2.0);
         s.spacing.button_padding = egui::vec2(SP_S, SP_XS);
         s.spacing.interact_size.y = 24.0;

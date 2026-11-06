@@ -1,4 +1,4 @@
-//! Kern von DmxCraft: Datenmodell und Lichtengine, komplett ohne I/O.
+//! Kern von DMXCraft: Datenmodell und Lichtengine, komplett ohne I/O.
 //!
 //! * [`fixture`] – Gerätetypen und deren Kanäle
 //! * [`show`]    – die Show-Datei: Patch, Zonen, Szenen (JSON)

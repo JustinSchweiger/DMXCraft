@@ -1,4 +1,4 @@
-//! Umwandlung einer OFL-Gerätedatei in DmxCraft-Gerätetypen.
+//! Umwandlung einer OFL-Gerätedatei in DMXCraft-Gerätetypen.
 //!
 //! Unterstützt: Kanäle mit `capability`/`capabilities`, feine Kanäle
 //! (`fineChannelAliases`), Standardwerte (Zahl oder Prozent), Matrix-Geräte

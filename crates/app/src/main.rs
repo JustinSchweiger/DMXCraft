@@ -3,6 +3,7 @@
 mod app;
 mod demo;
 mod desktop;
+mod history;
 mod icon;
 mod lock;
 mod settings;
@@ -23,7 +24,7 @@ fn main() -> eframe::Result {
     });
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("DmxCraft")
+            .with_title("DMXCraft")
             .with_inner_size([1440.0, 900.0])
             .with_min_inner_size([900.0, 600.0])
             .with_icon(icon::window_icon())
@@ -33,7 +34,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "DmxCraft",
+        "DMXCraft",
         options,
         Box::new(move |_cc| Ok(Box::new(app::DmxCraftApp::new(show_path, settings)))),
     )

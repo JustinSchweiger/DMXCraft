@@ -47,6 +47,8 @@ pub struct AppState {
     pub layout_clipboard: Option<Vec<[f32; 2]>>,
     /// Gerät, das der DMX-Patch beim nächsten Öffnen zeigen soll.
     pub monitor_focus: Option<FixtureId>,
+    /// Patch-Raster auf „Ausgang“ umschalten (Tools → DMX-Werte).
+    pub show_dmx_levels: bool,
 }
 
 impl AppState {
@@ -74,6 +76,7 @@ impl AppState {
             new_scene_zone: None,
             layout_clipboard: None,
             monitor_focus: None,
+            show_dmx_levels: false,
         }
     }
 

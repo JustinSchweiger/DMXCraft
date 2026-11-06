@@ -107,17 +107,17 @@ impl<'a> Fader<'a> {
             }
         }
         resp.context_menu(|ui| {
-            if ui.button("Freigeben").clicked() {
+            use crate::ui::widgets::menu::{self, MenuItem};
+            menu::begin(ui);
+            if menu::item(ui, MenuItem::new("Freigeben").icon(super::Icon::Reset)) {
                 event = FaderEvent::Release;
-                ui.close();
             }
-            if ui.button("0").clicked() {
+            menu::separator(ui);
+            if menu::item(ui, MenuItem::new("Aus (0)").icon(super::Icon::LightOff)) {
                 event = FaderEvent::Changed(0);
-                ui.close();
             }
-            if ui.button("Voll").clicked() {
+            if menu::item(ui, MenuItem::new("Voll (255)").icon(super::Icon::LightOn)) {
                 event = FaderEvent::Changed(255);
-                ui.close();
             }
         });
 

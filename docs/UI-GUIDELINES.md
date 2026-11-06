@@ -1,4 +1,4 @@
-# DmxCraft – UI-Richtlinien
+# DMXCraft – UI-Richtlinien
 
 Verbindliche Regeln für jede Änderung an der Oberfläche (`crates/app`).
 Ziel: ein ruhiges, dichtes Pult-Layout, das im Dunkeln bei einer Show
@@ -44,8 +44,9 @@ Schrift: `FS_CAPTION=10.5` (Sektionstitel, GROSS), `FS_BODY=13`,
 ## 3. Layout
 
 * **Eigene Titelleiste** (`titlebar.rs`, Fenster ohne Betriebssystem-Leiste):
-  links Logo · Menü (alle Befehle, Einstellungen) · Modus Einrichten/Steuern;
-  Mitte „DmxCraft · Showname“; rechts Auslastungsleiste „LAST“ (Statuspunkt, Details im Tooltip),
+  links Menü (Datei, Bearbeiten, Ansicht, Tools, Mappings, Hilfe) · Modus
+  Einrichten/Steuern;
+  Mitte „DMXCraft · Showname“; rechts Auslastungsleiste „LAST“ (Statuspunkt, Details im Tooltip),
   Sperre-Knopf, Fensterknöpfe. Keine fps- oder Geräte-/Szenenzahlen.
   Keine Bedienelemente der Wiedergabe (Master, Speed, Blackout) in der
   Titelleiste – die liegen unter STEUERN über dem Szenen-Raster.
@@ -91,6 +92,14 @@ keinen App-Zustand – nur ihre Eingabewerte.
   in voller Breite, alle Zeilen gleich hoch (`INPUT_H`).
 * **Eingabefelder** immer über `widgets::text_field()` (Text vertikal mittig,
   feste Höhe, Hintergrund `BG`), nie `TextEdit::singleline` direkt.
+* **Menüs** (`widgets::menu`): Hauptmenü und **alle** Kontextmenüs nur mit
+  `MenuItem` (Symbolspalte, Text, Kürzel rechts gedämpft, Pfeil bei
+  Untermenüs), `menu::item`, `menu::sub`, `menu::separator`, `menu::title`;
+  jedes Menü beginnt mit `menu::begin`. Nie `ui.button`/`ui.menu_button` in
+  Menüs. Symbole, wo sie helfen; die oberste Ebene des Hauptmenüs ohne
+  Symbolspalte (`plain()`). Zerstörendes (Löschen) immer als Untermenü mit
+  roter Bestätigung (`danger()`). Noch nicht Verfügbares deaktiviert mit
+  Tooltip „Noch nicht verfügbar“. Kürzel-Texte aus `titlebar::keys`.
 * **Toggle** (Schiebeschalter): für alle An/Aus-Optionen – **keine Checkboxen**.
 * **RangeSlider**: senkrechter Regler mit Unter- und Obergrenze (z. B. Dimmer-Limit).
 * **LimitPad**: XY-Feld mit Griffen für Bereiche (Pan/Tilt-Grenzen).

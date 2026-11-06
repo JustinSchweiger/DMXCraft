@@ -586,24 +586,3 @@ impl egui::Widget for ShapeButton {
         resp.on_hover_text(tip)
     }
 }
-
-/// Menüzeile mit Formsymbol und Text (für Kontextmenüs).
-pub fn shape_menu_row(ui: &mut Ui, shape: Option<PlanShape>, label: &str) -> egui::Response {
-    let h = 24.0;
-    let w = ui.available_width().max(190.0);
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
-    let p = ui.painter();
-    if resp.hovered() {
-        p.rect_filled(rect, theme::R_S as f32, theme::RAISED_HOVER);
-    }
-    let icon = Rect::from_min_size(rect.min + Vec2::new(6.0, 4.0), Vec2::splat(h - 8.0));
-    paint_shape_icon(p, shape, icon, theme::TEXT);
-    p.text(
-        egui::pos2(icon.right() + 8.0, rect.center().y),
-        egui::Align2::LEFT_CENTER,
-        label,
-        theme::body(),
-        theme::TEXT,
-    );
-    resp
-}

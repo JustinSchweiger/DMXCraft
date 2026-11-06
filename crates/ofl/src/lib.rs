@@ -1,6 +1,6 @@
 //! Open Fixture Library (<https://open-fixture-library.org>).
 //!
-//! * [`convert`] wandelt eine OFL-Gerätedatei (JSON) in DmxCraft-Gerätetypen
+//! * [`convert`] wandelt eine OFL-Gerätedatei (JSON) in DMXCraft-Gerätetypen
 //!   um – ein [`FixtureType`] pro DMX-Modus.
 //! * [`Library`] ist die eingebettete, vorkonvertierte Gesamtbibliothek
 //!   (`data/ofl-library.json.gz`, erzeugt mit dem Tool `ofl-bundle`).

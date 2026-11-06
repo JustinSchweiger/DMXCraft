@@ -8,8 +8,10 @@ use dmxcraft_core::{plan, Engine, FixtureId, GroupId, PlanShape, Show};
 use eframe::egui;
 
 use crate::state::{AppState, Mode};
-use crate::ui::widgets::shape_menu_row;
+use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::stage_canvas::fixture_pos;
+use crate::ui::widgets::stage_canvas::paint_shape_icon;
+use crate::ui::widgets::Icon;
 
 /// Größenstufen für Menüs und Werkzeugleiste.
 pub const SIZES: [(&str, f32); 5] = [
@@ -61,14 +63,12 @@ pub fn menu(
     has_layout_clipboard: bool,
 ) -> Option<FixtureAction> {
     let mut out = None;
-    // Formauswahl separat, weil `item` `out` bereits ausleiht
-    let mut picked_shape: Option<FixtureAction> = None;
-    let mut item = |ui: &mut egui::Ui, enabled: bool, label: &str, a: FixtureAction| {
-        if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+    let mut act = |ui: &mut egui::Ui, item: MenuItem<'_>, a: FixtureAction| {
+        if menu::item(ui, item) {
             out = Some(a);
-            ui.close();
         }
     };
+    menu::begin(ui);
     let n = selected.len();
     let some = n > 0;
 
@@ -78,127 +78,190 @@ pub fn menu(
         } else {
             format!("{} · U{}/{}", f.name, f.universe + 1, f.address)
         };
-        ui.label(egui::RichText::new(title).strong());
-        ui.separator();
+        menu::title(ui, &title);
     }
 
     // Gruppen
-    ui.add_enabled_ui(some && !show.groups.is_empty(), |ui| {
-        ui.menu_button("Zu Gruppe hinzufügen", |ui| {
+    menu::sub(
+        ui,
+        MenuItem::new("Zu Gruppe hinzufügen")
+            .icon(Icon::Group)
+            .enabled(some && !show.groups.is_empty()),
+        |ui| {
             for g in &show.groups {
-                item(ui, true, &g.name, FixtureAction::AddToGroup(g.id));
+                act(ui, MenuItem::new(&g.name), FixtureAction::AddToGroup(g.id));
             }
-        });
-    });
+        },
+    );
     let containing: Vec<_> = show
         .groups
         .iter()
         .filter(|g| g.fixtures.iter().any(|f| selected.contains(f)))
         .collect();
-    ui.add_enabled_ui(!containing.is_empty(), |ui| {
-        ui.menu_button("Aus Gruppe entfernen", |ui| {
+    menu::sub(
+        ui,
+        MenuItem::new("Aus Gruppe entfernen").enabled(!containing.is_empty()),
+        |ui| {
             for g in &containing {
-                item(ui, true, &g.name, FixtureAction::RemoveFromGroup(g.id));
+                act(
+                    ui,
+                    MenuItem::new(&g.name),
+                    FixtureAction::RemoveFromGroup(g.id),
+                );
             }
-        });
-    });
-    item(ui, some, "Neue Gruppe aus Auswahl", FixtureAction::NewGroup);
-    ui.separator();
+        },
+    );
+    act(
+        ui,
+        MenuItem::new("Neue Gruppe aus Auswahl")
+            .icon(Icon::Plus)
+            .enabled(some),
+        FixtureAction::NewGroup,
+    );
+    menu::separator(ui);
 
     // Auswahl
-    item(
+    act(
         ui,
-        some,
-        "Gleichen Gerätetyp auswählen",
+        MenuItem::new("Gleichen Gerätetyp auswählen").enabled(some),
         FixtureAction::SelectSameType,
     );
-    item(ui, true, "Alle auswählen", FixtureAction::SelectAll);
-    item(ui, some, "Auswahl aufheben", FixtureAction::SelectNone);
-    item(
+    act(
         ui,
-        n > 1,
-        "Reihenfolge umkehren",
+        MenuItem::new("Alle auswählen"),
+        FixtureAction::SelectAll,
+    );
+    act(
+        ui,
+        MenuItem::new("Auswahl aufheben").enabled(some),
+        FixtureAction::SelectNone,
+    );
+    act(
+        ui,
+        MenuItem::new("Reihenfolge umkehren").enabled(n > 1),
         FixtureAction::InvertOrder,
     );
 
     // Darstellung
     if place != MenuPlace::Patch {
-        ui.separator();
-        ui.add_enabled_ui(some, |ui| {
-            ui.menu_button("Form", |ui| {
-                if shape_menu_row(ui, None, "Automatisch (nach Typ)").clicked() {
-                    picked_shape = Some(FixtureAction::SetShape(None));
-                    ui.close();
-                }
-                ui.separator();
-                for s in PlanShape::ALL {
-                    if shape_menu_row(ui, Some(s), s.label()).clicked() {
-                        picked_shape = Some(FixtureAction::SetShape(Some(s)));
-                        ui.close();
-                    }
-                }
-            });
-            ui.menu_button("Größe", |ui| {
-                for (label, f) in SIZES {
-                    item(ui, true, label, FixtureAction::SetSize(f));
-                }
-            });
+        menu::separator(ui);
+        let current_shape = (n == 1)
+            .then(|| selected.iter().next().map(|id| show.plan_shape(*id)))
+            .flatten();
+        menu::sub(ui, MenuItem::new("Form").enabled(some), |ui| {
+            act(
+                ui,
+                MenuItem::new("Automatisch (nach Typ)")
+                    .icon_fn(|p, r, c| paint_shape_icon(p, None, r, c)),
+                FixtureAction::SetShape(None),
+            );
+            menu::separator(ui);
+            for shape in PlanShape::ALL {
+                act(
+                    ui,
+                    MenuItem::new(shape.label())
+                        .icon_fn(move |p, r, c| paint_shape_icon(p, Some(shape), r, c))
+                        .checked(current_shape == Some(shape)),
+                    FixtureAction::SetShape(Some(shape)),
+                );
+            }
+        });
+        let current_size = (n == 1)
+            .then(|| selected.iter().next().map(|id| show.plan_size(*id)))
+            .flatten();
+        menu::sub(ui, MenuItem::new("Größe").enabled(some), |ui| {
+            for (label, f) in SIZES {
+                act(
+                    ui,
+                    MenuItem::new(label)
+                        .checked(current_size.is_some_and(|c| (c - f).abs() < 0.01)),
+                    FixtureAction::SetSize(f),
+                );
+            }
         });
     }
 
     // Anordnung
     if place == MenuPlace::StageEditor {
-        ui.separator();
-        item(ui, some, "Layout kopieren", FixtureAction::CopyLayout);
-        item(
+        menu::separator(ui);
+        act(
             ui,
-            some && has_layout_clipboard,
-            "Layout einfügen",
+            MenuItem::new("Layout kopieren")
+                .icon(Icon::Copy)
+                .enabled(some),
+            FixtureAction::CopyLayout,
+        );
+        act(
+            ui,
+            MenuItem::new("Layout einfügen")
+                .icon(Icon::Paste)
+                .enabled(some && has_layout_clipboard),
             FixtureAction::PasteLayout,
         );
-        item(ui, n > 1, "Waagerecht spiegeln", FixtureAction::MirrorH);
-        item(ui, n > 1, "Senkrecht spiegeln", FixtureAction::MirrorV);
-        item(
+        act(
             ui,
-            some,
-            "Position zurücksetzen",
+            MenuItem::new("Waagerecht spiegeln")
+                .icon(Icon::AlignV)
+                .enabled(n > 1),
+            FixtureAction::MirrorH,
+        );
+        act(
+            ui,
+            MenuItem::new("Senkrecht spiegeln")
+                .icon(Icon::AlignH)
+                .enabled(n > 1),
+            FixtureAction::MirrorV,
+        );
+        act(
+            ui,
+            MenuItem::new("Position zurücksetzen")
+                .icon(Icon::Reset)
+                .enabled(some),
             FixtureAction::ResetPosition,
         );
     }
     if place == MenuPlace::Patch {
-        ui.separator();
-        item(
+        menu::separator(ui);
+        act(
             ui,
-            some,
-            "Auf nächste freie Adresse",
+            MenuItem::new("Auf nächste freie Adresse")
+                .icon(Icon::Next)
+                .enabled(some),
             FixtureAction::NextFreeAddress,
         );
     }
 
-    ui.separator();
+    menu::separator(ui);
     if place == MenuPlace::Stage {
-        item(
+        act(
             ui,
-            some,
-            "Unter Einrichten bearbeiten",
+            MenuItem::new("Unter Einrichten bearbeiten")
+                .icon(Icon::Edit)
+                .enabled(some),
             FixtureAction::ShowInSetup,
         );
     } else {
-        item(ui, n == 1, "Umbenennen", FixtureAction::Rename);
+        act(
+            ui,
+            MenuItem::new("Umbenennen").icon(Icon::Edit).enabled(n == 1),
+            FixtureAction::Rename,
+        );
     }
     if place != MenuPlace::Stage {
-        ui.add_enabled_ui(some, |ui| {
-            ui.menu_button("Löschen", |ui| {
-                item(
+        let confirm = format!("{n} Gerät(e) wirklich löschen");
+        menu::sub(
+            ui,
+            MenuItem::new("Löschen").icon(Icon::Trash).enabled(some),
+            |ui| {
+                act(
                     ui,
-                    true,
-                    &format!("{n} Gerät(e) wirklich löschen"),
+                    MenuItem::new(&confirm).icon(Icon::Trash).danger(),
                     FixtureAction::Delete,
                 );
-            });
-        });
+            },
+        );
     }
-    out.or(picked_shape)
+    out
 }
 
 /// Führt eine Menüaktion aus.

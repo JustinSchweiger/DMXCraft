@@ -1,6 +1,6 @@
 [package]
 name = "dmxcraft-ofl"
-description = "Import der Open Fixture Library (OFL) in DmxCraft-Gerätetypen"
+description = "Import der Open Fixture Library (OFL) in DMXCraft-Gerätetypen"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

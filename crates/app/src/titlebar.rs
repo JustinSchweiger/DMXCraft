@@ -3,18 +3,17 @@
 //! Fensterknöpfe rechts. Leere Fläche: Ziehen = Fenster bewegen,
 //! Doppelklick = maximieren.
 
-use dmxcraft_output::OutputKind;
 use eframe::egui::{self, Color32, Sense, ViewportCommand};
 
 use crate::state::Mode;
 use crate::ui::theme;
+use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::{Icon, IconButton, Segmented};
 
 pub const HEIGHT: f32 = 36.0;
 
 /// Was die Titelleiste zum Zeichnen braucht.
 pub struct TitleInfo<'a> {
-    pub logo: Option<egui::TextureId>,
     pub show_name: &'a str,
     /// Ausgangsstatus als Text und Farbe (für den Punkt und den Tooltip).
     pub status: (String, Color32),
@@ -22,8 +21,12 @@ pub struct TitleInfo<'a> {
     pub load: f32,
     pub fps: f32,
     pub locked: bool,
-    pub output: OutputKind,
+    pub output: dmxcraft_output::OutputKind,
     pub blackout: bool,
+    /// Zuletzt geöffnete Shows (neueste zuerst).
+    pub recent: &'a [String],
+    pub can_undo: bool,
+    pub can_redo: bool,
     /// Kurzzeitige Meldung (Text, ist Fehler).
     pub message: Option<(&'a str, bool)>,
     pub update: UpdateBadge,
@@ -43,20 +46,17 @@ pub enum UpdateBadge {
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuAction {
     NewShow,
-    DemoShow,
     OpenShow,
+    OpenRecent(String),
     SaveShow,
     SaveShowAs,
+    Undo,
+    Redo,
     Quit,
-    SetMode(Mode),
-    SceneEditor,
-    Zones,
     ToggleFullscreen,
     Zoom(f32),
-    ReleaseAll,
     ToggleBlackout,
-    ClearProgrammer,
-    Output(OutputKind),
+    DmxLevels,
     Settings,
     CheckUpdates,
     InstallUpdate,
@@ -89,7 +89,7 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
     let painter = ui.painter();
     let center = full.center();
     let name = egui::text::LayoutJob::simple_singleline(
-        "DmxCraft".into(),
+        "DMXCraft".into(),
         egui::FontId::proportional(theme::FS_TITLE),
         theme::TEXT,
     );
@@ -114,12 +114,6 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
 
     ui.horizontal_centered(|ui| {
         ui.add_space(6.0);
-        if let Some(tex) = info.logo {
-            ui.add(egui::Image::new(egui::load::SizedTexture::new(
-                tex,
-                [22.0, 22.0],
-            )));
-        }
         main_menu(ui, info, &mut actions);
         ui.add_space(theme::SP_XS);
         if info.locked {
@@ -273,93 +267,215 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
         .add(IconButton::new(Icon::Menu).size(28.0).flat())
         .on_hover_text("Menü");
     egui::Popup::menu(&resp).show(|ui| {
-        ui.set_min_width(220.0);
-        let mut item = |ui: &mut egui::Ui, label: &str, hint: &str, a: MenuAction| {
-            // Bei gesperrter Oberfläche nur Wiedergabe, Ansicht, Speichern, Entsperren und Hilfe
-            let allowed = free
-                || matches!(
-                    a,
-                    MenuAction::SaveShow
-                        | MenuAction::Quit
-                        | MenuAction::ReleaseAll
-                        | MenuAction::ToggleBlackout
-                        | MenuAction::ClearProgrammer
-                        | MenuAction::ToggleFullscreen
-                        | MenuAction::Zoom(_)
-                        | MenuAction::SetMode(Mode::Control)
-                        | MenuAction::ToggleLock
-                        | MenuAction::CheckUpdates
-                        | MenuAction::InstallUpdate
-                        | MenuAction::About
-                );
-            let b = egui::Button::new(label).shortcut_text(hint);
-            if ui.add_enabled(allowed, b).clicked() {
+        menu::begin(ui);
+        let soon = "Noch nicht verfügbar";
+        let mut act = |ui: &mut egui::Ui, item: MenuItem<'_>, a: MenuAction| {
+            if menu::item(ui, item) {
                 actions.push(a);
-                ui.close();
             }
         };
-        ui.menu_button("Datei", |ui| {
-            item(ui, "Neue Show", "", MenuAction::NewShow);
-            item(ui, "Demo-Show laden", "", MenuAction::DemoShow);
-            ui.separator();
-            item(ui, "Öffnen …", "Strg+O", MenuAction::OpenShow);
-            item(ui, "Speichern", "Strg+S", MenuAction::SaveShow);
-            item(ui, "Speichern unter …", "", MenuAction::SaveShowAs);
-            ui.separator();
-            item(ui, "Beenden", "", MenuAction::Quit);
-        });
-        ui.menu_button("Bearbeiten", |ui| {
-            item(
+        menu::sub(ui, MenuItem::new("Datei").plain(), |ui| {
+            act(
                 ui,
-                "Einrichten (Patch & Bühnenplan)",
-                "",
-                MenuAction::SetMode(Mode::Setup),
+                MenuItem::new("Neu")
+                    .icon(Icon::FileNew)
+                    .shortcut(&keys::NEW)
+                    .enabled(free),
+                MenuAction::NewShow,
             );
-            item(ui, "Steuern", "", MenuAction::SetMode(Mode::Control));
-            ui.separator();
-            item(ui, "Szenen bearbeiten …", "", MenuAction::SceneEditor);
-            item(ui, "Zonen & Gruppen …", "", MenuAction::Zones);
+            act(
+                ui,
+                MenuItem::new("Öffnen …")
+                    .icon(Icon::FileOpen)
+                    .shortcut(&keys::OPEN)
+                    .enabled(free),
+                MenuAction::OpenShow,
+            );
+            menu::sub(
+                ui,
+                MenuItem::new("Zuletzt geöffnet")
+                    .icon(Icon::Recent)
+                    .enabled(free && !info.recent.is_empty()),
+                |ui| {
+                    for path in info.recent {
+                        let name = std::path::Path::new(path)
+                            .file_stem()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| path.clone());
+                        act(
+                            ui,
+                            MenuItem::new(&name).tooltip(path),
+                            MenuAction::OpenRecent(path.clone()),
+                        );
+                    }
+                },
+            );
+            menu::separator(ui);
+            act(
+                ui,
+                MenuItem::new("Speichern")
+                    .icon(Icon::Save)
+                    .shortcut(&keys::SAVE),
+                MenuAction::SaveShow,
+            );
+            act(
+                ui,
+                MenuItem::new("Speichern unter …")
+                    .icon(Icon::SaveAs)
+                    .shortcut(&keys::SAVE_AS)
+                    .enabled(free),
+                MenuAction::SaveShowAs,
+            );
+            menu::separator(ui);
+            ui.add(
+                MenuItem::new("Importieren von Daslight …")
+                    .icon(Icon::Import)
+                    .enabled(false)
+                    .tooltip(soon),
+            );
         });
-        ui.menu_button("Wiedergabe", |ui| {
-            item(ui, "Alle Szenen aus", "", MenuAction::ReleaseAll);
-            let bo = if info.blackout {
-                "Blackout aus"
+        menu::sub(ui, MenuItem::new("Bearbeiten").plain(), |ui| {
+            act(
+                ui,
+                MenuItem::new("Rückgängig")
+                    .icon(Icon::Undo)
+                    .shortcut(&keys::UNDO)
+                    .enabled(free && info.can_undo),
+                MenuAction::Undo,
+            );
+            act(
+                ui,
+                MenuItem::new("Wiederherstellen")
+                    .icon(Icon::Redo)
+                    .shortcut(&keys::REDO)
+                    .enabled(free && info.can_redo),
+                MenuAction::Redo,
+            );
+            menu::separator(ui);
+            let (lock_label, lock_icon) = if info.locked {
+                ("Entsperren …", Icon::Unlocked)
             } else {
-                "Blackout an"
+                ("Sperren", Icon::Locked)
             };
-            item(ui, bo, "B", MenuAction::ToggleBlackout);
-            item(ui, "Programmer leeren", "", MenuAction::ClearProgrammer);
+            act(
+                ui,
+                MenuItem::new(lock_label)
+                    .icon(lock_icon)
+                    .shortcut(&keys::LOCK),
+                MenuAction::ToggleLock,
+            );
+            act(
+                ui,
+                MenuItem::new("Einstellungen …")
+                    .icon(Icon::Settings)
+                    .shortcut(&keys::SETTINGS)
+                    .enabled(free),
+                MenuAction::Settings,
+            );
         });
-        ui.menu_button("Ausgang", |ui| {
-            for k in OutputKind::ALL {
-                let label = if k == info.output {
-                    format!("{}  (aktiv)", k.label())
-                } else {
-                    k.label().to_string()
-                };
-                item(ui, &label, "", MenuAction::Output(k));
+        menu::sub(ui, MenuItem::new("Ansicht").plain(), |ui| {
+            act(
+                ui,
+                MenuItem::new("Vollbild")
+                    .icon(Icon::Fullscreen)
+                    .shortcut("F11"),
+                MenuAction::ToggleFullscreen,
+            );
+            menu::separator(ui);
+            act(
+                ui,
+                MenuItem::new("Größer")
+                    .icon(Icon::ZoomIn)
+                    .shortcut(&keys::ZOOM_IN),
+                MenuAction::Zoom(0.1),
+            );
+            act(
+                ui,
+                MenuItem::new("Kleiner")
+                    .icon(Icon::ZoomOut)
+                    .shortcut(&keys::ZOOM_OUT),
+                MenuAction::Zoom(-0.1),
+            );
+            act(
+                ui,
+                MenuItem::new("Größe wiederherstellen")
+                    .icon(Icon::ZoomReset)
+                    .shortcut(&keys::ZOOM_RESET),
+                MenuAction::Zoom(0.0),
+            );
+        });
+        menu::sub(ui, MenuItem::new("Tools").plain(), |ui| {
+            ui.add(
+                MenuItem::new("3D-Visualisierer")
+                    .icon(Icon::Cube)
+                    .enabled(false)
+                    .tooltip(soon),
+            );
+            act(
+                ui,
+                MenuItem::new("DMX-Werte")
+                    .icon(Icon::Levels)
+                    .shortcut(&keys::LEVELS)
+                    .enabled(free),
+                MenuAction::DmxLevels,
+            );
+            ui.add(
+                MenuItem::new("Profile Builder")
+                    .icon(Icon::Builder)
+                    .enabled(false)
+                    .tooltip(soon),
+            );
+        });
+        menu::sub(ui, MenuItem::new("Mappings").plain(), |ui| {
+            for (label, icon) in [
+                ("Tastatur-Mapping", Icon::Keyboard),
+                ("MIDI-Mapping", Icon::Midi),
+                ("Touch-Mapping", Icon::Touch),
+            ] {
+                ui.add(MenuItem::new(label).icon(icon).enabled(false).tooltip(soon));
             }
         });
-        ui.menu_button("Ansicht", |ui| {
-            item(ui, "Vollbild", "F11", MenuAction::ToggleFullscreen);
-            ui.separator();
-            item(ui, "Größer", "Strg++", MenuAction::Zoom(0.1));
-            item(ui, "Kleiner", "Strg+-", MenuAction::Zoom(-0.1));
-            item(ui, "Normale Größe", "Strg+0", MenuAction::Zoom(0.0));
-        });
-        ui.separator();
-        let lock_label = if info.locked {
-            "Entsperren …"
-        } else {
-            "Oberfläche sperren"
-        };
-        item(ui, lock_label, "", MenuAction::ToggleLock);
-        item(ui, "Einstellungen …", "", MenuAction::Settings);
-        ui.menu_button("Hilfe", |ui| {
-            item(ui, "Nach Updates suchen", "", MenuAction::CheckUpdates);
-            item(ui, "Über DmxCraft", "", MenuAction::About);
+        menu::sub(ui, MenuItem::new("Hilfe").plain(), |ui| {
+            act(
+                ui,
+                MenuItem::new("Nach Updates suchen").icon(Icon::Update),
+                MenuAction::CheckUpdates,
+            );
+            act(
+                ui,
+                MenuItem::new("Über DMXCraft").icon(Icon::Info),
+                MenuAction::About,
+            );
         });
     });
+}
+
+/// Beschriftung der Tastenkürzel (Strg unter Windows/Linux, Cmd unter macOS).
+pub mod keys {
+    use std::sync::LazyLock;
+
+    const MOD: &str = if cfg!(target_os = "macos") {
+        "Cmd"
+    } else {
+        "Strg"
+    };
+
+    fn k(rest: &str) -> String {
+        format!("{MOD}+{rest}")
+    }
+
+    pub static NEW: LazyLock<String> = LazyLock::new(|| k("N"));
+    pub static OPEN: LazyLock<String> = LazyLock::new(|| k("O"));
+    pub static SAVE: LazyLock<String> = LazyLock::new(|| k("S"));
+    pub static SAVE_AS: LazyLock<String> = LazyLock::new(|| k("Umschalt+S"));
+    pub static UNDO: LazyLock<String> = LazyLock::new(|| k("Z"));
+    pub static REDO: LazyLock<String> = LazyLock::new(|| k("Y"));
+    pub static LOCK: LazyLock<String> = LazyLock::new(|| k("L"));
+    pub static SETTINGS: LazyLock<String> = LazyLock::new(|| k(","));
+    pub static ZOOM_IN: LazyLock<String> = LazyLock::new(|| k("+"));
+    pub static ZOOM_OUT: LazyLock<String> = LazyLock::new(|| k("-"));
+    pub static ZOOM_RESET: LazyLock<String> = LazyLock::new(|| k("0"));
+    pub static LEVELS: LazyLock<String> = LazyLock::new(|| k("D"));
 }
 
 /// Fenstergröße an den Rändern ändern (randloses Fenster).

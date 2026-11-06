@@ -14,6 +14,8 @@ pub struct Settings {
     pub check_updates: bool,
     /// Zuletzt verwendete Show-Datei.
     pub last_show: Option<String>,
+    /// Zuletzt geöffnete Shows, neueste zuerst.
+    pub recent: Vec<String>,
     /// Beim Start die zuletzt verwendete Show laden.
     pub open_last_show: bool,
     /// Gewählter Ausgang: "simulation" oder "dvc_gold".
@@ -30,6 +32,7 @@ impl Default for Settings {
             ui_scale: 1.0,
             check_updates: true,
             last_show: None,
+            recent: Vec::new(),
             open_last_show: true,
             output: "simulation".into(),
             lock_hash: None,
@@ -38,7 +41,18 @@ impl Default for Settings {
     }
 }
 
+/// Wie viele Shows unter „Zuletzt geöffnet“ stehen.
+pub const RECENT_MAX: usize = 8;
+
 impl Settings {
+    /// Merkt sich eine geöffnete oder gespeicherte Show.
+    pub fn remember(&mut self, path: &str) {
+        self.last_show = Some(path.to_string());
+        self.recent.retain(|p| p != path);
+        self.recent.insert(0, path.to_string());
+        self.recent.truncate(RECENT_MAX);
+    }
+
     /// Konfigurationsdatei je Betriebssystem.
     pub fn path() -> Option<PathBuf> {
         let base = if cfg!(target_os = "windows") {

@@ -44,6 +44,9 @@ pub struct PatchGrid {
 impl View for PatchGrid {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let universes = usize::from(cx.engine.show().universes);
+        if std::mem::take(&mut cx.state.show_dmx_levels) {
+            self.mode = GridMode::Output;
+        }
         if let Some(id) = cx.state.monitor_focus.take() {
             if let Some(f) = cx.engine.show().fixture(id) {
                 self.universe = usize::from(f.universe);
