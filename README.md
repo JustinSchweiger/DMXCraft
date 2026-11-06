@@ -32,15 +32,15 @@ vorhandene **Daslight DVC Gold** per USB ansteuern.
 **Linux / macOS** (Terminal):
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/JustinSchweiger/DmxCraft/releases/latest/download/dmxcraft-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/JustinSchweiger/DMXCraft/releases/latest/download/dmxcraft-installer.sh | sh
 ```
 
-**Windows**: Unter [Releases](https://github.com/JustinSchweiger/DmxCraft/releases/latest) die
+**Windows**: Unter [Releases](https://github.com/JustinSchweiger/DMXCraft/releases/latest) die
 `dmxcraft-x86_64-pc-windows-msvc.msi` herunterladen und ausführen. Dabei werden auch eine
 Startmenü- und eine Desktop-Verknüpfung angelegt. Alternativ in PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/JustinSchweiger/DmxCraft/releases/latest/download/dmxcraft-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/JustinSchweiger/DMXCraft/releases/latest/download/dmxcraft-installer.ps1 | iex"
 ```
 
 Gebaut wird für Linux (x86_64, ARM64 z. B. Raspberry Pi), macOS (Apple Silicon und Intel)

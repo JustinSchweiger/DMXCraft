@@ -601,8 +601,8 @@ impl DmxCraftApp {
                         );
                         ui.add_space(theme::SP_S);
                         ui.hyperlink_to(
-                            "github.com/JustinSchweiger/DmxCraft",
-                            "https://github.com/JustinSchweiger/DmxCraft",
+                            "github.com/JustinSchweiger/DMXCraft",
+                            "https://github.com/JustinSchweiger/DMXCraft",
                         );
                     });
                 });
