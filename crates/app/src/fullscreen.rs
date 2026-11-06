@@ -1,128 +1,74 @@
 //! Vollbild umschalten.
 //!
-//! Unter Windows übernimmt winit bei randlosen Fenstern (ohne Titelleiste des
-//! Systems) die neue Größe im Vollbild nicht zuverlässig – es bleibt ein
-//! schwarzer Streifen. Dort legen wir das Fenster daher selbst über die
-//! Win32-API auf die Fläche des aktuellen Monitors und stellen es danach
-//! wieder her. Auf den anderen Systemen genügt der normale egui-Befehl.
+//! Aus einem maximierten, randlosen Fenster heraus übernimmt Windows die
+//! Vollbildgröße nicht ganz: unten bleibt ein schwarzer Streifen in Höhe der
+//! Taskleiste. Daher wird die Maximierung vor dem Vollbild aufgehoben (und
+//! danach wiederhergestellt) – jeweils mit ein paar Frames Abstand, damit das
+//! System den Zwischenzustand übernommen hat.
 
-use eframe::egui;
+use eframe::egui::{self, ViewportCommand};
+
+/// Frames zwischen den Schritten.
+const SETTLE: u8 = 3;
 
 #[derive(Default)]
 pub struct Fullscreen {
-    #[cfg(windows)]
-    saved: Option<win::Saved>,
-    #[cfg(not(windows))]
     on: bool,
+    /// Vor dem Vollbild maximiert (beim Verlassen wieder maximieren).
+    was_maximized: bool,
+    /// Ausstehender Schritt und verbleibende Frames bis dahin.
+    pending: Option<(Step, u8)>,
+}
+
+#[derive(Clone, Copy)]
+enum Step {
+    Enter,
+    Maximize,
 }
 
 impl Fullscreen {
-    pub fn is_on(&self, ctx: &egui::Context) -> bool {
-        #[cfg(windows)]
-        {
-            let _ = ctx;
-            self.saved.is_some()
-        }
-        #[cfg(not(windows))]
-        {
-            self.on || ctx.input(|i| i.viewport().fullscreen.unwrap_or(false))
-        }
+    pub fn is_on(&self) -> bool {
+        self.on
     }
 
-    pub fn toggle(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        #[cfg(windows)]
-        {
-            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-            let Ok(handle) = frame.window_handle() else {
-                return;
-            };
-            let RawWindowHandle::Win32(h) = handle.as_raw() else {
-                return;
-            };
-            let hwnd = h.hwnd.get() as win::Hwnd;
-            match self.saved.take() {
-                Some(saved) => win::leave(hwnd, saved),
-                None => self.saved = win::enter(hwnd),
+    pub fn toggle(&mut self, ctx: &egui::Context) {
+        if self.pending.is_some() {
+            return;
+        }
+        if self.on {
+            self.on = false;
+            ctx.send_viewport_cmd(ViewportCommand::Fullscreen(false));
+            if self.was_maximized {
+                self.pending = Some((Step::Maximize, SETTLE));
             }
+        } else {
+            self.on = true;
+            self.was_maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+            if self.was_maximized {
+                ctx.send_viewport_cmd(ViewportCommand::Maximized(false));
+                self.pending = Some((Step::Enter, SETTLE));
+            } else {
+                ctx.send_viewport_cmd(ViewportCommand::Fullscreen(true));
+            }
+        }
+        ctx.request_repaint();
+    }
+
+    /// Jeden Frame aufrufen: führt ausstehende Schritte aus.
+    pub fn update(&mut self, ctx: &egui::Context) {
+        let Some((step, frames)) = self.pending else {
+            return;
+        };
+        if frames > 0 {
+            self.pending = Some((step, frames - 1));
             ctx.request_repaint();
+            return;
         }
-        #[cfg(not(windows))]
-        {
-            let _ = frame;
-            self.on = !self.is_on(ctx);
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.on));
+        self.pending = None;
+        match step {
+            Step::Enter => ctx.send_viewport_cmd(ViewportCommand::Fullscreen(true)),
+            Step::Maximize => ctx.send_viewport_cmd(ViewportCommand::Maximized(true)),
         }
-    }
-}
-
-#[cfg(windows)]
-mod win {
-    use windows_sys::Win32::Foundation::{HWND, RECT};
-    use windows_sys::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetWindowRect, IsZoomed, SetWindowPos, ShowWindow, HWND_TOP, SWP_FRAMECHANGED,
-        SWP_NOOWNERZORDER, SW_MAXIMIZE, SW_RESTORE,
-    };
-
-    pub type Hwnd = HWND;
-
-    pub struct Saved {
-        rect: RECT,
-        maximized: bool,
-    }
-
-    pub fn enter(hwnd: HWND) -> Option<Saved> {
-        // SAFETY: hwnd stammt von eframe und ist das gültige Hauptfenster;
-        // alle Strukturen sind korrekt initialisiert.
-        unsafe {
-            let maximized = IsZoomed(hwnd) != 0;
-            if maximized {
-                // Aus dem maximierten Zustand heraus, sonst begrenzt Windows
-                // das Fenster auf den Arbeitsbereich ohne Taskleiste.
-                ShowWindow(hwnd, SW_RESTORE);
-            }
-            let mut rect: RECT = std::mem::zeroed();
-            if GetWindowRect(hwnd, &mut rect) == 0 {
-                return None;
-            }
-            let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-            let mut info: MONITORINFO = std::mem::zeroed();
-            info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
-            if GetMonitorInfoW(monitor, &mut info) == 0 {
-                return None;
-            }
-            let m = info.rcMonitor;
-            SetWindowPos(
-                hwnd,
-                HWND_TOP,
-                m.left,
-                m.top,
-                m.right - m.left,
-                m.bottom - m.top,
-                SWP_FRAMECHANGED | SWP_NOOWNERZORDER,
-            );
-            Some(Saved { rect, maximized })
-        }
-    }
-
-    pub fn leave(hwnd: HWND, saved: Saved) {
-        let r = saved.rect;
-        // SAFETY: wie oben.
-        unsafe {
-            SetWindowPos(
-                hwnd,
-                HWND_TOP,
-                r.left,
-                r.top,
-                r.right - r.left,
-                r.bottom - r.top,
-                SWP_FRAMECHANGED | SWP_NOOWNERZORDER,
-            );
-            if saved.maximized {
-                ShowWindow(hwnd, SW_MAXIMIZE);
-            }
-        }
+        ctx.request_repaint();
     }
 }

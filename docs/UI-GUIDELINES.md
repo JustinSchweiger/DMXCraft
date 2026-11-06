@@ -97,8 +97,8 @@ keinen App-Zustand – nur ihre Eingabewerte.
   Untermenüs), `menu::item`, `menu::sub`, `menu::separator`, `menu::title`;
   jedes Menü beginnt mit `menu::begin`. Nie `ui.button`/`ui.menu_button` in
   Menüs. Symbole, wo sie helfen; die oberste Ebene des Hauptmenüs ohne
-  Symbolspalte (`plain()`). Zerstörendes (Löschen) immer als Untermenü mit
-  roter Bestätigung (`danger()`). Noch nicht Verfügbares deaktiviert mit
+  Symbolspalte (`plain()`). Löschen direkt und rot (`danger()`), ohne
+  Rückfrage – Strg+Z macht es rückgängig; Geräte zusätzlich per Entf. Noch nicht Verfügbares deaktiviert mit
   Tooltip „Noch nicht verfügbar“ – Klick darauf tut nichts, das Menü bleibt
   offen (`menu::context`/`menu::dropdown`, nie `resp.context_menu`).
   Kürzel-Texte aus `titlebar::keys`. „…“ am Ende heißt: es öffnet sich ein

@@ -594,7 +594,7 @@ impl DmxCraftApp {
 }
 
 impl eframe::App for DmxCraftApp {
-    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         // Laufende Szenen und Live-Farben flüssig anzeigen.
         ctx.request_repaint_after(Duration::from_millis(33));
@@ -649,8 +649,9 @@ impl eframe::App for DmxCraftApp {
             self.apply_menu(&ctx, a);
         }
         if std::mem::take(&mut self.toggle_fullscreen) {
-            self.fullscreen.toggle(&ctx, frame);
+            self.fullscreen.toggle(&ctx);
         }
+        self.fullscreen.update(&ctx);
 
         // ----- Inhalt (randlos, Bereiche nur durch Trennlinien getrennt) -----
         let frame = self.runtime.last_frame();
@@ -698,7 +699,7 @@ impl eframe::App for DmxCraftApp {
         }
         self.dialogs(&ctx);
         self.lock_window(&ctx);
-        titlebar::resize_handles(&ctx, self.fullscreen.is_on(&ctx));
+        titlebar::resize_handles(&ctx, self.fullscreen.is_on());
 
         // Rückgängig: Änderungen erst übernehmen, wenn Ziehen/Tippen beendet ist.
         let busy = ctx.input(|i| i.pointer.any_down()) || ctx.memory(|m| m.focused().is_some());

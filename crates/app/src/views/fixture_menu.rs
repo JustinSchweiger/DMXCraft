@@ -248,17 +248,14 @@ pub fn menu(
         );
     }
     if place != MenuPlace::Stage {
-        let confirm = format!("{n} Gerät(e) wirklich löschen");
-        menu::sub(
+        act(
             ui,
-            MenuItem::new("Löschen").icon(Icon::Trash).enabled(some),
-            |ui| {
-                act(
-                    ui,
-                    MenuItem::new(&confirm).icon(Icon::Trash).danger(),
-                    FixtureAction::Delete,
-                );
-            },
+            MenuItem::new("Löschen")
+                .icon(Icon::Trash)
+                .shortcut("Entf")
+                .danger()
+                .enabled(some),
+            FixtureAction::Delete,
         );
     }
     out

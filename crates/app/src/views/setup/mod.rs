@@ -12,6 +12,7 @@ pub mod zones;
 use eframe::egui;
 
 use crate::ui::theme;
+use crate::views::fixture_menu::FixtureAction;
 use crate::views::{View, ViewCtx};
 
 #[derive(Default)]
@@ -24,6 +25,14 @@ pub struct SetupView {
 
 impl View for SetupView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        // Entf löscht die ausgewählten Geräte (ohne Rückfrage, Strg+Z holt sie zurück)
+        let typing = ui.ctx().memory(|m| m.focused().is_some());
+        if !typing
+            && !cx.state.selected.is_empty()
+            && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete))
+        {
+            crate::views::fixture_menu::apply(cx.engine, cx.state, FixtureAction::Delete);
+        }
         let area = egui::Frame::new()
             .fill(theme::SURFACE)
             .inner_margin(egui::Margin::same(6));
