@@ -11,6 +11,7 @@ pub const RAISED: Color32 = Color32::from_rgb(0x1a, 0x20, 0x28);
 pub const RAISED_HOVER: Color32 = Color32::from_rgb(0x23, 0x2b, 0x35);
 pub const BORDER: Color32 = Color32::from_rgb(0x28, 0x30, 0x3a);
 pub const ACCENT: Color32 = Color32::from_rgb(0x19, 0xe3, 0xf0);
+pub const ACCENT_HOVER: Color32 = Color32::from_rgb(0x6c, 0xee, 0xf6);
 pub const ACCENT_DIM: Color32 = Color32::from_rgb(0x0c, 0x5c, 0x64);
 pub const TEXT: Color32 = Color32::from_rgb(0xe6, 0xec, 0xf2);
 pub const TEXT_DIM: Color32 = Color32::from_rgb(0x95, 0xa2, 0xb0);

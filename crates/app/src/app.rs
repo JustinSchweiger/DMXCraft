@@ -12,7 +12,8 @@ use crate::settings::Settings;
 use crate::state::{AppState, Mode};
 use crate::titlebar::{self, MenuAction, TitleInfo, UpdateBadge};
 use crate::ui::theme;
-use crate::ui::widgets::Toggle;
+use crate::ui::widgets::dialog::INPUT_H;
+use crate::ui::widgets::{form, text_field, Dialog, Toggle};
 use crate::updater::{UpdateState, Updater};
 use crate::views::control::{ProgrammerView, SceneGridView, StageView};
 use crate::views::setup::SetupView;
@@ -257,40 +258,50 @@ impl DmxCraftApp {
             return;
         };
         let mut open = true;
-        let mut confirm = false;
         let title = if d.set_password {
             "Oberfläche sperren"
         } else {
             "Oberfläche entsperren"
         };
-        egui::Window::new(title)
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .show(ctx, |ui| {
-                if d.set_password {
-                    ui.label("Passwort festlegen. Gesperrt sind Einrichten, Szenen bearbeiten und Einstellungen.");
-                } else {
-                    ui.label("Passwort eingeben:");
-                }
-                let r = ui.add(egui::TextEdit::singleline(&mut d.pw).password(true).desired_width(260.0));
-                r.request_focus();
-                if d.set_password {
-                    ui.label("Wiederholen:");
-                    ui.add(egui::TextEdit::singleline(&mut d.pw2).password(true).desired_width(260.0));
-                }
-                if let Some(e) = &d.error {
-                    ui.label(egui::RichText::new(e).color(theme::DANGER));
-                }
-                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    confirm = true;
-                }
-                let label = if d.set_password { "Sperren" } else { "Entsperren" };
-                if ui.button(label).clicked() {
-                    confirm = true;
-                }
+        let action = if d.set_password {
+            "Sperren"
+        } else {
+            "Entsperren"
+        };
+        let res = Dialog::new(title)
+            .id("lock")
+            .width(340.0)
+            .cancel("Abbrechen")
+            .primary(action)
+            .show(ctx, &mut open, |ui, first| {
+                form(ui, "lock_form", |f| {
+                    let r = f.row("Passwort", |ui| {
+                        ui.add(
+                            text_field(&mut d.pw)
+                                .password(true)
+                                .desired_width(f32::INFINITY),
+                        )
+                    });
+                    if first {
+                        r.request_focus();
+                    }
+                    if d.set_password {
+                        f.row("Wiederholen", |ui| {
+                            ui.add(
+                                text_field(&mut d.pw2)
+                                    .password(true)
+                                    .desired_width(f32::INFINITY),
+                            )
+                        });
+                    }
+                    if let Some(e) = &d.error {
+                        f.note(|ui| {
+                            ui.label(egui::RichText::new(e).color(theme::DANGER));
+                        });
+                    }
+                });
             });
+        let confirm = res.clicked(1);
         if confirm {
             if d.set_password {
                 if d.pw.chars().count() < 4 {
@@ -355,33 +366,32 @@ impl DmxCraftApp {
         // Pfad-Dialog
         if let Some((kind, mut path)) = self.path_dialog.take() {
             let mut open = true;
-            let mut confirm = false;
             let title = match kind {
                 PathDialog::Open => "Show öffnen",
                 PathDialog::SaveAs => "Show speichern unter",
             };
-            egui::Window::new(title)
-                .open(&mut open)
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ctx, |ui| {
-                    ui.label("Pfad der Show-Datei (.json):");
-                    let r = ui.add(egui::TextEdit::singleline(&mut path).desired_width(420.0));
-                    if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        confirm = true;
-                    }
-                    ui.horizontal(|ui| {
-                        let label = if kind == PathDialog::Open {
-                            "Öffnen"
-                        } else {
-                            "Speichern"
-                        };
-                        if ui.button(label).clicked() {
-                            confirm = true;
+            let action = if kind == PathDialog::Open {
+                "Öffnen"
+            } else {
+                "Speichern"
+            };
+            let res = Dialog::new(title)
+                .id("path")
+                .width(460.0)
+                .cancel("Abbrechen")
+                .primary(action)
+                .show(ctx, &mut open, |ui, first| {
+                    form(ui, "path_form", |f| {
+                        let r = f.row("Show-Datei", |ui| {
+                            ui.add(text_field(&mut path).desired_width(f32::INFINITY))
+                                .on_hover_text("Pfad der Show-Datei (.json)")
+                        });
+                        if first {
+                            r.request_focus();
                         }
                     });
                 });
+            let confirm = res.clicked(1);
             if confirm {
                 match kind {
                     PathDialog::Open => self.open_show(&path),
@@ -397,47 +407,56 @@ impl DmxCraftApp {
             let mut open = true;
             let mut changed = false;
             let mut new_output = self.output_kind;
-            egui::Window::new("Einstellungen")
-                .open(&mut open)
-                .collapsible(false)
-                .default_width(420.0)
-                .show(ctx, |ui| {
-                    ui.heading("Show");
-                    let mut e = Self::lock(&self.engine);
-                    egui::Grid::new("settings_show")
-                        .num_columns(2)
-                        .show(ui, |ui| {
-                            ui.label("Name");
-                            ui.text_edit_singleline(&mut e.show_mut().name);
-                            ui.end_row();
+            Dialog::new("Einstellungen")
+                .id("settings")
+                .width(440.0)
+                .cancel("Schließen")
+                .show(ctx, &mut open, |ui, _| {
+                    let section = |ui: &mut egui::Ui, title: &str| {
+                        ui.add_space(theme::SP_XS);
+                        ui.label(theme::heading_text(title));
+                        ui.add_space(theme::SP_XS);
+                    };
+                    section(ui, "Show");
+                    form(ui, "settings_show", |f| {
+                        let mut e = Self::lock(&self.engine);
+                        f.row("Name", |ui| {
+                            ui.add(text_field(&mut e.show_mut().name).desired_width(f32::INFINITY));
                         });
-                    drop(e);
-                    ui.separator();
-                    ui.heading("Ausgang");
-                    egui::ComboBox::from_id_salt("settings_output")
-                        .selected_text(new_output.label())
-                        .show_ui(ui, |ui| {
-                            for k in OutputKind::ALL {
-                                ui.selectable_value(&mut new_output, k, k.label());
+                    });
+                    ui.add_space(theme::SP_S);
+                    section(ui, "Ausgang");
+                    form(ui, "settings_output", |f| {
+                        f.row("Gerät", |ui| {
+                            ui.spacing_mut().interact_size.y = INPUT_H;
+                            egui::ComboBox::from_id_salt("settings_output")
+                                .selected_text(new_output.label())
+                                .width(ui.available_width())
+                                .show_ui(ui, |ui| {
+                                    for k in OutputKind::ALL {
+                                        ui.selectable_value(&mut new_output, k, k.label());
+                                    }
+                                });
+                        });
+                    });
+                    ui.add_space(theme::SP_S);
+                    section(ui, "Darstellung");
+                    form(ui, "settings_view", |f| {
+                        f.row("Skalierung", |ui| {
+                            let mut scale = self.settings.ui_scale;
+                            ui.spacing_mut().slider_width = ui.available_width() - 64.0;
+                            if ui
+                                .add(egui::Slider::new(&mut scale, 0.6..=2.0).fixed_decimals(2))
+                                .changed()
+                            {
+                                self.settings.ui_scale = scale;
+                                ctx.set_zoom_factor(scale);
+                                changed = true;
                             }
                         });
-                    ui.separator();
-                    ui.heading("Darstellung");
-                    let mut scale = self.settings.ui_scale;
-                    if ui
-                        .add(
-                            egui::Slider::new(&mut scale, 0.6..=2.0)
-                                .text("Skalierung")
-                                .fixed_decimals(2),
-                        )
-                        .changed()
-                    {
-                        self.settings.ui_scale = scale;
-                        ctx.set_zoom_factor(scale);
-                        changed = true;
-                    }
-                    ui.separator();
-                    ui.heading("Start");
+                    });
+                    ui.add_space(theme::SP_S);
+                    section(ui, "Start");
                     changed |= ui
                         .add(Toggle::new(
                             &mut self.settings.open_last_show,
@@ -450,28 +469,34 @@ impl DmxCraftApp {
                             "Beim Start nach Updates suchen",
                         ))
                         .changed();
-                    ui.separator();
-                    ui.heading("Sperre");
-                    ui.horizontal(|ui| {
-                        if self.settings.lock_hash.is_some() {
-                            ui.label("Passwort ist festgelegt.");
-                            if ui.button("Passwort entfernen").clicked() {
-                                self.settings.lock_hash = None;
-                                changed = true;
-                            }
-                        } else {
-                            ui.label(
-                                egui::RichText::new(
-                                    "Noch kein Passwort – wird beim ersten Sperren festgelegt.",
+                    ui.add_space(theme::SP_S);
+                    section(ui, "Sperre");
+                    form(ui, "settings_lock", |f| {
+                        f.row("Passwort", |ui| {
+                            if self.settings.lock_hash.is_some() {
+                                if ui
+                                    .button("Entfernen")
+                                    .on_hover_text(
+                                        "Beim nächsten Sperren wird ein neues festgelegt",
+                                    )
+                                    .clicked()
+                                {
+                                    self.settings.lock_hash = None;
+                                    changed = true;
+                                }
+                            } else {
+                                ui.label(
+                                    egui::RichText::new("nicht festgelegt").color(theme::TEXT_DIM),
                                 )
-                                .color(theme::TEXT_DIM),
-                            );
-                        }
+                                .on_hover_text("Wird beim ersten Sperren festgelegt");
+                            }
+                        });
                     });
-                    ui.separator();
                     if let Some(p) = Settings::path() {
+                        ui.add_space(theme::SP_M);
                         ui.label(
                             egui::RichText::new(format!("Gespeichert in {}", p.display()))
+                                .small()
                                 .color(theme::TEXT_FAINT),
                         );
                     }
@@ -488,26 +513,42 @@ impl DmxCraftApp {
         // Über
         if self.about_open {
             let mut open = true;
-            egui::Window::new("Über DmxCraft")
-                .open(&mut open)
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ctx, |ui| {
-                    if let Some(tex) = &self.logo {
-                        ui.add(egui::Image::new(egui::load::SizedTexture::new(
-                            tex.id(),
-                            [64.0, 64.0],
-                        )));
-                    }
-                    ui.heading(format!("DmxCraft {}", Updater::current_version()));
-                    ui.label("DMX-Lichtsteuerung für Linux, Windows und macOS.");
-                    ui.label("Lizenz: MIT");
-                    ui.label("Gerätedaten: Open Fixture Library (MIT)");
-                    ui.hyperlink_to(
-                        "github.com/JustinSchweiger/DmxCraft",
-                        "https://github.com/JustinSchweiger/DmxCraft",
-                    );
+            let logo = self.logo.clone();
+            Dialog::new("Über DmxCraft")
+                .id("about")
+                .width(340.0)
+                .cancel("Schließen")
+                .show(ctx, &mut open, |ui, _| {
+                    ui.vertical_centered(|ui| {
+                        if let Some(tex) = &logo {
+                            ui.add(egui::Image::new(egui::load::SizedTexture::new(
+                                tex.id(),
+                                [72.0, 72.0],
+                            )));
+                            ui.add_space(theme::SP_S);
+                        }
+                        ui.label(
+                            egui::RichText::new(format!("DmxCraft {}", Updater::current_version()))
+                                .font(theme::heading_font())
+                                .size(theme::FS_TITLE),
+                        );
+                        ui.add_space(theme::SP_XS);
+                        ui.label(
+                            egui::RichText::new("DMX-Lichtsteuerung für Linux, Windows und macOS.")
+                                .color(theme::TEXT_DIM),
+                        );
+                        ui.add_space(theme::SP_S);
+                        ui.label(egui::RichText::new("Lizenz: MIT").color(theme::TEXT_DIM));
+                        ui.label(
+                            egui::RichText::new("Gerätedaten: Open Fixture Library (MIT)")
+                                .color(theme::TEXT_DIM),
+                        );
+                        ui.add_space(theme::SP_S);
+                        ui.hyperlink_to(
+                            "github.com/JustinSchweiger/DmxCraft",
+                            "https://github.com/JustinSchweiger/DmxCraft",
+                        );
+                    });
                 });
             self.about_open = open;
         }

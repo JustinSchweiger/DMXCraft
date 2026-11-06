@@ -6,7 +6,7 @@ use eframe::egui::{self, Color32};
 
 use crate::state::AppState;
 use crate::ui::theme;
-use crate::ui::widgets::{section_header, Fader, FaderEvent, Segmented, Swatch, XyPad};
+use crate::ui::widgets::{section_header, text_field, Fader, FaderEvent, Segmented, Swatch, XyPad};
 use crate::views::{View, ViewCtx};
 
 /// Kanal-Kategorien wie auf einem Lichtpult.
@@ -307,7 +307,7 @@ fn save_bar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
     let values = programmer_values(e);
     ui.horizontal_wrapped(|ui| {
         ui.label(egui::RichText::new("Als Szene").color(theme::TEXT_DIM));
-        ui.add(egui::TextEdit::singleline(&mut st.new_scene_name).desired_width(130.0));
+        ui.add(text_field(&mut st.new_scene_name).desired_width(130.0));
         zone_combo(ui, e, &mut st.new_scene_zone, "new_scene_zone");
         if ui.button("Speichern").clicked() {
             let name = st.new_scene_name.trim().to_string();

@@ -4,6 +4,7 @@ use dmxcraft_core::{Engine, LoopMode, SceneId};
 use eframe::egui;
 
 use crate::state::AppState as UiState;
+use crate::ui::theme;
 use crate::views::{View, ViewCtx};
 
 /// EINRICHTEN → Szenen.
@@ -29,7 +30,7 @@ fn scenes_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
     egui::Panel::left("scene_list")
         .default_size(200.0)
         .show(ui, |ui| {
-            ui.strong("Szenen");
+            ui.label(theme::heading_text("Szenen"));
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for s in &e.show().scenes {
                     let active = e.is_active(s.id);

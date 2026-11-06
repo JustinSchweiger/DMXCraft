@@ -10,7 +10,7 @@ use eframe::egui;
 
 use crate::state::AppState;
 use crate::ui::theme;
-use crate::ui::widgets::section_header;
+use crate::ui::widgets::{section_header, text_field};
 use crate::views::{View, ViewCtx};
 
 /// Höchstens so viele Hersteller werden bei leerer Suche aufgeklappt angeboten.
@@ -39,7 +39,7 @@ impl View for LibraryPanel {
         if self.show_import {
             ui.horizontal(|ui| {
                 ui.add(
-                    egui::TextEdit::singleline(&mut self.import_path)
+                    text_field(&mut self.import_path)
                         .hint_text("/pfad/hersteller/geraet.json")
                         .desired_width(ui.available_width() - 80.0),
                 );
@@ -49,7 +49,7 @@ impl View for LibraryPanel {
             });
         }
         ui.add(
-            egui::TextEdit::singleline(&mut self.query)
+            text_field(&mut self.query)
                 .hint_text("Geräte suchen (Hersteller, Modell, Kategorie)")
                 .desired_width(f32::INFINITY),
         );

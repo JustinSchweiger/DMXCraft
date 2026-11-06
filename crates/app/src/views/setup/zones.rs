@@ -4,7 +4,7 @@ use dmxcraft_core::{FixtureId, GroupId, ZoneId};
 use eframe::egui;
 
 use crate::ui::theme;
-use crate::ui::widgets::section_header;
+use crate::ui::widgets::{section_header, text_field};
 use crate::views::{View, ViewCtx};
 
 pub struct ZonesView {
@@ -51,7 +51,7 @@ impl View for ZonesView {
                     if ui.color_edit_button_srgb(&mut c).changed() {
                         z.color = Some(c);
                     }
-                    ui.add(egui::TextEdit::singleline(&mut z.name).desired_width(180.0));
+                    ui.add(text_field(&mut z.name).desired_width(180.0));
                     ui.label(egui::RichText::new(format!("{count} Szenen")).color(theme::TEXT_DIM));
                     if ui.add_enabled(i > 0, egui::Button::new("Nach links")).clicked() {
                         move_zone = Some((i, i - 1));
@@ -66,7 +66,7 @@ impl View for ZonesView {
             }
             ui.add_space(theme::SP_S);
             ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.new_zone).desired_width(180.0));
+                ui.add(text_field(&mut self.new_zone).desired_width(180.0));
                 if ui.button("Zone anlegen").clicked() && !self.new_zone.trim().is_empty() {
                     e.show_mut().add_zone(self.new_zone.trim().to_string());
                 }
@@ -84,7 +84,7 @@ impl View for ZonesView {
                 e.show().fixtures.iter().map(|f| (f.id, f.name.clone())).collect();
             for g in &mut e.show_mut().groups {
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut g.name).desired_width(160.0));
+                    ui.add(text_field(&mut g.name).desired_width(160.0));
                     let members: Vec<String> = g
                         .fixtures
                         .iter()
@@ -105,7 +105,7 @@ impl View for ZonesView {
             }
             ui.add_space(theme::SP_S);
             ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.new_group).hint_text("Name").desired_width(160.0));
+                ui.add(text_field(&mut self.new_group).hint_text("Name").desired_width(160.0));
                 if ui
                     .add_enabled(!selected.is_empty(), egui::Button::new("Gruppe aus Auswahl"))
                     .on_hover_text("Geräte im Patch oder Bühnenplan auswählen")

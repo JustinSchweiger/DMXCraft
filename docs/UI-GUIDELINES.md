@@ -79,6 +79,18 @@ keinen App-Zustand – nur ihre Eingabewerte.
   Kontextmenü (Freigeben). Ungesetzt = gedämpft, im Programmer = `ACCENT`.
 * **SceneCard**: Name, Typzeile (STATISCH/ABLAUF), Fortschritt als
   Leiste unten, Zonenfarbe als Rand, wenn aktiv.
+* **Dialog** (`widgets::Dialog`): **jedes** Fenster läuft hierüber, nie
+  `egui::Window` direkt. Kopf: Titel zentriert in Überschrift-Schrift,
+  Schließen-Symbol rechts. Inhalt auf `SURFACE`. Aktionsknöpfe (Abbrechen,
+  Schließen, Speichern …) **immer in der Fußzeile unten rechts**, Hauptaktion
+  ganz rechts in `ACCENT` (auch per Enter), Esc schließt.
+  Erstes Feld nur über das `first`-Flag fokussieren – nie jeden Frame
+  `request_focus()`, sonst funktioniert Tab nicht.
+* **Formulare** (`widgets::form` + `Form::row`): Beschriftung links
+  (`TEXT_DIM`, feste Spaltenbreite, ohne Doppelpunkt), Bedienelement rechts
+  in voller Breite, alle Zeilen gleich hoch (`INPUT_H`).
+* **Eingabefelder** immer über `widgets::text_field()` (Text vertikal mittig,
+  feste Höhe, Hintergrund `BG`), nie `TextEdit::singleline` direkt.
 * **Toggle** (Schiebeschalter): für alle An/Aus-Optionen – **keine Checkboxen**.
 * **RangeSlider**: senkrechter Regler mit Unter- und Obergrenze (z. B. Dimmer-Limit).
 * **LimitPad**: XY-Feld mit Griffen für Bereiche (Pan/Tilt-Grenzen).

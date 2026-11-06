@@ -1,0 +1,366 @@
+//! Einheitliches Dialogfenster: Kopf mit Titel und Schließen-Symbol,
+//! Inhalt, Fußzeile mit den Aktionsknöpfen unten rechts.
+//!
+//! Alle Fenster der App laufen hierüber (siehe docs/UI-GUIDELINES.md, 4.).
+
+use eframe::egui::{
+    self, vec2, Align, Align2, CornerRadius, Frame, Id, Layout, Rect, Response, Sense, Stroke,
+    TextBuffer, Ui, UiBuilder, Vec2, Widget,
+};
+
+use crate::ui::theme;
+use crate::ui::widgets::{Icon, IconButton};
+
+const HEADER_H: f32 = 36.0;
+const FOOTER_H: f32 = 48.0;
+/// Höhe von Eingabefeldern in Formularen.
+pub const INPUT_H: f32 = 28.0;
+/// Breite der Beschriftungsspalte in Formularen.
+pub const LABEL_W: f32 = 120.0;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Cancel,
+    Primary,
+}
+
+struct Button {
+    label: String,
+    kind: Kind,
+    enabled: bool,
+}
+
+pub struct Dialog<'a> {
+    title: &'a str,
+    id: Id,
+    width: f32,
+    size: Option<Vec2>,
+    buttons: Vec<Button>,
+}
+
+pub struct DialogResult {
+    /// Index des geklickten Knopfs (in der Reihenfolge des Hinzufügens).
+    /// Primär-Knöpfe werden auch durch Enter ausgelöst.
+    pub clicked: Option<usize>,
+}
+
+impl DialogResult {
+    pub fn clicked(&self, index: usize) -> bool {
+        self.clicked == Some(index)
+    }
+}
+
+impl<'a> Dialog<'a> {
+    pub fn new(title: &'a str) -> Self {
+        Self {
+            title,
+            id: Id::unique(("dialog", title)),
+            width: 380.0,
+            size: None,
+            buttons: Vec::new(),
+        }
+    }
+
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = Id::unique(("dialog", id));
+        self
+    }
+
+    /// Feste Inhaltsbreite (nicht veränderbare Dialoge).
+    pub fn width(mut self, w: f32) -> Self {
+        self.width = w;
+        self
+    }
+
+    /// Größenveränderbar mit Startgröße.
+    pub fn resizable(mut self, size: impl Into<Vec2>) -> Self {
+        self.size = Some(size.into());
+        self
+    }
+
+    /// Schließt den Dialog ohne weitere Aktion (z. B. „Abbrechen“).
+    pub fn cancel(self, label: &str) -> Self {
+        self.push(label, Kind::Cancel, true)
+    }
+
+    /// Hauptaktion, ganz rechts, auch per Enter.
+    pub fn primary(self, label: &str) -> Self {
+        self.push(label, Kind::Primary, true)
+    }
+
+    fn push(mut self, label: &str, kind: Kind, enabled: bool) -> Self {
+        self.buttons.push(Button {
+            label: label.to_owned(),
+            kind,
+            enabled,
+        });
+        self
+    }
+
+    /// Zeigt den Dialog. `body` bekommt `true` in den ersten Frames nach dem
+    /// Öffnen (zum Fokussieren des ersten Felds – nur dann, sonst geht Tab nicht).
+    pub fn show(
+        self,
+        ctx: &egui::Context,
+        open: &mut bool,
+        body: impl FnOnce(&mut Ui, bool),
+    ) -> DialogResult {
+        let frame_nr = ctx.cumulative_frame_nr();
+        // (Öffnungs-Frame, letzter Frame, Fokus vor dem Öffnen):
+        // neu geöffnet, wenn ein Frame fehlt.
+        let key = self.id.with("frames");
+        let last: Option<(u64, u64, Option<Id>)> = ctx.data(|d| d.get_temp(key));
+        let focused = ctx.memory(|m| m.focused());
+        let (opened, before) = match last {
+            Some((o, l, b)) if l + 1 >= frame_nr => (o, b),
+            _ => (frame_nr, focused),
+        };
+        ctx.data_mut(|d| d.insert_temp(key, (opened, frame_nr, before)));
+        // egui misst neue Fenster zuerst nur aus und ignoriert dabei Fokus-
+        // anfragen. Daher anfragen, bis sich der Fokus geändert hat.
+        let first = frame_nr - opened <= 30 && focused == before;
+
+        let mut clicked = None;
+        let mut close = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        let enter = frame_nr > opened && ctx.input(|i| i.key_pressed(egui::Key::Enter));
+
+        let frame = Frame::new()
+            .fill(theme::SURFACE)
+            .stroke(Stroke::new(1.0, theme::BORDER))
+            .corner_radius(CornerRadius::same(theme::R_M))
+            .shadow(ctx.global_style().visuals.window_shadow);
+        let mut window = egui::Window::new(self.title)
+            .id(self.id)
+            .title_bar(false)
+            .collapsible(false)
+            .frame(frame)
+            .pivot(Align2::CENTER_CENTER)
+            .default_pos(ctx.content_rect().center());
+        window = match self.size {
+            Some(s) => window
+                .resizable(true)
+                .default_size(s)
+                .min_size(vec2(320.0, 200.0)),
+            None => window.resizable(false),
+        };
+
+        let title = self.title;
+        let width = self.width;
+        let resizable = self.size.is_some();
+        let buttons = &self.buttons;
+        window.show(ctx, |ui| {
+            let spacing = ui.spacing().item_spacing;
+            ui.spacing_mut().item_spacing = Vec2::ZERO;
+            let w = if resizable {
+                ui.available_width()
+            } else {
+                width + 2.0 * theme::SP_L
+            };
+            ui.set_width(w);
+
+            // Kopf
+            let (head, _) = ui.allocate_exact_size(vec2(w, HEADER_H), Sense::hover());
+            let r = theme::R_M;
+            ui.painter().rect_filled(
+                head,
+                CornerRadius {
+                    nw: r,
+                    ne: r,
+                    sw: 0,
+                    se: 0,
+                },
+                theme::BG,
+            );
+            ui.painter().hline(
+                head.x_range(),
+                head.bottom() - 0.5,
+                Stroke::new(1.0, theme::BORDER),
+            );
+            ui.painter().text(
+                head.center(),
+                Align2::CENTER_CENTER,
+                title.to_uppercase(),
+                theme::heading_font(),
+                theme::TEXT,
+            );
+            let close_rect = Rect::from_center_size(
+                head.right_center() - vec2(HEADER_H / 2.0, 0.0),
+                Vec2::splat(24.0),
+            );
+            if ui
+                .put(close_rect, IconButton::new(Icon::Close).flat().danger())
+                .on_hover_text("Schließen")
+                .clicked()
+            {
+                close = true;
+            }
+
+            // Inhalt
+            let footer_h = if buttons.is_empty() { 0.0 } else { FOOTER_H };
+            let body_rect = if resizable {
+                let h = (ui.available_height() - footer_h).max(60.0);
+                Some(Rect::from_min_size(ui.cursor().min, vec2(w, h)))
+            } else {
+                None
+            };
+            let margin = if resizable { theme::SP_S } else { theme::SP_L };
+            match body_rect {
+                Some(rect) => {
+                    ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
+                        ui.set_min_size(rect.size());
+                        ui.spacing_mut().item_spacing = spacing;
+                        Frame::new().inner_margin(margin).show(ui, |ui| {
+                            ui.set_min_size(rect.size() - Vec2::splat(2.0 * margin));
+                            body(ui, first)
+                        });
+                    });
+                }
+                None => {
+                    Frame::new().inner_margin(margin).show(ui, |ui| {
+                        ui.spacing_mut().item_spacing = spacing;
+                        ui.set_width(width);
+                        body(ui, first)
+                    });
+                }
+            }
+
+            // Fußzeile
+            if !buttons.is_empty() {
+                let (foot, _) = ui.allocate_exact_size(vec2(w, FOOTER_H), Sense::hover());
+                ui.painter().rect_filled(
+                    foot,
+                    CornerRadius {
+                        nw: 0,
+                        ne: 0,
+                        sw: r,
+                        se: r,
+                    },
+                    theme::BG,
+                );
+                ui.painter().hline(
+                    foot.x_range(),
+                    foot.top() + 0.5,
+                    Stroke::new(1.0, theme::BORDER),
+                );
+                let mut row = ui.new_child(
+                    UiBuilder::new()
+                        .max_rect(foot.shrink2(vec2(theme::SP_M, 0.0)))
+                        .layout(Layout::right_to_left(Align::Center)),
+                );
+                row.spacing_mut().item_spacing = vec2(theme::SP_S, 0.0);
+                for (i, b) in buttons.iter().enumerate().rev() {
+                    let resp = row.add(FooterButton {
+                        label: &b.label,
+                        primary: b.kind == Kind::Primary,
+                        enabled: b.enabled,
+                    });
+                    let hit = resp.clicked() || (enter && b.kind == Kind::Primary && b.enabled);
+                    if hit {
+                        if b.kind == Kind::Cancel {
+                            close = true;
+                        } else {
+                            clicked = Some(i);
+                        }
+                    }
+                }
+            }
+        });
+        if close {
+            *open = false;
+        }
+        DialogResult { clicked }
+    }
+}
+
+/// Knopf der Fußzeile: feste Mindestbreite, Überschrift-Schrift.
+struct FooterButton<'a> {
+    label: &'a str,
+    primary: bool,
+    enabled: bool,
+}
+
+impl Widget for FooterButton<'_> {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let galley = ui.painter().layout_no_wrap(
+            self.label.to_uppercase(),
+            theme::heading_font(),
+            theme::TEXT,
+        );
+        let w = (galley.size().x + 2.0 * theme::SP_L).max(96.0);
+        let sense = if self.enabled {
+            Sense::click()
+        } else {
+            Sense::hover()
+        };
+        let (rect, resp) = ui.allocate_exact_size(vec2(w, 30.0), sense);
+        let hovered = resp.hovered() && self.enabled;
+        let (fill, stroke, text) = match (self.primary, self.enabled, hovered) {
+            (_, false, _) => (theme::RAISED, theme::BORDER, theme::TEXT_FAINT),
+            (true, true, false) => (theme::ACCENT, theme::ACCENT, theme::BG),
+            (true, true, true) => (theme::ACCENT_HOVER, theme::ACCENT_HOVER, theme::BG),
+            (false, true, false) => (theme::RAISED, theme::BORDER, theme::TEXT),
+            (false, true, true) => (theme::RAISED_HOVER, theme::ACCENT_DIM, theme::TEXT),
+        };
+        let p = ui.painter();
+        p.rect(
+            rect,
+            theme::R_S as f32,
+            fill,
+            Stroke::new(1.0, stroke),
+            egui::StrokeKind::Inside,
+        );
+        p.text(
+            rect.center(),
+            Align2::CENTER_CENTER,
+            self.label.to_uppercase(),
+            theme::heading_font(),
+            text,
+        );
+        resp
+    }
+}
+
+/// Einzeiliges Eingabefeld im App-Stil: Text vertikal mittig, feste Höhe.
+pub fn text_field<'t>(text: &'t mut dyn TextBuffer) -> egui::TextEdit<'t> {
+    egui::TextEdit::singleline(text)
+        .align(Align2::LEFT_CENTER)
+        .min_size(vec2(0.0, INPUT_H))
+        .margin(vec2(theme::SP_S, 0.0))
+        .background_color(theme::BG)
+}
+
+/// Formular: Beschriftung links, Bedienelement rechts, Zeilen bündig.
+pub fn form(ui: &mut Ui, id: &str, rows: impl FnOnce(&mut Form<'_>)) {
+    egui::Grid::new(id)
+        .num_columns(2)
+        .min_col_width(LABEL_W)
+        .min_row_height(INPUT_H)
+        .spacing(vec2(theme::SP_M, theme::SP_S))
+        .show(ui, |ui| rows(&mut Form { ui }));
+}
+
+pub struct Form<'u> {
+    ui: &'u mut Ui,
+}
+
+impl Form<'_> {
+    /// Eine Zeile; das Bedienelement füllt die restliche Breite.
+    pub fn row<R>(&mut self, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
+        self.ui
+            .label(egui::RichText::new(label).color(theme::TEXT_DIM));
+        let r = self
+            .ui
+            .with_layout(Layout::left_to_right(Align::Center), |ui| add(ui))
+            .inner;
+        self.ui.end_row();
+        r
+    }
+
+    /// Zeile ohne Beschriftung (z. B. Fehlermeldung unter den Feldern).
+    pub fn note(&mut self, add: impl FnOnce(&mut Ui)) {
+        self.ui.label("");
+        self.ui
+            .with_layout(Layout::left_to_right(Align::Center), add);
+        self.ui.end_row();
+    }
+}
