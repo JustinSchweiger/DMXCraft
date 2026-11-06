@@ -52,6 +52,7 @@ pub enum Icon {
     Group,
     Copy,
     Paste,
+    ZoomFit,
 }
 
 impl Icon {
@@ -503,6 +504,23 @@ impl Icon {
                 if self == Icon::Paste {
                     painter.rect_filled(front.shrink(s * 0.2), 1.0, color);
                 }
+            }
+            Icon::ZoomFit => {
+                // Rahmenecken mit kleinem Quadrat: „alles einpassen“
+                let d = s * 0.62;
+                let l = s * 0.3;
+                for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                    let corner = c + Vec2::new(sx * d, sy * d);
+                    painter.add(Shape::line(
+                        vec![
+                            corner + Vec2::new(0.0, -sy * l),
+                            corner,
+                            corner + Vec2::new(-sx * l, 0.0),
+                        ],
+                        stroke,
+                    ));
+                }
+                painter.rect_filled(Rect::from_center_size(c, Vec2::splat(s * 0.42)), 1.0, color);
             }
             Icon::Plus => {
                 painter.line_segment(

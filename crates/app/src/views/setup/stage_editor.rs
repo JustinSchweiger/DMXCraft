@@ -5,7 +5,7 @@ use dmxcraft_core::{plan, FixtureId};
 use eframe::egui;
 
 use crate::ui::theme;
-use crate::ui::widgets::stage_canvas::fixture_pos;
+use crate::ui::widgets::stage_canvas::{fixture_pos, ZOOM_MAX, ZOOM_MIN};
 use crate::ui::widgets::{
     section_header, CanvasMode, Icon, IconButton, StageCanvas, StageInteraction, Toggle,
 };
@@ -32,6 +32,60 @@ impl Default for StageEditorView {
     }
 }
 
+/// Zoom-Leiste unten rechts im Bühnenplan: Einpassen, −, Regler, +.
+fn zoom_bar(ui: &mut egui::Ui, area: egui::Rect, st: &mut StageInteraction) {
+    let size = egui::vec2(210.0, 32.0);
+    let bar = egui::Rect::from_min_size(area.right_bottom() - size - egui::vec2(8.0, 8.0), size);
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(bar)
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
+    egui::Frame::new()
+        .fill(theme::raised())
+        .stroke(egui::Stroke::new(1.0, theme::border()))
+        .corner_radius(theme::R_M)
+        .inner_margin(egui::Margin::symmetric(4, 2))
+        .show(&mut child, |ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            if ui
+                .add(IconButton::new(Icon::ZoomFit).flat())
+                .on_hover_text(t("Alle Geräte einpassen"))
+                .clicked()
+            {
+                st.fit_request = true;
+            }
+            if ui
+                .add(IconButton::new(Icon::ZoomOut).flat())
+                .on_hover_text(t("Verkleinern"))
+                .clicked()
+            {
+                st.zoom_by(0.8);
+            }
+            // Logarithmisch: gleiche Wege für Vergrößern und Verkleinern
+            let mut z = st.zoom;
+            ui.spacing_mut().slider_width = 100.0;
+            if ui
+                .add(
+                    egui::Slider::new(&mut z, ZOOM_MIN..=ZOOM_MAX)
+                        .logarithmic(true)
+                        .show_value(false),
+                )
+                .on_hover_text(tr!("Zoom {pct} %", pct = (st.zoom * 100.0).round()))
+                .changed()
+            {
+                st.zoom = z;
+            }
+            if ui
+                .add(IconButton::new(Icon::ZoomIn).flat())
+                .on_hover_text(t("Vergrößern"))
+                .clicked()
+            {
+                st.zoom_by(1.25);
+            }
+        });
+}
+
 enum Arrange {
     Row,
     Grid,
@@ -45,7 +99,7 @@ impl View for StageEditorView {
         let mut arrange: Option<Arrange> = None;
         section_header(ui, t("Bühnenplan"), |ui| {
             ui.label(egui::RichText::new(t("Hilfe")).color(theme::text_faint())).on_hover_text(
-                t("Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nRechtsklick = Menü (Form, Größe, Gruppen …)"),
+                t("Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nMittlere Maustaste = Ansicht ziehen\nMausrad = zoomen\nRechtsklick = Menü (Form, Größe, Gruppen …)"),
             );
             ui.separator();
             ui.add(Toggle::new(&mut self.labels, t("Namen")));
@@ -111,6 +165,7 @@ impl View for StageEditorView {
                     snap: self.snap.then_some(self.cells),
                     show_labels: self.labels,
                     show_grid: self.grid,
+                    auto_fit: false,
                 }
                 .show(
                     ui,
@@ -124,6 +179,8 @@ impl View for StageEditorView {
                         }
                     },
                 );
+                let area = ui.min_rect();
+                zoom_bar(ui, area, &mut self.interaction);
                 for (id, p) in moves {
                     set_pos(cx, id, p);
                 }

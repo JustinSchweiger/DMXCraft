@@ -368,9 +368,13 @@ pub const ENTRIES: &[(&str, &str)] = &[
     // ----- Bühnenplan-Editor -----
     ("Bühnenplan", "Stage plan"),
     (
-        "Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nRechtsklick = Menü (Form, Größe, Gruppen …)",
-        "Drag = move\nDrag a box = select\nCtrl/Shift = add to selection\nRight-click = menu (shape, size, groups …)",
+        "Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nMittlere Maustaste = Ansicht ziehen\nMausrad = zoomen\nRechtsklick = Menü (Form, Größe, Gruppen …)",
+        "Drag = move\nDrag a box = select\nCtrl/Shift = add to selection\nMiddle mouse button = pan the view\nMouse wheel = zoom\nRight-click = menu (shape, size, groups …)",
     ),
+    ("Vergrößern", "Zoom in"),
+    ("Verkleinern", "Zoom out"),
+    ("Zoom {pct} %", "Zoom {pct} %"),
+    ("Alle Geräte einpassen", "Fit all fixtures"),
     ("Namen", "Names"),
     ("Raster", "Grid"),
     (" Felder", " cells"),

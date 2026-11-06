@@ -32,6 +32,7 @@ impl View for StageView {
             snap: None,
             show_labels: false,
             show_grid: false,
+            auto_fit: true,
         };
         let mut action = None;
         let clip = cx.state.layout_clipboard.is_some();
