@@ -3,8 +3,8 @@
 
 pub mod control;
 pub mod fixture_menu;
-pub mod library;
 pub mod setup;
+pub mod windows;
 
 use dmxcraft_core::{DmxFrame, Engine};
 use eframe::egui::Ui;

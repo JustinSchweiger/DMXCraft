@@ -14,8 +14,8 @@ use crate::titlebar::{self, MenuAction, TitleInfo};
 use crate::ui::theme;
 use crate::updater::{UpdateState, Updater};
 use crate::views::control::{ProgrammerView, SceneGridView, StageView};
-use crate::views::library::LibraryWindow;
 use crate::views::setup::SetupView;
+use crate::views::windows::Windows;
 use crate::views::{View, ViewCtx};
 
 /// DMX-Wiederholrate des Ausgabe-Threads.
@@ -50,7 +50,7 @@ pub struct DmxCraftApp {
     state: AppState,
     control: ControlViews,
     setup: SetupView,
-    library: LibraryWindow,
+    windows: Windows,
 }
 
 impl DmxCraftApp {
@@ -70,15 +70,10 @@ impl DmxCraftApp {
             },
             None => demo::demo_show(),
         };
-        let first_type = show
-            .fixture_types
-            .first()
-            .map(|t| t.key.clone())
-            .unwrap_or_default();
         let engine = Arc::new(Mutex::new(Engine::new(show)));
         let output_kind = OutputKind::from_key(&settings.output);
         let runtime = Runtime::start(engine.clone(), output_kind.create(), OUTPUT_HZ);
-        let mut state = AppState::new(show_path.unwrap_or_else(|| "show.json".into()), first_type);
+        let mut state = AppState::new(show_path.unwrap_or_else(|| "show.json".into()));
         state.message = message;
         Self {
             engine,
@@ -94,7 +89,7 @@ impl DmxCraftApp {
             state,
             control: ControlViews::default(),
             setup: SetupView::default(),
-            library: LibraryWindow::default(),
+            windows: Windows::default(),
         }
     }
 
@@ -174,10 +169,9 @@ impl DmxCraftApp {
                 self.path_dialog = Some((PathDialog::SaveAs, self.state.show_path.clone()))
             }
             MenuAction::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
-            MenuAction::Setup(tab) => {
-                self.state.mode = Mode::Setup;
-                self.state.setup_tab = tab;
-            }
+            MenuAction::SetMode(m) => self.state.mode = m,
+            MenuAction::SceneEditor => self.state.scene_editor_open = true,
+            MenuAction::Zones => self.state.zones_open = true,
             MenuAction::ToggleFullscreen => {
                 let fs = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fs));
@@ -480,19 +474,19 @@ impl eframe::App for DmxCraftApp {
         let engine = self.engine.clone();
         {
             let mut e = Self::lock(&engine);
-            self.library.show(&ctx, &mut e, &mut self.state);
             let mut cx = ViewCtx {
                 engine: &mut e,
                 state: &mut self.state,
                 frame: &frame,
             };
+            self.windows.show(&ctx, &mut cx);
             let area = egui::Frame::new()
                 .fill(theme::SURFACE)
                 .inner_margin(egui::Margin::same(6));
             match cx.state.mode {
                 Mode::Setup => {
                     egui::CentralPanel::default_margins()
-                        .frame(area)
+                        .frame(egui::Frame::new().fill(theme::SURFACE))
                         .show(ui, |ui| self.setup.ui(ui, &mut cx));
                 }
                 Mode::Control => {

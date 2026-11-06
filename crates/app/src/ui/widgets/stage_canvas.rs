@@ -291,7 +291,6 @@ pub fn fixture_rect(show: &Show, id: FixtureId, center: Pos2) -> Rect {
     let size = match show.plan_shape(id) {
         PlanShape::BarHorizontal => Vec2::new(s * 2.8, s * 0.55),
         PlanShape::BarVertical => Vec2::new(s * 0.55, s * 2.8),
-        PlanShape::MovingHead => Vec2::new(s, s * 1.15),
         _ => Vec2::splat(s),
     };
     Rect::from_center_size(center, size)
@@ -363,7 +362,8 @@ pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32
         .collect()
 }
 
-/// Zeichnet ein Gerät in seiner Form.
+/// Zeichnet ein Gerät in seiner Form – vollflächig in der aktuellen Farbe,
+/// mit dünner Kontur. Mehrere Pixel werden als Segmente gezeigt.
 fn paint_fixture(
     p: &egui::Painter,
     shape: PlanShape,
@@ -379,62 +379,83 @@ fn paint_fixture(
     } else {
         Stroke::new(1.0, theme::BORDER)
     };
-    let (c0, l0) = colors.first().copied().unwrap_or((theme::BG, 0.0));
-    let lit = |c: Color32, l: f32| if l > 0.02 { c } else { theme::BG };
+    let fill = |c: Color32, l: f32| if l > 0.02 { c } else { theme::FIXTURE_OFF };
     let glow = |center: Pos2, radius: f32, c: Color32, l: f32| {
         if l > 0.02 {
-            p.circle_filled(center, radius, c.gamma_multiply(0.14 * l));
+            p.circle_filled(center, radius, c.gamma_multiply(0.12 * l));
         }
     };
+    let (c0, l0) = colors.first().copied().unwrap_or((theme::BG, 0.0));
+    let n = colors.len().max(1);
     match shape {
-        PlanShape::Round => {
-            let rad = r.width() * 0.5;
-            glow(r.center(), rad * 1.7, c0, l0);
-            p.circle_filled(r.center(), rad, theme::RAISED);
-            p.circle_filled(r.center(), rad * 0.62, lit(c0, l0));
+        PlanShape::Round | PlanShape::MovingHead => {
+            let rad = r.width().min(r.height()) * 0.5;
+            let max_l = colors.iter().map(|c| c.1).fold(0.0, f32::max);
+            glow(r.center(), rad * 1.6, c0, max_l);
+            if n == 1 {
+                p.circle_filled(r.center(), rad, fill(c0, l0));
+            } else {
+                // Segmente wie ein LED-Ring
+                let steps = 48 / n.min(48) + 1;
+                for (i, (c, l)) in colors.iter().enumerate() {
+                    let a0 =
+                        std::f32::consts::TAU * i as f32 / n as f32 - std::f32::consts::FRAC_PI_2;
+                    let a1 = std::f32::consts::TAU * (i + 1) as f32 / n as f32
+                        - std::f32::consts::FRAC_PI_2;
+                    let mut pts = vec![r.center()];
+                    for k in 0..=steps {
+                        let a = a0 + (a1 - a0) * k as f32 / steps as f32;
+                        pts.push(r.center() + Vec2::angled(a) * rad);
+                    }
+                    p.add(egui::Shape::convex_polygon(
+                        pts,
+                        fill(*c, *l),
+                        Stroke::new(0.5, theme::BG),
+                    ));
+                }
+            }
             p.circle_stroke(r.center(), rad, stroke);
         }
         PlanShape::Square => {
-            glow(r.center(), r.width() * 0.85, c0, l0);
-            p.rect_filled(r, 3.0, theme::RAISED);
-            p.rect_filled(r.shrink(r.width() * 0.18), 2.0, lit(c0, l0));
-            p.rect_stroke(r, 3.0, stroke, StrokeKind::Outside);
+            glow(r.center(), r.width() * 0.8, c0, l0);
+            p.rect_filled(r, 2.0, fill(c0, l0));
+            p.rect_stroke(r, 2.0, stroke, StrokeKind::Outside);
         }
-        PlanShape::MovingHead => {
-            let base =
-                Rect::from_min_max(Pos2::new(r.left(), r.bottom() - r.height() * 0.3), r.max);
-            let head_c = Pos2::new(r.center().x, r.top() + r.width() * 0.45);
-            let rad = r.width() * 0.42;
-            glow(head_c, rad * 1.9, c0, l0);
-            p.rect_filled(base, 3.0, theme::RAISED);
-            p.circle_filled(head_c, rad, theme::RAISED_HOVER);
-            p.circle_filled(head_c, rad * 0.55, lit(c0, l0));
-            p.circle_stroke(head_c, rad, stroke);
-            p.rect_stroke(base, 3.0, stroke, StrokeKind::Outside);
+        PlanShape::Matrix => {
+            let side = (n as f32).sqrt().ceil().max(1.0) as usize;
+            let (cw, ch) = (r.width() / side as f32, r.height() / side as f32);
+            for (i, (c, l)) in colors.iter().enumerate() {
+                let cell = Rect::from_min_size(
+                    Pos2::new(
+                        r.left() + cw * (i % side) as f32,
+                        r.top() + ch * (i / side) as f32,
+                    ),
+                    Vec2::new(cw, ch),
+                );
+                p.rect_filled(cell.shrink(0.5), 0.0, fill(*c, *l));
+            }
+            p.rect_stroke(r, 2.0, stroke, StrokeKind::Outside);
         }
         PlanShape::BarHorizontal | PlanShape::BarVertical => {
             let horizontal = shape == PlanShape::BarHorizontal;
-            p.rect_filled(r, 3.0, theme::RAISED);
-            let n = colors.len().max(1);
-            let inner = r.shrink(3.0);
             for (i, (c, l)) in colors.iter().enumerate() {
                 let seg = if horizontal {
-                    let w = inner.width() / n as f32;
+                    let w = r.width() / n as f32;
                     Rect::from_min_size(
-                        Pos2::new(inner.left() + w * i as f32, inner.top()),
-                        Vec2::new(w, inner.height()),
+                        Pos2::new(r.left() + w * i as f32, r.top()),
+                        Vec2::new(w, r.height()),
                     )
                 } else {
-                    let h = inner.height() / n as f32;
+                    let h = r.height() / n as f32;
                     Rect::from_min_size(
-                        Pos2::new(inner.left(), inner.top() + h * i as f32),
-                        Vec2::new(inner.width(), h),
+                        Pos2::new(r.left(), r.top() + h * i as f32),
+                        Vec2::new(r.width(), h),
                     )
                 };
-                glow(seg.center(), seg.width().max(seg.height()) * 0.9, *c, *l);
-                p.rect_filled(seg.shrink(1.0), 1.5, lit(*c, *l));
+                glow(seg.center(), seg.width().max(seg.height()) * 0.8, *c, *l);
+                p.rect_filled(if n > 1 { seg.shrink(0.5) } else { seg }, 0.0, fill(*c, *l));
             }
-            p.rect_stroke(r, 3.0, stroke, StrokeKind::Outside);
+            p.rect_stroke(r, 2.0, stroke, StrokeKind::Outside);
         }
         PlanShape::Effect => {
             let pts = vec![
@@ -442,13 +463,8 @@ fn paint_fixture(
                 Pos2::new(r.right(), r.bottom()),
                 Pos2::new(r.left(), r.bottom()),
             ];
-            glow(r.center(), r.width() * 0.9, c0, l0);
-            p.add(egui::Shape::convex_polygon(pts, theme::RAISED, stroke));
-            p.circle_filled(
-                Pos2::new(r.center().x, r.top() + r.height() * 0.62),
-                r.width() * 0.17,
-                lit(c0, l0),
-            );
+            glow(r.center(), r.width() * 0.8, c0, l0);
+            p.add(egui::Shape::convex_polygon(pts, fill(c0, l0), stroke));
         }
     }
 }

@@ -1,48 +1,54 @@
-//! EINRICHTEN: Patch, Bühnenplan, Szenen, Zonen & Gruppen, DMX-Monitor.
+//! EINRICHTEN: eine Seite mit Patch-Raster (oben), Bühnenplan mit
+//! Geräteeinstellungen (unten) und Bibliothek (rechts).
 
-pub mod monitor;
-pub mod patch;
+pub mod fixture_settings;
+pub mod library_panel;
+pub mod patch_grid;
 pub mod scenes;
 pub mod stage_editor;
 pub mod zones;
 
 use eframe::egui;
 
-use crate::state::SetupTab;
 use crate::ui::theme;
-use crate::ui::widgets::Segmented;
 use crate::views::{View, ViewCtx};
 
-/// Rahmen für EINRICHTEN mit Unterbereichen als Karten.
 #[derive(Default)]
 pub struct SetupView {
-    patch: patch::PatchView,
+    grid: patch_grid::PatchGrid,
     stage: stage_editor::StageEditorView,
-    scenes: scenes::ScenesView,
-    zones: zones::ZonesView,
-    monitor: monitor::MonitorView,
+    settings: fixture_settings::FixtureSettings,
+    library: library_panel::LibraryPanel,
 }
-
-const TABS: [(SetupTab, &str); 5] = [
-    (SetupTab::Patch, "Patch"),
-    (SetupTab::Stage, "Bühnenplan"),
-    (SetupTab::Scenes, "Szenen"),
-    (SetupTab::Zones, "Zonen & Gruppen"),
-    (SetupTab::Monitor, "DMX-Adressen"),
-];
 
 impl View for SetupView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        Segmented::new(&TABS).show(ui, &mut cx.state.setup_tab);
-        ui.add_space(theme::SP_XS);
-        ui.separator();
-        let view: &mut dyn View = match cx.state.setup_tab {
-            SetupTab::Patch => &mut self.patch,
-            SetupTab::Stage => &mut self.stage,
-            SetupTab::Scenes => &mut self.scenes,
-            SetupTab::Zones => &mut self.zones,
-            SetupTab::Monitor => &mut self.monitor,
-        };
-        view.ui(ui, cx);
+        let area = egui::Frame::new()
+            .fill(theme::SURFACE)
+            .inner_margin(egui::Margin::same(6));
+        egui::Panel::right("setup_library")
+            .resizable(true)
+            .default_size(340.0)
+            .min_size(260.0)
+            .frame(area)
+            .show(ui, |ui| self.library.ui(ui, cx));
+        egui::Panel::bottom("setup_stage")
+            .resizable(true)
+            .default_size(ui.available_height() * 0.48)
+            .min_size(200.0)
+            .frame(egui::Frame::new().fill(theme::SURFACE))
+            .show(ui, |ui| {
+                egui::Panel::right("setup_fixture_settings")
+                    .resizable(false)
+                    .exact_size(250.0)
+                    .frame(area)
+                    .show(ui, |ui| self.settings.ui(ui, cx));
+                egui::CentralPanel::default_margins()
+                    .frame(area)
+                    .show(ui, |ui| self.stage.ui(ui, cx));
+            });
+        egui::CentralPanel::default_margins()
+            .frame(area)
+            .show(ui, |ui| self.grid.ui(ui, cx));
     }
 }

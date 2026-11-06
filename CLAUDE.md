@@ -18,7 +18,8 @@ crates/output  DmxOutput-Trait, Ausgabe-Thread, Backends (dvc_gold.rs = USB, noc
 crates/ofl     Open-Fixture-Library-Konverter + eingebettete Bibliothek (data/)
 crates/app     Oberfläche
   src/ui/        Design-System: theme.rs (Tokens), widgets/ (Fader, SceneCard, …)
-  src/views/     Ansichten, je ein Typ mit `impl View` (control/, setup/)
+  src/views/     Ansichten, je ein Typ mit `impl View` (control/, setup/, windows.rs)
+  src/titlebar.rs  eigene Titelleiste + Hauptmenü; src/settings.rs Programmeinstellungen
   src/state.rs   gemeinsamer UI-Zustand (AppState)
   src/app.rs     Rahmen: Kopfzeile, Modus, Layout, Runtime
 docs/UI-GUIDELINES.md  verbindliche UI-Regeln – vor UI-Arbeit lesen

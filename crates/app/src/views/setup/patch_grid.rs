@@ -1,21 +1,22 @@
-//! EINRICHTEN → DMX: Adressbelegung eines Universums.
+//! EINRICHTEN → Patch-Raster: Adressbelegung eines Universums.
 //!
 //! * Modus **Patch**: Geräte als Balken über ihren Adressbereich; per Ziehen
 //!   auf eine neue Startadresse verschieben, freie Adressen sind sofort sichtbar.
 //! * Modus **Ausgang**: die aktuell gesendeten DMX-Werte.
 
-use dmxcraft_core::{Engine, FixtureId, UNIVERSE_SIZE};
+use dmxcraft_core::{FixtureId, UNIVERSE_SIZE};
 use eframe::egui::{self, pos2, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 
-use crate::state::AppState;
 use crate::ui::theme;
-use crate::ui::widgets::{section_header, DipSwitch, Icon, IconButton, Segmented};
+use crate::ui::widgets::{DipSwitch, Icon, IconButton, Segmented};
 use crate::views::fixture_menu::{self, MenuPlace};
 use crate::views::{View, ViewCtx};
 
 const COLUMNS: usize = 32;
 const ROWS: usize = UNIVERSE_SIZE / COLUMNS;
-const CELL_H: f32 = 30.0;
+/// Zellhöhe passt sich der verfügbaren Höhe an (zwischen diesen Grenzen).
+const CELL_H_MIN: f32 = 18.0;
+const CELL_H_MAX: f32 = 30.0;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 enum GridMode {
@@ -31,14 +32,16 @@ struct Drag {
 }
 
 #[derive(Default)]
-pub struct MonitorView {
+pub struct PatchGrid {
     universe: usize,
     mode: GridMode,
     drag: Option<Drag>,
     context_target: Option<FixtureId>,
+    /// Laufende Umbenennung: Gerät und bearbeiteter Name.
+    rename: Option<(FixtureId, String)>,
 }
 
-impl View for MonitorView {
+impl View for PatchGrid {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let universes = usize::from(cx.engine.show().universes);
         if let Some(id) = cx.state.monitor_focus.take() {
@@ -52,50 +55,54 @@ impl View for MonitorView {
 
         let map = cx.engine.show().address_map(self.universe as u8);
         let free = map.iter().filter(|s| s.is_none()).count();
-        section_header(ui, "DMX-Adressen", |ui| {
-            ui.label(
-                egui::RichText::new(format!("{free} von 512 Adressen frei")).color(theme::TEXT_DIM),
-            );
-        });
+        if let Some(id) = cx.state.rename_request.take() {
+            if let Some(f) = cx.engine.show().fixture(id) {
+                self.universe = usize::from(f.universe);
+                self.rename = Some((id, f.name.clone()));
+            }
+        }
+        let dip_address = (cx.state.selected.len() == 1)
+            .then(|| {
+                cx.state
+                    .selected
+                    .iter()
+                    .next()
+                    .and_then(|id| cx.engine.show().fixture(*id))
+            })
+            .flatten()
+            .filter(|f| usize::from(f.universe) == self.universe)
+            .map(|f| (f.address, f.name.clone()));
         ui.horizontal(|ui| {
-            Segmented::new(&[(GridMode::Patch, "Patch"), (GridMode::Output, "Ausgang")])
-                .show(ui, &mut self.mode);
-            ui.add_space(theme::SP_L);
-            if ui
-                .add(IconButton::new(Icon::Prev).enabled(self.universe > 0))
-                .clicked()
-            {
+            ui.set_min_height(30.0);
+            ui.label(egui::RichText::new("PATCH").font(theme::caption()).color(theme::TEXT_DIM).strong());
+            ui.add_space(theme::SP_S);
+            Segmented::new(&[(GridMode::Patch, "Patch"), (GridMode::Output, "Ausgang")]).show(ui, &mut self.mode);
+            ui.add_space(theme::SP_M);
+            if ui.add(IconButton::new(Icon::Prev).enabled(self.universe > 0)).clicked() {
                 self.universe -= 1;
             }
-            ui.label(
-                egui::RichText::new(format!("Universum {} / {universes}", self.universe + 1))
-                    .strong(),
-            );
+            ui.label(egui::RichText::new(format!("Universum {} / {universes}", self.universe + 1)).strong());
             if ui
                 .add(IconButton::new(Icon::Next).enabled(self.universe + 1 < universes))
                 .clicked()
             {
                 self.universe += 1;
             }
-            ui.add_space(theme::SP_L);
-            ui.label(
-                egui::RichText::new(match self.mode {
-                    GridMode::Patch => "Gerät ziehen = Adresse ändern · Rechtsklick = Menü",
-                    GridMode::Output => "Aktuell gesendete Werte",
-                })
-                .color(theme::TEXT_FAINT),
-            );
+            ui.add_space(theme::SP_M);
+            ui.label(egui::RichText::new(format!("{free} von 512 frei")).color(theme::TEXT_DIM));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if let Some((addr, name)) = &dip_address {
+                    DipSwitch { address: *addr, compact: true }.show(ui);
+                    ui.label(egui::RichText::new(format!("{name} · DIP {addr}")).color(theme::TEXT_DIM));
+                } else {
+                    ui.label(
+                        egui::RichText::new("Ziehen = Adresse ändern · Doppelklick = umbenennen · Rechtsklick = Menü")
+                            .color(theme::TEXT_FAINT),
+                    );
+                }
+            });
         });
         ui.add_space(theme::SP_XS);
-
-        egui::Panel::right("dmx_details")
-            .resizable(false)
-            .exact_size(300.0)
-            .frame(egui::Frame::new().inner_margin(egui::Margin {
-                left: 12,
-                ..Default::default()
-            }))
-            .show(ui, |ui| details(ui, cx.engine, cx.state));
 
         egui::CentralPanel::default_margins()
             .frame(egui::Frame::new())
@@ -109,21 +116,22 @@ impl View for MonitorView {
     }
 }
 
-impl MonitorView {
+impl PatchGrid {
     fn grid(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, map: &[Option<FixtureId>]) {
         let width = ui.available_width().max(400.0);
         let cell_w = width / COLUMNS as f32;
+        let cell_h = (ui.available_height() / ROWS as f32).clamp(CELL_H_MIN, CELL_H_MAX);
         let (rect, resp) = ui.allocate_exact_size(
-            Vec2::new(width, CELL_H * ROWS as f32),
+            Vec2::new(width, cell_h * ROWS as f32),
             Sense::click_and_drag(),
         );
         let cell_rect = |i: usize| {
             Rect::from_min_size(
                 pos2(
                     rect.left() + (i % COLUMNS) as f32 * cell_w,
-                    rect.top() + (i / COLUMNS) as f32 * CELL_H,
+                    rect.top() + (i / COLUMNS) as f32 * cell_h,
                 ),
-                Vec2::new(cell_w, CELL_H),
+                Vec2::new(cell_w, cell_h),
             )
             .shrink(1.0)
         };
@@ -132,7 +140,7 @@ impl MonitorView {
                 return None;
             }
             let c = ((p.x - rect.left()) / cell_w) as usize;
-            let r = ((p.y - rect.top()) / CELL_H) as usize;
+            let r = ((p.y - rect.top()) / cell_h) as usize;
             (c < COLUMNS && r < ROWS).then_some(r * COLUMNS + c)
         };
         let show = cx.engine.show();
@@ -209,6 +217,11 @@ impl MonitorView {
                 }
             }
             self.drag = None;
+        }
+        if resp.double_clicked() && self.mode == GridMode::Patch {
+            if let Some(id) = hovered_fixture {
+                self.rename = show.fixture(id).map(|f| (id, f.name.clone()));
+            }
         }
         if resp.clicked() {
             match hovered_fixture {
@@ -391,6 +404,36 @@ impl MonitorView {
                 );
             }
         }
+        // Umbenennen direkt im Raster
+        let mut rename_commit: Option<(FixtureId, String)> = None;
+        if let Some((id, text)) = &mut self.rename {
+            if let Some((_, start, len, _)) = fixtures.iter().find(|f| f.0 == *id) {
+                let first_end = (*start + *len).min(((*start / COLUMNS) + 1) * COLUMNS) - 1;
+                let seg = cell_rect(*start).union(cell_rect(first_end)).shrink(2.0);
+                let seg =
+                    Rect::from_min_size(seg.min, Vec2::new(seg.width().max(160.0), seg.height()));
+                let edit = ui.put(
+                    seg,
+                    egui::TextEdit::singleline(text)
+                        .font(theme::body())
+                        .margin(egui::Margin::symmetric(4, 2)),
+                );
+                if !edit.has_focus() && !edit.lost_focus() {
+                    edit.request_focus();
+                }
+                let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+                let esc = ui.input(|i| i.key_pressed(egui::Key::Escape));
+                if esc {
+                    self.rename = None;
+                } else if edit.lost_focus() || enter {
+                    rename_commit = Some((*id, text.as_str().trim().to_string()));
+                }
+            } else {
+                // Gerät liegt in einem anderen Universum
+                self.rename = None;
+            }
+        }
+
         if self.drag.is_some() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
         } else if self.mode == GridMode::Patch && hovered_fixture.is_some() {
@@ -417,6 +460,14 @@ impl MonitorView {
             resp.on_hover_text_at_pointer(text);
         }
 
+        if let Some((id, name)) = rename_commit {
+            self.rename = None;
+            if !name.is_empty() {
+                if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
+                    f.name = name;
+                }
+            }
+        }
         if let Some((id, addr)) = repatch {
             if let Err(e) = cx.engine.show_mut().repatch_fixture(id, universe, addr) {
                 cx.state.error(e.to_string());
@@ -427,87 +478,6 @@ impl MonitorView {
         if let Some(a) = action {
             fixture_menu::apply(cx.engine, cx.state, a);
         }
-    }
-}
-
-/// Seitenleiste: Details und DIP-Schalter des ausgewählten Geräts.
-fn details(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
-    section_header(ui, "Gerät", |_| {});
-    let Some(id) = st.selected.iter().next().copied() else {
-        ui.label(
-            egui::RichText::new("Ein Gerät anklicken, um Adresse und DIP-Schalter zu sehen.")
-                .color(theme::TEXT_DIM),
-        );
-        return;
-    };
-    let Some(f) = e.show().fixture(id).cloned() else {
-        return;
-    };
-    let ch = e.show().fixture_channels(id);
-    let ty = e
-        .show()
-        .type_of(&f)
-        .map(|t| t.display_name())
-        .unwrap_or_default();
-    ui.label(egui::RichText::new(&f.name).size(theme::FS_TITLE).strong());
-    ui.label(egui::RichText::new(ty).color(theme::TEXT_DIM));
-    ui.add_space(theme::SP_S);
-    egui::Grid::new("dmx_detail_grid")
-        .num_columns(2)
-        .show(ui, |ui| {
-            ui.label(egui::RichText::new("Universum").color(theme::TEXT_DIM));
-            ui.label((f.universe + 1).to_string());
-            ui.end_row();
-            ui.label(egui::RichText::new("Adressen").color(theme::TEXT_DIM));
-            ui.label(format!(
-                "{} – {}  ({ch} Kanäle)",
-                f.address,
-                f.address + ch.saturating_sub(1)
-            ));
-            ui.end_row();
-        });
-    ui.add_space(theme::SP_S);
-    ui.label(
-        egui::RichText::new("DIP-SCHALTER")
-            .font(theme::caption())
-            .color(theme::TEXT_DIM)
-            .strong(),
-    );
-    DipSwitch { address: f.address }.show(ui);
-    let on = dmxcraft_core::dip::on_switches(f.address);
-    ui.label(
-        egui::RichText::new(if on.is_empty() {
-            "Alle Schalter aus".to_string()
-        } else {
-            format!(
-                "AN: {}",
-                on.iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        })
-        .color(theme::TEXT_DIM),
-    );
-    if f.address > 511 {
-        ui.label(
-            egui::RichText::new("Adresse 512 ist mit 9 Schaltern nicht einstellbar.")
-                .color(theme::WARN),
-        );
-    }
-    if st.selected.len() > 1 {
-        ui.add_space(theme::SP_S);
-        ui.label(
-            egui::RichText::new(format!(
-                "{} weitere Geräte ausgewählt",
-                st.selected.len() - 1
-            ))
-            .color(theme::TEXT_FAINT),
-        );
-    }
-    ui.add_space(theme::SP_M);
-    if ui.button("Auf nächste freie Adresse").clicked() {
-        fixture_menu::apply(e, st, fixture_menu::FixtureAction::NextFreeAddress);
     }
 }
 

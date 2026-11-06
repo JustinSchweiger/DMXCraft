@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use dmxcraft_core::{plan, Engine, FixtureId, GroupId, PlanShape, Show};
 use eframe::egui;
 
-use crate::state::{AppState, SetupTab};
+use crate::state::{AppState, Mode};
 use crate::ui::widgets::stage_canvas::fixture_pos;
 
 /// Größenstufen für Menüs und Werkzeugleiste.
@@ -45,8 +45,8 @@ pub enum FixtureAction {
     SetShape(Option<PlanShape>),
     SetSize(f32),
     NextFreeAddress,
-    ShowInPatch,
-    ShowInStageEditor,
+    ShowInSetup,
+    Rename,
     Delete,
 }
 
@@ -172,16 +172,15 @@ pub fn menu(
     }
 
     ui.separator();
-    if place != MenuPlace::Patch {
-        item(ui, some, "Im DMX-Patch zeigen", FixtureAction::ShowInPatch);
-    }
-    if place != MenuPlace::StageEditor {
+    if place == MenuPlace::Stage {
         item(
             ui,
             some,
-            "Im Bühnenplan bearbeiten",
-            FixtureAction::ShowInStageEditor,
+            "Unter Einrichten bearbeiten",
+            FixtureAction::ShowInSetup,
         );
+    } else {
+        item(ui, n == 1, "Umbenennen", FixtureAction::Rename);
     }
     if place != MenuPlace::Stage {
         ui.add_enabled_ui(some, |ui| {
@@ -348,14 +347,13 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
                 }
             }
         }
-        FixtureAction::ShowInPatch => {
-            st.mode = crate::state::Mode::Setup;
-            st.setup_tab = SetupTab::Monitor;
+        FixtureAction::ShowInSetup => {
+            st.mode = Mode::Setup;
             st.monitor_focus = ids.first().copied();
         }
-        FixtureAction::ShowInStageEditor => {
-            st.mode = crate::state::Mode::Setup;
-            st.setup_tab = SetupTab::Stage;
+        FixtureAction::Rename => {
+            st.mode = Mode::Setup;
+            st.rename_request = ids.first().copied();
         }
         FixtureAction::Delete => {
             let n = ids.len();

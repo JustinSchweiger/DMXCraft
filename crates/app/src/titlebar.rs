@@ -6,7 +6,7 @@
 use dmxcraft_output::OutputKind;
 use eframe::egui::{self, Color32, Sense, ViewportCommand};
 
-use crate::state::{Mode, SetupTab};
+use crate::state::Mode;
 use crate::ui::theme;
 use crate::ui::widgets::{Icon, IconButton, Segmented};
 
@@ -31,7 +31,9 @@ pub enum MenuAction {
     SaveShow,
     SaveShowAs,
     Quit,
-    Setup(SetupTab),
+    SetMode(Mode),
+    SceneEditor,
+    Zones,
     ToggleFullscreen,
     Zoom(f32),
     ReleaseAll,
@@ -169,17 +171,17 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             ui.separator();
             item(ui, "Beenden", "", MenuAction::Quit);
         });
-        ui.menu_button("Einrichten", |ui| {
-            item(ui, "Patch", "", MenuAction::Setup(SetupTab::Patch));
-            item(ui, "Bühnenplan", "", MenuAction::Setup(SetupTab::Stage));
-            item(ui, "Szenen", "", MenuAction::Setup(SetupTab::Scenes));
+        ui.menu_button("Bearbeiten", |ui| {
             item(
                 ui,
-                "Zonen & Gruppen",
+                "Einrichten (Patch & Bühnenplan)",
                 "",
-                MenuAction::Setup(SetupTab::Zones),
+                MenuAction::SetMode(Mode::Setup),
             );
-            item(ui, "DMX-Adressen", "", MenuAction::Setup(SetupTab::Monitor));
+            item(ui, "Steuern", "", MenuAction::SetMode(Mode::Control));
+            ui.separator();
+            item(ui, "Szenen bearbeiten …", "", MenuAction::SceneEditor);
+            item(ui, "Zonen & Gruppen …", "", MenuAction::Zones);
         });
         ui.menu_button("Wiedergabe", |ui| {
             item(ui, "Alle Szenen aus", "", MenuAction::ReleaseAll);

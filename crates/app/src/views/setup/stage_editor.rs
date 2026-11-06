@@ -1,6 +1,6 @@
 //! EINRICHTEN → Bühnenplan: Geräte anordnen.
 
-use dmxcraft_core::{plan, FixtureId, PlanShape, PLAN_SIZE_RANGE};
+use dmxcraft_core::{plan, FixtureId};
 use eframe::egui;
 
 use crate::ui::theme;
@@ -40,7 +40,7 @@ enum Arrange {
 impl View for StageEditorView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut arrange: Option<Arrange> = None;
-        section_header(ui, "Bühnenplan bearbeiten", |ui| {
+        section_header(ui, "Bühnenplan", |ui| {
             ui.checkbox(&mut self.labels, "Namen");
             ui.checkbox(&mut self.grid, "Raster");
             ui.add_enabled(
@@ -86,8 +86,6 @@ impl View for StageEditorView {
                 arrange = Some(Arrange::Reset);
             }
             ui.separator();
-            shape_and_size(ui, cx);
-            ui.separator();
             ui.label(
                 egui::RichText::new(
                     "Hilfe",
@@ -98,34 +96,8 @@ impl View for StageEditorView {
         });
         ui.add_space(theme::SP_XS);
 
-        egui::Panel::left("stage_fixture_list")
-            .resizable(true)
-            .default_size(200.0)
-            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4)))
-            .show(ui, |ui| {
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        for f in &cx.engine.show().fixtures {
-                            let sel = cx.state.selected.contains(&f.id);
-                            let r = ui.selectable_label(sel, &f.name);
-                            if r.clicked() {
-                                let add = ui.input(|i| i.modifiers.shift || i.modifiers.command);
-                                if !add {
-                                    cx.state.selected.clear();
-                                }
-                                if sel && add {
-                                    cx.state.selected.remove(&f.id);
-                                } else {
-                                    cx.state.selected.insert(f.id);
-                                }
-                            }
-                        }
-                    });
-            });
-
         egui::CentralPanel::default_margins()
-            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(8, 4)))
+            .frame(egui::Frame::new())
             .show(ui, |ui| {
                 let show = cx.engine.show();
                 let clip = cx.state.layout_clipboard.is_some();
@@ -191,51 +163,5 @@ impl View for StageEditorView {
 fn set_pos(cx: &mut ViewCtx<'_>, id: FixtureId, p: [f32; 2]) {
     if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
         f.plan_pos = Some(p);
-    }
-}
-
-/// Form und Größe der Auswahl ändern.
-fn shape_and_size(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-    let ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
-    let Some(first) = ids.first().copied() else {
-        return;
-    };
-    let show = cx.engine.show();
-    let current = show.fixture(first).and_then(|f| f.plan_shape);
-    let label = current.map_or("Automatisch", |s| s.label());
-    let mut new_shape: Option<Option<PlanShape>> = None;
-    egui::ComboBox::from_id_salt("plan_shape")
-        .selected_text(format!("Form: {label}"))
-        .show_ui(ui, |ui| {
-            if ui
-                .selectable_label(current.is_none(), "Automatisch (nach Typ)")
-                .clicked()
-            {
-                new_shape = Some(None);
-            }
-            for s in PlanShape::ALL {
-                if ui.selectable_label(current == Some(s), s.label()).clicked() {
-                    new_shape = Some(Some(s));
-                }
-            }
-        });
-    let mut size = show.plan_size(first);
-    let changed = ui
-        .add(
-            egui::Slider::new(&mut size, PLAN_SIZE_RANGE)
-                .text("Größe")
-                .fixed_decimals(1)
-                .suffix("x"),
-        )
-        .changed();
-    for id in ids {
-        if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
-            if let Some(s) = new_shape {
-                f.plan_shape = s;
-            }
-            if changed {
-                f.plan_size = Some(size);
-            }
-        }
     }
 }

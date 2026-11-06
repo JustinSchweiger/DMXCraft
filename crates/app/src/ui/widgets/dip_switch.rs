@@ -7,25 +7,30 @@ use crate::ui::theme;
 
 pub struct DipSwitch {
     pub address: u16,
+    /// Kleine Darstellung für Kopfzeilen.
+    pub compact: bool,
 }
 
 impl DipSwitch {
     pub fn show(self, ui: &mut Ui) -> egui::Response {
         let sw = dip::switches(self.address);
-        let (w, h) = (22.0, 46.0);
-        let size = Vec2::new(w * dip::SWITCHES as f32 + 12.0, h + 34.0);
+        let k = if self.compact { 0.62 } else { 1.0 };
+        let (w, h) = (22.0 * k, 46.0 * k);
+        let size = Vec2::new(w * dip::SWITCHES as f32 + 12.0 * k, h + 34.0 * k);
         let (rect, resp) = ui.allocate_exact_size(size, Sense::hover());
         let p = ui.painter();
         let r = theme::R_M as f32;
         p.rect_filled(rect, r, theme::DIP_BODY);
         p.rect_stroke(rect, r, Stroke::new(1.0, theme::BORDER), StrokeKind::Inside);
-        p.text(
-            rect.left_top() + Vec2::new(8.0, 5.0),
-            egui::Align2::LEFT_TOP,
-            "ON",
-            theme::caption(),
-            theme::TEXT,
-        );
+        if !self.compact {
+            p.text(
+                rect.left_top() + Vec2::new(8.0, 5.0),
+                egui::Align2::LEFT_TOP,
+                "ON",
+                theme::caption(),
+                theme::TEXT,
+            );
+        }
         for (i, on) in sw.iter().enumerate() {
             let x = rect.left() + 6.0 + i as f32 * w;
             let slot = Rect::from_min_size(
@@ -47,10 +52,10 @@ impl DipSwitch {
             };
             p.rect_filled(knob, 2.0, if *on { theme::ACCENT } else { theme::TEXT_DIM });
             p.text(
-                pos2(slot.center().x, rect.bottom() - 9.0),
+                pos2(slot.center().x, rect.bottom() - 9.0 * k),
                 egui::Align2::CENTER_CENTER,
                 (i + 1).to_string(),
-                theme::caption(),
+                egui::FontId::proportional(if self.compact { 7.5 } else { theme::FS_CAPTION }),
                 if *on { theme::ACCENT } else { theme::TEXT_DIM },
             );
         }

@@ -21,6 +21,8 @@ pub const OK: Color32 = Color32::from_rgb(0x34, 0xd3, 0x99);
 pub const DIP_BODY: Color32 = Color32::from_rgb(0x1c, 0x3f, 0x8a);
 /// Geräte-Balken im DMX-Patch.
 pub const FIXTURE_BAR: Color32 = Color32::from_rgb(0x2b, 0x35, 0x42);
+/// Füllung ausgeschalteter Geräte im Bühnenplan.
+pub const FIXTURE_OFF: Color32 = Color32::from_rgb(0x1e, 0x25, 0x2e);
 pub const WARN: Color32 = Color32::from_rgb(0xfb, 0xbf, 0x24);
 
 /// Standardfarben für Zonen ohne eigene Farbe.

@@ -47,6 +47,66 @@ pub struct Fixture {
     /// Größenfaktor im Bühnenplan (1.0 = normal).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_size: Option<f32>,
+    /// Ausgangsgrenzen (Dimmer-Limit, Pan/Tilt-Bereich, Invertieren).
+    #[serde(default, skip_serializing_if = "FixtureLimits::is_default")]
+    pub limits: FixtureLimits,
+}
+
+/// Grenzen, die beim Ausgeben auf ein Gerät angewendet werden – unabhängig
+/// von Szenen und Programmer (z. B. um zu helle Geräte zu zähmen oder Moving
+/// Heads vom Publikum fernzuhalten).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FixtureLimits {
+    /// Höchster Dimmerwert (255 = keine Begrenzung).
+    pub dimmer_max: u8,
+    pub pan_min: u8,
+    pub pan_max: u8,
+    pub tilt_min: u8,
+    pub tilt_max: u8,
+    pub invert_pan: bool,
+    pub invert_tilt: bool,
+    /// Pan und Tilt vertauschen (z. B. für seitlich montierte Geräte).
+    pub swap_pan_tilt: bool,
+}
+
+impl Default for FixtureLimits {
+    fn default() -> Self {
+        Self {
+            dimmer_max: 255,
+            pan_min: 0,
+            pan_max: 255,
+            tilt_min: 0,
+            tilt_max: 255,
+            invert_pan: false,
+            invert_tilt: false,
+            swap_pan_tilt: false,
+        }
+    }
+}
+
+impl FixtureLimits {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub fn affects_position(&self) -> bool {
+        self.pan_min != 0
+            || self.pan_max != 255
+            || self.tilt_min != 0
+            || self.tilt_max != 255
+            || self.invert_pan
+            || self.invert_tilt
+            || self.swap_pan_tilt
+    }
+
+    /// Bildet einen 16-Bit-Wert (0..=65535) auf den erlaubten Bereich ab.
+    pub fn map16(value: u16, min: u8, max: u8, invert: bool) -> u16 {
+        let v = if invert { u16::MAX - value } else { value };
+        let (lo, hi) = (u32::from(min) << 8, (u32::from(max) << 8) | 0xFF);
+        let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
+        (lo + u32::from(v) * (hi - lo) / u32::from(u16::MAX)) as u16
+    }
 }
 
 /// Form eines Geräts im Bühnenplan.
@@ -57,8 +117,10 @@ pub enum PlanShape {
     Round,
     /// Quadratisches Gerät (Fluter, Panel).
     Square,
-    /// Moving Head (Sockel mit Kopf).
+    /// Rund mit mehreren LEDs als Segmente (z. B. Moving Head mit LED-Ring).
     MovingHead,
+    /// Quadratisches Pixel-Raster (Matrix-Panel).
+    Matrix,
     /// Waagerechte Leiste (LED-Bar, Pixel-Leiste).
     BarHorizontal,
     /// Senkrechte Leiste.
@@ -68,10 +130,11 @@ pub enum PlanShape {
 }
 
 impl PlanShape {
-    pub const ALL: [PlanShape; 6] = [
+    pub const ALL: [PlanShape; 7] = [
         PlanShape::Round,
         PlanShape::Square,
         PlanShape::MovingHead,
+        PlanShape::Matrix,
         PlanShape::BarHorizontal,
         PlanShape::BarVertical,
         PlanShape::Effect,
@@ -81,7 +144,8 @@ impl PlanShape {
         match self {
             PlanShape::Round => "Rund (PAR/Spot)",
             PlanShape::Square => "Quadrat (Fluter/Panel)",
-            PlanShape::MovingHead => "Moving Head",
+            PlanShape::MovingHead => "Rund mit LED-Segmenten",
+            PlanShape::Matrix => "Pixel-Raster (Matrix)",
             PlanShape::BarHorizontal => "Leiste waagerecht",
             PlanShape::BarVertical => "Leiste senkrecht",
             PlanShape::Effect => "Effekt/Laser",
@@ -92,8 +156,13 @@ impl PlanShape {
     pub fn guess(ty: &FixtureType) -> PlanShape {
         use crate::fixture::ChannelKind as K;
         let reds = ty.channels.iter().filter(|c| c.kind == K::Red).count();
-        if ty.has_kind(K::Pan) || ty.has_kind(K::Tilt) {
+        let moving = ty.has_kind(K::Pan) || ty.has_kind(K::Tilt);
+        if moving && reds > 1 {
             PlanShape::MovingHead
+        } else if moving {
+            PlanShape::Round
+        } else if reds >= 9 && (reds as f32).sqrt().fract() == 0.0 {
+            PlanShape::Matrix
         } else if reds > 1 {
             PlanShape::BarHorizontal
         } else if reds == 1 || ty.has_kind(K::Dimmer) {
@@ -371,6 +440,7 @@ impl Show {
             plan_pos: None,
             plan_shape: None,
             plan_size: None,
+            limits: FixtureLimits::default(),
         });
         Ok(id)
     }
@@ -591,7 +661,7 @@ mod tests {
             .add_fixture("M", "generic/moving-head-spot-11ch", 0, 20)
             .unwrap();
         assert_eq!(s.plan_shape(par), PlanShape::Round);
-        assert_eq!(s.plan_shape(mh), PlanShape::MovingHead);
+        assert_eq!(s.plan_shape(mh), PlanShape::Round);
         s.fixture_mut(par).unwrap().plan_shape = Some(PlanShape::BarVertical);
         assert_eq!(s.plan_shape(par), PlanShape::BarVertical);
         assert_eq!(s.plan_size(par), 1.0);

@@ -96,11 +96,13 @@ Die Oberfläche hat zwei Bereiche:
   Aufziehen auswählen. Unten rechts ist der **Programmer** mit den Kategorien Dimmer, Farbe
   (mit Farbfeldern), Position (mit XY-Feld), Gobo, Strahl und Sonstiges. Fader: ziehen,
   Mausrad (Shift = 10er-Schritte), Doppelklick = 0/voll, Rechtsklick = Freigeben.
-* **EINRICHTEN** – Patch und Gerätebibliothek, **Bühnenplan** (Geräte verschieben, Form und Größe, Einrasten,
-  in Reihe/Raster anordnen, ausrichten), Szenen-Editor, Zonen (Farbe, Reihenfolge) & Gruppen,
-  **DMX-Adressen** (Modus *Patch*: Geräte als Balken über ihren Adressbereich, per Ziehen auf
-  eine neue Startadresse verschieben, freie Adressen sichtbar; Modus *Ausgang*: gesendete
-  Werte; Seitenleiste mit DIP-Schalter-Stellung des ausgewählten Geräts).
+* **EINRICHTEN** – eine Seite: oben das **Patch-Raster** (Geräte als Balken über ihren
+  Adressbereich, Ziehen = neue Startadresse, Doppelklick = umbenennen, Umschalter Patch/Ausgang,
+  DIP-Schalter des ausgewählten Geräts oben rechts), darunter der **Bühnenplan** (verschieben,
+  Einrasten, anordnen) mit den **Geräteeinstellungen** (Form, Größe, Dimmer-Limit,
+  Pan/Tilt-Bereich, Invertieren, Pan/Tilt tauschen), rechts die **Bibliothek** (Generisch,
+  Open Fixture Library nach Hersteller, eigene OFL-Dateien) mit Patch-Formular.
+  Szenen-Editor und Zonen & Gruppen öffnen sich als Fenster (Menü → Bearbeiten).
 * **Rechtsklick auf ein Gerät** (Bühne, Bühnenplan, DMX-Adressen): Gruppen zuweisen/entfernen,
   neue Gruppe, gleichen Typ auswählen, Reihenfolge umkehren, Layout kopieren/einfügen,
   spiegeln, nächste freie Adresse, löschen (mit Rückfrage).

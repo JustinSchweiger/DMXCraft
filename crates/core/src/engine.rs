@@ -11,7 +11,8 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use crate::dmx::DmxFrame;
-use crate::show::{ChannelRef, LoopMode, SceneId, Show};
+use crate::fixture::ChannelKind;
+use crate::show::{ChannelRef, FixtureLimits, LoopMode, SceneId, Show};
 
 /// Obergrenze für Schrittwechsel pro Tick (Schutz vor Endlosschleifen bei
 /// Szenen mit sehr kurzen Schritten).
@@ -406,6 +407,77 @@ impl Engine {
             }
         }
 
+        // 4b) Gerätegrenzen
+        for f in &self.show.fixtures {
+            let lim = f.limits;
+            if lim.is_default() {
+                continue;
+            }
+            let Some(ty) = self.show.type_of(f) else {
+                continue;
+            };
+            let ch = |i: usize| ChannelRef {
+                fixture: f.id,
+                channel: i as u16,
+            };
+            if lim.dimmer_max < 255 {
+                let has_dimmer = ty.channels.iter().any(|c| c.kind.is_htp());
+                let factor = f32::from(lim.dimmer_max) / 255.0;
+                for (i, def) in ty.channels.iter().enumerate() {
+                    let scale = if has_dimmer {
+                        def.kind.is_htp()
+                    } else {
+                        def.kind.is_color_intensity()
+                    };
+                    if scale {
+                        if let Some(v) = values.get_mut(&ch(i)) {
+                            *v = (f32::from(*v) * factor).round() as u8;
+                        }
+                    }
+                }
+            }
+            if lim.affects_position() {
+                let idx = |k: ChannelKind| ty.channels.iter().position(|c| c.kind == k);
+                let (pan, pan_f, tilt, tilt_f) = (
+                    idx(ChannelKind::Pan),
+                    idx(ChannelKind::PanFine),
+                    idx(ChannelKind::Tilt),
+                    idx(ChannelKind::TiltFine),
+                );
+                let read = |coarse: Option<usize>, fine: Option<usize>| -> Option<u16> {
+                    let c = values.get(&ch(coarse?)).copied()?;
+                    let fv = fine.and_then(|i| values.get(&ch(i)).copied()).unwrap_or(0);
+                    Some(u16::from(c) << 8 | u16::from(fv))
+                };
+                let (mut p16, mut t16) = (read(pan, pan_f), read(tilt, tilt_f));
+                if lim.swap_pan_tilt {
+                    std::mem::swap(&mut p16, &mut t16);
+                }
+                let mut write = |coarse: Option<usize>, fine: Option<usize>, v: u16| {
+                    if let Some(slot) = coarse.and_then(|i| values.get_mut(&ch(i))) {
+                        *slot = (v >> 8) as u8;
+                    }
+                    if let Some(slot) = fine.and_then(|i| values.get_mut(&ch(i))) {
+                        *slot = (v & 0xFF) as u8;
+                    }
+                };
+                if let Some(v) = p16 {
+                    write(
+                        pan,
+                        pan_f,
+                        FixtureLimits::map16(v, lim.pan_min, lim.pan_max, lim.invert_pan),
+                    );
+                }
+                if let Some(v) = t16 {
+                    write(
+                        tilt,
+                        tilt_f,
+                        FixtureLimits::map16(v, lim.tilt_min, lim.tilt_max, lim.invert_tilt),
+                    );
+                }
+            }
+        }
+
         // 5) In den Frame schreiben
         for f in &self.show.fixtures {
             for (ch, v) in values.iter().filter(|(ch, _)| ch.fixture == f.id) {
@@ -656,6 +728,58 @@ mod tests {
         e.toggle_pause(id);
         e.tick(MS(1000));
         assert_eq!(e.progress(id).unwrap().step, 0);
+    }
+
+    #[test]
+    fn limits_cap_dimmer_and_position() {
+        let mut s = Show::new("T", 1);
+        for t in builtin_fixture_types() {
+            s.upsert_fixture_type(t);
+        }
+        let mh = s
+            .add_fixture("MH", "generic/moving-head-spot-11ch", 0, 1)
+            .unwrap();
+        // Kanäle: 0 Pan, 1 Pan fein, 2 Tilt, 3 Tilt fein, 5 Dimmer
+        let id = s.add_scene(
+            "S",
+            None,
+            vec![Step::new(vec![
+                cv(mh, 0, 255),
+                cv(mh, 1, 255),
+                cv(mh, 2, 0),
+                cv(mh, 5, 200),
+            ])],
+        );
+        {
+            let l = &mut s.fixture_mut(mh).unwrap().limits;
+            l.dimmer_max = 128;
+            l.pan_min = 64;
+            l.pan_max = 191;
+            l.invert_tilt = true;
+        }
+        let mut e = Engine::new(s);
+        e.activate(id);
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 6), Some(100), "Dimmer 200 * 128/255");
+        assert_eq!(f.get(0, 1), Some(191), "Pan voll -> Pan max");
+        assert_eq!(f.get(0, 2), Some(255), "Pan fein am oberen Ende");
+        assert_eq!(f.get(0, 3), Some(255), "Tilt 0 invertiert -> voll");
+        // Vertauschen
+        e.show_mut().fixture_mut(mh).unwrap().limits = FixtureLimits {
+            swap_pan_tilt: true,
+            ..Default::default()
+        };
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 1), Some(0), "Pan bekommt Tilt-Wert");
+        assert_eq!(f.get(0, 3), Some(255), "Tilt bekommt Pan-Wert");
+    }
+
+    #[test]
+    fn map16_ranges() {
+        assert_eq!(FixtureLimits::map16(0, 0, 255, false), 0);
+        assert_eq!(FixtureLimits::map16(u16::MAX, 0, 255, false), u16::MAX);
+        assert_eq!(FixtureLimits::map16(u16::MAX, 0, 255, true), 0);
+        assert_eq!(FixtureLimits::map16(0, 64, 191, false) >> 8, 64);
     }
 
     #[test]

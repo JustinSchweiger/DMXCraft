@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use dmxcraft_core::{FixtureId, SceneId, ZoneId};
+use dmxcraft_core::{FixtureId, FixtureType, SceneId, ZoneId};
 
 /// Hauptbereich der Oberfläche.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -12,19 +12,8 @@ pub enum Mode {
     Control,
 }
 
-/// Unterbereiche von EINRICHTEN.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum SetupTab {
-    Patch,
-    Stage,
-    Scenes,
-    Zones,
-    Monitor,
-}
-
 /// Formular „Geräte hinzufügen“ (geteilt zwischen Patch und Gerätebibliothek).
 pub struct PatchForm {
-    pub type_key: String,
     pub name: String,
     pub count: u16,
     /// 1-basiert in der Oberfläche.
@@ -34,12 +23,18 @@ pub struct PatchForm {
 
 pub struct AppState {
     pub mode: Mode,
-    pub setup_tab: SetupTab,
     pub show_path: String,
     pub message: Option<(String, bool)>,
     pub selected: BTreeSet<FixtureId>,
     pub patch: PatchForm,
-    pub library_open: bool,
+    /// Per Datei importierte Gerätetypen (noch nicht gepatcht).
+    pub imported_types: Vec<FixtureType>,
+    /// Szenen-Editor als Fenster geöffnet.
+    pub scene_editor_open: bool,
+    /// Fenster „Zonen & Gruppen“ geöffnet.
+    pub zones_open: bool,
+    /// Gerät, das im Patch-Raster umbenannt werden soll.
+    pub rename_request: Option<FixtureId>,
     pub edit_scene: Option<SceneId>,
     pub append_target: Option<SceneId>,
     pub new_scene_name: String,
@@ -51,21 +46,22 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(show_path: String, first_type: String) -> Self {
+    pub fn new(show_path: String) -> Self {
         Self {
             mode: Mode::Control,
-            setup_tab: SetupTab::Patch,
             show_path,
             message: None,
             selected: BTreeSet::new(),
             patch: PatchForm {
-                type_key: first_type,
-                name: "PAR".into(),
+                name: String::new(),
                 count: 1,
                 universe: 1,
                 address: 1,
             },
-            library_open: false,
+            imported_types: Vec::new(),
+            scene_editor_open: false,
+            zones_open: false,
+            rename_request: None,
             edit_scene: None,
             append_target: None,
             new_scene_name: "Neue Szene".into(),
@@ -93,7 +89,6 @@ impl AppState {
     /// Szene im Szenen-Editor öffnen.
     pub fn open_scene_editor(&mut self, id: SceneId) {
         self.edit_scene = Some(id);
-        self.mode = Mode::Setup;
-        self.setup_tab = SetupTab::Scenes;
+        self.scene_editor_open = true;
     }
 }
