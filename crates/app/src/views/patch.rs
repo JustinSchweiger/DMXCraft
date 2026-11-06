@@ -31,6 +31,13 @@ pub fn ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
                         ui.selectable_value(&mut st.patch.type_key, key.clone(), name);
                     }
                 });
+            if ui
+                .button("Gerätebibliothek...")
+                .on_hover_text("Über 600 Geräte aus der Open Fixture Library")
+                .clicked()
+            {
+                st.library.open = true;
+            }
 
             let universes = e.show().universes;
             egui::Grid::new("patch_form").num_columns(2).show(ui, |ui| {

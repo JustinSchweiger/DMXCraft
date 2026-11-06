@@ -13,4 +13,5 @@ path = "src/main.rs"
 [dependencies]
 lightcraft-core.workspace = true
 lightcraft-output.workspace = true
+lightcraft-ofl.workspace = true
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }

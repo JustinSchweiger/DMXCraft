@@ -55,6 +55,7 @@ pub struct UiState {
     pub edit_scene: Option<SceneId>,
     pub new_zone_name: String,
     pub monitor_universe: usize,
+    pub library: views::library::LibraryState,
 }
 
 impl UiState {
@@ -120,6 +121,7 @@ impl LightCraftApp {
                 edit_scene: None,
                 new_zone_name: "Neue Zone".into(),
                 monitor_universe: 0,
+                library: Default::default(),
             },
         }
     }
@@ -301,6 +303,11 @@ impl eframe::App for LightCraftApp {
                 let mut e = engine.lock().unwrap_or_else(|p| p.into_inner());
                 views::patch::ui(ui, &mut e, &mut self.ui);
             });
+
+        {
+            let mut e = engine.lock().unwrap_or_else(|p| p.into_inner());
+            views::library::window(ui.ctx(), &mut e, &mut self.ui);
+        }
 
         egui::CentralPanel::default_margins().show(ui, |ui| {
             ui.horizontal(|ui| {

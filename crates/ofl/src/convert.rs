@@ -297,7 +297,11 @@ fn wheel_kind(fixture: &Value, wheel: &str) -> ChannelKind {
     let count = |t: &str| {
         slots
             .iter()
-            .filter(|s| s.get("type").and_then(Value::as_str).is_some_and(|x| x.contains(t)))
+            .filter(|s| {
+                s.get("type")
+                    .and_then(Value::as_str)
+                    .is_some_and(|x| x.contains(t))
+            })
             .count()
     };
     if count("Color") >= count("Gobo") && count("Color") > 0 {
@@ -457,11 +461,18 @@ pub fn convert_fixture(
             .unwrap_or(&mode_name)
             .to_string();
         let mut channels = Vec::new();
-        for entry in mode.get("channels").and_then(Value::as_array).into_iter().flatten() {
+        for entry in mode
+            .get("channels")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             match entry {
                 Value::Null => channels.push(ChannelDef::new("(unbenutzt)", ChannelKind::Generic)),
                 Value::String(s) => channels.push(make_channel(s)),
-                Value::Object(o) if o.get("insert").and_then(Value::as_str) == Some("matrixChannels") => {
+                Value::Object(o)
+                    if o.get("insert").and_then(Value::as_str) == Some("matrixChannels") =>
+                {
                     let Some(m) = matrix.as_ref() else {
                         return Err(OflError::Invalid("matrixChannels ohne matrix".into()));
                     };
@@ -485,7 +496,11 @@ pub fn convert_fixture(
                     };
                     channels.extend(names.iter().map(|n| make_channel(n)));
                 }
-                _ => return Err(OflError::Invalid(format!("unbekannter Kanaleintrag in {mode_name}"))),
+                _ => {
+                    return Err(OflError::Invalid(format!(
+                        "unbekannter Kanaleintrag in {mode_name}"
+                    )))
+                }
             }
         }
         if channels.is_empty() || channels.len() > 512 {
@@ -549,7 +564,10 @@ mod tests {
         assert_eq!(kinds(&f.modes[0]), [K::Red, K::Green, K::Blue]);
         let m = &f.modes[1];
         assert_eq!(m.channel_count(), 6);
-        assert_eq!(kinds(m), [K::Dimmer, K::Red, K::Green, K::Blue, K::Strobe, K::Generic]);
+        assert_eq!(
+            kinds(m),
+            [K::Dimmer, K::Red, K::Green, K::Blue, K::Strobe, K::Generic]
+        );
         assert_eq!(m.channels[0].default, 255);
         assert_eq!(m.manufacturer, "Testhersteller");
         assert_eq!(f.categories, ["Color Changer"]);
@@ -575,7 +593,17 @@ mod tests {
         let m = &f.modes[0];
         assert_eq!(
             kinds(m),
-            [K::Pan, K::PanFine, K::Tilt, K::TiltFine, K::Speed, K::ColorWheel, K::Gobo, K::Generic, K::Generic]
+            [
+                K::Pan,
+                K::PanFine,
+                K::Tilt,
+                K::TiltFine,
+                K::Speed,
+                K::ColorWheel,
+                K::Gobo,
+                K::Generic,
+                K::Generic
+            ]
         );
         assert_eq!(m.channels[0].default, 128, "16-Bit-Default → grobes Byte");
         assert_eq!(m.channels[2].default, 128, "50 %");
@@ -603,7 +631,10 @@ mod tests {
         let names = |i: usize| -> Vec<String> {
             f.modes[i].channels.iter().map(|c| c.name.clone()).collect()
         };
-        assert_eq!(names(0), ["Master", "Red 1", "Green 1", "Red 2", "Green 2", "Red 3", "Green 3"]);
+        assert_eq!(
+            names(0),
+            ["Master", "Red 1", "Green 1", "Red 2", "Green 2", "Red 3", "Green 3"]
+        );
         assert_eq!(names(1), ["Red 3", "Red 1", "Green 3", "Green 1"]);
         assert_eq!(kinds(&f.modes[0])[0], K::Dimmer);
         assert_eq!(kinds(&f.modes[0])[1], K::Red);
@@ -652,7 +683,12 @@ mod tests {
 
     #[test]
     fn redirects_are_skipped() {
-        let r = convert_fixture("x", "X", "r", r#"{"name": "R", "redirectTo": "y/z", "reason": "SameAsDifferentBrand"}"#);
+        let r = convert_fixture(
+            "x",
+            "X",
+            "r",
+            r#"{"name": "R", "redirectTo": "y/z", "reason": "SameAsDifferentBrand"}"#,
+        );
         assert!(matches!(r, Err(OflError::Skip(_))));
     }
 

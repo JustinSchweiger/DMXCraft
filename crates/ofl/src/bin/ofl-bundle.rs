@@ -30,8 +30,9 @@ fn main() {
 
 fn run(root: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let fixtures_dir = root.join("fixtures");
-    let manufacturers: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(fixtures_dir.join("manufacturers.json"))?)?;
+    let manufacturers: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(
+        fixtures_dir.join("manufacturers.json"),
+    )?)?;
 
     let mut lib = Library {
         source_commit: git(root, &["rev-parse", "HEAD"]),
@@ -61,7 +62,11 @@ fn run(root: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
             .collect();
         files.sort();
         for file in files {
-            let key = file.file_stem().unwrap_or_default().to_string_lossy().to_string();
+            let key = file
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
             let json = std::fs::read_to_string(&file)?;
             match convert_fixture(&man_key, &man_name, &key, &json) {
                 Ok(f) => lib.fixtures.push(f),

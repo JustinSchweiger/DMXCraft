@@ -67,10 +67,7 @@ impl Library {
     /// Volltextsuche über Hersteller, Name und Kategorien. Alle Wörter der
     /// Suche müssen vorkommen (ohne Groß-/Kleinschreibung).
     pub fn search(&self, query: &str, limit: usize) -> Vec<&LibraryFixture> {
-        let words: Vec<String> = query
-            .split_whitespace()
-            .map(|w| w.to_lowercase())
-            .collect();
+        let words: Vec<String> = query.split_whitespace().map(|w| w.to_lowercase()).collect();
         self.fixtures
             .iter()
             .filter(|f| {
@@ -99,7 +96,11 @@ mod tests {
     #[test]
     fn embedded_library_loads() {
         let lib = Library::embedded();
-        assert!(lib.fixtures.len() > 500, "nur {} Geräte", lib.fixtures.len());
+        assert!(
+            lib.fixtures.len() > 500,
+            "nur {} Geräte",
+            lib.fixtures.len()
+        );
         assert!(lib.fixtures.iter().all(|f| !f.modes.is_empty()));
         assert!(!lib.search("cameo", 10).is_empty());
         assert!(lib.search("rgb par", 5).len() <= 5);
