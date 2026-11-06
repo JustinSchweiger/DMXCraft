@@ -16,7 +16,7 @@ use crate::state::{AppState, Mode};
 use crate::titlebar::{self, MenuAction, TitleInfo, UpdateBadge};
 use crate::ui::theme;
 use crate::ui::widgets::dialog::INPUT_H;
-use crate::ui::widgets::{form, text_field, Dialog, Toggle};
+use crate::ui::widgets::{form, text_field, Dialog, Icon, IconButton, Toggle};
 use crate::updater::{UpdateState, Updater};
 use crate::views::control::{ProgrammerView, SceneGridView, StageView};
 use crate::views::setup::SetupView;
@@ -61,8 +61,10 @@ pub struct DmxCraftApp {
     windows: Windows,
     history: History,
     fullscreen: Fullscreen,
-    /// Vollbild umschalten, sobald der Frame (Fensterhandle) verfügbar ist.
+    /// Vollbild beim nächsten Frame umschalten.
     toggle_fullscreen: bool,
+    /// Zuletzt erkannte USB-DMX-Kabel (für die Einstellungen).
+    usb_ports: Vec<dmxcraft_output::UsbDmxPort>,
 }
 
 impl DmxCraftApp {
@@ -84,7 +86,11 @@ impl DmxCraftApp {
         };
         let engine = Arc::new(Mutex::new(Engine::new(show)));
         let output_kind = OutputKind::from_key(&settings.output);
-        let runtime = Runtime::start(engine.clone(), output_kind.create(), OUTPUT_HZ);
+        let runtime = Runtime::start(
+            engine.clone(),
+            output_kind.create(&settings.output_config()),
+            OUTPUT_HZ,
+        );
         let mut state = AppState::new(show_path.unwrap_or_default());
         state.message = message;
         // Gesperrt bleibt gesperrt – auch nach einem Neustart
@@ -106,6 +112,7 @@ impl DmxCraftApp {
             setup: SetupView::default(),
             windows: Windows::default(),
             history: History::default(),
+            usb_ports: Vec::new(),
             fullscreen: Fullscreen::default(),
             toggle_fullscreen: false,
         }
@@ -121,11 +128,21 @@ impl DmxCraftApp {
         if kind == self.output_kind {
             return;
         }
-        self.runtime.stop();
-        self.runtime = Runtime::start(self.engine.clone(), kind.create(), OUTPUT_HZ);
         self.output_kind = kind;
         self.settings.output = kind.key().into();
         self.save_settings();
+        self.restart_output();
+    }
+
+    /// Ausgang mit den aktuellen Einstellungen neu starten (z. B. nach
+    /// geänderter Kabelzuordnung).
+    fn restart_output(&mut self) {
+        self.runtime.stop();
+        self.runtime = Runtime::start(
+            self.engine.clone(),
+            self.output_kind.create(&self.settings.output_config()),
+            OUTPUT_HZ,
+        );
     }
 
     fn save_settings(&mut self) {
@@ -246,7 +263,10 @@ impl DmxCraftApp {
                 let bo = e.blackout();
                 e.set_blackout(!bo);
             }
-            MenuAction::Settings => self.settings_open = true,
+            MenuAction::Settings => {
+                self.usb_ports = dmxcraft_output::list_ports();
+                self.settings_open = true;
+            }
             MenuAction::CheckUpdates => self.updater.check(ctx.clone()),
             MenuAction::InstallUpdate => self.updater.install(ctx.clone()),
             MenuAction::About => self.about_open = true,
@@ -419,7 +439,12 @@ impl DmxCraftApp {
     fn title_info(&self) -> (String, f32, (String, egui::Color32), bool) {
         let e = Self::lock(&self.engine);
         let (fps, status) = match self.runtime.status() {
-            OutputStatus::Running { fps, .. } => (fps, ("Ausgang aktiv".to_string(), theme::OK)),
+            OutputStatus::Running {
+                fps, note: None, ..
+            } => (fps, ("Ausgang aktiv".to_string(), theme::OK)),
+            OutputStatus::Running {
+                fps, note: Some(n), ..
+            } => (fps, (format!("Ausgang aktiv, aber: {n}"), theme::WARN)),
             OutputStatus::Connecting => (0.0, ("Ausgang verbindet".into(), theme::WARN)),
             OutputStatus::Error(msg) => (0.0, (format!("Ausgang: Fehler – {msg}"), theme::DANGER)),
             OutputStatus::Stopped => (0.0, ("Ausgang gestoppt".into(), theme::TEXT_DIM)),
@@ -445,6 +470,7 @@ impl DmxCraftApp {
             let mut open = true;
             let mut changed = false;
             let mut new_output = self.output_kind;
+            let mut output_changed = false;
             Dialog::new("Einstellungen")
                 .id("settings")
                 .width(440.0)
@@ -476,6 +502,86 @@ impl DmxCraftApp {
                                     }
                                 });
                         });
+                        if new_output == OutputKind::OpenDmx {
+                            let patched = Self::lock(&self.engine)
+                                .show()
+                                .fixtures
+                                .iter()
+                                .map(|f| usize::from(f.universe) + 1)
+                                .max()
+                                .unwrap_or(1);
+                            let rows = patched
+                                .max(self.settings.open_dmx.len())
+                                .max(2)
+                                .min(usize::from(dmxcraft_core::UNIVERSES));
+                            for u in 0..rows {
+                                let current = self
+                                    .settings
+                                    .open_dmx
+                                    .get(u)
+                                    .filter(|k| !k.is_empty())
+                                    .cloned();
+                                let mut picked = current.clone();
+                                f.row(&format!("Universum {}", u + 1), |ui| {
+                                    ui.spacing_mut().interact_size.y = INPUT_H;
+                                    let text = match &current {
+                                        None => "– kein Kabel –".to_string(),
+                                        Some(k) => self
+                                            .usb_ports
+                                            .iter()
+                                            .find(|p| &p.key == k)
+                                            .map(|p| p.label.clone())
+                                            .unwrap_or_else(|| {
+                                                format!("{k} (nicht angeschlossen)")
+                                            }),
+                                    };
+                                    egui::ComboBox::from_id_salt(("open_dmx_u", u))
+                                        .selected_text(text)
+                                        .width(ui.available_width())
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(
+                                                &mut picked,
+                                                None,
+                                                "– kein Kabel –",
+                                            );
+                                            for p in &self.usb_ports {
+                                                let label = if p.ftdi {
+                                                    p.label.clone()
+                                                } else {
+                                                    format!("{} (kein FTDI)", p.label)
+                                                };
+                                                ui.selectable_value(
+                                                    &mut picked,
+                                                    Some(p.key.clone()),
+                                                    label,
+                                                );
+                                            }
+                                        });
+                                });
+                                if picked != current {
+                                    self.settings.assign_open_dmx(u, picked);
+                                    output_changed = true;
+                                }
+                            }
+                            f.note(|ui| {
+                                if ui
+                                    .add(IconButton::new(Icon::Reset).flat())
+                                    .on_hover_text("Kabel neu suchen")
+                                    .clicked()
+                                {
+                                    self.usb_ports = dmxcraft_output::list_ports();
+                                }
+                                let n = self.usb_ports.iter().filter(|p| p.ftdi).count();
+                                ui.label(
+                                    egui::RichText::new(match n {
+                                        0 => "Kein USB-DMX-Kabel gefunden".to_string(),
+                                        1 => "1 Kabel gefunden".to_string(),
+                                        n => format!("{n} Kabel gefunden"),
+                                    })
+                                    .color(theme::TEXT_DIM),
+                                );
+                            });
+                        }
                     });
                     ui.add_space(theme::SP_S);
                     section(ui, "Darstellung");
@@ -540,7 +646,13 @@ impl DmxCraftApp {
                     }
                 });
             if new_output != self.output_kind {
+                if new_output == OutputKind::OpenDmx {
+                    self.usb_ports = dmxcraft_output::list_ports();
+                }
                 self.switch_output(new_output);
+            } else if output_changed {
+                self.save_settings();
+                self.restart_output();
             }
             if changed {
                 self.save_settings();

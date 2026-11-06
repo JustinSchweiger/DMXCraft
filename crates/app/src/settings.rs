@@ -18,8 +18,10 @@ pub struct Settings {
     pub recent: Vec<String>,
     /// Beim Start die zuletzt verwendete Show laden.
     pub open_last_show: bool,
-    /// Gewählter Ausgang: "simulation" oder "dvc_gold".
+    /// Gewählter Ausgang: "simulation" oder "open_dmx".
     pub output: String,
+    /// USB-DMX: je Universum (Index) die Seriennummer des Kabels, leer = keins.
+    pub open_dmx: Vec<String>,
     /// Gesalzener Hash des Sperr-Passworts („salz:hash“).
     pub lock_hash: Option<String>,
     /// Oberfläche war beim Beenden gesperrt (bleibt nach Neustart gesperrt).
@@ -35,6 +37,7 @@ impl Default for Settings {
             recent: Vec::new(),
             open_last_show: true,
             output: "simulation".into(),
+            open_dmx: Vec::new(),
             lock_hash: None,
             locked: false,
         }
@@ -45,6 +48,34 @@ impl Default for Settings {
 pub const RECENT_MAX: usize = 8;
 
 impl Settings {
+    /// Ausgangs-Einstellungen für die Ausgabeschicht.
+    pub fn output_config(&self) -> dmxcraft_output::OutputConfig {
+        dmxcraft_output::OutputConfig {
+            open_dmx: (0..usize::from(dmxcraft_core::UNIVERSES))
+                .map(|u| self.open_dmx.get(u).filter(|k| !k.is_empty()).cloned())
+                .collect(),
+        }
+    }
+
+    /// Kabel einem Universum zuordnen (`None` = keins). Ein Kabel kann nur
+    /// einem Universum gehören.
+    pub fn assign_open_dmx(&mut self, universe: usize, key: Option<String>) {
+        if let Some(k) = &key {
+            for slot in &mut self.open_dmx {
+                if slot == k {
+                    slot.clear();
+                }
+            }
+        }
+        if self.open_dmx.len() <= universe {
+            self.open_dmx.resize(universe + 1, String::new());
+        }
+        self.open_dmx[universe] = key.unwrap_or_default();
+        while self.open_dmx.last().is_some_and(|k| k.is_empty()) {
+            self.open_dmx.pop();
+        }
+    }
+
     /// Merkt sich eine geöffnete oder gespeicherte Show.
     pub fn remember(&mut self, path: &str) {
         self.last_show = Some(path.to_string());
@@ -99,5 +130,19 @@ mod tests {
         assert_eq!(s.ui_scale, 1.25);
         assert!(s.check_updates);
         assert_eq!(s.output, "simulation");
+    }
+
+    #[test]
+    fn cable_belongs_to_one_universe() {
+        let mut s = Settings::default();
+        s.assign_open_dmx(0, Some("A".into()));
+        s.assign_open_dmx(1, Some("B".into()));
+        s.assign_open_dmx(1, Some("A".into()));
+        let cfg = s.output_config();
+        assert_eq!(cfg.open_dmx[0], None);
+        assert_eq!(cfg.open_dmx[1].as_deref(), Some("A"));
+        assert_eq!(cfg.open_dmx.len(), 8);
+        s.assign_open_dmx(1, None);
+        assert!(s.open_dmx.is_empty());
     }
 }

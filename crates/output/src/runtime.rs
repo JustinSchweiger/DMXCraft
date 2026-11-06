@@ -15,7 +15,12 @@ const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 #[derive(Clone, Debug, PartialEq)]
 pub enum OutputStatus {
     Connecting,
-    Running { output: String, fps: f32 },
+    /// `note`: Teilproblem des Ausgangs, z. B. ein fehlendes Kabel.
+    Running {
+        output: String,
+        fps: f32,
+        note: Option<String>,
+    },
     Error(String),
     Stopped,
 }
@@ -111,6 +116,7 @@ impl Runtime {
                                 set_status(OutputStatus::Running {
                                     output: output.name().into(),
                                     fps: 0.0,
+                                    note: output.health(),
                                 });
                             }
                             Err(err) => {
@@ -129,6 +135,7 @@ impl Runtime {
                                 set_status(OutputStatus::Running {
                                     output: output.name().into(),
                                     fps: fps_count as f32 / el.as_secs_f32(),
+                                    note: output.health(),
                                 });
                                 fps_count = 0;
                                 fps_since = Instant::now();

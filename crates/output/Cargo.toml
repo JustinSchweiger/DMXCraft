@@ -11,4 +11,5 @@ authors.workspace = true
 
 [dependencies]
 dmxcraft-core.workspace = true
+serialport = { version = "4.10", default-features = false }
 thiserror.workspace = true

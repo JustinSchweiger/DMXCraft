@@ -1,8 +1,8 @@
 # DMXCraft
 
 Eine freie, in Rust geschriebene DMX-Lichtsteuerung nach dem Vorbild von
-Daslight 5. Sie läuft auf Linux, Windows und macOS und soll später die
-vorhandene **Daslight DVC Gold** per USB ansteuern.
+Daslight 5. Sie läuft auf Linux, Windows und macOS und gibt DMX über
+günstige USB-DMX-Kabel (Open DMX / FTDI) aus – ein Kabel je Universum.
 
 > Unabhängiges Projekt, nicht mit Nicolaudie/Daslight verbunden. Es wird
 > kein Code, keine Gerätebibliothek und kein Grafik-Asset von Daslight
@@ -22,7 +22,8 @@ vorhandene **Daslight DVC Gold** per USB ansteuern.
 | DMX-Monitor (512 Kanäle pro Universum) | ✅ |
 | Show-Datei (JSON) laden/speichern | ✅ |
 | Ausgabe-Thread mit 40 Hz, automatischer Reconnect | ✅ |
-| **USB-Ausgang DVC Gold** | ⏳ Platzhalter – Protokoll wird noch entschlüsselt |
+| **USB-DMX-Kabel (Open DMX / FTDI)**, ein Kabel je Universum | ✅ |
+| Daslight DVC Gold | ❌ verschlüsselt, nicht ansprechbar (siehe `dvc_gold.rs`) |
 | Gerätebibliothek: 650+ Geräte aus der Open Fixture Library, eigene OFL-Dateien importieren | ✅ |
 | Installer für Linux/macOS/Windows, Auto-Update | ✅ |
 | Effekt-Generator, 3D-Ansicht, MIDI | ❌ geplant |
@@ -146,7 +147,8 @@ crates/
            show.rs    Patch, Zonen, Szenen, JSON
            engine.rs  Wiedergabe, Fades, HTP/LTP, Master, Programmer
   output/  DmxOutput-Trait, Ausgabe-Thread (runtime.rs), Backends
-           dvc_gold.rs  ← hier kommt die USB-Anbindung hinein
+           open_dmx.rs  USB-DMX über FTDI-Kabel (Open DMX)
+           dvc_gold.rs  Ergebnisse zur DVC Gold (verschlüsselt)
   ofl/     Open-Fixture-Library-Konverter + eingebettete Bibliothek (data/)
   app/     Oberfläche mit egui/eframe, Updater
            ui/      Design-System: theme.rs (Tokens) + widgets/ (Fader, SceneCard, StageCanvas, …)
@@ -156,10 +158,19 @@ docs/UI-GUIDELINES.md   UI-Richtlinien
 graphify-out/           Code-Graph für KI-Assistenten (`graphify update .`)
 ```
 
-Die USB-Anbindung ist genau ein Backend: Man implementiert `DmxOutput`
-(`open` = verbinden + Handshake, `send` = Frame senden) in
-`crates/output/src/dvc_gold.rs`. Engine und Oberfläche bleiben dabei
-unverändert. Die Schritte dafür stehen als Kommentar in der Datei.
+Jeder Ausgang ist ein Backend, das `DmxOutput` implementiert (`open` =
+verbinden, `send` = Frame übergeben). Engine und Oberfläche bleiben dabei
+unverändert.
+
+**USB-DMX-Kabel einrichten:** Kabel einstecken (unter Windows installiert sich
+der FTDI-Treiber meist selbst, sonst von ftdichip.com; unter Linux und macOS
+kein Treiber nötig). In DMXCraft unter Einstellungen → Ausgang „USB-DMX-Kabel“
+wählen und jedem Universum ein Kabel zuordnen. Die Zuordnung läuft über die
+Seriennummer des Kabels und bleibt nach Neustart und Umstecken erhalten.
+Fehlt ein Kabel, zeigt der Statuspunkt in der Titelleiste Gelb, und DMXCraft
+verbindet sich automatisch, sobald es wieder steckt. Unter Linux braucht der
+Benutzer Zugriff auf `/dev/ttyUSB*` (meist Gruppe `dialout`:
+`sudo usermod -aG dialout $USER`, danach neu anmelden).
 
 ## Show-Format
 
