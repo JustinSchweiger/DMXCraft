@@ -8,8 +8,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// Sprache der Oberfläche („de“; weitere folgen).
+    pub language: String,
     /// Skalierung der Oberfläche (1.0 = 100 %).
     pub ui_scale: f32,
+    /// Name dieses Rechners, z. B. für Fernsteuerung im Netz.
+    pub instance_name: String,
+    /// Beim Start direkt im Touch-Modus öffnen.
+    pub start_touch: bool,
     /// Beim Start nach Updates suchen.
     pub check_updates: bool,
     /// Zuletzt verwendete Show-Datei.
@@ -31,7 +37,10 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            language: "de".into(),
             ui_scale: 1.0,
+            instance_name: default_instance_name(),
+            start_touch: false,
             check_updates: true,
             last_show: None,
             recent: Vec::new(),
@@ -44,10 +53,33 @@ impl Default for Settings {
     }
 }
 
+/// Rechnername als Vorschlag für den Instanznamen.
+fn default_instance_name() -> String {
+    ["COMPUTERNAME", "HOSTNAME"]
+        .iter()
+        .find_map(|v| std::env::var(v).ok())
+        .or_else(|| {
+            std::fs::read_to_string("/etc/hostname")
+                .ok()
+                .map(|s| s.trim().to_string())
+        })
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "DMXCraft".into())
+}
+
 /// Wie viele Shows unter „Zuletzt geöffnet“ stehen.
 pub const RECENT_MAX: usize = 8;
 
 impl Settings {
+    /// Aktiver Ausgang: USB-DMX, sobald einem Universum ein Kabel gehört.
+    pub fn output_kind(&self) -> dmxcraft_output::OutputKind {
+        if self.open_dmx.iter().any(|k| !k.is_empty()) {
+            dmxcraft_output::OutputKind::OpenDmx
+        } else {
+            dmxcraft_output::OutputKind::Simulation
+        }
+    }
+
     /// Ausgangs-Einstellungen für die Ausgabeschicht.
     pub fn output_config(&self) -> dmxcraft_output::OutputConfig {
         dmxcraft_output::OutputConfig {
@@ -142,7 +174,9 @@ mod tests {
         assert_eq!(cfg.open_dmx[0], None);
         assert_eq!(cfg.open_dmx[1].as_deref(), Some("A"));
         assert_eq!(cfg.open_dmx.len(), 8);
+        assert_eq!(s.output_kind(), dmxcraft_output::OutputKind::OpenDmx);
         s.assign_open_dmx(1, None);
         assert!(s.open_dmx.is_empty());
+        assert_eq!(s.output_kind(), dmxcraft_output::OutputKind::Simulation);
     }
 }

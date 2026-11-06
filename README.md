@@ -164,8 +164,9 @@ unverändert.
 
 **USB-DMX-Kabel einrichten:** Kabel einstecken (unter Windows installiert sich
 der FTDI-Treiber meist selbst, sonst von ftdichip.com; unter Linux und macOS
-kein Treiber nötig). In DMXCraft unter Einstellungen → Ausgang „USB-DMX-Kabel“
-wählen und jedem Universum ein Kabel zuordnen. Die Zuordnung läuft über die
+kein Treiber nötig). In DMXCraft unter Bearbeiten → Einstellungen → Ausgänge
+jedem Universum ein Kabel zuordnen; ohne Zuordnung läuft DMXCraft als
+Simulation. Die Zuordnung läuft über die
 Seriennummer des Kabels und bleibt nach Neustart und Umstecken erhalten.
 Fehlt ein Kabel, zeigt der Statuspunkt in der Titelleiste Gelb, und DMXCraft
 verbindet sich automatisch, sobald es wieder steckt. Unter Linux braucht der

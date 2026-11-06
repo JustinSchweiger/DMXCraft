@@ -35,6 +35,10 @@ pub struct Dialog<'a> {
     id: Id,
     width: f32,
     size: Option<Vec2>,
+    /// Feste Inhaltshöhe (nicht veränderbare Dialoge), z. B. bei Reitern.
+    height: Option<f32>,
+    /// Inhalt ohne Innenabstand (eigene Aufteilung wie Reiterleiste).
+    flush: bool,
     buttons: Vec<Button>,
 }
 
@@ -57,6 +61,8 @@ impl<'a> Dialog<'a> {
             id: Id::unique(("dialog", title)),
             width: 380.0,
             size: None,
+            height: None,
+            flush: false,
             buttons: Vec::new(),
         }
     }
@@ -69,6 +75,18 @@ impl<'a> Dialog<'a> {
     /// Feste Inhaltsbreite (nicht veränderbare Dialoge).
     pub fn width(mut self, w: f32) -> Self {
         self.width = w;
+        self
+    }
+
+    /// Feste Inhaltshöhe – das Fenster springt nicht, wenn sich der Inhalt ändert.
+    pub fn height(mut self, h: f32) -> Self {
+        self.height = Some(h);
+        self
+    }
+
+    /// Inhalt ohne Innenabstand; `width`/`height` gelten dann für die ganze Fläche.
+    pub fn flush(mut self) -> Self {
+        self.flush = true;
         self
     }
 
@@ -148,11 +166,15 @@ impl<'a> Dialog<'a> {
         let width = self.width;
         let resizable = self.size.is_some();
         let buttons = &self.buttons;
+        let fixed_height = self.height;
+        let flush = self.flush;
         window.show(ctx, |ui| {
             let spacing = ui.spacing().item_spacing;
             ui.spacing_mut().item_spacing = Vec2::ZERO;
             let w = if resizable {
                 ui.available_width()
+            } else if flush {
+                width
             } else {
                 width + 2.0 * theme::SP_L
             };
@@ -203,7 +225,13 @@ impl<'a> Dialog<'a> {
             } else {
                 None
             };
-            let margin = if resizable { theme::SP_S } else { theme::SP_L };
+            let margin = if flush {
+                0.0
+            } else if resizable {
+                theme::SP_S
+            } else {
+                theme::SP_L
+            };
             match body_rect {
                 Some(rect) => {
                     ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
@@ -219,6 +247,9 @@ impl<'a> Dialog<'a> {
                     Frame::new().inner_margin(margin).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = spacing;
                         ui.set_width(width);
+                        if let Some(h) = fixed_height {
+                            ui.set_height(h);
+                        }
                         body(ui, first)
                     });
                 }

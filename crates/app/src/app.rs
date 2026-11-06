@@ -12,11 +12,11 @@ use crate::file_dialog::{self, Purpose};
 use crate::fullscreen::Fullscreen;
 use crate::history::History;
 use crate::settings::Settings;
+use crate::settings_window::{SettingsCx, SettingsWindow};
 use crate::state::{AppState, Mode};
 use crate::titlebar::{self, MenuAction, TitleInfo, UpdateBadge};
 use crate::ui::theme;
-use crate::ui::widgets::dialog::INPUT_H;
-use crate::ui::widgets::{form, text_field, Dialog, Icon, IconButton, Toggle};
+use crate::ui::widgets::{form, text_field, Dialog};
 use crate::updater::{UpdateState, Updater};
 use crate::views::control::{ProgrammerView, SceneGridView, StageView};
 use crate::views::setup::SetupView;
@@ -51,6 +51,7 @@ pub struct DmxCraftApp {
     logo: Option<egui::TextureHandle>,
     settings: Settings,
     settings_open: bool,
+    settings_window: SettingsWindow,
     about_open: bool,
     /// Offener Systemdialog (Öffnen / Speichern unter).
     file_dialog: Option<file_dialog::Pending>,
@@ -85,7 +86,7 @@ impl DmxCraftApp {
             None => demo::demo_show(),
         };
         let engine = Arc::new(Mutex::new(Engine::new(show)));
-        let output_kind = OutputKind::from_key(&settings.output);
+        let output_kind = settings.output_kind();
         let runtime = Runtime::start(
             engine.clone(),
             output_kind.create(&settings.output_config()),
@@ -104,6 +105,7 @@ impl DmxCraftApp {
             logo: None,
             settings,
             settings_open: false,
+            settings_window: SettingsWindow::default(),
             about_open: false,
             file_dialog: None,
             lock_dialog: None,
@@ -124,19 +126,11 @@ impl DmxCraftApp {
         engine.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    fn switch_output(&mut self, kind: OutputKind) {
-        if kind == self.output_kind {
-            return;
-        }
-        self.output_kind = kind;
-        self.settings.output = kind.key().into();
-        self.save_settings();
-        self.restart_output();
-    }
-
     /// Ausgang mit den aktuellen Einstellungen neu starten (z. B. nach
     /// geänderter Kabelzuordnung).
     fn restart_output(&mut self) {
+        self.output_kind = self.settings.output_kind();
+        self.settings.output = self.output_kind.key().into();
         self.runtime.stop();
         self.runtime = Runtime::start(
             self.engine.clone(),
@@ -468,193 +462,25 @@ impl DmxCraftApp {
         // Einstellungen
         if self.settings_open {
             let mut open = true;
-            let mut changed = false;
-            let mut new_output = self.output_kind;
-            let mut output_changed = false;
-            Dialog::new("Einstellungen")
-                .id("settings")
-                .width(440.0)
-                .cancel("Schließen")
-                .show(ctx, &mut open, |ui, _| {
-                    let section = |ui: &mut egui::Ui, title: &str| {
-                        ui.add_space(theme::SP_XS);
-                        ui.label(theme::heading_text(title));
-                        ui.add_space(theme::SP_XS);
-                    };
-                    section(ui, "Show");
-                    form(ui, "settings_show", |f| {
-                        let mut e = Self::lock(&self.engine);
-                        f.row("Name", |ui| {
-                            ui.add(text_field(&mut e.show_mut().name).desired_width(f32::INFINITY));
-                        });
-                    });
-                    ui.add_space(theme::SP_S);
-                    section(ui, "Ausgang");
-                    form(ui, "settings_output", |f| {
-                        f.row("Gerät", |ui| {
-                            ui.spacing_mut().interact_size.y = INPUT_H;
-                            egui::ComboBox::from_id_salt("settings_output")
-                                .selected_text(new_output.label())
-                                .width(ui.available_width())
-                                .show_ui(ui, |ui| {
-                                    for k in OutputKind::ALL {
-                                        ui.selectable_value(&mut new_output, k, k.label());
-                                    }
-                                });
-                        });
-                        if new_output == OutputKind::OpenDmx {
-                            let patched = Self::lock(&self.engine)
-                                .show()
-                                .fixtures
-                                .iter()
-                                .map(|f| usize::from(f.universe) + 1)
-                                .max()
-                                .unwrap_or(1);
-                            let rows = patched
-                                .max(self.settings.open_dmx.len())
-                                .max(2)
-                                .min(usize::from(dmxcraft_core::UNIVERSES));
-                            for u in 0..rows {
-                                let current = self
-                                    .settings
-                                    .open_dmx
-                                    .get(u)
-                                    .filter(|k| !k.is_empty())
-                                    .cloned();
-                                let mut picked = current.clone();
-                                f.row(&format!("Universum {}", u + 1), |ui| {
-                                    ui.spacing_mut().interact_size.y = INPUT_H;
-                                    let text = match &current {
-                                        None => "– kein Kabel –".to_string(),
-                                        Some(k) => self
-                                            .usb_ports
-                                            .iter()
-                                            .find(|p| &p.key == k)
-                                            .map(|p| p.label.clone())
-                                            .unwrap_or_else(|| {
-                                                format!("{k} (nicht angeschlossen)")
-                                            }),
-                                    };
-                                    egui::ComboBox::from_id_salt(("open_dmx_u", u))
-                                        .selected_text(text)
-                                        .width(ui.available_width())
-                                        .show_ui(ui, |ui| {
-                                            ui.selectable_value(
-                                                &mut picked,
-                                                None,
-                                                "– kein Kabel –",
-                                            );
-                                            for p in &self.usb_ports {
-                                                let label = if p.ftdi {
-                                                    p.label.clone()
-                                                } else {
-                                                    format!("{} (kein FTDI)", p.label)
-                                                };
-                                                ui.selectable_value(
-                                                    &mut picked,
-                                                    Some(p.key.clone()),
-                                                    label,
-                                                );
-                                            }
-                                        });
-                                });
-                                if picked != current {
-                                    self.settings.assign_open_dmx(u, picked);
-                                    output_changed = true;
-                                }
-                            }
-                            f.note(|ui| {
-                                if ui
-                                    .add(IconButton::new(Icon::Reset).flat())
-                                    .on_hover_text("Kabel neu suchen")
-                                    .clicked()
-                                {
-                                    self.usb_ports = dmxcraft_output::list_ports();
-                                }
-                                let n = self.usb_ports.iter().filter(|p| p.ftdi).count();
-                                ui.label(
-                                    egui::RichText::new(match n {
-                                        0 => "Kein USB-DMX-Kabel gefunden".to_string(),
-                                        1 => "1 Kabel gefunden".to_string(),
-                                        n => format!("{n} Kabel gefunden"),
-                                    })
-                                    .color(theme::TEXT_DIM),
-                                );
-                            });
-                        }
-                    });
-                    ui.add_space(theme::SP_S);
-                    section(ui, "Darstellung");
-                    form(ui, "settings_view", |f| {
-                        f.row("Skalierung", |ui| {
-                            let mut scale = self.settings.ui_scale;
-                            ui.spacing_mut().slider_width = ui.available_width() - 64.0;
-                            if ui
-                                .add(egui::Slider::new(&mut scale, 0.6..=2.0).fixed_decimals(2))
-                                .changed()
-                            {
-                                self.settings.ui_scale = scale;
-                                ctx.set_zoom_factor(scale);
-                                changed = true;
-                            }
-                        });
-                    });
-                    ui.add_space(theme::SP_S);
-                    section(ui, "Start");
-                    changed |= ui
-                        .add(Toggle::new(
-                            &mut self.settings.open_last_show,
-                            "Zuletzt verwendete Show öffnen",
-                        ))
-                        .changed();
-                    changed |= ui
-                        .add(Toggle::new(
-                            &mut self.settings.check_updates,
-                            "Beim Start nach Updates suchen",
-                        ))
-                        .changed();
-                    ui.add_space(theme::SP_S);
-                    section(ui, "Sperre");
-                    form(ui, "settings_lock", |f| {
-                        f.row("Passwort", |ui| {
-                            if self.settings.lock_hash.is_some() {
-                                if ui
-                                    .button("Entfernen")
-                                    .on_hover_text(
-                                        "Beim nächsten Sperren wird ein neues festgelegt",
-                                    )
-                                    .clicked()
-                                {
-                                    self.settings.lock_hash = None;
-                                    changed = true;
-                                }
-                            } else {
-                                ui.label(
-                                    egui::RichText::new("nicht festgelegt").color(theme::TEXT_DIM),
-                                )
-                                .on_hover_text("Wird beim ersten Sperren festgelegt");
-                            }
-                        });
-                    });
-                    if let Some(p) = Settings::path() {
-                        ui.add_space(theme::SP_M);
-                        ui.label(
-                            egui::RichText::new(format!("Gespeichert in {}", p.display()))
-                                .small()
-                                .color(theme::TEXT_FAINT),
-                        );
-                    }
-                });
-            if new_output != self.output_kind {
-                if new_output == OutputKind::OpenDmx {
-                    self.usb_ports = dmxcraft_output::list_ports();
-                }
-                self.switch_output(new_output);
-            } else if output_changed {
-                self.save_settings();
+            let mut e = Self::lock(&self.engine);
+            let ch = self.settings_window.show(
+                ctx,
+                &mut open,
+                SettingsCx {
+                    settings: &mut self.settings,
+                    engine: &mut e,
+                    usb_ports: &mut self.usb_ports,
+                    show_path: &self.state.show_path,
+                },
+            );
+            drop(e);
+            if let Some(z) = ch.zoom {
+                ctx.set_zoom_factor(z);
+            }
+            if ch.restart_output {
                 self.restart_output();
             }
-            if changed {
+            if ch.save || !open {
                 self.save_settings();
             }
             self.settings_open = open;

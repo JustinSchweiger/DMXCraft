@@ -87,6 +87,10 @@ keinen App-Zustand – nur ihre Eingabewerte.
   ganz rechts in `ACCENT` (auch per Enter), Esc schließt.
   Erstes Feld nur über das `first`-Flag fokussieren – nie jeden Frame
   `request_focus()`, sonst funktioniert Tab nicht.
+* **Fenster mit Reitern** (Vorbild: `settings_window.rs`): `Dialog` mit
+  `.flush()` und fester `.height()`, Reiterleiste links (`BG`, aktiver Reiter
+  `SURFACE` mit Akzentstreifen, Symbol + Text), Inhalt rechts scrollbar. Das
+  Fenster behält beim Reiterwechsel seine Größe.
 * **Formulare** (`widgets::form` + `Form::row`): Beschriftung links
   (`TEXT_DIM`, feste Spaltenbreite, ohne Doppelpunkt), Bedienelement rechts
   in voller Breite, alle Zeilen gleich hoch (`INPUT_H`).

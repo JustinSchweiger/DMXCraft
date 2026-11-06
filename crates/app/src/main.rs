@@ -9,6 +9,7 @@ mod history;
 mod icon;
 mod lock;
 mod settings;
+mod settings_window;
 mod state;
 mod titlebar;
 mod ui;
