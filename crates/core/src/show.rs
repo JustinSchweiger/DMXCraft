@@ -25,9 +25,10 @@ macro_rules! id_type {
 id_type!(FixtureId);
 id_type!(SceneId);
 id_type!(ZoneId);
+id_type!(GroupId);
 
 /// Ein gepatchtes Gerät.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Fixture {
     pub id: FixtureId,
     pub name: String,
@@ -37,6 +38,9 @@ pub struct Fixture {
     pub universe: u8,
     /// Startadresse, 1-basiert (1..=512).
     pub address: u16,
+    /// Position im Bühnenplan (0.0..=1.0 in beiden Achsen). `None` = automatisch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_pos: Option<[f32; 2]>,
 }
 
 /// Verweis auf einen Kanal eines Geräts (Kanalindex 0-basiert im Gerätetyp).
@@ -119,6 +123,17 @@ pub struct Scene {
 pub struct Zone {
     pub id: ZoneId,
     pub name: String,
+    /// Akzentfarbe der Zone in der Oberfläche (RGB).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<[u8; 3]>,
+}
+
+/// Eine benannte Geräteauswahl (z. B. „Moving Heads“, „PARs Traverse“).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Group {
+    pub id: GroupId,
+    pub name: String,
+    pub fixtures: Vec<FixtureId>,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -143,7 +158,7 @@ pub enum ShowError {
     Version(u32),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Show {
     pub format_version: u32,
     pub name: String,
@@ -153,6 +168,8 @@ pub struct Show {
     pub fixtures: Vec<Fixture>,
     pub zones: Vec<Zone>,
     pub scenes: Vec<Scene>,
+    #[serde(default)]
+    pub groups: Vec<Group>,
 }
 
 impl Default for Show {
@@ -171,6 +188,7 @@ impl Show {
             fixtures: Vec::new(),
             zones: Vec::new(),
             scenes: Vec::new(),
+            groups: Vec::new(),
         }
     }
 
@@ -286,6 +304,7 @@ impl Show {
             type_key: type_key.into(),
             universe,
             address,
+            plan_pos: None,
         });
         Ok(id)
     }
@@ -311,6 +330,9 @@ impl Show {
     /// Entfernt ein Gerät und alle Szenenwerte, die es betreffen.
     pub fn remove_fixture(&mut self, id: FixtureId) {
         self.fixtures.retain(|f| f.id != id);
+        for g in &mut self.groups {
+            g.fixtures.retain(|f| *f != id);
+        }
         for scene in &mut self.scenes {
             for step in &mut scene.steps {
                 step.values.retain(|v| v.fixture != id);
@@ -344,8 +366,29 @@ impl Show {
         self.zones.push(Zone {
             id,
             name: name.into(),
+            color: None,
         });
         id
+    }
+
+    pub fn zone(&self, id: ZoneId) -> Option<&Zone> {
+        self.zones.iter().find(|z| z.id == id)
+    }
+
+    // ---------- Gruppen ----------
+
+    pub fn add_group(&mut self, name: impl Into<String>, fixtures: Vec<FixtureId>) -> GroupId {
+        let id = GroupId(self.groups.iter().map(|g| g.id.0).max().unwrap_or(0) + 1);
+        self.groups.push(Group {
+            id,
+            name: name.into(),
+            fixtures,
+        });
+        id
+    }
+
+    pub fn remove_group(&mut self, id: GroupId) {
+        self.groups.retain(|g| g.id != id);
     }
 
     pub fn remove_zone(&mut self, id: ZoneId) {
@@ -460,6 +503,30 @@ mod tests {
         );
         let json = s.to_json().unwrap();
         assert_eq!(Show::from_json(&json).unwrap(), s);
+    }
+
+    #[test]
+    fn old_show_files_without_new_fields_load() {
+        let json = r#"{"format_version":1,"name":"Alt","universes":1,"fixture_types":[],
+            "fixtures":[{"id":1,"name":"A","type_key":"x","universe":0,"address":1}],
+            "zones":[{"id":1,"name":"Z"}],"scenes":[]}"#;
+        let s = Show::from_json(json).unwrap();
+        assert!(s.groups.is_empty());
+        assert_eq!(s.fixtures[0].plan_pos, None);
+        assert_eq!(s.zones[0].color, None);
+    }
+
+    #[test]
+    fn groups_follow_fixture_removal() {
+        let mut s = show();
+        let a = s.add_fixture("A", "generic/rgb-3ch", 0, 1).unwrap();
+        let b = s.add_fixture("B", "generic/rgb-3ch", 0, 4).unwrap();
+        let g = s.add_group("Alle", vec![a, b]);
+        s.remove_fixture(a);
+        assert_eq!(
+            s.groups.iter().find(|x| x.id == g).unwrap().fixtures,
+            vec![b]
+        );
     }
 
     #[test]

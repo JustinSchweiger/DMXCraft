@@ -80,6 +80,19 @@ cargo test --workspace                          # Tests
 Ohne Gerät wählst du oben „Simulation (kein Gerät)“. Die Engine läuft dann
 trotzdem, und im Tab **DMX-Monitor** siehst du, was an die Box gehen würde.
 
+## Oberfläche
+
+Die Oberfläche hat zwei Bereiche (oben links umschalten):
+
+* **STEUERN** – oben die Zonen als Spalten mit Szenenkarten (Klick = an/aus, Rechtsklick =
+  bearbeiten/löschen). Jede Spalte hat Tasten für Pause sowie vorherigen/nächsten Schritt und „+“
+  (neue Szene aus dem Programmer). Darüber filtert die Seitenleiste nach Zonen.
+  Unten links liegt der **Bühnenplan** mit Gruppen: Geräte per Klick, Strg/Shift+Klick oder
+  Aufziehen auswählen, mit „Anordnen“ verschieben. Unten rechts ist der **Programmer** mit den
+  Kategorien Dimmer, Farbe (mit Farbfeldern), Position (mit XY-Feld), Gobo, Strahl und Sonstiges.
+* **EINRICHTEN** – Patch und Gerätebibliothek, Szenen-Editor, Zonen (Farbe, Reihenfolge) &
+  Gruppen, DMX-Monitor.
+
 ## Bedienung in Kürze
 
 1. **Patch** (links): Gerätetyp wählen, Anzahl, Universum, Startadresse →

@@ -5,6 +5,7 @@ use dmxcraft_core::{ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, Ste
 use eframe::egui;
 
 use crate::app::UiState;
+use crate::theme;
 
 /// Ein Fader in der Oberfläche; steuert gleichnamige Kanäle aller
 /// ausgewählten Geräte gemeinsam.
@@ -44,116 +45,302 @@ fn fader_groups(e: &Engine, st: &UiState) -> Vec<FaderGroup> {
     groups
 }
 
-pub fn ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState, frame: &DmxFrame) {
-    if st.selected.is_empty() {
-        ui.add_space(20.0);
-        ui.label("Wähle links im Patch ein oder mehrere Geräte aus.");
-        programmer_actions(ui, e, st);
-        return;
+/// Kanal-Kategorien wie auf einem Lichtpult.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum Category {
+    #[default]
+    Dimmer,
+    Color,
+    Position,
+    Gobo,
+    Beam,
+    Other,
+    All,
+}
+
+impl Category {
+    pub const ALL: [Category; 7] = [
+        Category::Dimmer,
+        Category::Color,
+        Category::Position,
+        Category::Gobo,
+        Category::Beam,
+        Category::Other,
+        Category::All,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            Category::Dimmer => "DIMMER",
+            Category::Color => "FARBE",
+            Category::Position => "POSITION",
+            Category::Gobo => "GOBO",
+            Category::Beam => "STRAHL",
+            Category::Other => "SONSTIGES",
+            Category::All => "ALLE KANÄLE",
+        }
     }
 
-    let groups = fader_groups(e, st);
+    fn contains(self, k: ChannelKind) -> bool {
+        use ChannelKind as K;
+        match self {
+            Category::Dimmer => matches!(k, K::Dimmer),
+            Category::Color => matches!(
+                k,
+                K::Red | K::Green | K::Blue | K::White | K::Amber | K::Uv | K::ColorWheel
+            ),
+            Category::Position => matches!(k, K::Pan | K::PanFine | K::Tilt | K::TiltFine),
+            Category::Gobo => matches!(k, K::Gobo),
+            Category::Beam => matches!(k, K::Strobe | K::Speed),
+            Category::Other => matches!(k, K::Generic),
+            Category::All => true,
+        }
+    }
+}
 
+pub fn ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState, frame: &DmxFrame) {
+    let groups = fader_groups(e, st);
     ui.horizontal(|ui| {
-        ui.strong(format!("{} Gerät(e) ausgewählt", st.selected.len()));
-        // Farbwähler für RGB-Geräte
-        let find = |k: ChannelKind| groups.iter().find(|g| g.kind == k);
-        if let (Some(r), Some(g), Some(b)) = (
-            find(ChannelKind::Red),
-            find(ChannelKind::Green),
-            find(ChannelKind::Blue),
-        ) {
-            let cur = |grp: &FaderGroup| e.output_value(frame, grp.channels[0]).unwrap_or(0);
-            let mut rgb = [cur(r), cur(g), cur(b)];
-            ui.separator();
-            ui.label("Farbe");
-            if ui.color_edit_button_srgb(&mut rgb).changed() {
-                for (grp, v) in [(r, rgb[0]), (g, rgb[1]), (b, rgb[2])] {
-                    for ch in &grp.channels {
-                        e.set_programmer(*ch, v);
-                    }
+        ui.label(
+            egui::RichText::new("PROGRAMMER")
+                .small()
+                .color(theme::TEXT_WEAK),
+        );
+        ui.label(format!("{} Gerät(e)", st.selected.len()));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .small_button("Leeren")
+                .on_hover_text("Alle Programmer-Werte freigeben")
+                .clicked()
+            {
+                e.clear_programmer();
+            }
+            ui.weak(format!("{} Kanäle gesetzt", e.programmer().len()));
+        });
+    });
+    ui.separator();
+
+    ui.horizontal_top(|ui| {
+        // Kategorien
+        ui.vertical(|ui| {
+            ui.set_width(104.0);
+            for c in Category::ALL {
+                let n = groups.iter().filter(|g| c.contains(g.kind)).count();
+                let text = egui::RichText::new(c.label()).size(12.0);
+                let text = if n == 0 && c != Category::All {
+                    text.color(theme::TEXT_WEAK.gamma_multiply(0.6))
+                } else {
+                    text
+                };
+                if ui
+                    .add_sized(
+                        [100.0, 22.0],
+                        egui::Button::selectable(st.prog_category == c, text),
+                    )
+                    .clicked()
+                {
+                    st.prog_category = c;
                 }
             }
-        }
-    });
-    ui.add_space(6.0);
+        });
+        ui.separator();
 
-    egui::ScrollArea::horizontal()
-        .id_salt("faders")
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                for grp in &groups {
-                    let first = grp.channels[0];
-                    let in_programmer = e.programmer().contains_key(&first);
-                    let mut v = e
-                        .programmer()
-                        .get(&first)
-                        .copied()
-                        .or_else(|| e.output_value(frame, first))
-                        .unwrap_or(0);
-                    ui.vertical(|ui| {
-                        ui.set_width(64.0);
-                        let title = egui::RichText::new(&grp.name).small();
-                        ui.label(if in_programmer {
-                            title.strong()
-                        } else {
-                            title.weak()
-                        })
-                        .on_hover_text(format!(
-                            "{} – {} Kanal/Kanäle",
-                            grp.kind.label(),
-                            grp.channels.len()
-                        ));
-                        let slider = egui::Slider::new(&mut v, 0..=255)
-                            .vertical()
-                            .show_value(true);
-                        ui.spacing_mut().slider_width = 220.0;
-                        if ui.add(slider).changed() {
-                            for ch in &grp.channels {
-                                e.set_programmer(*ch, v);
-                            }
-                        }
+        ui.vertical(|ui| {
+            if st.selected.is_empty() {
+                ui.add_space(12.0);
+                ui.weak("Im Bühnenplan Geräte auswählen (Klick, Ziehen, Strg+Klick).");
+                return;
+            }
+            let visible: Vec<&FaderGroup> = groups
+                .iter()
+                .filter(|g| st.prog_category.contains(g.kind))
+                .collect();
+            if st.prog_category == Category::Color {
+                color_picker(ui, e, &groups, frame);
+            }
+            if visible.is_empty() {
+                ui.weak("Die ausgewählten Geräte haben keine Kanäle in dieser Kategorie.");
+                return;
+            }
+            ui.horizontal_top(|ui| {
+                if st.prog_category == Category::Position {
+                    xy_pad(ui, e, &groups, frame);
+                    ui.add_space(8.0);
+                }
+                egui::ScrollArea::horizontal()
+                    .id_salt("faders")
+                    .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            if ui.small_button("0").clicked() {
-                                for ch in &grp.channels {
-                                    e.set_programmer(*ch, 0);
-                                }
-                            }
-                            if ui.small_button("Max").clicked() {
-                                for ch in &grp.channels {
-                                    e.set_programmer(*ch, 255);
-                                }
+                            for grp in visible {
+                                fader(ui, e, grp, frame);
                             }
                         });
-                        if in_programmer
-                            && ui
-                                .small_button("freigeben")
-                                .on_hover_text("Kanal aus dem Programmer entfernen")
-                                .clicked()
-                        {
-                            for ch in &grp.channels {
-                                e.clear_programmer_channel(*ch);
-                            }
-                        }
                     });
-                }
             });
         });
-
+    });
     ui.separator();
     programmer_actions(ui, e, st);
 }
 
-/// Speichern des Programmer-Inhalts als Szene / Schritt.
-fn programmer_actions(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
-    let count = e.programmer().len();
-    ui.horizontal(|ui| {
-        ui.label(format!("Programmer: {count} Kanal/Kanäle gesetzt"));
-        if ui.button("Programmer leeren").clicked() {
-            e.clear_programmer();
+fn set_group(e: &mut Engine, grp: &FaderGroup, v: u8) {
+    for ch in &grp.channels {
+        e.set_programmer(*ch, v);
+    }
+}
+
+fn current(e: &Engine, ch: ChannelRef, frame: &DmxFrame) -> u8 {
+    e.programmer()
+        .get(&ch)
+        .copied()
+        .or_else(|| e.output_value(frame, ch))
+        .unwrap_or(0)
+}
+
+fn fader(ui: &mut egui::Ui, e: &mut Engine, grp: &FaderGroup, frame: &DmxFrame) {
+    let first = grp.channels[0];
+    let in_programmer = e.programmer().contains_key(&first);
+    let mut v = current(e, first, frame);
+    ui.vertical(|ui| {
+        ui.set_width(58.0);
+        let title = egui::RichText::new(&grp.name).small();
+        ui.label(if in_programmer {
+            title.strong().color(theme::ACCENT)
+        } else {
+            title.color(theme::TEXT_WEAK)
+        })
+        .on_hover_text(format!(
+            "{} – {} Kanal/Kanäle",
+            grp.kind.label(),
+            grp.channels.len()
+        ));
+        ui.spacing_mut().slider_width = 130.0;
+        if ui
+            .add(
+                egui::Slider::new(&mut v, 0..=255)
+                    .vertical()
+                    .show_value(true),
+            )
+            .changed()
+        {
+            set_group(e, grp, v);
+        }
+        ui.horizontal(|ui| {
+            if ui.small_button("0").clicked() {
+                set_group(e, grp, 0);
+            }
+            if ui.small_button("FL").on_hover_text("Voll (255)").clicked() {
+                set_group(e, grp, 255);
+            }
+        });
+        if in_programmer
+            && ui
+                .small_button("frei")
+                .on_hover_text("Kanal aus dem Programmer entfernen")
+                .clicked()
+        {
+            for ch in &grp.channels {
+                e.clear_programmer_channel(*ch);
+            }
         }
     });
-    if count == 0 {
+}
+
+fn color_picker(ui: &mut egui::Ui, e: &mut Engine, groups: &[FaderGroup], frame: &DmxFrame) {
+    let find = |k: ChannelKind| groups.iter().find(|g| g.kind == k);
+    let (Some(r), Some(g), Some(b)) = (
+        find(ChannelKind::Red),
+        find(ChannelKind::Green),
+        find(ChannelKind::Blue),
+    ) else {
+        return;
+    };
+    let mut rgb = [
+        current(e, r.channels[0], frame),
+        current(e, g.channels[0], frame),
+        current(e, b.channels[0], frame),
+    ];
+    let mut changed = false;
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Farbe");
+        changed |= ui.color_edit_button_srgb(&mut rgb).changed();
+        const PRESETS: [(&str, [u8; 3]); 8] = [
+            ("Rot", [255, 0, 0]),
+            ("Orange", [255, 100, 0]),
+            ("Gelb", [255, 200, 0]),
+            ("Grün", [0, 255, 0]),
+            ("Cyan", [0, 255, 255]),
+            ("Blau", [0, 0, 255]),
+            ("Magenta", [255, 0, 200]),
+            ("Weiß", [255, 255, 255]),
+        ];
+        for (name, c) in PRESETS {
+            let (rect, resp) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
+            ui.painter()
+                .rect_filled(rect, 3.0, egui::Color32::from_rgb(c[0], c[1], c[2]));
+            if resp.on_hover_text(name).clicked() {
+                rgb = c;
+                changed = true;
+            }
+        }
+    });
+    if changed {
+        for (grp, v) in [(r, rgb[0]), (g, rgb[1]), (b, rgb[2])] {
+            set_group(e, grp, v);
+        }
+    }
+}
+
+fn xy_pad(ui: &mut egui::Ui, e: &mut Engine, groups: &[FaderGroup], frame: &DmxFrame) {
+    let pan = groups.iter().find(|g| g.kind == ChannelKind::Pan);
+    let tilt = groups.iter().find(|g| g.kind == ChannelKind::Tilt);
+    if pan.is_none() && tilt.is_none() {
+        return;
+    }
+    let px = pan.map_or(128, |g| current(e, g.channels[0], frame));
+    let ty = tilt.map_or(128, |g| current(e, g.channels[0], frame));
+    let (rect, resp) =
+        ui.allocate_exact_size(egui::vec2(150.0, 150.0), egui::Sense::click_and_drag());
+    let p = ui.painter();
+    p.rect_filled(rect, 4.0, theme::BG);
+    p.line_segment(
+        [rect.center_top(), rect.center_bottom()],
+        egui::Stroke::new(1.0, theme::CARD),
+    );
+    p.line_segment(
+        [rect.left_center(), rect.right_center()],
+        egui::Stroke::new(1.0, theme::CARD),
+    );
+    let dot = egui::pos2(
+        rect.left() + f32::from(px) / 255.0 * rect.width(),
+        rect.top() + f32::from(ty) / 255.0 * rect.height(),
+    );
+    p.circle_filled(dot, 6.0, theme::ACCENT);
+    p.text(
+        rect.left_top() + egui::vec2(4.0, 2.0),
+        egui::Align2::LEFT_TOP,
+        format!("Pan {px} · Tilt {ty}"),
+        egui::FontId::proportional(10.0),
+        theme::TEXT_WEAK,
+    );
+    if let Some(pos) = resp.interact_pointer_pos() {
+        if resp.dragged() || resp.clicked() {
+            let nx = ((pos.x - rect.left()) / rect.width()).clamp(0.0, 1.0);
+            let ny = ((pos.y - rect.top()) / rect.height()).clamp(0.0, 1.0);
+            if let Some(g) = pan {
+                set_group(e, g, (nx * 255.0).round() as u8);
+            }
+            if let Some(g) = tilt {
+                set_group(e, g, (ny * 255.0).round() as u8);
+            }
+        }
+    }
+}
+
+/// Speichern des Programmer-Inhalts als Szene / Schritt.
+fn programmer_actions(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
+    if e.programmer().is_empty() {
+        ui.weak("Fader bewegen, um Werte in den Programmer zu legen.");
         return;
     }
     let values = programmer_values(e);

@@ -54,6 +54,20 @@ pub fn demo_show() -> Show {
         })
         .collect();
 
+    // Bühnenplan: PARs auf der Traverse, Moving Heads davor
+    for (i, id) in pars.iter().enumerate() {
+        if let Some(f) = s.fixture_mut(*id) {
+            f.plan_pos = Some([0.25 + i as f32 * 0.17, 0.25]);
+        }
+    }
+    for (i, id) in heads.iter().enumerate() {
+        if let Some(f) = s.fixture_mut(*id) {
+            f.plan_pos = Some([0.33 + i as f32 * 0.34, 0.65]);
+        }
+    }
+    s.add_group("PARs", pars.clone());
+    s.add_group("Moving Heads", heads.clone());
+
     let farben = s.add_zone("Farben");
     let bewegung = s.add_zone("Bewegung");
 

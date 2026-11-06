@@ -7,30 +7,26 @@ use dmxcraft_output::{OutputKind, OutputStatus, Runtime};
 use eframe::egui;
 
 use crate::demo;
+use crate::theme;
 use crate::updater::{UpdateState, Updater};
 use crate::views;
 
 /// DMX-Wiederholrate des Ausgabe-Threads.
 pub const OUTPUT_HZ: u32 = 40;
 
+/// Hauptbereich (wie bei Lichtpulten: einrichten vs. live steuern).
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Tab {
-    Live,
-    Programmer,
-    Scenes,
-    Monitor,
+pub enum Mode {
+    Setup,
+    Control,
 }
 
-impl Tab {
-    const ALL: [Tab; 4] = [Tab::Live, Tab::Programmer, Tab::Scenes, Tab::Monitor];
-    fn label(self) -> &'static str {
-        match self {
-            Tab::Live => "Live",
-            Tab::Programmer => "Programmer",
-            Tab::Scenes => "Szenen",
-            Tab::Monitor => "DMX-Monitor",
-        }
-    }
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum SetupTab {
+    Patch,
+    Scenes,
+    Zones,
+    Monitor,
 }
 
 /// Formular-Zustand für „Geräte hinzufügen“.
@@ -45,7 +41,12 @@ pub struct PatchForm {
 
 /// Zustand der Oberfläche (nicht Teil der Show-Datei).
 pub struct UiState {
-    pub tab: Tab,
+    pub mode: Mode,
+    pub setup_tab: SetupTab,
+    pub page: views::control::PageFilter,
+    pub prog_category: views::programmer::Category,
+    pub stage: views::stage::StageState,
+    pub new_group_name: String,
     pub show_path: String,
     pub message: Option<(String, bool)>,
     pub patch: PatchForm,
@@ -74,6 +75,7 @@ pub struct DmxCraftApp {
     output_kind: OutputKind,
     updater: Updater,
     update_checked: bool,
+    logo: Option<egui::TextureHandle>,
     pub ui: UiState,
 }
 
@@ -108,8 +110,14 @@ impl DmxCraftApp {
             output_kind,
             updater: Updater::default(),
             update_checked: false,
+            logo: None,
             ui: UiState {
-                tab: Tab::Live,
+                mode: Mode::Control,
+                setup_tab: SetupTab::Patch,
+                page: Default::default(),
+                prog_category: Default::default(),
+                stage: Default::default(),
+                new_group_name: String::new(),
                 show_path: show_path.unwrap_or_else(|| "show.json".into()),
                 message,
                 patch: PatchForm {
@@ -153,45 +161,69 @@ impl DmxCraftApp {
         let mut e = engine.lock().unwrap_or_else(|p| p.into_inner());
         let st = &mut self.ui;
 
+        let logo = self.logo.clone();
         ui.horizontal_wrapped(|ui| {
-            ui.strong("DmxCraft");
-            ui.weak(format!("v{}", Updater::current_version()));
-            update_widget(ui, &self.updater);
+            if let Some(tex) = &logo {
+                ui.add(egui::Image::new(egui::load::SizedTexture::new(
+                    tex.id(),
+                    [26.0, 26.0],
+                )));
+            }
+            ui.label(egui::RichText::new("DmxCraft").strong().size(16.0));
             ui.separator();
-
-            // Datei
-            if ui.button("Neu").clicked() {
-                e.replace_show(demo::empty_show());
-                st.selected.clear();
-                st.edit_scene = None;
-                st.info("Neue, leere Show");
+            for (m, label) in [(Mode::Setup, "EINRICHTEN"), (Mode::Control, "STEUERN")] {
+                let sel = st.mode == m;
+                let txt = egui::RichText::new(label).strong().color(if sel {
+                    theme::ACCENT
+                } else {
+                    theme::TEXT_WEAK
+                });
+                if ui.add(egui::Button::new(txt).frame(false)).clicked() {
+                    st.mode = m;
+                }
             }
-            if ui.button("Demo").clicked() {
-                e.replace_show(demo::demo_show());
-                st.selected.clear();
-                st.edit_scene = None;
-                st.info("Demo-Show geladen");
-            }
-            ui.add(egui::TextEdit::singleline(&mut st.show_path).desired_width(180.0));
-            if ui.button("Öffnen").clicked() {
-                match Show::load(&st.show_path) {
-                    Ok(mut s) => {
-                        demo::ensure_builtin_types(&mut s);
-                        let name = s.name.clone();
-                        e.replace_show(s);
-                        st.selected.clear();
-                        st.edit_scene = None;
-                        st.info(format!("Show „{name}“ geladen"));
+            ui.separator();
+            ui.add(
+                egui::TextEdit::singleline(&mut e.show_mut().name)
+                    .desired_width(150.0)
+                    .hint_text("Showname"),
+            )
+            .on_hover_text("Name der Show");
+            ui.menu_button("Datei", |ui| {
+                if ui.button("Neu").clicked() {
+                    e.replace_show(demo::empty_show());
+                    st.selected.clear();
+                    st.edit_scene = None;
+                    st.info("Neue, leere Show");
+                }
+                if ui.button("Demo").clicked() {
+                    e.replace_show(demo::demo_show());
+                    st.selected.clear();
+                    st.edit_scene = None;
+                    st.info("Demo-Show geladen");
+                }
+                ui.add(egui::TextEdit::singleline(&mut st.show_path).desired_width(220.0))
+                    .on_hover_text("Pfad der Show-Datei");
+                if ui.button("Öffnen").clicked() {
+                    match Show::load(&st.show_path) {
+                        Ok(mut s) => {
+                            demo::ensure_builtin_types(&mut s);
+                            let name = s.name.clone();
+                            e.replace_show(s);
+                            st.selected.clear();
+                            st.edit_scene = None;
+                            st.info(format!("Show „{name}“ geladen"));
+                        }
+                        Err(err) => st.error(err.to_string()),
                     }
-                    Err(err) => st.error(err.to_string()),
                 }
-            }
-            if ui.button("Speichern").clicked() {
-                match e.show().save(&st.show_path) {
-                    Ok(()) => st.info(format!("Gespeichert: {}", st.show_path)),
-                    Err(err) => st.error(err.to_string()),
+                if ui.button("Speichern").clicked() {
+                    match e.show().save(&st.show_path) {
+                        Ok(()) => st.info(format!("Gespeichert: {}", st.show_path)),
+                        Err(err) => st.error(err.to_string()),
+                    }
                 }
-            }
+            });
             ui.separator();
 
             // Ausgang
@@ -203,10 +235,9 @@ impl DmxCraftApp {
                     }
                 });
             let (text, color) = match &status {
-                OutputStatus::Running { fps, .. } => (
-                    format!("Ausgang aktiv · {fps:.0} fps"),
-                    egui::Color32::from_rgb(80, 200, 120),
-                ),
+                OutputStatus::Running { fps, .. } => {
+                    (format!("Ausgang aktiv · {fps:.0} fps"), theme::OK)
+                }
                 OutputStatus::Connecting => ("verbinde…".into(), egui::Color32::YELLOW),
                 OutputStatus::Error(_) => (
                     "Ausgang: Fehler".into(),
@@ -247,14 +278,18 @@ impl DmxCraftApp {
             let bo = e.blackout();
             let bo_btn =
                 egui::Button::new(if bo { "BLACKOUT AN" } else { "Blackout" }).fill(if bo {
-                    egui::Color32::from_rgb(170, 30, 30)
+                    theme::DANGER
                 } else {
                     ui.visuals().widgets.inactive.weak_bg_fill
                 });
             if ui.add(bo_btn).clicked() {
                 e.set_blackout(!bo);
             }
-            if ui.button("Alle Szenen aus").clicked() {
+            if ui
+                .button("Alle aus")
+                .on_hover_text("Alle Szenen stoppen")
+                .clicked()
+            {
                 e.release_all();
             }
         });
@@ -269,6 +304,10 @@ impl eframe::App for DmxCraftApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Laufende Szenen/Monitor flüssig anzeigen.
         ui.ctx().request_repaint_after(Duration::from_millis(33));
+        if self.logo.is_none() {
+            theme::apply(ui.ctx());
+            self.logo = crate::icon::texture(ui.ctx());
+        }
         if !self.update_checked {
             self.update_checked = true;
             self.updater.check(ui.ctx().clone());
@@ -294,6 +333,9 @@ impl eframe::App for DmxCraftApp {
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    update_widget(ui, &self.updater);
+                    ui.weak(format!("DmxCraft v{}", Updater::current_version()));
+                    ui.separator();
                     let e = self.engine();
                     ui.weak(format!(
                         "{} Geräte · {} Szenen · {} aktiv",
@@ -308,33 +350,41 @@ impl eframe::App for DmxCraftApp {
         let frame = self.runtime.last_frame();
         let engine = self.engine.clone();
 
-        egui::Panel::left("patch")
-            .default_size(340.0)
-            .show(ui, |ui| {
-                let mut e = engine.lock().unwrap_or_else(|p| p.into_inner());
-                views::patch::ui(ui, &mut e, &mut self.ui);
-            });
-
         {
             let mut e = engine.lock().unwrap_or_else(|p| p.into_inner());
             views::library::window(ui.ctx(), &mut e, &mut self.ui);
         }
 
-        egui::CentralPanel::default_margins().show(ui, |ui| {
-            ui.horizontal(|ui| {
-                for t in Tab::ALL {
-                    ui.selectable_value(&mut self.ui.tab, t, t.label());
-                }
-            });
-            ui.separator();
-            let mut e = engine.lock().unwrap_or_else(|p| p.into_inner());
-            match self.ui.tab {
-                Tab::Live => views::live::ui(ui, &mut e, &mut self.ui),
-                Tab::Programmer => views::programmer::ui(ui, &mut e, &mut self.ui, &frame),
-                Tab::Scenes => views::scenes::ui(ui, &mut e, &mut self.ui),
-                Tab::Monitor => views::monitor::ui(ui, &e, &mut self.ui, &frame),
+        match self.ui.mode {
+            Mode::Setup => {
+                egui::CentralPanel::default_margins().show(ui, |ui| {
+                    let mut e = engine.lock().unwrap_or_else(|p| p.into_inner());
+                    views::setup::ui(ui, &mut e, &mut self.ui, &frame);
+                });
             }
-        });
+            Mode::Control => {
+                egui::Panel::bottom("live_bottom")
+                    .resizable(true)
+                    .default_size(340.0)
+                    .show(ui, |ui| {
+                        egui::Panel::right("programmer_panel")
+                            .resizable(true)
+                            .default_size(560.0)
+                            .show(ui, |ui| {
+                                let mut e = engine.lock().unwrap_or_else(|p| p.into_inner());
+                                views::programmer::ui(ui, &mut e, &mut self.ui, &frame);
+                            });
+                        egui::CentralPanel::default_margins().show(ui, |ui| {
+                            let mut e = engine.lock().unwrap_or_else(|p| p.into_inner());
+                            views::stage::ui(ui, &mut e, &mut self.ui, &frame);
+                        });
+                    });
+                egui::CentralPanel::default_margins().show(ui, |ui| {
+                    let mut e = engine.lock().unwrap_or_else(|p| p.into_inner());
+                    views::control::ui(ui, &mut e, &mut self.ui);
+                });
+            }
+        }
     }
 }
 
@@ -368,10 +418,7 @@ fn update_widget(ui: &mut egui::Ui, updater: &Updater) {
             ui.weak("installiere Update...");
         }
         UpdateState::Installed(v) => {
-            ui.colored_label(
-                egui::Color32::from_rgb(80, 200, 120),
-                format!("v{v} installiert - bitte neu starten"),
-            );
+            ui.colored_label(theme::OK, format!("v{v} installiert - bitte neu starten"));
         }
         UpdateState::NotInstalled => {
             ui.weak("(Entwickler-Build)").on_hover_text(

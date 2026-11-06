@@ -137,7 +137,7 @@
                     <Component Id='MenuShortcut' Guid='5B0E4E52-2B7B-4C1A-9F3E-4C6A1D2E7F10'>
                         <Shortcut Id='StartMenuShortcut' Name='DmxCraft'
                                   Description='DMX-Lichtsteuerung'
-                                  Target='[Bin]dmxcraft.exe' WorkingDirectory='Bin'/>
+                                  Target='[Bin]dmxcraft.exe' WorkingDirectory='Bin' Icon='ProductICO'/>
                         <RemoveFolder Id='RemoveAppMenuDir' On='uninstall'/>
                         <RegistryValue Root='HKCU' Key='Software\DmxCraft' Name='menu'
                                        Type='integer' Value='1' KeyPath='yes'/>
@@ -147,7 +147,7 @@
             <Directory Id='DesktopFolder' Name='Desktop'>
                 <Component Id='DesktopShortcut' Guid='8C3D2A61-7E4F-4B9A-A1C2-3D4E5F607182'>
                     <Shortcut Id='DesktopShortcutLnk' Name='DmxCraft'
-                              Target='[Bin]dmxcraft.exe' WorkingDirectory='Bin'/>
+                              Target='[Bin]dmxcraft.exe' WorkingDirectory='Bin' Icon='ProductICO'/>
                     <RegistryValue Root='HKCU' Key='Software\DmxCraft' Name='desktop'
                                    Type='integer' Value='1' KeyPath='yes'/>
                 </Component>
@@ -193,8 +193,8 @@
           The product icon is the graphic that appears in the Add/Remove
           Programs control panel for the application.
         -->
-        <!--<Icon Id='ProductICO' SourceFile='wix\Product.ico'/>-->
-        <!--<Property Id='ARPPRODUCTICON' Value='ProductICO' />-->
+        <Icon Id='ProductICO' SourceFile='wix\Product.ico'/>
+        <Property Id='ARPPRODUCTICON' Value='ProductICO' />
 
         <Property Id='ARPHELPLINK' Value='https://github.com/JustinSchweiger/DmxCraft'/>
         

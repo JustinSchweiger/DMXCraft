@@ -27,6 +27,7 @@ struct PlayingScene {
     /// Noch im ersten Durchlauf von Schritt 0 (es gibt keinen Vorgänger).
     first_entry: bool,
     finished: bool,
+    paused: bool,
 }
 
 /// Fortschritt einer laufenden Szene für die Oberfläche.
@@ -37,6 +38,7 @@ pub struct SceneProgress {
     /// 0.0..=1.0 innerhalb des aktuellen Schritts.
     pub step_fraction: f32,
     pub finished: bool,
+    pub paused: bool,
 }
 
 pub struct Engine {
@@ -130,6 +132,7 @@ impl Engine {
             elapsed_ms: 0.0,
             first_entry: true,
             finished: false,
+            paused: false,
         });
         self.next_seq += 1;
     }
@@ -160,7 +163,42 @@ impl Engine {
             step_count: scene.steps.len(),
             step_fraction: (p.elapsed_ms / dur).clamp(0.0, 1.0) as f32,
             finished: p.finished,
+            paused: p.paused,
         })
+    }
+
+    /// Hält eine laufende Szene an bzw. setzt sie fort.
+    pub fn toggle_pause(&mut self, id: SceneId) {
+        if let Some(p) = self.playing.iter_mut().find(|p| p.scene == id) {
+            p.paused = !p.paused;
+        }
+    }
+
+    /// Springt zum nächsten (`delta = 1`) oder vorherigen (`-1`) Schritt.
+    /// Der neue Schritt blendet mit seiner Überblendzeit ein.
+    pub fn jump_step(&mut self, id: SceneId, delta: i32) {
+        let Some(len) = self.show.scene(id).map(|s| s.steps.len()) else {
+            return;
+        };
+        if len == 0 {
+            return;
+        }
+        if let Some(p) = self.playing.iter_mut().find(|p| p.scene == id) {
+            let n = len as i64;
+            p.step = (p.step as i64 + i64::from(delta)).rem_euclid(n) as usize;
+            p.elapsed_ms = 0.0;
+            p.first_entry = false;
+            p.finished = false;
+        }
+    }
+
+    /// Aktive Szene einer Zone (bei Zonen ist höchstens eine aktiv).
+    pub fn active_in_zone(&self, zone: crate::show::ZoneId) -> Option<SceneId> {
+        self.playing
+            .iter()
+            .rev()
+            .map(|p| p.scene)
+            .find(|id| self.show.scene(*id).is_some_and(|s| s.zone == Some(zone)))
     }
 
     // ---------- Programmer ----------
@@ -218,7 +256,7 @@ impl Engine {
                 continue;
             };
             let len = scene.steps.len();
-            if len == 0 || p.finished {
+            if len == 0 || p.finished || p.paused {
                 continue;
             }
             p.elapsed_ms += dt_ms;
@@ -591,6 +629,33 @@ mod tests {
         let f = e.render_frame();
         assert_eq!(f.get(0, 1), Some(0));
         assert_eq!(f.get(1, 10), Some(0));
+    }
+
+    #[test]
+    fn pause_and_step_jumps() {
+        let (mut s, a, _) = setup();
+        let steps = (0..3u8)
+            .map(|i| {
+                let mut st = Step::new(vec![cv(a, 1, i * 10)]);
+                st.hold_ms = 1000;
+                st
+            })
+            .collect();
+        let z = s.add_zone("Z");
+        let id = s.add_scene("S", Some(z), steps);
+        let mut e = Engine::new(s);
+        e.activate(id);
+        assert_eq!(e.active_in_zone(z), Some(id));
+        e.toggle_pause(id);
+        e.tick(MS(5000));
+        assert_eq!(e.progress(id).unwrap().step, 0, "pausiert");
+        e.jump_step(id, 1);
+        assert_eq!(e.render_frame().get(0, 2), Some(10));
+        e.jump_step(id, -2);
+        assert_eq!(e.progress(id).unwrap().step, 2, "rückwärts mit Umlauf");
+        e.toggle_pause(id);
+        e.tick(MS(1000));
+        assert_eq!(e.progress(id).unwrap().step, 0);
     }
 
     #[test]

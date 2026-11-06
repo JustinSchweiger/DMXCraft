@@ -21,6 +21,13 @@ pub fn ensure_linux_menu_entry() {
     let data = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".local/share"));
+    // Icon ablegen (hicolor-Theme)
+    let icon_dir = data.join("icons/hicolor/256x256/apps");
+    let icon_file = icon_dir.join("dmxcraft.png");
+    if std::fs::read(&icon_file).ok().as_deref() != Some(crate::icon::ICON_PNG) {
+        let _ = std::fs::create_dir_all(&icon_dir)
+            .and_then(|_| std::fs::write(&icon_file, crate::icon::ICON_PNG));
+    }
     let dir = data.join("applications");
     let file = dir.join("dmxcraft.desktop");
     let content = format!(
@@ -29,7 +36,7 @@ pub fn ensure_linux_menu_entry() {
          Name=DmxCraft\n\
          Comment=DMX-Lichtsteuerung\n\
          Exec=\"{}\" %f\n\
-         Icon=preferences-desktop-display\n\
+         Icon=dmxcraft\n\
          Terminal=false\n\
          Categories=AudioVideo;Video;\n\
          Keywords=DMX;Licht;Lighting;Daslight;\n",
