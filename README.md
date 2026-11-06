@@ -82,7 +82,12 @@ trotzdem, und im Tab **DMX-Monitor** siehst du, was an die Box gehen würde.
 
 ## Oberfläche
 
-Die Oberfläche hat zwei Bereiche (oben links umschalten):
+DmxCraft hat eine eigene Titelleiste: links das Menü (Datei, Einrichten, Wiedergabe, Ausgang,
+Ansicht, Einstellungen, Hilfe) und der Umschalter **Einrichten/Steuern**, in der Mitte Programm-
+und Showname, rechts Ausgangsstatus, Statistik und die Fensterknöpfe. Ziehen an der Leiste
+verschiebt das Fenster, Doppelklick maximiert. Tastenkürzel: Strg+S, Strg+O, F11, B (Blackout).
+
+Die Oberfläche hat zwei Bereiche:
 
 * **STEUERN** – oben die Zonen als Spalten mit Szenenkarten (Klick = an/aus, Rechtsklick =
   bearbeiten/löschen). Jede Spalte hat Tasten für Pause sowie vorherigen/nächsten Schritt und „+“
@@ -91,7 +96,7 @@ Die Oberfläche hat zwei Bereiche (oben links umschalten):
   Aufziehen auswählen. Unten rechts ist der **Programmer** mit den Kategorien Dimmer, Farbe
   (mit Farbfeldern), Position (mit XY-Feld), Gobo, Strahl und Sonstiges. Fader: ziehen,
   Mausrad (Shift = 10er-Schritte), Doppelklick = 0/voll, Rechtsklick = Freigeben.
-* **EINRICHTEN** – Patch und Gerätebibliothek, **Bühnenplan** (Geräte verschieben, Einrasten,
+* **EINRICHTEN** – Patch und Gerätebibliothek, **Bühnenplan** (Geräte verschieben, Form und Größe, Einrasten,
   in Reihe/Raster anordnen, ausrichten), Szenen-Editor, Zonen (Farbe, Reihenfolge) & Gruppen,
   **DMX-Adressen** (Modus *Patch*: Geräte als Balken über ihren Adressbereich, per Ziehen auf
   eine neue Startadresse verschieben, freie Adressen sichtbar; Modus *Ausgang*: gesendete

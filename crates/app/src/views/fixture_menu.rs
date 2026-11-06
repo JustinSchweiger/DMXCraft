@@ -4,11 +4,20 @@
 
 use std::collections::BTreeSet;
 
-use dmxcraft_core::{plan, Engine, FixtureId, GroupId, Show};
+use dmxcraft_core::{plan, Engine, FixtureId, GroupId, PlanShape, Show};
 use eframe::egui;
 
 use crate::state::{AppState, SetupTab};
 use crate::ui::widgets::stage_canvas::fixture_pos;
+
+/// Größenstufen für Menüs und Werkzeugleiste.
+pub const SIZES: [(&str, f32); 5] = [
+    ("Klein", 0.7),
+    ("Normal", 1.0),
+    ("Groß", 1.5),
+    ("Sehr groß", 2.2),
+    ("Riesig", 3.2),
+];
 
 /// Wo das Menü geöffnet wurde (bestimmt die angebotenen Einträge).
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -32,6 +41,9 @@ pub enum FixtureAction {
     MirrorH,
     MirrorV,
     ResetPosition,
+    /// `None` = automatisch nach Gerätetyp.
+    SetShape(Option<PlanShape>),
+    SetSize(f32),
     NextFreeAddress,
     ShowInPatch,
     ShowInStageEditor,
@@ -105,6 +117,30 @@ pub fn menu(
         "Reihenfolge umkehren",
         FixtureAction::InvertOrder,
     );
+
+    // Darstellung
+    if place != MenuPlace::Patch {
+        ui.separator();
+        ui.add_enabled_ui(some, |ui| {
+            ui.menu_button("Form", |ui| {
+                item(
+                    ui,
+                    true,
+                    "Automatisch (nach Typ)",
+                    FixtureAction::SetShape(None),
+                );
+                ui.separator();
+                for s in PlanShape::ALL {
+                    item(ui, true, s.label(), FixtureAction::SetShape(Some(s)));
+                }
+            });
+            ui.menu_button("Größe", |ui| {
+                for (label, f) in SIZES {
+                    item(ui, true, label, FixtureAction::SetSize(f));
+                }
+            });
+        });
+    }
 
     // Anordnung
     if place == MenuPlace::StageEditor {
@@ -270,6 +306,20 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
             for id in &ids {
                 if let Some(f) = e.show_mut().fixture_mut(*id) {
                     f.plan_pos = None;
+                }
+            }
+        }
+        FixtureAction::SetShape(shape) => {
+            for id in &ids {
+                if let Some(f) = e.show_mut().fixture_mut(*id) {
+                    f.plan_shape = shape;
+                }
+            }
+        }
+        FixtureAction::SetSize(size) => {
+            for id in &ids {
+                if let Some(f) = e.show_mut().fixture_mut(*id) {
+                    f.plan_size = (size != 1.0).then_some(size);
                 }
             }
         }

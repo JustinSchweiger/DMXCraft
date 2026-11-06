@@ -538,6 +538,8 @@ dependencies = [
  "dmxcraft-ofl",
  "dmxcraft-output",
  "eframe",
+ "serde",
+ "serde_json",
  "winresource",
 ]
 

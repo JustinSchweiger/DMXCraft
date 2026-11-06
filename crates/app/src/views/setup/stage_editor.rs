@@ -1,6 +1,6 @@
 //! EINRICHTEN → Bühnenplan: Geräte anordnen.
 
-use dmxcraft_core::{plan, FixtureId};
+use dmxcraft_core::{plan, FixtureId, PlanShape, PLAN_SIZE_RANGE};
 use eframe::egui;
 
 use crate::ui::theme;
@@ -85,12 +85,16 @@ impl View for StageEditorView {
             {
                 arrange = Some(Arrange::Reset);
             }
+            ui.separator();
+            shape_and_size(ui, cx);
+            ui.separator();
             ui.label(
                 egui::RichText::new(
-                    "Ziehen = verschieben · Aufziehen = auswählen · Strg/Shift = hinzufügen · Rechtsklick = Menü",
+                    "Hilfe",
                 )
                 .color(theme::TEXT_FAINT),
-            );
+            )
+            .on_hover_text("Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nRechtsklick = Menü (Form, Größe, Gruppen …)");
         });
         ui.add_space(theme::SP_XS);
 
@@ -187,5 +191,51 @@ impl View for StageEditorView {
 fn set_pos(cx: &mut ViewCtx<'_>, id: FixtureId, p: [f32; 2]) {
     if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
         f.plan_pos = Some(p);
+    }
+}
+
+/// Form und Größe der Auswahl ändern.
+fn shape_and_size(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+    let ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
+    let Some(first) = ids.first().copied() else {
+        return;
+    };
+    let show = cx.engine.show();
+    let current = show.fixture(first).and_then(|f| f.plan_shape);
+    let label = current.map_or("Automatisch", |s| s.label());
+    let mut new_shape: Option<Option<PlanShape>> = None;
+    egui::ComboBox::from_id_salt("plan_shape")
+        .selected_text(format!("Form: {label}"))
+        .show_ui(ui, |ui| {
+            if ui
+                .selectable_label(current.is_none(), "Automatisch (nach Typ)")
+                .clicked()
+            {
+                new_shape = Some(None);
+            }
+            for s in PlanShape::ALL {
+                if ui.selectable_label(current == Some(s), s.label()).clicked() {
+                    new_shape = Some(Some(s));
+                }
+            }
+        });
+    let mut size = show.plan_size(first);
+    let changed = ui
+        .add(
+            egui::Slider::new(&mut size, PLAN_SIZE_RANGE)
+                .text("Größe")
+                .fixed_decimals(1)
+                .suffix("x"),
+        )
+        .changed();
+    for id in ids {
+        if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
+            if let Some(s) = new_shape {
+                f.plan_shape = s;
+            }
+            if changed {
+                f.plan_size = Some(size);
+            }
+        }
     }
 }

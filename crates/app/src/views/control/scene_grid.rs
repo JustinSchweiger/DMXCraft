@@ -36,8 +36,13 @@ pub struct SceneGridView {
 
 impl View for SceneGridView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        self.page_bar(ui, cx.engine);
-        ui.add_space(theme::SP_S);
+        ui.horizontal(|ui| {
+            self.page_bar(ui, cx.engine);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                playback_controls(ui, cx.engine);
+            });
+        });
+        ui.add_space(theme::SP_XS);
 
         let mut columns: Vec<(Option<ZoneId>, String)> = cx
             .engine
@@ -71,7 +76,7 @@ impl View for SceneGridView {
 
 impl SceneGridView {
     fn page_bar(&mut self, ui: &mut egui::Ui, e: &Engine) {
-        ui.horizontal_wrapped(|ui| {
+        ui.horizontal(|ui| {
             chip(
                 ui,
                 &mut self.page,
@@ -95,6 +100,55 @@ impl SceneGridView {
             );
         });
     }
+}
+
+/// Master, Speed, Blackout und Alle aus (rechts neben den Zonen-Chips).
+fn playback_controls(ui: &mut egui::Ui, e: &mut Engine) {
+    let bo = e.blackout();
+    let bo_btn = egui::Button::new(egui::RichText::new("Blackout").strong().color(if bo {
+        Color32::WHITE
+    } else {
+        theme::TEXT
+    }))
+    .fill(if bo { theme::DANGER } else { theme::RAISED })
+    .min_size(Vec2::new(88.0, 28.0));
+    if ui.add(bo_btn).on_hover_text("Taste B").clicked() {
+        e.set_blackout(!bo);
+    }
+    if ui
+        .button("Alle aus")
+        .on_hover_text("Alle Szenen stoppen")
+        .clicked()
+    {
+        e.release_all();
+    }
+    ui.spacing_mut().slider_width = 110.0;
+    let mut speed = e.speed();
+    if ui
+        .add(
+            egui::Slider::new(&mut speed, 0.1..=4.0)
+                .logarithmic(true)
+                .fixed_decimals(2)
+                .suffix("x"),
+        )
+        .on_hover_text("Wiedergabegeschwindigkeit")
+        .changed()
+    {
+        e.set_speed(speed);
+    }
+    ui.label(egui::RichText::new("Speed").color(theme::TEXT_DIM));
+    let mut master = e.master() * 100.0;
+    if ui
+        .add(
+            egui::Slider::new(&mut master, 0.0..=100.0)
+                .integer()
+                .suffix("%"),
+        )
+        .changed()
+    {
+        e.set_master(master / 100.0);
+    }
+    ui.label(egui::RichText::new("Master").color(theme::TEXT_DIM));
 }
 
 /// Filter-Chip; ein Punkt zeigt an, dass in der Zone etwas läuft.

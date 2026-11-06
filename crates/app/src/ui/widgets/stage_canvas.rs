@@ -9,7 +9,7 @@
 
 use std::collections::BTreeSet;
 
-use dmxcraft_core::{plan, ChannelKind, DmxFrame, FixtureId, Show};
+use dmxcraft_core::{plan, ChannelKind, DmxFrame, FixtureId, PlanShape, Show};
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 use crate::ui::theme;
@@ -67,12 +67,10 @@ impl StageCanvas<'_> {
         let size = ui.available_size().max(Vec2::new(120.0, 120.0));
         let (rect, resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
-        let r = theme::R_M as f32;
-        painter.rect_filled(rect, r, theme::BG);
+        painter.rect_filled(rect, 0.0, theme::BG);
         if self.show_grid {
             self.paint_grid(&painter, rect);
         }
-        painter.rect_stroke(rect, r, Stroke::new(1.0, theme::BORDER), StrokeKind::Inside);
 
         if self.show.fixtures.is_empty() {
             painter.text(
@@ -99,10 +97,7 @@ impl StageCanvas<'_> {
             .map(|f| {
                 (
                     f.id,
-                    Rect::from_center_size(
-                        to_screen(fixture_pos(self.show, f.id)),
-                        Vec2::splat(BOX),
-                    ),
+                    fixture_rect(self.show, f.id, to_screen(fixture_pos(self.show, f.id))),
                 )
             })
             .collect();
@@ -219,27 +214,18 @@ impl StageCanvas<'_> {
             let b = moves
                 .iter()
                 .find(|(m, _)| m == id)
-                .map(|(_, p)| Rect::from_center_size(to_screen(*p), Vec2::splat(BOX)))
+                .map(|(_, p)| fixture_rect(self.show, *id, to_screen(*p)))
                 .unwrap_or(*b);
-            let (c, lum) = live_color(self.show, *id, self.frame);
-            if lum > 0.02 {
-                painter.circle_filled(b.center(), BOX * 0.85, c.gamma_multiply(0.14 * lum));
-            }
-            painter.rect_filled(b, 6.0, theme::RAISED);
-            painter.circle_filled(
-                b.center(),
-                BOX * 0.3,
-                if lum > 0.02 { c } else { theme::BG },
-            );
             let sel = selected.contains(id);
-            let stroke = if sel {
-                Stroke::new(2.0, theme::ACCENT)
-            } else if Some(*id) == hovered {
-                Stroke::new(1.0, theme::TEXT_DIM)
-            } else {
-                Stroke::new(1.0, theme::BORDER)
-            };
-            painter.rect_stroke(b, 6.0, stroke, StrokeKind::Outside);
+            let colors = live_colors(self.show, *id, self.frame);
+            paint_fixture(
+                &painter,
+                self.show.plan_shape(*id),
+                b,
+                &colors,
+                sel,
+                Some(*id) == hovered,
+            );
             if self.show_labels || Some(*id) == hovered {
                 if let Some(f) = self.show.fixture(*id) {
                     let text = if Some(*id) == hovered {
@@ -299,49 +285,170 @@ impl StageCanvas<'_> {
     }
 }
 
-/// Anzeigefarbe und Helligkeit eines Geräts aus den aktuellen DMX-Werten.
-pub fn live_color(show: &Show, id: FixtureId, frame: &DmxFrame) -> (Color32, f32) {
+/// Bildschirm-Rechteck eines Geräts nach Form und Größe.
+pub fn fixture_rect(show: &Show, id: FixtureId, center: Pos2) -> Rect {
+    let s = BOX * show.plan_size(id);
+    let size = match show.plan_shape(id) {
+        PlanShape::BarHorizontal => Vec2::new(s * 2.8, s * 0.55),
+        PlanShape::BarVertical => Vec2::new(s * 0.55, s * 2.8),
+        PlanShape::MovingHead => Vec2::new(s, s * 1.15),
+        _ => Vec2::splat(s),
+    };
+    Rect::from_center_size(center, size)
+}
+
+/// Eine Anzeigefarbe pro Pixel (bei Leisten mehrere, sonst eine) mit Helligkeit.
+pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32, f32)> {
     let Some(f) = show.fixture(id) else {
-        return (Color32::DARK_GRAY, 0.0);
+        return vec![(Color32::DARK_GRAY, 0.0)];
     };
     let Some(ty) = show.type_of(f) else {
-        return (Color32::DARK_GRAY, 0.0);
+        return vec![(Color32::DARK_GRAY, 0.0)];
     };
-    let val = |k: ChannelKind| -> Option<f32> {
-        let i = ty.channels.iter().position(|c| c.kind == k)?;
+    let value = |i: usize| -> f32 {
         frame
             .get(usize::from(f.universe), f.address + i as u16)
-            .map(|v| f32::from(v) / 255.0)
+            .map_or(0.0, |v| f32::from(v) / 255.0)
     };
-    let (r, g, b) = (
-        val(ChannelKind::Red),
-        val(ChannelKind::Green),
-        val(ChannelKind::Blue),
+    let all = |k: ChannelKind| -> Vec<usize> {
+        ty.channels
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.kind == k)
+            .map(|(i, _)| i)
+            .collect()
+    };
+    let (reds, greens, blues, whites) = (
+        all(ChannelKind::Red),
+        all(ChannelKind::Green),
+        all(ChannelKind::Blue),
+        all(ChannelKind::White),
     );
-    let w = val(ChannelKind::White).unwrap_or(0.0);
-    let has_color = r.is_some() || g.is_some() || b.is_some();
-    let base = if has_color {
-        [
-            r.unwrap_or(0.0) + w,
-            g.unwrap_or(0.0) + w,
-            b.unwrap_or(0.0) + w,
-        ]
+    let dimmers = all(ChannelKind::Dimmer);
+    let pixels = reds.len().max(greens.len()).max(blues.len()).max(1);
+    let has_color = !(reds.is_empty() && greens.is_empty() && blues.is_empty());
+    (0..pixels)
+        .map(|px| {
+            let pick = |v: &Vec<usize>| -> Option<f32> {
+                v.get(px).or_else(|| v.first()).map(|i| value(*i))
+            };
+            let w = pick(&whites).unwrap_or(0.0);
+            let base = if has_color {
+                [
+                    pick(&reds).unwrap_or(0.0) + w,
+                    pick(&greens).unwrap_or(0.0) + w,
+                    pick(&blues).unwrap_or(0.0) + w,
+                ]
+            } else {
+                [1.0, 0.95, 0.85]
+            };
+            // Pixel-Dimmer, falls vorhanden, sonst der erste Dimmer
+            let intensity = match (dimmers.len(), has_color) {
+                (0, true) => 1.0,
+                (0, false) => 0.0,
+                (n, _) if n == pixels => value(dimmers[px]),
+                _ => value(dimmers[0]),
+            };
+            let c = base.map(|x| (x * intensity).min(1.0));
+            let lum = c[0].max(c[1]).max(c[2]);
+            (
+                Color32::from_rgb(
+                    (c[0] * 255.0) as u8,
+                    (c[1] * 255.0) as u8,
+                    (c[2] * 255.0) as u8,
+                ),
+                lum,
+            )
+        })
+        .collect()
+}
+
+/// Zeichnet ein Gerät in seiner Form.
+fn paint_fixture(
+    p: &egui::Painter,
+    shape: PlanShape,
+    r: Rect,
+    colors: &[(Color32, f32)],
+    sel: bool,
+    hovered: bool,
+) {
+    let stroke = if sel {
+        Stroke::new(2.0, theme::ACCENT)
+    } else if hovered {
+        Stroke::new(1.0, theme::TEXT_DIM)
     } else {
-        [1.0, 0.95, 0.85]
+        Stroke::new(1.0, theme::BORDER)
     };
-    let intensity = match (val(ChannelKind::Dimmer), has_color) {
-        (Some(d), _) => d,
-        (None, true) => 1.0,
-        (None, false) => 0.0,
+    let (c0, l0) = colors.first().copied().unwrap_or((theme::BG, 0.0));
+    let lit = |c: Color32, l: f32| if l > 0.02 { c } else { theme::BG };
+    let glow = |center: Pos2, radius: f32, c: Color32, l: f32| {
+        if l > 0.02 {
+            p.circle_filled(center, radius, c.gamma_multiply(0.14 * l));
+        }
     };
-    let c = base.map(|x| (x * intensity).min(1.0));
-    let lum = c[0].max(c[1]).max(c[2]);
-    (
-        Color32::from_rgb(
-            (c[0] * 255.0) as u8,
-            (c[1] * 255.0) as u8,
-            (c[2] * 255.0) as u8,
-        ),
-        lum,
-    )
+    match shape {
+        PlanShape::Round => {
+            let rad = r.width() * 0.5;
+            glow(r.center(), rad * 1.7, c0, l0);
+            p.circle_filled(r.center(), rad, theme::RAISED);
+            p.circle_filled(r.center(), rad * 0.62, lit(c0, l0));
+            p.circle_stroke(r.center(), rad, stroke);
+        }
+        PlanShape::Square => {
+            glow(r.center(), r.width() * 0.85, c0, l0);
+            p.rect_filled(r, 3.0, theme::RAISED);
+            p.rect_filled(r.shrink(r.width() * 0.18), 2.0, lit(c0, l0));
+            p.rect_stroke(r, 3.0, stroke, StrokeKind::Outside);
+        }
+        PlanShape::MovingHead => {
+            let base =
+                Rect::from_min_max(Pos2::new(r.left(), r.bottom() - r.height() * 0.3), r.max);
+            let head_c = Pos2::new(r.center().x, r.top() + r.width() * 0.45);
+            let rad = r.width() * 0.42;
+            glow(head_c, rad * 1.9, c0, l0);
+            p.rect_filled(base, 3.0, theme::RAISED);
+            p.circle_filled(head_c, rad, theme::RAISED_HOVER);
+            p.circle_filled(head_c, rad * 0.55, lit(c0, l0));
+            p.circle_stroke(head_c, rad, stroke);
+            p.rect_stroke(base, 3.0, stroke, StrokeKind::Outside);
+        }
+        PlanShape::BarHorizontal | PlanShape::BarVertical => {
+            let horizontal = shape == PlanShape::BarHorizontal;
+            p.rect_filled(r, 3.0, theme::RAISED);
+            let n = colors.len().max(1);
+            let inner = r.shrink(3.0);
+            for (i, (c, l)) in colors.iter().enumerate() {
+                let seg = if horizontal {
+                    let w = inner.width() / n as f32;
+                    Rect::from_min_size(
+                        Pos2::new(inner.left() + w * i as f32, inner.top()),
+                        Vec2::new(w, inner.height()),
+                    )
+                } else {
+                    let h = inner.height() / n as f32;
+                    Rect::from_min_size(
+                        Pos2::new(inner.left(), inner.top() + h * i as f32),
+                        Vec2::new(inner.width(), h),
+                    )
+                };
+                glow(seg.center(), seg.width().max(seg.height()) * 0.9, *c, *l);
+                p.rect_filled(seg.shrink(1.0), 1.5, lit(*c, *l));
+            }
+            p.rect_stroke(r, 3.0, stroke, StrokeKind::Outside);
+        }
+        PlanShape::Effect => {
+            let pts = vec![
+                Pos2::new(r.center().x, r.top()),
+                Pos2::new(r.right(), r.bottom()),
+                Pos2::new(r.left(), r.bottom()),
+            ];
+            glow(r.center(), r.width() * 0.9, c0, l0);
+            p.add(egui::Shape::convex_polygon(pts, theme::RAISED, stroke));
+            p.circle_filled(
+                Pos2::new(r.center().x, r.top() + r.height() * 0.62),
+                r.width() * 0.17,
+                lit(c0, l0),
+            );
+        }
+    }
 }

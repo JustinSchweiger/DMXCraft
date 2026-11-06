@@ -4,25 +4,36 @@ mod app;
 mod demo;
 mod desktop;
 mod icon;
+mod settings;
 mod state;
+mod titlebar;
 mod ui;
 mod updater;
 mod views;
 
 fn main() -> eframe::Result {
     desktop::ensure_linux_menu_entry();
-    let show_path = std::env::args().nth(1);
+    let settings = settings::Settings::load();
+    let show_path = std::env::args().nth(1).or_else(|| {
+        settings
+            .open_last_show
+            .then(|| settings.last_show.clone())
+            .flatten()
+    });
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("DmxCraft")
             .with_inner_size([1440.0, 900.0])
             .with_min_inner_size([900.0, 600.0])
-            .with_icon(icon::window_icon()),
+            .with_icon(icon::window_icon())
+            // eigene Titelleiste statt der des Betriebssystems
+            .with_decorations(false)
+            .with_resizable(true),
         ..Default::default()
     };
     eframe::run_native(
         "DmxCraft",
         options,
-        Box::new(move |_cc| Ok(Box::new(app::DmxCraftApp::new(show_path)))),
+        Box::new(move |_cc| Ok(Box::new(app::DmxCraftApp::new(show_path, settings)))),
     )
 }

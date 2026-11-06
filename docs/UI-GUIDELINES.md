@@ -43,9 +43,14 @@ Schrift: `FS_CAPTION=10.5` (Sektionstitel, GROSS), `FS_BODY=13`,
 
 ## 3. Layout
 
-* Kopfzeile (Panel oben): Logo · Modus-Umschalter · Showname · Datei ·
-  Ausgang · Master/Speed/Blackout. Eine Zeile; bei Platzmangel Elemente in
-  Menüs verschieben, nicht umbrechen.
+* **Eigene Titelleiste** (`titlebar.rs`, Fenster ohne Betriebssystem-Leiste):
+  links Logo · Menü (alle Befehle, Einstellungen) · Modus Einrichten/Steuern;
+  Mitte „DmxCraft · Showname“; rechts Ausgangsstatus, Statistik, Fensterknöpfe.
+  Keine Bedienelemente der Wiedergabe (Master, Speed, Blackout) in der
+  Titelleiste – die liegen unter STEUERN über dem Szenen-Raster.
+* **Randlos:** Bereiche stoßen aneinander und sind nur durch 1-px-Trennlinien
+  (Panel-Grenzen) getrennt. Innenabstand eines Bereichs `SP_XS`–`SP_S`,
+  keine äußeren Rahmen oder Rundungen um ganze Bereiche (Canvas, Raster).
 * STEUERN: oben Szenen-Raster (flexibel), unten Bühnenplan + Programmer
   (Höhe per Splitter, Standard 40 %).
 * Jeder Bereich beginnt mit einem **Sektionskopf** (`widgets::section_header`):
@@ -69,6 +74,10 @@ keinen App-Zustand – nur ihre Eingabewerte.
   Modi Auswahl/Bearbeiten).
 
 ## 5. Interaktion
+
+* Jeder Befehl ist über das Hauptmenü erreichbar; häufige zusätzlich direkt
+  in der Ansicht oder per Tastenkürzel (Strg+S, Strg+O, F11, B).
+* Rechtsklick auf Geräte öffnet überall dasselbe Menü (`views/fixture_menu.rs`).
 
 * Hover: `RAISED_HOVER`; gedrückt/aktiv: `ACCENT` gedämpft; Auswahl:
   2-px-Rand in `ACCENT`.

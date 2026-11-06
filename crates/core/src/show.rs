@@ -41,7 +41,71 @@ pub struct Fixture {
     /// Position im Bühnenplan (0.0..=1.0 in beiden Achsen). `None` = automatisch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_pos: Option<[f32; 2]>,
+    /// Darstellung im Bühnenplan. `None` = automatisch nach Gerätetyp.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_shape: Option<PlanShape>,
+    /// Größenfaktor im Bühnenplan (1.0 = normal).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_size: Option<f32>,
 }
+
+/// Form eines Geräts im Bühnenplan.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanShape {
+    /// Runder Scheinwerfer (PAR, Spot).
+    Round,
+    /// Quadratisches Gerät (Fluter, Panel).
+    Square,
+    /// Moving Head (Sockel mit Kopf).
+    MovingHead,
+    /// Waagerechte Leiste (LED-Bar, Pixel-Leiste).
+    BarHorizontal,
+    /// Senkrechte Leiste.
+    BarVertical,
+    /// Effekt / Laser / Sonstiges.
+    Effect,
+}
+
+impl PlanShape {
+    pub const ALL: [PlanShape; 6] = [
+        PlanShape::Round,
+        PlanShape::Square,
+        PlanShape::MovingHead,
+        PlanShape::BarHorizontal,
+        PlanShape::BarVertical,
+        PlanShape::Effect,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            PlanShape::Round => "Rund (PAR/Spot)",
+            PlanShape::Square => "Quadrat (Fluter/Panel)",
+            PlanShape::MovingHead => "Moving Head",
+            PlanShape::BarHorizontal => "Leiste waagerecht",
+            PlanShape::BarVertical => "Leiste senkrecht",
+            PlanShape::Effect => "Effekt/Laser",
+        }
+    }
+
+    /// Passende Form für einen Gerätetyp.
+    pub fn guess(ty: &FixtureType) -> PlanShape {
+        use crate::fixture::ChannelKind as K;
+        let reds = ty.channels.iter().filter(|c| c.kind == K::Red).count();
+        if ty.has_kind(K::Pan) || ty.has_kind(K::Tilt) {
+            PlanShape::MovingHead
+        } else if reds > 1 {
+            PlanShape::BarHorizontal
+        } else if reds == 1 || ty.has_kind(K::Dimmer) {
+            PlanShape::Round
+        } else {
+            PlanShape::Effect
+        }
+    }
+}
+
+/// Erlaubter Bereich für [`Fixture::plan_size`].
+pub const PLAN_SIZE_RANGE: std::ops::RangeInclusive<f32> = 0.5..=4.0;
 
 /// Verweis auf einen Kanal eines Geräts (Kanalindex 0-basiert im Gerätetyp).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -305,6 +369,8 @@ impl Show {
             universe,
             address,
             plan_pos: None,
+            plan_shape: None,
+            plan_size: None,
         });
         Ok(id)
     }
@@ -338,6 +404,24 @@ impl Show {
                 step.values.retain(|v| v.fixture != id);
             }
         }
+    }
+
+    /// Form eines Geräts im Bühnenplan (gespeichert oder nach Typ geschätzt).
+    pub fn plan_shape(&self, id: FixtureId) -> PlanShape {
+        let Some(f) = self.fixture(id) else {
+            return PlanShape::Round;
+        };
+        f.plan_shape
+            .or_else(|| self.type_of(f).map(PlanShape::guess))
+            .unwrap_or(PlanShape::Round)
+    }
+
+    /// Größenfaktor eines Geräts im Bühnenplan.
+    pub fn plan_size(&self, id: FixtureId) -> f32 {
+        self.fixture(id)
+            .and_then(|f| f.plan_size)
+            .unwrap_or(1.0)
+            .clamp(*PLAN_SIZE_RANGE.start(), *PLAN_SIZE_RANGE.end())
     }
 
     /// Kanalanzahl eines gepatchten Geräts.
@@ -497,6 +581,22 @@ mod tests {
         assert_eq!(s.next_free_address(0, 3), Some(7));
         assert_eq!(s.next_free_address(0, 4), Some(16));
         assert_eq!(s.next_free_address(1, 512), Some(1));
+    }
+
+    #[test]
+    fn plan_shape_is_guessed_from_type() {
+        let mut s = show();
+        let par = s.add_fixture("P", "generic/rgbw-par-6ch", 0, 1).unwrap();
+        let mh = s
+            .add_fixture("M", "generic/moving-head-spot-11ch", 0, 20)
+            .unwrap();
+        assert_eq!(s.plan_shape(par), PlanShape::Round);
+        assert_eq!(s.plan_shape(mh), PlanShape::MovingHead);
+        s.fixture_mut(par).unwrap().plan_shape = Some(PlanShape::BarVertical);
+        assert_eq!(s.plan_shape(par), PlanShape::BarVertical);
+        assert_eq!(s.plan_size(par), 1.0);
+        s.fixture_mut(par).unwrap().plan_size = Some(99.0);
+        assert_eq!(s.plan_size(par), 4.0);
     }
 
     #[test]

@@ -60,6 +60,21 @@ impl OutputKind {
         }
     }
 
+    /// Schlüssel für die Einstellungen.
+    pub fn key(self) -> &'static str {
+        match self {
+            OutputKind::Simulation => "simulation",
+            OutputKind::DvcGoldUsb => "dvc_gold",
+        }
+    }
+
+    pub fn from_key(key: &str) -> OutputKind {
+        OutputKind::ALL
+            .into_iter()
+            .find(|k| k.key() == key)
+            .unwrap_or(OutputKind::Simulation)
+    }
+
     pub fn create(self) -> Box<dyn DmxOutput> {
         match self {
             OutputKind::Simulation => Box::new(NullOutput::default()),
