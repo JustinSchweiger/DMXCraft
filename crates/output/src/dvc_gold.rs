@@ -1,32 +1,31 @@
 //! Platzhalter für die USB-Anbindung der Daslight DVC Gold.
 //!
-//! Stand: Das Protokoll ist noch nicht entschlüsselt. Dieses Backend meldet
-//! deshalb beim Öffnen „noch nicht implementiert“; Engine und Oberfläche
-//! funktionieren trotzdem (der Runtime-Thread versucht es periodisch erneut).
+//! Stand (USB-Mitschnitte vom 06.11.2026, Daslight 5 unter Windows):
 //!
-//! Plan für die Umsetzung (nach Auswertung der USB-Mitschnitte):
+//! * Gerät: „Smart universal DMX interface (SIUDI11A)“, meldet sich als
+//!   „DVC GOLD“, VID `0x6244`, PID `0x0650`, eigener Herstellertreiber.
+//! * Verbinden: Vendor-Control-Requests mit Zeitstempel, 32-Byte-Challenge
+//!   der Box, 236-Byte-Antwort des PCs und mehreren Challenge-Response-Runden
+//!   – eine kryptografische Authentisierung der Software.
+//! * DMX-Daten: Bulk-OUT Endpoint 1, 50 Pakete/s zu 536 Byte
+//!   (`01 01 <Zähler> 24 00 00 01 00` + 528 Byte). Der Nutzteil ist auch bei
+//!   lauter Nullen zufällig verteilt und ändert sich mit jedem Paket, ist also
+//!   mit einem Sitzungsschlüssel verschlüsselt.
 //!
-//! 1. Gerät per `nusb` finden. Hypothese aus älteren Daslight-Boxen
-//!    (DVC128, Projekt „derlicht“): Vendor-ID `0x6244`. Die Product-ID der
-//!    DVC Gold muss aus dem Geräte-Manager / Mitschnitt kommen.
-//! 2. Interface claimen, Endpoints aus den Descriptors bestimmen
-//!    (Bulk/Interrupt OUT für DMX-Daten, ggf. IN für Antworten).
-//! 3. Handshake nachspielen, den Daslight 5 beim Verbinden sendet
-//!    (Lizenz-/Seriennummernabfrage?). Prüfen, ob er statisch ist oder
-//!    Challenge-Response.
-//! 4. `send`: Frame pro Universum in das Paketformat der Box packen
-//!    (Header? Universumsnummer? Prüfsumme?) und schreiben.
-//!    Der Runtime-Thread ruft `send` mit der eingestellten Rate auf.
-//!
-//! Wichtig unter Windows: den Daslight-Treiber NICHT durch WinUSB/Zadig
-//! ersetzen, solange Daslight 5 parallel weiter funktionieren soll.
+//! Damit lässt sich die Box nicht ohne die Schlüssel von Daslight ansprechen.
+//! Diese aus der Software zu holen hieße, eine technische Schutzmaßnahme zu
+//! umgehen – das machen wir nicht. Offen bleiben ein offizielles SDK von
+//! Nicolaudie oder ein anderes Interface (Art-Net, Enttec-kompatibel).
+//! Dieses Backend meldet deshalb „nicht verfügbar“.
 
 use dmxcraft_core::DmxFrame;
 
 use crate::{DmxOutput, OutputError};
 
-/// Bekannte Vendor-ID älterer Daslight/Nicolaudie-Interfaces (Hypothese).
+/// Vendor-ID der Nicolaudie-Interfaces (aus dem Geräte-Manager bestätigt).
 pub const NICOLAUDIE_VENDOR_ID_GUESS: u16 = 0x6244;
+/// Product-ID der DVC Gold (SIUDI11A).
+pub const DVC_GOLD_PRODUCT_ID: u16 = 0x0650;
 
 /// Die DVC Gold hat im Live-Modus 2 Universen (erweiterbar auf 4).
 pub const DVC_GOLD_UNIVERSES: usize = 2;
@@ -55,7 +54,7 @@ impl DmxOutput for DvcGoldUsb {
     fn open(&mut self) -> Result<(), OutputError> {
         self.connected = false;
         Err(OutputError::NotImplemented(
-            "USB-Protokoll der DVC Gold ist noch nicht entschlüsselt",
+            "Die DVC Gold verschlüsselt ihre USB-Daten – ohne offizielles SDK nicht ansprechbar",
         ))
     }
 
