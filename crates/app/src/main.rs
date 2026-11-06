@@ -4,7 +4,8 @@ mod app;
 mod demo;
 mod desktop;
 mod icon;
-mod theme;
+mod state;
+mod ui;
 mod updater;
 mod views;
 

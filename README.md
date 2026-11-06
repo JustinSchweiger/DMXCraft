@@ -87,11 +87,13 @@ Die Oberfläche hat zwei Bereiche (oben links umschalten):
 * **STEUERN** – oben die Zonen als Spalten mit Szenenkarten (Klick = an/aus, Rechtsklick =
   bearbeiten/löschen). Jede Spalte hat Tasten für Pause sowie vorherigen/nächsten Schritt und „+“
   (neue Szene aus dem Programmer). Darüber filtert die Seitenleiste nach Zonen.
-  Unten links liegt der **Bühnenplan** mit Gruppen: Geräte per Klick, Strg/Shift+Klick oder
-  Aufziehen auswählen, mit „Anordnen“ verschieben. Unten rechts ist der **Programmer** mit den
-  Kategorien Dimmer, Farbe (mit Farbfeldern), Position (mit XY-Feld), Gobo, Strahl und Sonstiges.
-* **EINRICHTEN** – Patch und Gerätebibliothek, Szenen-Editor, Zonen (Farbe, Reihenfolge) &
-  Gruppen, DMX-Monitor.
+  Unten links liegt die **Bühne** mit Gruppen: Geräte per Klick, Strg/Shift+Klick oder
+  Aufziehen auswählen. Unten rechts ist der **Programmer** mit den Kategorien Dimmer, Farbe
+  (mit Farbfeldern), Position (mit XY-Feld), Gobo, Strahl und Sonstiges. Fader: ziehen,
+  Mausrad (Shift = 10er-Schritte), Doppelklick = 0/voll, Rechtsklick = Freigeben.
+* **EINRICHTEN** – Patch und Gerätebibliothek, **Bühnenplan** (Geräte verschieben, Einrasten,
+  in Reihe/Raster anordnen, ausrichten), Szenen-Editor, Zonen (Farbe, Reihenfolge) & Gruppen,
+  DMX-Monitor.
 
 ## Bedienung in Kürze
 
@@ -115,6 +117,11 @@ crates/
            dvc_gold.rs  ← hier kommt die USB-Anbindung hinein
   ofl/     Open-Fixture-Library-Konverter + eingebettete Bibliothek (data/)
   app/     Oberfläche mit egui/eframe, Updater
+           ui/      Design-System: theme.rs (Tokens) + widgets/ (Fader, SceneCard, StageCanvas, …)
+           views/   Ansichten (je ein Typ mit `impl View`): control/ und setup/
+           state.rs gemeinsamer UI-Zustand
+docs/UI-GUIDELINES.md   UI-Richtlinien
+graphify-out/           Code-Graph für KI-Assistenten (`graphify update .`)
 ```
 
 Die USB-Anbindung ist genau ein Backend: Man implementiert `DmxOutput`

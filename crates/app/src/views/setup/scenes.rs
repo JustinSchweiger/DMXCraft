@@ -3,8 +3,19 @@
 use dmxcraft_core::{Engine, LoopMode, SceneId};
 use eframe::egui;
 
-use crate::app::UiState;
-use crate::views::programmer::{programmer_values, zone_combo};
+use crate::state::AppState as UiState;
+use crate::views::{View, ViewCtx};
+
+/// EINRICHTEN → Szenen.
+#[derive(Default)]
+pub struct ScenesView;
+
+impl View for ScenesView {
+    fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        scenes_ui(ui, cx.engine, cx.state);
+    }
+}
+use crate::views::control::programmer::{programmer_values, zone_combo};
 
 enum StepAction {
     Load(usize),
@@ -14,7 +25,7 @@ enum StepAction {
     Down(usize),
 }
 
-pub fn ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
+fn scenes_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
     egui::Panel::left("scene_list")
         .default_size(200.0)
         .show(ui, |ui| {

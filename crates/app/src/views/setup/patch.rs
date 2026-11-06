@@ -3,9 +3,20 @@
 use dmxcraft_core::{Engine, FixtureId};
 use eframe::egui;
 
-use crate::app::UiState;
+use crate::state::AppState as UiState;
+use crate::views::{View, ViewCtx};
 
-pub fn ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
+/// EINRICHTEN → Patch.
+#[derive(Default)]
+pub struct PatchView;
+
+impl View for PatchView {
+    fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        patch_ui(ui, cx.engine, cx.state);
+    }
+}
+
+fn patch_ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
     ui.heading("Patch");
 
     // ---------- Hinzufügen ----------
@@ -32,11 +43,11 @@ pub fn ui(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState) {
                     }
                 });
             if ui
-                .button("Gerätebibliothek...")
+                .button("Gerätebibliothek öffnen")
                 .on_hover_text("Über 600 Geräte aus der Open Fixture Library")
                 .clicked()
             {
-                st.library.open = true;
+                st.library_open = true;
             }
 
             let universes = e.show().universes;

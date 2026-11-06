@@ -9,6 +9,7 @@ pub mod dmx;
 pub mod engine;
 pub mod fixture;
 pub mod library;
+pub mod plan;
 pub mod show;
 
 pub use dmx::{DmxFrame, UNIVERSE_SIZE};

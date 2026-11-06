@@ -3,17 +3,29 @@
 use dmxcraft_core::{DmxFrame, Engine, UNIVERSE_SIZE};
 use eframe::egui;
 
-use crate::app::UiState;
+use crate::views::{View, ViewCtx};
+
+/// EINRICHTEN → DMX-Monitor.
+#[derive(Default)]
+pub struct MonitorView {
+    universe: usize,
+}
+
+impl View for MonitorView {
+    fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        monitor_ui(ui, cx.engine, &mut self.universe, cx.frame);
+    }
+}
 
 const COLUMNS: usize = 32;
 
-pub fn ui(ui: &mut egui::Ui, e: &Engine, st: &mut UiState, frame: &DmxFrame) {
+fn monitor_ui(ui: &mut egui::Ui, e: &Engine, universe: &mut usize, frame: &DmxFrame) {
     let universes = usize::from(e.show().universes);
-    st.monitor_universe = st.monitor_universe.min(universes.saturating_sub(1));
+    *universe = (*universe).min(universes.saturating_sub(1));
     ui.horizontal(|ui| {
         ui.label("Universum");
         for u in 0..universes {
-            ui.selectable_value(&mut st.monitor_universe, u, format!("{}", u + 1));
+            ui.selectable_value(universe, u, format!("{}", u + 1));
         }
     });
 
@@ -23,7 +35,7 @@ pub fn ui(ui: &mut egui::Ui, e: &Engine, st: &mut UiState, frame: &DmxFrame) {
         .show()
         .fixtures
         .iter()
-        .filter(|f| usize::from(f.universe) == st.monitor_universe)
+        .filter(|f| usize::from(f.universe) == *universe)
     {
         if let Some(ty) = e.show().type_of(f) {
             for (i, def) in ty.channels.iter().enumerate() {
@@ -35,7 +47,7 @@ pub fn ui(ui: &mut egui::Ui, e: &Engine, st: &mut UiState, frame: &DmxFrame) {
         }
     }
 
-    let Some(data) = frame.universe(st.monitor_universe) else {
+    let Some(data) = frame.universe(*universe) else {
         ui.label("Keine Daten");
         return;
     };

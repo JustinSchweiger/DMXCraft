@@ -1,8 +1,23 @@
+//! Ansichten. Jede Ansicht ist ein Typ mit eigenem Zustand, der [`View`]
+//! implementiert; gemeinsame Daten kommen über [`ViewCtx`].
+
 pub mod control;
 pub mod library;
-pub mod monitor;
-pub mod patch;
-pub mod programmer;
-pub mod scenes;
 pub mod setup;
-pub mod stage;
+
+use dmxcraft_core::{DmxFrame, Engine};
+use eframe::egui::Ui;
+
+use crate::state::AppState;
+
+/// Alles, was eine Ansicht zum Zeichnen braucht.
+pub struct ViewCtx<'a> {
+    pub engine: &'a mut Engine,
+    pub state: &'a mut AppState,
+    /// Zuletzt ausgegebener DMX-Frame (für Live-Anzeigen).
+    pub frame: &'a DmxFrame,
+}
+
+pub trait View {
+    fn ui(&mut self, ui: &mut Ui, cx: &mut ViewCtx<'_>);
+}

@@ -1,0 +1,169 @@
+//! EINRICHTEN → Bühnenplan: Geräte anordnen.
+
+use dmxcraft_core::{plan, FixtureId};
+use eframe::egui;
+
+use crate::ui::theme;
+use crate::ui::widgets::stage_canvas::fixture_pos;
+use crate::ui::widgets::{section_header, CanvasMode, StageCanvas, StageInteraction};
+use crate::views::{View, ViewCtx};
+
+pub struct StageEditorView {
+    interaction: StageInteraction,
+    snap: bool,
+    cells: u32,
+    labels: bool,
+}
+
+impl Default for StageEditorView {
+    fn default() -> Self {
+        Self {
+            interaction: StageInteraction::default(),
+            snap: true,
+            cells: 24,
+            labels: true,
+        }
+    }
+}
+
+enum Arrange {
+    Row,
+    Grid,
+    AlignH,
+    AlignV,
+    Reset,
+}
+
+impl View for StageEditorView {
+    fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        let mut arrange: Option<Arrange> = None;
+        section_header(ui, "Bühnenplan bearbeiten", |ui| {
+            ui.checkbox(&mut self.labels, "Namen");
+            ui.add_enabled(
+                self.snap,
+                egui::DragValue::new(&mut self.cells)
+                    .range(4..=64)
+                    .suffix(" Felder"),
+            );
+            ui.checkbox(&mut self.snap, "Einrasten");
+        });
+        ui.horizontal_wrapped(|ui| {
+            let some = !cx.state.selected.is_empty();
+            ui.label(egui::RichText::new("Auswahl:").color(theme::TEXT_DIM));
+            if ui
+                .add_enabled(some, egui::Button::new("In Reihe"))
+                .clicked()
+            {
+                arrange = Some(Arrange::Row);
+            }
+            if ui
+                .add_enabled(some, egui::Button::new("Als Raster"))
+                .clicked()
+            {
+                arrange = Some(Arrange::Grid);
+            }
+            if ui
+                .add_enabled(some, egui::Button::new("Waagerecht ausrichten"))
+                .clicked()
+            {
+                arrange = Some(Arrange::AlignH);
+            }
+            if ui
+                .add_enabled(some, egui::Button::new("Senkrecht ausrichten"))
+                .clicked()
+            {
+                arrange = Some(Arrange::AlignV);
+            }
+            if ui
+                .add_enabled(some, egui::Button::new("Position zurücksetzen"))
+                .on_hover_text("Automatische Position nach Patch-Reihenfolge")
+                .clicked()
+            {
+                arrange = Some(Arrange::Reset);
+            }
+            ui.label(
+                egui::RichText::new(
+                    "Ziehen = verschieben · Aufziehen = auswählen · Strg/Shift = hinzufügen",
+                )
+                .color(theme::TEXT_FAINT),
+            );
+        });
+        ui.add_space(theme::SP_XS);
+
+        egui::Panel::left("stage_fixture_list")
+            .resizable(true)
+            .default_size(200.0)
+            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4)))
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        for f in &cx.engine.show().fixtures {
+                            let sel = cx.state.selected.contains(&f.id);
+                            let r = ui.selectable_label(sel, &f.name);
+                            if r.clicked() {
+                                let add = ui.input(|i| i.modifiers.shift || i.modifiers.command);
+                                if !add {
+                                    cx.state.selected.clear();
+                                }
+                                if sel && add {
+                                    cx.state.selected.remove(&f.id);
+                                } else {
+                                    cx.state.selected.insert(f.id);
+                                }
+                            }
+                        }
+                    });
+            });
+
+        egui::CentralPanel::default_margins()
+            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(8, 4)))
+            .show(ui, |ui| {
+                let moves = StageCanvas {
+                    show: cx.engine.show(),
+                    frame: cx.frame,
+                    mode: CanvasMode::Edit,
+                    snap: self.snap.then_some(self.cells),
+                    show_labels: self.labels,
+                }
+                .show(ui, &mut self.interaction, &mut cx.state.selected);
+                for (id, p) in moves {
+                    set_pos(cx, id, p);
+                }
+            });
+
+        if let Some(a) = arrange {
+            let ids: Vec<FixtureId> = cx
+                .engine
+                .show()
+                .fixtures
+                .iter()
+                .map(|f| f.id)
+                .filter(|id| cx.state.selected.contains(id))
+                .collect();
+            let cur: Vec<[f32; 2]> = ids
+                .iter()
+                .map(|id| fixture_pos(cx.engine.show(), *id))
+                .collect();
+            let avg = |i: usize| cur.iter().map(|p| p[i]).sum::<f32>() / cur.len().max(1) as f32;
+            let targets: Vec<Option<[f32; 2]>> = match a {
+                Arrange::Row => plan::row(ids.len(), avg(1)).into_iter().map(Some).collect(),
+                Arrange::Grid => plan::grid(ids.len()).into_iter().map(Some).collect(),
+                Arrange::AlignH => cur.iter().map(|p| Some([p[0], avg(1)])).collect(),
+                Arrange::AlignV => cur.iter().map(|p| Some([avg(0), p[1]])).collect(),
+                Arrange::Reset => vec![None; ids.len()],
+            };
+            for (id, t) in ids.into_iter().zip(targets) {
+                if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
+                    f.plan_pos = t;
+                }
+            }
+        }
+    }
+}
+
+fn set_pos(cx: &mut ViewCtx<'_>, id: FixtureId, p: [f32; 2]) {
+    if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
+        f.plan_pos = Some(p);
+    }
+}
