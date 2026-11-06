@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::ui::theme;
 use crate::ui::widgets::stage_canvas::fixture_pos;
-use crate::ui::widgets::{section_header, CanvasMode, StageCanvas, StageInteraction};
+use crate::ui::widgets::{section_header, CanvasMode, StageCanvas, StageInteraction, Toggle};
 use crate::views::fixture_menu::{self, MenuPlace};
 use crate::views::{View, ViewCtx};
 
@@ -41,60 +41,73 @@ impl View for StageEditorView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut arrange: Option<Arrange> = None;
         section_header(ui, "Bühnenplan", |ui| {
-            ui.checkbox(&mut self.labels, "Namen");
-            ui.checkbox(&mut self.grid, "Raster");
-            ui.add_enabled(
-                self.snap,
-                egui::DragValue::new(&mut self.cells)
-                    .range(4..=64)
-                    .suffix(" Felder"),
+            ui.label(egui::RichText::new("Hilfe").color(theme::TEXT_FAINT)).on_hover_text(
+                "Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nRechtsklick = Menü (Form, Größe, Gruppen …)",
             );
-            ui.checkbox(&mut self.snap, "Einrasten");
         });
-        ui.horizontal_wrapped(|ui| {
-            let some = !cx.state.selected.is_empty();
-            ui.label(egui::RichText::new("Auswahl:").color(theme::TEXT_DIM));
-            if ui
-                .add_enabled(some, egui::Button::new("In Reihe"))
-                .clicked()
-            {
-                arrange = Some(Arrange::Row);
-            }
-            if ui
-                .add_enabled(some, egui::Button::new("Als Raster"))
-                .clicked()
-            {
-                arrange = Some(Arrange::Grid);
-            }
-            if ui
-                .add_enabled(some, egui::Button::new("Waagerecht ausrichten"))
-                .clicked()
-            {
-                arrange = Some(Arrange::AlignH);
-            }
-            if ui
-                .add_enabled(some, egui::Button::new("Senkrecht ausrichten"))
-                .clicked()
-            {
-                arrange = Some(Arrange::AlignV);
-            }
-            if ui
-                .add_enabled(some, egui::Button::new("Position zurücksetzen"))
-                .on_hover_text("Automatische Position nach Patch-Reihenfolge")
-                .clicked()
-            {
-                arrange = Some(Arrange::Reset);
-            }
-            ui.separator();
-            ui.label(
-                egui::RichText::new(
-                    "Hilfe",
-                )
-                .color(theme::TEXT_FAINT),
-            )
-            .on_hover_text("Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nRechtsklick = Menü (Form, Größe, Gruppen …)");
-        });
-        ui.add_space(theme::SP_XS);
+
+        // Werkzeuge senkrecht links
+        egui::Panel::left("stage_tools")
+            .resizable(false)
+            .exact_size(132.0)
+            .frame(egui::Frame::new().inner_margin(egui::Margin {
+                right: 6,
+                ..Default::default()
+            }))
+            .show(ui, |ui| {
+                let some = !cx.state.selected.is_empty();
+                let w = ui.available_width();
+                let mut tool = |ui: &mut egui::Ui, label: &str, hint: &str, a: Arrange| {
+                    if ui
+                        .add_enabled(some, egui::Button::new(label).min_size(egui::vec2(w, 26.0)))
+                        .on_hover_text(hint)
+                        .clicked()
+                    {
+                        arrange = Some(a);
+                    }
+                };
+                tool(
+                    ui,
+                    "In Reihe",
+                    "Auswahl gleichmäßig in einer Reihe verteilen",
+                    Arrange::Row,
+                );
+                tool(
+                    ui,
+                    "Als Raster",
+                    "Auswahl als Raster anordnen",
+                    Arrange::Grid,
+                );
+                tool(
+                    ui,
+                    "Waagerecht",
+                    "Auswahl auf eine Höhe bringen",
+                    Arrange::AlignH,
+                );
+                tool(
+                    ui,
+                    "Senkrecht",
+                    "Auswahl untereinander ausrichten",
+                    Arrange::AlignV,
+                );
+                tool(
+                    ui,
+                    "Zurücksetzen",
+                    "Automatische Position nach Patch-Reihenfolge",
+                    Arrange::Reset,
+                );
+                ui.add_space(theme::SP_S);
+                ui.separator();
+                ui.add(Toggle::new(&mut self.snap, "Einrasten"));
+                ui.add_enabled(
+                    self.snap,
+                    egui::DragValue::new(&mut self.cells)
+                        .range(4..=64)
+                        .suffix(" Felder"),
+                );
+                ui.add(Toggle::new(&mut self.grid, "Raster"));
+                ui.add(Toggle::new(&mut self.labels, "Namen"));
+            });
 
         egui::CentralPanel::default_margins()
             .frame(egui::Frame::new())

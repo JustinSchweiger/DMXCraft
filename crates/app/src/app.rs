@@ -12,6 +12,7 @@ use crate::settings::Settings;
 use crate::state::{AppState, Mode};
 use crate::titlebar::{self, MenuAction, TitleInfo};
 use crate::ui::theme;
+use crate::ui::widgets::Toggle;
 use crate::updater::{UpdateState, Updater};
 use crate::views::control::{ProgrammerView, SceneGridView, StageView};
 use crate::views::setup::SetupView;
@@ -367,16 +368,16 @@ impl DmxCraftApp {
                     ui.separator();
                     ui.heading("Start");
                     changed |= ui
-                        .checkbox(
+                        .add(Toggle::new(
                             &mut self.settings.open_last_show,
                             "Zuletzt verwendete Show öffnen",
-                        )
+                        ))
                         .changed();
                     changed |= ui
-                        .checkbox(
+                        .add(Toggle::new(
                             &mut self.settings.check_updates,
                             "Beim Start nach Updates suchen",
-                        )
+                        ))
                         .changed();
                     ui.separator();
                     if let Some(p) = Settings::path() {

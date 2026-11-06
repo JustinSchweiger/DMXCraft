@@ -71,17 +71,29 @@ impl View for PatchGrid {
             })
             .flatten()
             .filter(|f| usize::from(f.universe) == self.universe)
-            .map(|f| (f.address, f.name.clone()));
+            .map(|f| (f.address, ()));
         ui.horizontal(|ui| {
             ui.set_min_height(30.0);
-            ui.label(egui::RichText::new("PATCH").font(theme::caption()).color(theme::TEXT_DIM).strong());
+            ui.label(
+                egui::RichText::new("PATCH")
+                    .font(theme::caption())
+                    .color(theme::TEXT_DIM)
+                    .strong(),
+            );
             ui.add_space(theme::SP_S);
-            Segmented::new(&[(GridMode::Patch, "Patch"), (GridMode::Output, "Ausgang")]).show(ui, &mut self.mode);
+            Segmented::new(&[(GridMode::Patch, "Patch"), (GridMode::Output, "Ausgang")])
+                .show(ui, &mut self.mode);
             ui.add_space(theme::SP_M);
-            if ui.add(IconButton::new(Icon::Prev).enabled(self.universe > 0)).clicked() {
+            if ui
+                .add(IconButton::new(Icon::Prev).enabled(self.universe > 0))
+                .clicked()
+            {
                 self.universe -= 1;
             }
-            ui.label(egui::RichText::new(format!("Universum {} / {universes}", self.universe + 1)).strong());
+            ui.label(
+                egui::RichText::new(format!("Universum {} / {universes}", self.universe + 1))
+                    .strong(),
+            );
             if ui
                 .add(IconButton::new(Icon::Next).enabled(self.universe + 1 < universes))
                 .clicked()
@@ -91,14 +103,12 @@ impl View for PatchGrid {
             ui.add_space(theme::SP_M);
             ui.label(egui::RichText::new(format!("{free} von 512 frei")).color(theme::TEXT_DIM));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if let Some((addr, name)) = &dip_address {
-                    DipSwitch { address: *addr, compact: true }.show(ui);
-                    ui.label(egui::RichText::new(format!("{name} · DIP {addr}")).color(theme::TEXT_DIM));
-                } else {
-                    ui.label(
-                        egui::RichText::new("Ziehen = Adresse ändern · Doppelklick = umbenennen · Rechtsklick = Menü")
-                            .color(theme::TEXT_FAINT),
-                    );
+                if let Some((addr, _)) = &dip_address {
+                    DipSwitch {
+                        address: *addr,
+                        compact: true,
+                    }
+                    .show(ui);
                 }
             });
         });
@@ -272,8 +282,8 @@ impl PatchGrid {
                         },
                     );
                     p.text(
-                        r.left_top() + Vec2::new(4.0, 3.0),
-                        egui::Align2::LEFT_TOP,
+                        r.center(),
+                        egui::Align2::CENTER_CENTER,
                         (i + 1).to_string(),
                         theme::caption(),
                         theme::TEXT_FAINT,

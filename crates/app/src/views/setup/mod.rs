@@ -1,5 +1,6 @@
 //! EINRICHTEN: eine Seite mit Patch-Raster (oben), Bühnenplan mit
-//! Geräteeinstellungen (unten) und Bibliothek (rechts).
+//! Geräteeinstellungen (unten) und Bibliothek (links). Alle Bereiche sind
+//! an ihren Trennlinien in der Größe veränderbar.
 
 pub mod fixture_settings;
 pub mod library_panel;
@@ -26,10 +27,10 @@ impl View for SetupView {
         let area = egui::Frame::new()
             .fill(theme::SURFACE)
             .inner_margin(egui::Margin::same(6));
-        egui::Panel::right("setup_library")
+        egui::Panel::left("setup_library")
             .resizable(true)
             .default_size(340.0)
-            .min_size(260.0)
+            .min_size(240.0)
             .frame(area)
             .show(ui, |ui| self.library.ui(ui, cx));
         egui::Panel::bottom("setup_stage")
@@ -39,8 +40,9 @@ impl View for SetupView {
             .frame(egui::Frame::new().fill(theme::SURFACE))
             .show(ui, |ui| {
                 egui::Panel::right("setup_fixture_settings")
-                    .resizable(false)
-                    .exact_size(250.0)
+                    .resizable(true)
+                    .default_size(560.0)
+                    .min_size(320.0)
                     .frame(area)
                     .show(ui, |ui| self.settings.ui(ui, cx));
                 egui::CentralPanel::default_margins()

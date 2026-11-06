@@ -58,6 +58,9 @@ pub struct Fixture {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FixtureLimits {
+    /// Niedrigster Dimmerwert, sobald das Gerät an ist (0 = keine Begrenzung).
+    /// Ein Dimmerwert von 0 bleibt 0, damit Blackout und „aus“ funktionieren.
+    pub dimmer_min: u8,
     /// Höchster Dimmerwert (255 = keine Begrenzung).
     pub dimmer_max: u8,
     pub pan_min: u8,
@@ -73,6 +76,7 @@ pub struct FixtureLimits {
 impl Default for FixtureLimits {
     fn default() -> Self {
         Self {
+            dimmer_min: 0,
             dimmer_max: 255,
             pan_min: 0,
             pan_max: 255,
@@ -88,6 +92,22 @@ impl Default for FixtureLimits {
 impl FixtureLimits {
     pub fn is_default(&self) -> bool {
         *self == Self::default()
+    }
+
+    pub fn affects_dimmer(&self) -> bool {
+        self.dimmer_min != 0 || self.dimmer_max != 255
+    }
+
+    /// Dimmerwert in den erlaubten Bereich abbilden (0 bleibt 0).
+    pub fn map_dimmer(&self, v: u8) -> u8 {
+        if v == 0 {
+            return 0;
+        }
+        let (lo, hi) = (
+            u32::from(self.dimmer_min.min(self.dimmer_max)),
+            u32::from(self.dimmer_max.max(self.dimmer_min)),
+        );
+        (lo + u32::from(v) * (hi - lo) / 255) as u8
     }
 
     pub fn affects_position(&self) -> bool {

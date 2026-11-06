@@ -420,9 +420,8 @@ impl Engine {
                 fixture: f.id,
                 channel: i as u16,
             };
-            if lim.dimmer_max < 255 {
+            if lim.affects_dimmer() {
                 let has_dimmer = ty.channels.iter().any(|c| c.kind.is_htp());
-                let factor = f32::from(lim.dimmer_max) / 255.0;
                 for (i, def) in ty.channels.iter().enumerate() {
                     let scale = if has_dimmer {
                         def.kind.is_htp()
@@ -431,7 +430,7 @@ impl Engine {
                     };
                     if scale {
                         if let Some(v) = values.get_mut(&ch(i)) {
-                            *v = (f32::from(*v) * factor).round() as u8;
+                            *v = lim.map_dimmer(*v);
                         }
                     }
                 }
@@ -761,6 +760,13 @@ mod tests {
         e.activate(id);
         let f = e.render_frame();
         assert_eq!(f.get(0, 6), Some(100), "Dimmer 200 * 128/255");
+        e.show_mut().fixture_mut(mh).unwrap().limits.dimmer_min = 64;
+        assert_eq!(
+            e.render_frame().get(0, 6),
+            Some((64 + 200u32 * 64 / 255) as u8),
+            "Bereich 64..128"
+        );
+        e.show_mut().fixture_mut(mh).unwrap().limits.dimmer_min = 0;
         assert_eq!(f.get(0, 1), Some(191), "Pan voll -> Pan max");
         assert_eq!(f.get(0, 2), Some(255), "Pan fein am oberen Ende");
         assert_eq!(f.get(0, 3), Some(255), "Tilt 0 invertiert -> voll");

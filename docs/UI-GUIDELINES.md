@@ -69,6 +69,9 @@ keinen App-Zustand – nur ihre Eingabewerte.
   Kontextmenü (Freigeben). Ungesetzt = gedämpft, im Programmer = `ACCENT`.
 * **SceneCard**: Name, Typzeile (STATISCH/ABLAUF), Fortschritt als
   Leiste unten, Zonenfarbe als Rand, wenn aktiv.
+* **Toggle** (Schiebeschalter): für alle An/Aus-Optionen – **keine Checkboxen**.
+* **RangeSlider**: senkrechter Regler mit Unter- und Obergrenze (z. B. Dimmer-Limit).
+* **LimitPad**: XY-Feld mit Griffen für Bereiche (Pan/Tilt-Grenzen).
 * **SegmentedTabs**: für Modus- und Kategorie-Umschalter.
 * **XyPad**, **Swatch** (Farbfeld), **StageCanvas** (Bühnenplan in den
   Modi Auswahl/Bearbeiten).
@@ -85,6 +88,11 @@ keinen App-Zustand – nur ihre Eingabewerte.
 * Ziehen beginnt erst nach der egui-Schwelle; Treffer werden am
   **Druckpunkt** (`press_origin`) ermittelt, nicht an der aktuellen Position.
 * Kontextmenüs für seltene Aktionen (Bearbeiten, Löschen, Freigeben).
+* Keine erklärenden Hinweistexte dauerhaft in Kopfzeilen; Hilfe gehört in
+  Tooltips (z. B. ein „Hilfe“-Label mit `on_hover_text`).
+* Elemente, die abhängig von der Auswahl erscheinen (z. B. DIP-Schalter), dürfen
+  die Höhe ihrer Zeile nicht verändern.
+* Alle Bereiche einer Seite sind an ihren Trennlinien in der Größe veränderbar.
 
 ## 6. Text & Symbole
 

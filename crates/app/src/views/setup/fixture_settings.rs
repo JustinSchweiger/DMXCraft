@@ -1,15 +1,25 @@
-//! EINRICHTEN → Geräteeinstellungen der Auswahl: Darstellung im Bühnenplan
-//! und Ausgangsgrenzen (Dimmer-Limit, Pan/Tilt-Bereich, Invertieren).
+//! EINRICHTEN → Geräteeinstellungen der Auswahl: Schnelltest (Licht aus/an,
+//! Moving Head zentrieren), Darstellung und Ausgangsgrenzen.
 
-use dmxcraft_core::{ChannelKind, FixtureId, FixtureLimits, PlanShape, PLAN_SIZE_RANGE};
+use dmxcraft_core::{
+    ChannelKind, ChannelRef, Engine, FixtureId, FixtureLimits, PlanShape, PLAN_SIZE_RANGE,
+};
 use eframe::egui;
 
 use crate::ui::theme;
-use crate::ui::widgets::section_header;
+use crate::ui::widgets::{section_header, Icon, IconButton, LimitPad, RangeSlider, Toggle};
 use crate::views::{View, ViewCtx};
 
 #[derive(Default)]
 pub struct FixtureSettings;
+
+/// Schnelltest über den Programmer.
+#[derive(Clone, Copy)]
+enum Quick {
+    Off,
+    On,
+    Center,
+}
 
 impl View for FixtureSettings {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
@@ -23,7 +33,34 @@ impl View for FixtureSettings {
                 .map_or("Gerät".into(), |f| f.name.clone()),
             n => format!("{n} Geräte"),
         };
-        section_header(ui, &title, |_| {});
+        let mut quick = None;
+        let some = !ids.is_empty();
+        section_header(ui, &title, |ui| {
+            if ui
+                .add(IconButton::new(Icon::Center).enabled(some))
+                .on_hover_text("Moving Head zentrieren (Pan/Tilt 50 %)")
+                .clicked()
+            {
+                quick = Some(Quick::Center);
+            }
+            if ui
+                .add(IconButton::new(Icon::LightOn).enabled(some))
+                .on_hover_text("Licht an (Dimmer und Weiß voll)")
+                .clicked()
+            {
+                quick = Some(Quick::On);
+            }
+            if ui
+                .add(IconButton::new(Icon::LightOff).enabled(some))
+                .on_hover_text("Licht aus")
+                .clicked()
+            {
+                quick = Some(Quick::Off);
+            }
+        });
+        if let Some(q) = quick {
+            quick_action(cx.engine, &ids, q);
+        }
         let Some(first) = ids.first().copied() else {
             ui.label(
                 egui::RichText::new("Geräte im Bühnenplan oder im Patch auswählen.")
@@ -31,6 +68,7 @@ impl View for FixtureSettings {
             );
             return;
         };
+
         let show = cx.engine.show();
         let has = |k: ChannelKind| {
             ids.iter().any(|id| {
@@ -39,11 +77,10 @@ impl View for FixtureSettings {
                     .is_some_and(|t| t.has_kind(k))
             })
         };
-        let (has_dimmer, has_pan, has_tilt) = (
-            has(ChannelKind::Dimmer) || has(ChannelKind::Red),
-            has(ChannelKind::Pan),
-            has(ChannelKind::Tilt),
-        );
+        let has_dimmer =
+            has(ChannelKind::Dimmer) || has(ChannelKind::Red) || has(ChannelKind::White);
+        let has_pan = has(ChannelKind::Pan);
+        let has_tilt = has(ChannelKind::Tilt);
         let mut lim = show.fixture(first).map(|f| f.limits).unwrap_or_default();
         let shape = show.fixture(first).and_then(|f| f.plan_shape);
         let mut size = show.plan_size(first);
@@ -51,93 +88,97 @@ impl View for FixtureSettings {
         let mut new_shape: Option<Option<PlanShape>> = None;
         let mut size_changed = false;
 
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                // Darstellung
-                caption(ui, "Darstellung");
-                egui::ComboBox::from_id_salt("fs_shape")
-                    .width(ui.available_width())
-                    .selected_text(shape.map_or("Form: automatisch", |s| s.label()))
-                    .show_ui(ui, |ui| {
-                        if ui
-                            .selectable_label(shape.is_none(), "Automatisch (nach Typ)")
-                            .clicked()
-                        {
-                            new_shape = Some(None);
-                        }
-                        for s in PlanShape::ALL {
-                            if ui.selectable_label(shape == Some(s), s.label()).clicked() {
-                                new_shape = Some(Some(s));
-                            }
-                        }
-                    });
-                ui.spacing_mut().slider_width = ui.available_width() - 70.0;
-                size_changed = ui
-                    .add(
-                        egui::Slider::new(&mut size, PLAN_SIZE_RANGE)
-                            .fixed_decimals(1)
-                            .suffix("x"),
-                    )
-                    .on_hover_text("Größe im Bühnenplan")
-                    .changed();
-
-                // Dimmer
-                ui.add_space(theme::SP_S);
-                caption(ui, "Dimmer-Limit");
-                ui.add_enabled_ui(has_dimmer, |ui| {
-                    let mut pct = (f32::from(lim.dimmer_max) / 255.0 * 100.0).round();
+        // Darstellung
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("fs_shape")
+                .width(170.0)
+                .selected_text(shape.map_or("Form: automatisch", |s| s.label()))
+                .show_ui(ui, |ui| {
                     if ui
-                        .add(
-                            egui::Slider::new(&mut pct, 0.0..=100.0)
-                                .integer()
-                                .suffix("%"),
-                        )
-                        .on_hover_text("Höchste Helligkeit dieses Geräts")
-                        .changed()
+                        .selectable_label(shape.is_none(), "Automatisch (nach Typ)")
+                        .clicked()
                     {
-                        lim.dimmer_max = (pct / 100.0 * 255.0).round() as u8;
+                        new_shape = Some(None);
+                    }
+                    for s in PlanShape::ALL {
+                        if ui.selectable_label(shape == Some(s), s.label()).clicked() {
+                            new_shape = Some(Some(s));
+                        }
                     }
                 });
+            ui.spacing_mut().slider_width = (ui.available_width() - 60.0).max(60.0);
+            size_changed = ui
+                .add(
+                    egui::Slider::new(&mut size, PLAN_SIZE_RANGE)
+                        .fixed_decimals(1)
+                        .suffix("x"),
+                )
+                .on_hover_text("Größe im Bühnenplan")
+                .changed();
+        });
+        ui.add_space(theme::SP_XS);
+        ui.separator();
 
-                // Bewegung
-                ui.add_space(theme::SP_S);
-                caption(ui, "Bewegungsbereich");
+        // Grenzen: Dimmer | Bewegung (XY) | Werte & Schalter
+        let h = ui.available_height().clamp(150.0, 320.0);
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                caption(ui, "Dimmer");
+                RangeSlider {
+                    min: &mut lim.dimmer_min,
+                    max: &mut lim.dimmer_max,
+                    height: h - 24.0,
+                    enabled: has_dimmer,
+                }
+                .show(ui);
+            });
+            ui.separator();
+            ui.vertical(|ui| {
+                caption(ui, "Bewegung");
+                let side = (h - 24.0).min(ui.available_width() - 150.0).max(110.0);
+                LimitPad {
+                    pan: (&mut lim.pan_min, &mut lim.pan_max),
+                    tilt: (&mut lim.tilt_min, &mut lim.tilt_max),
+                    size: egui::vec2(side, side),
+                    enabled: has_pan || has_tilt,
+                }
+                .show(ui);
+            });
+            ui.vertical(|ui| {
+                ui.add_space(theme::SP_L);
                 ui.add_enabled_ui(has_pan || has_tilt, |ui| {
-                    range(ui, "Pan", &mut lim.pan_min, &mut lim.pan_max, has_pan);
-                    range(ui, "Tilt", &mut lim.tilt_min, &mut lim.tilt_max, has_tilt);
-                    ui.add_space(theme::SP_XS);
-                    ui.add_enabled(
-                        has_pan,
-                        egui::Checkbox::new(&mut lim.invert_pan, "Pan invertieren"),
-                    );
-                    ui.add_enabled(
-                        has_tilt,
-                        egui::Checkbox::new(&mut lim.invert_tilt, "Tilt invertieren"),
-                    );
-                    ui.add_enabled(
-                        has_pan && has_tilt,
-                        egui::Checkbox::new(&mut lim.swap_pan_tilt, "Pan und Tilt tauschen"),
+                    egui::Grid::new("fs_ranges")
+                        .num_columns(3)
+                        .spacing([6.0, 4.0])
+                        .show(ui, |ui| {
+                            range_row(ui, "Pan", &mut lim.pan_min, &mut lim.pan_max, has_pan);
+                            range_row(ui, "Tilt", &mut lim.tilt_min, &mut lim.tilt_max, has_tilt);
+                        });
+                    ui.add_space(theme::SP_S);
+                    caption(ui, "Invertieren");
+                    ui.add(Toggle::new(&mut lim.invert_pan, "Pan").enabled(has_pan));
+                    ui.add(Toggle::new(&mut lim.invert_tilt, "Tilt").enabled(has_tilt));
+                    ui.add(
+                        Toggle::new(&mut lim.swap_pan_tilt, "Tauschen")
+                            .enabled(has_pan && has_tilt),
                     );
                 });
-                if !(has_pan || has_tilt) {
-                    ui.label(egui::RichText::new("Keine Pan/Tilt-Kanäle").color(theme::TEXT_FAINT));
-                }
-
                 ui.add_space(theme::SP_S);
                 if ui
-                    .add_enabled(!lim.is_default(), egui::Button::new("Grenzen zurücksetzen"))
+                    .add_enabled(!lim.is_default(), egui::Button::new("Zurücksetzen"))
+                    .on_hover_text("Alle Grenzen zurücksetzen")
                     .clicked()
                 {
                     lim = FixtureLimits::default();
                 }
-                if ids.len() > 1 {
-                    ui.label(
-                        egui::RichText::new("Änderungen gelten für alle ausgewählten Geräte.")
-                            .color(theme::TEXT_FAINT),
-                    );
-                }
             });
+        });
+        if ids.len() > 1 {
+            ui.label(
+                egui::RichText::new("Änderungen gelten für alle ausgewählten Geräte.")
+                    .color(theme::TEXT_FAINT),
+            );
+        }
 
         let limits_changed = lim != before;
         for id in ids {
@@ -165,33 +206,72 @@ fn caption(ui: &mut egui::Ui, text: &str) {
     );
 }
 
-/// Bereich als zwei Werte in Prozent (min/max).
-fn range(ui: &mut egui::Ui, label: &str, min: &mut u8, max: &mut u8, enabled: bool) {
-    ui.add_enabled_ui(enabled, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(label).color(theme::TEXT_DIM));
-            let mut lo = f32::from(*min) / 255.0 * 100.0;
-            let mut hi = f32::from(*max) / 255.0 * 100.0;
-            let a = ui.add(
-                egui::DragValue::new(&mut lo)
-                    .range(0.0..=100.0)
-                    .speed(0.5)
-                    .fixed_decimals(0)
-                    .prefix("von ")
-                    .suffix("%"),
-            );
-            let b = ui.add(
-                egui::DragValue::new(&mut hi)
-                    .range(0.0..=100.0)
-                    .speed(0.5)
-                    .fixed_decimals(0)
-                    .prefix("bis ")
-                    .suffix("%"),
-            );
-            if a.changed() || b.changed() {
-                *min = (lo / 100.0 * 255.0).round() as u8;
-                *max = (hi / 100.0 * 255.0).round() as u8;
+/// Eine Zeile „Pan  von … bis …“ in Prozent.
+fn range_row(ui: &mut egui::Ui, label: &str, min: &mut u8, max: &mut u8, enabled: bool) {
+    ui.label(egui::RichText::new(label).color(if enabled {
+        theme::TEXT_DIM
+    } else {
+        theme::TEXT_FAINT
+    }));
+    let mut lo = f32::from(*min) / 255.0 * 100.0;
+    let mut hi = f32::from(*max) / 255.0 * 100.0;
+    let a = ui.add_enabled(
+        enabled,
+        egui::DragValue::new(&mut lo)
+            .range(0.0..=100.0)
+            .speed(0.5)
+            .fixed_decimals(0)
+            .suffix("%"),
+    );
+    let b = ui.add_enabled(
+        enabled,
+        egui::DragValue::new(&mut hi)
+            .range(0.0..=100.0)
+            .speed(0.5)
+            .fixed_decimals(0)
+            .suffix("%"),
+    );
+    if a.changed() || b.changed() {
+        *min = (lo.min(hi) / 100.0 * 255.0).round() as u8;
+        *max = (hi.max(lo) / 100.0 * 255.0).round() as u8;
+    }
+    ui.end_row();
+}
+
+/// Setzt Programmer-Werte für einen schnellen Test der Auswahl.
+fn quick_action(e: &mut Engine, ids: &[FixtureId], q: Quick) {
+    for id in ids {
+        let Some(ty) = e
+            .show()
+            .fixture(*id)
+            .and_then(|f| e.show().type_of(f))
+            .cloned()
+        else {
+            continue;
+        };
+        let has_white = ty.has_kind(ChannelKind::White);
+        for (i, def) in ty.channels.iter().enumerate() {
+            let ch = ChannelRef {
+                fixture: *id,
+                channel: i as u16,
+            };
+            let value = match (q, def.kind) {
+                (Quick::Off, ChannelKind::Dimmer) => Some(0),
+                (Quick::Off, k) if k.is_color_intensity() => Some(0),
+                (Quick::On, ChannelKind::Dimmer) => Some(255),
+                (Quick::On, ChannelKind::White) => Some(255),
+                (Quick::On, ChannelKind::Red | ChannelKind::Green | ChannelKind::Blue)
+                    if !has_white =>
+                {
+                    Some(255)
+                }
+                (Quick::Center, ChannelKind::Pan | ChannelKind::Tilt) => Some(128),
+                (Quick::Center, ChannelKind::PanFine | ChannelKind::TiltFine) => Some(0),
+                _ => None,
+            };
+            if let Some(v) = value {
+                e.set_programmer(ch, v);
             }
-        });
-    });
+        }
+    }
 }

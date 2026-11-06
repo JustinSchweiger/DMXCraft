@@ -11,6 +11,9 @@ pub enum Icon {
     Prev,
     Next,
     Plus,
+    LightOff,
+    LightOn,
+    Center,
     Menu,
     Minimize,
     Maximize,
@@ -56,6 +59,39 @@ impl Icon {
                     Vec2::new(s * 0.18, s * 1.1),
                 );
                 painter.rect_filled(bar, 1.0, color);
+            }
+            Icon::LightOff | Icon::LightOn => {
+                // Scheinwerfer von vorn: Gehäuse, Linse, bei „an“ mit Strahlen
+                let r = s * 0.42;
+                let lens = c + Vec2::new(0.0, -s * 0.05);
+                painter.circle_stroke(lens, r, stroke);
+                if self == Icon::LightOn {
+                    painter.circle_filled(lens, r * 0.62, color);
+                    for k in 0..8 {
+                        let a = std::f32::consts::TAU * k as f32 / 8.0;
+                        let dir = Vec2::angled(a);
+                        painter.line_segment(
+                            [lens + dir * r * 1.3, lens + dir * r * 1.75],
+                            Stroke::new(1.3, color),
+                        );
+                    }
+                } else {
+                    painter.line_segment(
+                        [
+                            lens + Vec2::new(-r * 0.7, -r * 0.7),
+                            lens + Vec2::new(r * 0.7, r * 0.7),
+                        ],
+                        stroke,
+                    );
+                }
+            }
+            Icon::Center => {
+                let r = s * 0.45;
+                painter.circle_stroke(c, r, stroke);
+                painter.circle_filled(c, s * 0.1, color);
+                for dir in [Vec2::X, -Vec2::X, Vec2::Y, -Vec2::Y] {
+                    painter.line_segment([c + dir * r * 0.55, c + dir * r * 1.45], stroke);
+                }
             }
             Icon::Menu => {
                 for dy in [-0.45, 0.0, 0.45] {
