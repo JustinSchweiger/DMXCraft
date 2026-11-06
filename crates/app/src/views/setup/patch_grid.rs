@@ -259,7 +259,7 @@ impl PatchGrid {
         let target = self.context_target;
         let has_clip = cx.state.layout_clipboard.is_some();
         let selected = &cx.state.selected;
-        resp.context_menu(|ui| {
+        crate::ui::widgets::menu::context(&resp, |ui| {
             action = fixture_menu::menu(ui, show, selected, target, MenuPlace::Patch, has_clip);
         });
 

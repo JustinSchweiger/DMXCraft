@@ -334,7 +334,7 @@ fn scene_card(
     if locked {
         return;
     }
-    resp.context_menu(|ui| {
+    crate::ui::widgets::menu::context(&resp, |ui| {
         menu::begin(ui);
         if menu::item(ui, MenuItem::new("Bearbeiten …").icon(Icon::Edit)) {
             actions.push(Action::Edit(id));

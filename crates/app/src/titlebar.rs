@@ -266,7 +266,7 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
     let resp = ui
         .add(IconButton::new(Icon::Menu).size(28.0).flat())
         .on_hover_text("Menü");
-    egui::Popup::menu(&resp).show(|ui| {
+    menu::dropdown(&resp, |ui| {
         menu::begin(ui);
         let soon = "Noch nicht verfügbar";
         let mut act = |ui: &mut egui::Ui, item: MenuItem<'_>, a: MenuAction| {

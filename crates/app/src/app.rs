@@ -8,6 +8,7 @@ use dmxcraft_output::{OutputKind, OutputStatus, Runtime};
 use eframe::egui;
 
 use crate::demo;
+use crate::file_dialog::{self, Purpose};
 use crate::history::History;
 use crate::settings::Settings;
 use crate::state::{AppState, Mode};
@@ -32,13 +33,6 @@ struct ControlViews {
     programmer: ProgrammerView,
 }
 
-/// Kleiner Dialog für Dateipfade (Öffnen / Speichern unter).
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum PathDialog {
-    Open,
-    SaveAs,
-}
-
 /// Dialog zum Sperren (Passwort festlegen) oder Entsperren.
 struct LockDialog {
     set_password: bool,
@@ -57,13 +51,16 @@ pub struct DmxCraftApp {
     settings: Settings,
     settings_open: bool,
     about_open: bool,
-    path_dialog: Option<(PathDialog, String)>,
+    /// Offener Systemdialog (Öffnen / Speichern unter).
+    file_dialog: Option<file_dialog::Pending>,
     lock_dialog: Option<LockDialog>,
     state: AppState,
     control: ControlViews,
     setup: SetupView,
     windows: Windows,
     history: History,
+    /// Bisherige Größenkorrekturen im aktuellen Vollbild.
+    fullscreen_fixes: u8,
 }
 
 impl DmxCraftApp {
@@ -100,13 +97,14 @@ impl DmxCraftApp {
             settings,
             settings_open: false,
             about_open: false,
-            path_dialog: None,
+            file_dialog: None,
             lock_dialog: None,
             state,
             control: ControlViews::default(),
             setup: SetupView::default(),
             windows: Windows::default(),
             history: History::default(),
+            fullscreen_fixes: 0,
         }
     }
 
@@ -164,6 +162,38 @@ impl DmxCraftApp {
         }
     }
 
+    /// Randlose Fenster (Windows) übernehmen beim Vollbild die neue Größe
+    /// nicht immer – der Rest bleibt schwarz. Dann die Größe ausdrücklich setzen.
+    fn fix_fullscreen_size(&mut self, ctx: &egui::Context) {
+        let (fullscreen, inner, monitor) = ctx.input(|i| {
+            let v = i.viewport();
+            (v.fullscreen.unwrap_or(false), v.inner_rect, v.monitor_size)
+        });
+        if !fullscreen {
+            self.fullscreen_fixes = 0;
+            return;
+        }
+        if let (Some(inner), Some(monitor)) = (inner, monitor) {
+            let off = (inner.size() - monitor).abs();
+            if (off.x > 2.0 || off.y > 2.0) && self.fullscreen_fixes < 5 {
+                self.fullscreen_fixes += 1;
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(monitor));
+                ctx.request_repaint();
+            }
+        }
+    }
+
+    fn start_file_dialog(&mut self, ctx: &egui::Context, purpose: Purpose) {
+        // Nur ein Dialog zur Zeit
+        if self.file_dialog.is_none() {
+            self.file_dialog = Some(file_dialog::Pending::start(
+                purpose,
+                &self.state.show_path,
+                ctx,
+            ));
+        }
+    }
+
     fn apply_menu(&mut self, ctx: &egui::Context, action: MenuAction) {
         match action {
             MenuAction::NewShow => {
@@ -172,16 +202,16 @@ impl DmxCraftApp {
                 self.state.reset_for_new_show();
                 self.state.info("Neue, leere Show");
             }
-            MenuAction::OpenShow => {
-                self.path_dialog = Some((PathDialog::Open, self.state.show_path.clone()))
-            }
+            MenuAction::OpenShow => self.start_file_dialog(ctx, Purpose::OpenShow),
             MenuAction::SaveShow => {
                 let p = self.state.show_path.clone();
-                self.save_show(&p);
+                if p.trim().is_empty() {
+                    self.start_file_dialog(ctx, Purpose::SaveShowAs);
+                } else {
+                    self.save_show(&p);
+                }
             }
-            MenuAction::SaveShowAs => {
-                self.path_dialog = Some((PathDialog::SaveAs, self.state.show_path.clone()))
-            }
+            MenuAction::SaveShowAs => self.start_file_dialog(ctx, Purpose::SaveShowAs),
             MenuAction::OpenRecent(path) => {
                 if std::path::Path::new(&path).exists() {
                     self.open_show(&path);
@@ -269,7 +299,7 @@ impl DmxCraftApp {
         self.state.scene_editor_open = false;
         self.state.zones_open = false;
         self.settings_open = false;
-        self.path_dialog = None;
+
         self.settings.locked = true;
         self.save_settings();
         self.state.info("Oberfläche gesperrt");
@@ -419,42 +449,15 @@ impl DmxCraftApp {
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
-        // Pfad-Dialog
-        if let Some((kind, mut path)) = self.path_dialog.take() {
-            let mut open = true;
-            let title = match kind {
-                PathDialog::Open => "Show öffnen",
-                PathDialog::SaveAs => "Show speichern unter",
-            };
-            let action = if kind == PathDialog::Open {
-                "Öffnen"
-            } else {
-                "Speichern"
-            };
-            let res = Dialog::new(title)
-                .id("path")
-                .width(460.0)
-                .cancel("Abbrechen")
-                .primary(action)
-                .show(ctx, &mut open, |ui, first| {
-                    form(ui, "path_form", |f| {
-                        let r = f.row("Show-Datei", |ui| {
-                            ui.add(text_field(&mut path).desired_width(f32::INFINITY))
-                                .on_hover_text("Pfad der Show-Datei (.json)")
-                        });
-                        if first {
-                            r.request_focus();
-                        }
-                    });
-                });
-            let confirm = res.clicked(1);
-            if confirm {
-                match kind {
-                    PathDialog::Open => self.open_show(&path),
-                    PathDialog::SaveAs => self.save_show(&path),
+        // Ergebnis eines Systemdialogs
+        if let Some((purpose, result)) = self.file_dialog.as_ref().and_then(|d| d.poll()) {
+            self.file_dialog = None;
+            if let Some(path) = result {
+                let path = path.to_string_lossy().into_owned();
+                match purpose {
+                    Purpose::OpenShow => self.open_show(&path),
+                    Purpose::SaveShowAs => self.save_show(&path),
                 }
-            } else if open {
-                self.path_dialog = Some((kind, path));
             }
         }
 
@@ -714,6 +717,7 @@ impl eframe::App for DmxCraftApp {
         self.dialogs(&ctx);
         self.lock_window(&ctx);
         titlebar::resize_handles(&ctx);
+        self.fix_fullscreen_size(&ctx);
 
         // Rückgängig: Änderungen erst übernehmen, wenn Ziehen/Tippen beendet ist.
         let busy = ctx.input(|i| i.pointer.any_down()) || ctx.memory(|m| m.focused().is_some());

@@ -205,7 +205,7 @@ impl StageCanvas<'_> {
             state.context_target = target;
         }
         let target = state.context_target;
-        resp.context_menu(|ui| menu(ui, target, selected));
+        crate::ui::widgets::menu::context(&resp, |ui| menu(ui, target, selected));
 
         // ----- Zeichnen -----
         let hovered = resp.hover_pos().and_then(hit);

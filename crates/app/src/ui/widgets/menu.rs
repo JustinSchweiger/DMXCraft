@@ -240,6 +240,21 @@ pub fn sub(ui: &mut Ui, mut item: MenuItem<'_>, content: impl FnOnce(&mut Ui)) {
     }
 }
 
+/// Kontextmenü (Rechtsklick) im App-Stil. Klicks auf deaktivierte Einträge
+/// oder Trenner lassen das Menü offen; Einträge schließen es selbst.
+pub fn context(resp: &Response, content: impl FnOnce(&mut Ui)) {
+    egui::Popup::context_menu(resp)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(content);
+}
+
+/// Aufklappmenü an einem Knopf (z. B. Hauptmenü), gleiches Schließverhalten.
+pub fn dropdown(resp: &Response, content: impl FnOnce(&mut Ui)) {
+    egui::Popup::menu(resp)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(content);
+}
+
 /// Trennlinie zwischen Gruppen.
 pub fn separator(ui: &mut Ui) {
     // Breite 0: das gestreckte Layout füllt die Menübreite, ohne sie zu vergrößern.

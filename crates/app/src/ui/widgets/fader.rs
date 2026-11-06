@@ -106,7 +106,7 @@ impl<'a> Fader<'a> {
                 event = FaderEvent::Changed(value);
             }
         }
-        resp.context_menu(|ui| {
+        crate::ui::widgets::menu::context(&resp, |ui| {
             use crate::ui::widgets::menu::{self, MenuItem};
             menu::begin(ui);
             if menu::item(ui, MenuItem::new("Freigeben").icon(super::Icon::Reset)) {

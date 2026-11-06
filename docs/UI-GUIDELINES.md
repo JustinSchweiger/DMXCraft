@@ -99,7 +99,11 @@ keinen App-Zustand – nur ihre Eingabewerte.
   Menüs. Symbole, wo sie helfen; die oberste Ebene des Hauptmenüs ohne
   Symbolspalte (`plain()`). Zerstörendes (Löschen) immer als Untermenü mit
   roter Bestätigung (`danger()`). Noch nicht Verfügbares deaktiviert mit
-  Tooltip „Noch nicht verfügbar“. Kürzel-Texte aus `titlebar::keys`.
+  Tooltip „Noch nicht verfügbar“ – Klick darauf tut nichts, das Menü bleibt
+  offen (`menu::context`/`menu::dropdown`, nie `resp.context_menu`).
+  Kürzel-Texte aus `titlebar::keys`. „…“ am Ende heißt: es öffnet sich ein
+  Dialog; Dateien immer über den Systemdialog (`file_dialog`), nie über ein
+  eigenes Pfad-Feld.
 * **Toggle** (Schiebeschalter): für alle An/Aus-Optionen – **keine Checkboxen**.
 * **RangeSlider**: senkrechter Regler mit Unter- und Obergrenze (z. B. Dimmer-Limit).
 * **LimitPad**: XY-Feld mit Griffen für Bereiche (Pan/Tilt-Grenzen).
