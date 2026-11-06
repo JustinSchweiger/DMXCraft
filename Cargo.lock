@@ -575,10 +575,12 @@ dependencies = [
  "dmxcraft-ofl",
  "dmxcraft-output",
  "eframe",
+ "raw-window-handle",
  "rfd",
  "serde",
  "serde_json",
  "sha2",
+ "windows-sys 0.61.2",
  "winresource",
 ]
 

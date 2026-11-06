@@ -4,6 +4,7 @@ mod app;
 mod demo;
 mod desktop;
 mod file_dialog;
+mod fullscreen;
 mod history;
 mod icon;
 mod lock;

@@ -39,13 +39,47 @@ pub fn ensure_linux_menu_entry() {
          Icon=dmxcraft\n\
          Terminal=false\n\
          Categories=AudioVideo;Video;\n\
-         Keywords=DMX;Licht;Lighting;Daslight;\n",
+         Keywords=DMX;Licht;Lighting;Daslight;\n\
+         MimeType=application/x-dmxcraft;\n",
         exe.display()
     );
     if std::fs::read_to_string(&file).ok().as_deref() == Some(content.as_str()) {
         return;
     }
     let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&file, content));
+    register_mime(&data);
+    // Datenbanken aktualisieren, falls die Werkzeuge vorhanden sind
+    let _ = std::process::Command::new("update-desktop-database")
+        .arg(&dir)
+        .status();
+}
+
+/// Dateityp `.dmxcraft` bekannt machen (Doppelklick öffnet DMXCraft).
+#[cfg(target_os = "linux")]
+fn register_mime(data: &std::path::Path) {
+    const XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-dmxcraft">
+    <comment>DMXCraft-Show</comment>
+    <sub-class-of type="application/json"/>
+    <icon name="dmxcraft"/>
+    <glob pattern="*.dmxcraft"/>
+  </mime-type>
+</mime-info>
+"#;
+    let mime = data.join("mime");
+    let file = mime.join("packages/dmxcraft.xml");
+    if std::fs::read_to_string(&file).ok().as_deref() == Some(XML) {
+        return;
+    }
+    if std::fs::create_dir_all(mime.join("packages"))
+        .and_then(|_| std::fs::write(&file, XML))
+        .is_ok()
+    {
+        let _ = std::process::Command::new("update-mime-database")
+            .arg(&mime)
+            .status();
+    }
 }
 
 #[cfg(not(target_os = "linux"))]

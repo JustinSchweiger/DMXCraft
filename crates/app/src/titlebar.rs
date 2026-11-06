@@ -479,9 +479,8 @@ pub mod keys {
 }
 
 /// Fenstergröße an den Rändern ändern (randloses Fenster).
-pub fn resize_handles(ctx: &egui::Context) {
+pub fn resize_handles(ctx: &egui::Context, fullscreen: bool) {
     let maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
-    let fullscreen = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
     if maximized || fullscreen {
         return;
     }

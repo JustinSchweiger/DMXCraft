@@ -163,6 +163,8 @@ unverändert. Die Schritte dafür stehen als Kommentar in der Datei.
 
 ## Show-Format
 
-JSON, Version 1. Die verwendeten Gerätetypen werden in jede Show kopiert,
+Dateiendung **`.dmxcraft`**, Inhalt JSON (Version 1); ältere `.json`-Shows lassen sich weiter
+öffnen. Der Windows-Installer verknüpft `.dmxcraft` mit DMXCraft, unter Linux trägt DMXCraft
+den Dateityp beim ersten Start ein (Doppelklick öffnet die Show). Die verwendeten Gerätetypen werden in jede Show kopiert,
 damit die Datei auf jedem Rechner identisch lädt. Universen sind in der Datei
 0-basiert, DMX-Adressen 1-basiert.

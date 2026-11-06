@@ -9,6 +9,7 @@ use eframe::egui;
 
 use crate::demo;
 use crate::file_dialog::{self, Purpose};
+use crate::fullscreen::Fullscreen;
 use crate::history::History;
 use crate::settings::Settings;
 use crate::state::{AppState, Mode};
@@ -59,8 +60,9 @@ pub struct DmxCraftApp {
     setup: SetupView,
     windows: Windows,
     history: History,
-    /// Bisherige Größenkorrekturen im aktuellen Vollbild.
-    fullscreen_fixes: u8,
+    fullscreen: Fullscreen,
+    /// Vollbild umschalten, sobald der Frame (Fensterhandle) verfügbar ist.
+    toggle_fullscreen: bool,
 }
 
 impl DmxCraftApp {
@@ -83,7 +85,7 @@ impl DmxCraftApp {
         let engine = Arc::new(Mutex::new(Engine::new(show)));
         let output_kind = OutputKind::from_key(&settings.output);
         let runtime = Runtime::start(engine.clone(), output_kind.create(), OUTPUT_HZ);
-        let mut state = AppState::new(show_path.unwrap_or_else(|| "show.json".into()));
+        let mut state = AppState::new(show_path.unwrap_or_default());
         state.message = message;
         // Gesperrt bleibt gesperrt – auch nach einem Neustart
         state.locked = settings.locked && settings.lock_hash.is_some();
@@ -104,7 +106,8 @@ impl DmxCraftApp {
             setup: SetupView::default(),
             windows: Windows::default(),
             history: History::default(),
-            fullscreen_fixes: 0,
+            fullscreen: Fullscreen::default(),
+            toggle_fullscreen: false,
         }
     }
 
@@ -159,27 +162,6 @@ impl DmxCraftApp {
                 self.save_settings();
             }
             Err(err) => self.state.error(err.to_string()),
-        }
-    }
-
-    /// Randlose Fenster (Windows) übernehmen beim Vollbild die neue Größe
-    /// nicht immer – der Rest bleibt schwarz. Dann die Größe ausdrücklich setzen.
-    fn fix_fullscreen_size(&mut self, ctx: &egui::Context) {
-        let (fullscreen, inner, monitor) = ctx.input(|i| {
-            let v = i.viewport();
-            (v.fullscreen.unwrap_or(false), v.inner_rect, v.monitor_size)
-        });
-        if !fullscreen {
-            self.fullscreen_fixes = 0;
-            return;
-        }
-        if let (Some(inner), Some(monitor)) = (inner, monitor) {
-            let off = (inner.size() - monitor).abs();
-            if (off.x > 2.0 || off.y > 2.0) && self.fullscreen_fixes < 5 {
-                self.fullscreen_fixes += 1;
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(monitor));
-                ctx.request_repaint();
-            }
         }
     }
 
@@ -248,10 +230,7 @@ impl DmxCraftApp {
                 self.state.show_dmx_levels = true;
             }
             MenuAction::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
-            MenuAction::ToggleFullscreen => {
-                let fs = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
-                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fs));
-            }
+            MenuAction::ToggleFullscreen => self.toggle_fullscreen = true,
             MenuAction::Zoom(d) => {
                 let z = if d == 0.0 {
                     1.0
@@ -615,7 +594,7 @@ impl DmxCraftApp {
 }
 
 impl eframe::App for DmxCraftApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         // Laufende Szenen und Live-Farben flüssig anzeigen.
         ctx.request_repaint_after(Duration::from_millis(33));
@@ -669,6 +648,9 @@ impl eframe::App for DmxCraftApp {
         for a in actions {
             self.apply_menu(&ctx, a);
         }
+        if std::mem::take(&mut self.toggle_fullscreen) {
+            self.fullscreen.toggle(&ctx, frame);
+        }
 
         // ----- Inhalt (randlos, Bereiche nur durch Trennlinien getrennt) -----
         let frame = self.runtime.last_frame();
@@ -716,8 +698,7 @@ impl eframe::App for DmxCraftApp {
         }
         self.dialogs(&ctx);
         self.lock_window(&ctx);
-        titlebar::resize_handles(&ctx);
-        self.fix_fullscreen_size(&ctx);
+        titlebar::resize_handles(&ctx, self.fullscreen.is_on(&ctx));
 
         // Rückgängig: Änderungen erst übernehmen, wenn Ziehen/Tippen beendet ist.
         let busy = ctx.input(|i| i.pointer.any_down()) || ctx.memory(|m| m.focused().is_some());

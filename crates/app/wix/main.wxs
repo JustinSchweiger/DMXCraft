@@ -127,6 +127,12 @@
                                 DiskId='1'
                                 Source='$(var.CargoTargetBinDir)\dmxcraft.exe'
                                 KeyPath='yes'/>
+                            <!-- DMXCraft: Dateityp .dmxcraft mit DMXCraft verknüpfen -->
+                            <ProgId Id='DMXCraft.Show' Description='DMXCraft-Show' Icon='exe0' IconIndex='0'>
+                                <Extension Id='dmxcraft' ContentType='application/x-dmxcraft'>
+                                    <Verb Id='open' Command='Open' TargetFile='exe0' Argument='"%1"'/>
+                                </Extension>
+                            </ProgId>
                         </Component>
                     </Directory>
                 </Directory>

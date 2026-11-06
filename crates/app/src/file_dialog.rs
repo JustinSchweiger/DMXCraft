@@ -8,6 +8,10 @@ use std::sync::mpsc::{channel, Receiver};
 
 use eframe::egui;
 
+/// Dateiendung der Shows (Inhalt ist JSON). Ältere `.json`-Shows lassen sich
+/// weiter öffnen.
+pub const SHOW_EXT: &str = "dmxcraft";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Purpose {
     OpenShow,
@@ -26,7 +30,10 @@ impl Pending {
         let current = PathBuf::from(current);
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let mut dialog = rfd::FileDialog::new().add_filter("DMXCraft-Show", &["json"]);
+            let mut dialog = rfd::FileDialog::new().add_filter("DMXCraft-Show", &[SHOW_EXT]);
+            if purpose == Purpose::OpenShow {
+                dialog = dialog.add_filter("Ältere Show (JSON)", &["json"]);
+            }
             if let Some(dir) = current.parent().filter(|d| d.is_dir()) {
                 dialog = dialog.set_directory(dir);
             }
@@ -34,14 +41,14 @@ impl Pending {
                 Purpose::OpenShow => dialog.set_title("Show öffnen").pick_file(),
                 Purpose::SaveShowAs => {
                     let name = current
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or_else(|| "Show.json".into());
+                        .file_stem()
+                        .map(|n| format!("{}.{SHOW_EXT}", n.to_string_lossy()))
+                        .unwrap_or_else(|| format!("Show.{SHOW_EXT}"));
                     dialog
                         .set_title("Show speichern unter")
                         .set_file_name(name)
                         .save_file()
-                        .map(with_json_extension)
+                        .map(with_show_extension)
                 }
             };
             let _ = tx.send(result);
@@ -56,10 +63,34 @@ impl Pending {
     }
 }
 
-fn with_json_extension(p: PathBuf) -> PathBuf {
-    if p.extension().is_some() {
+/// Speichern unter: immer mit `.dmxcraft` (auch wenn `.json` gewählt war).
+fn with_show_extension(p: PathBuf) -> PathBuf {
+    if p.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case(SHOW_EXT))
+    {
         p
     } else {
-        p.with_extension("json")
+        p.with_extension(SHOW_EXT)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn save_as_gets_show_extension() {
+        assert_eq!(
+            with_show_extension("a/b".into()),
+            PathBuf::from("a/b.dmxcraft")
+        );
+        assert_eq!(
+            with_show_extension("a/b.json".into()),
+            PathBuf::from("a/b.dmxcraft")
+        );
+        assert_eq!(
+            with_show_extension("a/b.DMXCraft".into()),
+            PathBuf::from("a/b.DMXCraft")
+        );
     }
 }
