@@ -22,6 +22,10 @@ auf einem zweiten Bildschirm).
   32 Schatten).
 * Die Werte kommen direkt aus dem DMX-Ausgang: Dimmer, RGB/W/Amber/UV (auch je
   Zelle bei Bars), Strobe, Pan/Tilt (mit Feinkanal) bei Moving Heads.
+* Farbrad und Gobos werden angenähert, weil die Gerätedaten keine
+  Farbfelder/Gobo-Bilder enthalten: Farbrad unten offen, dann acht typische
+  Farben; Gobo unten offen, dann sechs Muster (Stern, Punkte, Ringe, Breakup,
+  Balken, Spirale) im Lichtfleck und als Schächte im Strahl.
 
 ## Veranstaltungsort
 
@@ -53,5 +57,5 @@ Daslight-Gerätebibliothek.
 
 ## Nächste Schritte
 
-Farbrad/Gobos, Zellen aus den physischen Gerätedaten, eigene 3D-Modelle
+Farbfelder und Gobo-Bilder je Gerät (Profile Builder), Zellen aus den physischen Gerätedaten, eigene 3D-Modelle
 (glTF), Kamera-Voreinstellungen.

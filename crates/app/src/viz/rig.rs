@@ -34,6 +34,37 @@ pub struct Beam {
     pub color: Vec3,
     /// Radius der Linse (Breite des Strahls am Anfang)
     pub lens: f32,
+    /// Gobo-Muster (0 = offen, 1–6 angenähert)
+    pub gobo: f32,
+}
+
+/// Farbe eines Farbrads (angenähert, ohne Herstellerangaben):
+/// unten offen (weiß), dann acht typische Farbfelder.
+pub fn color_wheel(v: f32) -> Vec3 {
+    const SLOTS: [[f32; 3]; 8] = [
+        [1.0, 0.05, 0.03],
+        [1.0, 0.35, 0.02],
+        [1.0, 0.85, 0.05],
+        [0.1, 1.0, 0.15],
+        [0.05, 0.85, 1.0],
+        [0.05, 0.15, 1.0],
+        [1.0, 0.05, 0.75],
+        [0.7, 0.55, 1.0],
+    ];
+    if v < 0.06 {
+        return Vec3::new(1.0, 0.95, 0.9);
+    }
+    let k = (((v - 0.06) / 0.94) * SLOTS.len() as f32) as usize;
+    Vec3::from(SLOTS[k.min(SLOTS.len() - 1)])
+}
+
+/// Gobo-Nummer aus dem Kanalwert (angenähert: unten offen, dann sechs Muster).
+pub fn gobo(v: f32) -> f32 {
+    if v < 0.05 {
+        0.0
+    } else {
+        (1.0 + ((v - 0.05) / 0.95 * 6.0).floor()).min(6.0)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -104,11 +135,14 @@ fn cell_light(get: &dyn Fn(K, usize) -> Option<f32>, cell: usize, cells: usize) 
     let uv = get(K::Uv, cell);
     let any_color =
         r.is_some() || g.is_some() || b.is_some() || w.is_some() || a.is_some() || uv.is_some();
+    let wheel = get(K::ColorWheel, 0);
     let mut c = if any_color {
         Vec3::new(r.unwrap_or(0.0), g.unwrap_or(0.0), b.unwrap_or(0.0))
             + Vec3::new(1.0, 0.92, 0.82) * w.unwrap_or(0.0)
             + Vec3::new(1.0, 0.5, 0.05) * a.unwrap_or(0.0)
             + Vec3::new(0.32, 0.04, 1.0) * uv.unwrap_or(0.0) * 0.8
+    } else if let Some(v) = wheel {
+        color_wheel(v)
     } else {
         // Halogen/Dimmer: warmweiß
         Vec3::new(1.0, 0.78, 0.5)
@@ -117,7 +151,7 @@ fn cell_light(get: &dyn Fn(K, usize) -> Option<f32>, cell: usize, cells: usize) 
     let dim = get(K::Dimmer, cell)
         .or_else(|| (cells > 1).then(|| get(K::Dimmer, 0)).flatten())
         .unwrap_or(1.0);
-    if !any_color && get(K::Dimmer, 0).is_none() {
+    if !any_color && wheel.is_none() && get(K::Dimmer, 0).is_none() {
         c = Vec3::ZERO;
     }
     c * dim
@@ -194,6 +228,7 @@ pub fn build(
             let [a, b] = p.beam_angle;
             (a + (b - a) * zoom.unwrap_or(0.0)) * 0.5
         });
+        let gobo_v = by_kind(K::Gobo).first().map_or(0.0, |i| gobo(value(*i)));
         let sel = selected.contains(&f.id);
         let body = if sel {
             Vec3::new(0.0, 0.45, 0.5)
@@ -221,6 +256,7 @@ pub fn build(
                         half_angle: half,
                         color: on * power,
                         lens,
+                        gobo: gobo_v,
                     });
                 }
             };

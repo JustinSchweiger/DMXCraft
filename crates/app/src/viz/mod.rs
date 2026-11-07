@@ -826,7 +826,9 @@ impl VizView {
                 let r = b.lens + len * b.half_angle.to_radians().tan();
                 let rot = glam::Quat::from_rotation_arc(Vec3::NEG_Y, b.dir);
                 let m = Mat4::from_scale_rotation_translation(Vec3::new(r, len, r), rot, b.origin);
-                f.beams.push(Instance::new(m, b.color, 1.0, 0.0, 0.0));
+                let mut inst = Instance::new(m, b.color, 1.0, 0.0, 0.0);
+                inst.params[2] = b.gobo;
+                f.beams.push(inst);
                 let power = b.color.max_element();
                 lights.push((
                     power,
@@ -840,7 +842,7 @@ impl VizView {
                         color: (b.color * 2.5)
                             .extend((b.half_angle * 0.6).to_radians().cos())
                             .into(),
-                        extra: [-1.0, b.half_angle * 1.25, 0.0, 0.0],
+                        extra: [-1.0, b.half_angle * 1.25, b.gobo, 0.0],
                     },
                 ));
             }

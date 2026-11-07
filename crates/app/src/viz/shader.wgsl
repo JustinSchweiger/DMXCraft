@@ -104,6 +104,26 @@ fn inverse3(m: mat3x3<f32>) -> mat3x3<f32> {
     return transpose(mat3x3<f32>(r0 * inv, r1 * inv, r2 * inv));
 }
 
+// Gobo-Muster (angenähert): Winkel um die Achse, Abstand von der Mitte 0–1
+fn gobo(id: f32, ang: f32, r: f32) -> f32 {
+    let k = i32(id + 0.5);
+    var v = 1.0;
+    if (k == 1) {
+        v = smoothstep(-0.1, 0.3, cos(ang * 6.0)); // Stern
+    } else if (k == 2) {
+        v = smoothstep(0.2, 0.5, sin(r * 20.0)) * smoothstep(-0.2, 0.2, cos(ang * 8.0)); // Punkte
+    } else if (k == 3) {
+        v = smoothstep(-0.2, 0.4, sin(r * 26.0)); // Ringe
+    } else if (k == 4) {
+        v = smoothstep(-0.1, 0.4, sin(ang * 5.0 + r * 9.0) * sin(ang * 3.0 - r * 13.0) + 0.2); // Breakup
+    } else if (k == 5) {
+        v = smoothstep(-0.2, 0.2, cos(ang * 2.0)) * 0.9 + 0.1; // Balken
+    } else if (k == 6) {
+        v = smoothstep(-0.2, 0.3, sin(ang * 3.0 + r * 14.0)); // Spirale
+    }
+    return v;
+}
+
 // Lichtkegel eines Scheinwerfers auf einer Fläche
 fn spot(l: Light, p: vec3<f32>, n: vec3<f32>, view: vec3<f32>, gloss: f32) -> vec3<f32> {
     let to = l.pos.xyz - p;
@@ -125,7 +145,17 @@ fn spot(l: Light, p: vec3<f32>, n: vec3<f32>, view: vec3<f32>, gloss: f32) -> ve
     let h = normalize(ld + view);
     let spec = pow(max(dot(n, h), 0.0), mix(8.0, 96.0, gloss)) * gloss;
     let sh = shadow(i32(l.extra.x), p, n, ld);
-    return l.color.rgb * cone * fall * edge * (diff + spec) * sh;
+    var pattern = 1.0;
+    if (l.extra.z > 0.5) {
+        let ax = l.dir.xyz;
+        let up = select(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), abs(ax.y) > 0.95);
+        let u = normalize(cross(ax, up));
+        let w = cross(ax, u);
+        let q = -ld;
+        let r = acos(clamp(cosang, -1.0, 1.0)) / max(acos(clamp(l.dir.w, -1.0, 1.0)), 1e-3);
+        pattern = gobo(l.extra.z, atan2(dot(q, w), dot(q, u)), r);
+    }
+    return l.color.rgb * cone * fall * edge * (diff + spec) * sh * pattern;
 }
 
 @fragment
@@ -163,7 +193,11 @@ fn fs_beam(i: VOut) -> @location(0) vec4<f32> {
     // nahe der Linse heller, zum Ende auslaufen
     let along = pow(1.0 - t, 1.8) * smoothstep(0.0, 0.03, t);
     let air = g.env.y * (0.15 + 0.85 * g.env.z);
-    let a = rim * along * air * i.color.a;
+    var a = rim * along * air * i.color.a;
+    if (i.params.z > 0.5) {
+        // Gobo im Strahl: Schächte um die Achse
+        a = a * mix(0.15, 1.0, gobo(i.params.z, atan2(i.local.z, i.local.x), 0.9));
+    }
     return vec4<f32>(i.color.rgb * a, 0.0);
 }
 
