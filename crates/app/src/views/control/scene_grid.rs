@@ -691,9 +691,14 @@ fn column(
         ui.add_space(theme::SP_XS);
         // Umbrechen: so viele Karten untereinander, wie bis zum unteren Rand
         // passen, dann in der nächsten Spalte weiter
-        let row_h = CARD_H + theme::SP_XS;
+        // Zeilenhöhe wie tatsächlich belegt: Karte + Abstand + egui-Abstände
+        // zwischen den Elementen (sonst passt eine Karte zu viel und es scrollt)
+        let gap_y = ui.spacing().item_spacing.y;
+        let row_h = CARD_H + theme::SP_XS + 2.0 * gap_y;
         let per_col = if wrap {
-            (((ui.clip_rect().bottom() - ui.cursor().top()) / row_h).floor() as usize).max(1)
+            // n Karten brauchen n · Zeile − (Zeile − Karte), kleiner Rand unten
+            let room = ui.clip_rect().bottom() - ui.cursor().top() - 4.0;
+            (((room + row_h - CARD_H) / row_h).floor() as usize).max(1)
         } else {
             usize::MAX
         };
