@@ -1,17 +1,17 @@
 # Graph Report - dmxcraft-src  (2026-11-07)
 
 ## Corpus Check
-- 91 files · ~92,683 words
+- 91 files · ~93,029 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 14 file(s) not represented in the graph (top: (none) 5, .ttf 3, .ico 2)
 
 ## Summary
-- 2040 nodes · 4738 edges · 169 communities (92 shown, 77 thin omitted)
-- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 224 edges (avg confidence: 0.8)
+- 2040 nodes · 4740 edges · 169 communities (92 shown, 77 thin omitted)
+- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 225 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1af7a97c`
+- Built from commit: `f720c5c8`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -535,16 +535,16 @@ Nodes (7): Fullscreen, Step, Enter, Maximize, FxFile, import_fx(), mark_clipboar
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Show` connect `Show` to `Engine`, `AppState`, `runtime.rs`, `theme.rs`, `fx.rs`, `app.rs`, `t`, `stage_canvas.rs`, `.add_scene`, `stage.rs`, `DmxCraftApp`, `core/src/lib.rs`, `feature.rs`, `motion.rs`, `widgets/mod.rs`, `show.rs`, `demo.rs`, `ShowError`, `EffectKind`, `BankScope`, `FixtureType`?**
-  _High betweenness centrality (0.135) - this node is a cross-community bridge._
+  _High betweenness centrality (0.139) - this node is a cross-community bridge._
 - **Are the 78 inferred relationships involving `t()` (e.g. with `.apply_menu()` and `.dialogs()`) actually correct?**
   _`t()` has 78 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Move`, `Left`, `Right` to the rest of the system?**
   _314 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Engine` be split into smaller, more focused modules?**
   _Cohesion score 0.057133985405992856 - nodes in this community are weakly interconnected._
-- **Why does `t()` connect `egui` to `AppState`, `pal`, `t`, `app.rs`, `t`, `file_dialog.rs`, `fx_ui.rs`, `titlebar.rs`, `super`, `egui`, `ProgrammerMode`, `stage.rs`, `HeaderAction`, `Fader`, `i18n/mod.rs`, `Step`, `DmxCraftApp`, `settings_window.rs`, `programmer.rs`, `widgets/mod.rs`, `dialog.rs`, `Layer`, `PatchGrid`, `Dialog<'a>`, `Category`, `.ui`, `ViewCtx`, `control/timeline.rs`?**
-  _High betweenness centrality (0.120) - this node is a cross-community bridge._
+- **Why does `Engine` connect `Engine` to `hashmap`, `AppState`, `runtime.rs`, `ChannelKind`, `t`, `app.rs`, `t`, `DmxFrame`, `Timeline`, `ProgrammerMode`, `audio.rs`, `stage.rs`, `DmxCraftApp`, `settings_window.rs`, `programmer.rs`, `Show`, `Layer`, `Category`, `.ui`, `ViewCtx`, `control/timeline.rs`, `FixtureType`?**
+  _High betweenness centrality (0.119) - this node is a cross-community bridge._
 - **Should `AppState` be split into smaller, more focused modules?**
   _Cohesion score 0.0532724505327245 - nodes in this community are weakly interconnected._
-- **Why does `Engine` connect `Engine` to `hashmap`, `AppState`, `runtime.rs`, `ChannelKind`, `t`, `app.rs`, `t`, `DmxFrame`, `Timeline`, `ProgrammerMode`, `audio.rs`, `stage.rs`, `DmxCraftApp`, `settings_window.rs`, `programmer.rs`, `Show`, `Layer`, `Category`, `.ui`, `ViewCtx`, `control/timeline.rs`, `FixtureType`?**
-  _High betweenness centrality (0.108) - this node is a cross-community bridge._
+- **Why does `t()` connect `egui` to `AppState`, `pal`, `t`, `app.rs`, `t`, `file_dialog.rs`, `fx_ui.rs`, `titlebar.rs`, `super`, `egui`, `ProgrammerMode`, `stage.rs`, `HeaderAction`, `Fader`, `i18n/mod.rs`, `Step`, `DmxCraftApp`, `settings_window.rs`, `programmer.rs`, `widgets/mod.rs`, `dialog.rs`, `Layer`, `PatchGrid`, `Dialog<'a>`, `Category`, `.ui`, `ViewCtx`, `control/timeline.rs`?**
+  _High betweenness centrality (0.099) - this node is a cross-community bridge._

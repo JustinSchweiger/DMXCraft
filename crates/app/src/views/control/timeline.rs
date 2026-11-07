@@ -4,6 +4,7 @@
 //! ihren Blöcken (Szenen und Audio).
 
 use crate::i18n::t;
+use crate::ui::widgets::color_picker::color_swatches;
 use dmxcraft_core::timeline::{Clip, ClipContent, GridMode, Timeline};
 use dmxcraft_core::{Engine, SceneId};
 use eframe::egui::{self, pos2, Color32, Rect, Sense, Shape, Stroke, StrokeKind, Vec2};
@@ -13,7 +14,7 @@ use crate::ui::theme;
 use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::{Icon, IconButton};
 
-const HEADER_W: f32 = 84.0;
+const HEADER_W: f32 = 132.0;
 const RULER_H: f32 = 22.0;
 const ZOOMBAR_H: f32 = 12.0;
 const TRACK_H: f32 = 44.0;
@@ -49,6 +50,8 @@ pub struct TimelineView {
     ruler_acc: Vec2,
     /// Zuletzt angeklickte Spur: Ziel für Einfügen (Strg+V).
     paste_track: Option<usize>,
+    /// Spur, die gerade umbenannt wird (ID, Text).
+    rename: Option<(u32, String)>,
     /// Wo das Kontextmenü der Spuren geöffnet wurde.
     menu_pos: Option<egui::Pos2>,
     /// Auswahlrahmen: Startpunkt und Auswahl davor (Strg/Umschalt ergänzt).
@@ -70,6 +73,7 @@ impl Default for TimelineView {
             ruler_axis: None,
             ruler_acc: Vec2::ZERO,
             paste_track: None,
+            rename: None,
             menu_pos: None,
             marquee: None,
             drag: None,
@@ -217,7 +221,7 @@ impl TimelineView {
         let area = ui.available_rect_before_wrap();
         ui.allocate_rect(area, Sense::hover());
         let p = ui.painter_at(area);
-        p.rect_filled(area, 0.0, if live { theme::raised() } else { theme::bg() });
+        p.rect_filled(area, 0.0, theme::bg());
         let lanes = Rect::from_min_max(
             pos2(area.left() + HEADER_W, area.top() + ZOOMBAR_H + RULER_H),
             area.max,
@@ -365,7 +369,9 @@ impl TimelineView {
                 ],
                 Stroke::new(1.0, theme::border()),
             );
-            if let Some(a) = track_header(ui, &tp, row, i, &mut tl.tracks[i], locked) {
+            if let Some(a) =
+                track_header(ui, &tp, row, i, &mut tl.tracks[i], locked, &mut self.rename)
+            {
                 header_action = Some((i, a));
             }
         }
@@ -410,7 +416,7 @@ impl TimelineView {
         }
         ui.set_clip_rect(lanes_clip);
         for &(ti, ty, _) in &rows {
-            let tr_locked = tl.tracks[ti].locked || locked;
+            let tr_locked = locked;
             let expanded = tl.tracks[ti].expanded;
             let th = track_h(&tl.tracks[ti]);
             let ids: Vec<u32> = tl.tracks[ti].clips.iter().map(|c| c.id).collect();
@@ -604,9 +610,7 @@ impl TimelineView {
                             s as u64
                         };
                         if let Some(tt) = pointer_track {
-                            if !tl.tracks[tt].locked {
-                                target_track = tt;
-                            }
+                            target_track = tt;
                         }
                     }
                     Drag::Left => {
@@ -713,7 +717,7 @@ impl TimelineView {
             self.paste_track = tl.clip(cid).map(|(t, _)| t);
         }
         // Auswahlrahmen: Klicken und Ziehen im Spurbereich
-        if bg.drag_started() {
+        if bg.drag_started() && !locked {
             let add = ui.input(|i| i.modifiers.command || i.modifiers.shift);
             let origin = ui.input(|i| i.pointer.press_origin());
             if let Some(o) = origin {
@@ -814,6 +818,24 @@ impl TimelineView {
         }
 
         ui.set_clip_rect(outer_clip);
+        // Live: graue Ebene über allem – nur ansehen, nicht bearbeiten
+        if live {
+            p.rect_filled(area, 0.0, theme::text_faint().gamma_multiply(0.32));
+            let chip = p.layout_no_wrap(
+                t("LIVE – nur Ansicht").to_string(),
+                egui::FontId::proportional(theme::FS_CAPTION),
+                theme::text(),
+            );
+            let cr = Rect::from_min_size(
+                pos2(
+                    area.right() - chip.size().x - 22.0,
+                    area.bottom() - chip.size().y - 18.0,
+                ),
+                chip.size() + Vec2::new(12.0, 6.0),
+            );
+            p.rect_filled(cr, 4.0, theme::raised());
+            p.galley(cr.min + Vec2::new(6.0, 3.0), chip, theme::text());
+        }
         // Abspielposition
         let cx = self.x_at(st.timeline_cursor, lanes);
         if cx >= lanes.left() && cx <= lanes.right() {
@@ -1064,6 +1086,23 @@ impl TimelineView {
             .on_hover_text(t(
                 "Klick: Position setzen · Ziehen: hoch/runter zoomen, links/rechts scrollen",
             ));
+        // Abspielkopf (Dreieck) bleibt greifbar und liegt über dem Lineal
+        let cx = self.x_at(st.timeline_cursor, lanes);
+        let head = ui.interact(
+            Rect::from_min_max(pos2(cx - 7.0, r.top()), pos2(cx + 7.0, r.bottom())).intersect(r),
+            ui.scope_id().with("playhead"),
+            Sense::drag(),
+        );
+        if head.hovered() || head.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        } else if resp.hovered() && self.ruler_grab.is_none() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ZoomIn);
+        }
+        if let Some(q) = head.interact_pointer_pos().filter(|_| head.dragged()) {
+            let ms = self.snap(self.ms_at(q.x, lanes).max(0.0), tl, &[], 0);
+            st.timeline_cursor = ms;
+            e.seek_timeline(scene, ms);
+        }
         if resp.clicked() {
             if let Some(q) = resp.interact_pointer_pos() {
                 let ms = self.snap(self.ms_at(q.x, lanes).max(0.0), tl, &[], 0);
@@ -1090,7 +1129,7 @@ impl TimelineView {
                 }
                 match self.ruler_axis {
                     Some(true) => {
-                        self.scroll_ms = (self.scroll_ms + f64::from(d.x / self.zoom)).max(0.0);
+                        self.scroll_ms = (self.scroll_ms - f64::from(d.x / self.zoom)).max(0.0);
                     }
                     Some(false) => self.zoom_at((-d.y * 0.01).exp(), origin.x, lanes),
                     None => {}
@@ -1294,6 +1333,8 @@ fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {
 }
 
 /// Kopf einer Spur: Pfeil (Unterspuren), Nummer, Auge (stumm), Schloss.
+/// Kopf einer Spur: Farbstreifen, Aufklappen, Name (Doppelklick: umbenennen),
+/// Ein-/Ausblenden; Rechtsklick: Menü mit Farbe.
 fn track_header(
     ui: &mut egui::Ui,
     p: &egui::Painter,
@@ -1301,25 +1342,35 @@ fn track_header(
     i: usize,
     tr: &mut dmxcraft_core::timeline::Track,
     locked: bool,
+    rename: &mut Option<(u32, String)>,
 ) -> Option<HeaderAction> {
     let head = Rect::from_min_max(row.min, pos2(row.left() + HEADER_W, row.bottom()));
+    let th = track_h(tr);
+    let top = Rect::from_min_size(head.min, Vec2::new(HEADER_W, th));
+    let color = tr.color.map(theme::rgb);
     p.rect_filled(head, 0.0, theme::surface());
+    if let Some(c) = color {
+        p.rect_filled(top, 0.0, c.gamma_multiply(0.14));
+    }
+    // Farbstreifen links
+    p.rect_filled(
+        Rect::from_min_size(top.min + Vec2::new(0.0, 3.0), Vec2::new(4.0, th - 6.0)),
+        2.0,
+        color.unwrap_or_else(theme::border),
+    );
     p.line_segment(
         [head.right_top(), head.right_bottom()],
         Stroke::new(1.0, theme::border()),
     );
     let mut action = None;
-    let th = track_h(tr);
-    let top = Rect::from_min_size(head.min, Vec2::new(HEADER_W, th));
     let resp = ui.interact(
         top,
         ui.scope_id().with(("track_head", tr.id)),
         Sense::click(),
     );
-    // Pfeil
     let arrow = Rect::from_min_size(
-        pos2(top.left() + 2.0, top.center().y - 12.0),
-        Vec2::new(24.0, 24.0),
+        pos2(top.left() + 6.0, top.center().y - 11.0),
+        Vec2::splat(22.0),
     );
     if ui
         .put(
@@ -1329,23 +1380,16 @@ fn track_header(
             } else {
                 Icon::ChevronRight
             })
-            .size(24.0)
+            .size(22.0)
             .flat(),
         )
         .clicked()
     {
         action = Some(HeaderAction::Toggle);
     }
-    p.text(
-        pos2(top.left() + 32.0, top.center().y),
-        egui::Align2::CENTER_CENTER,
-        (i + 1).to_string(),
-        theme::body(),
-        theme::text_dim(),
-    );
     let eye = Rect::from_min_size(
-        pos2(top.right() - 28.0, top.center().y - 21.0),
-        Vec2::splat(21.0),
+        pos2(top.right() - 26.0, top.center().y - 11.0),
+        Vec2::splat(22.0),
     );
     if ui
         .put(
@@ -1360,59 +1404,110 @@ fn track_header(
     {
         tr.muted = !tr.muted;
     }
-    let lock = Rect::from_min_size(pos2(top.right() - 28.0, top.center().y), Vec2::splat(22.0));
-    if ui
-        .put(
-            lock,
-            IconButton::new(if tr.locked {
-                Icon::Locked
+    // Name
+    let name_rect = Rect::from_min_max(
+        pos2(arrow.right() + 2.0, top.center().y - 10.0),
+        pos2(eye.left() - 2.0, top.center().y + 10.0),
+    );
+    let editing = matches!(rename, Some((id, _)) if *id == tr.id);
+    if editing {
+        if let Some((_, text)) = rename.as_mut() {
+            let te = ui.put(
+                name_rect,
+                egui::TextEdit::singleline(text)
+                    .font(theme::body())
+                    .margin(Vec2::new(4.0, 1.0)),
+            );
+            if !te.has_focus() && !te.lost_focus() {
+                te.request_focus();
+            }
+            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let esc = ui.input(|i| i.key_pressed(egui::Key::Escape));
+            if te.lost_focus() || enter || esc {
+                if !esc {
+                    tr.name = text.trim().to_string();
+                }
+                *rename = None;
+            }
+        }
+    } else {
+        let label = if tr.name.is_empty() {
+            tr!("Spur {n}", n = i + 1)
+        } else {
+            tr.name.clone()
+        };
+        let clip = p.with_clip_rect(name_rect.intersect(p.clip_rect()));
+        clip.text(
+            pos2(name_rect.left(), name_rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            label,
+            theme::body(),
+            if tr.muted {
+                theme::text_faint()
             } else {
-                Icon::Unlocked
-            })
-            .size(22.0)
-            .flat(),
-        )
-        .on_hover_text(t("Spur sperren"))
-        .clicked()
-        && !locked
-    {
-        tr.locked = !tr.locked;
+                theme::text()
+            },
+        );
     }
     if tr.expanded {
         p.text(
-            pos2(head.left() + 10.0, head.top() + th + LANE_H / 2.0),
+            pos2(head.left() + 12.0, head.top() + th + LANE_H / 2.0),
             egui::Align2::LEFT_CENTER,
             t("Dimmer/Volume"),
             egui::FontId::proportional(theme::FS_CAPTION - 1.0),
             theme::text_faint(),
         );
     }
-    if !locked {
-        menu::context(&resp, |ui| {
-            menu::begin(ui);
-            let label = if tr.expanded {
-                t("Einklappen")
-            } else {
-                t("Erweitern")
-            };
-            if menu::item(ui, MenuItem::new(label)) {
-                action = Some(HeaderAction::Toggle);
-            }
-            if menu::item(ui, MenuItem::new(t("Alle erweitern"))) {
-                action = Some(HeaderAction::ExpandAll);
-            }
-            menu::separator(ui);
-            if menu::item(ui, MenuItem::new(t("Neue Spur einfügen")).icon(Icon::Plus)) {
-                action = Some(HeaderAction::Insert);
-            }
-            if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
-                action = Some(HeaderAction::Duplicate);
-            }
-            if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash)) {
-                action = Some(HeaderAction::Delete);
-            }
-        });
+    if locked {
+        return action;
     }
+    if resp.double_clicked() {
+        *rename = Some((tr.id, tr.name.clone()));
+    }
+    menu::context(&resp, |ui| {
+        menu::begin(ui);
+        if menu::item(ui, MenuItem::new(t("Umbenennen")).icon(Icon::Edit)) {
+            *rename = Some((tr.id, tr.name.clone()));
+        }
+        let label = if tr.expanded {
+            t("Einklappen")
+        } else {
+            t("Erweitern")
+        };
+        if menu::item(ui, MenuItem::new(label)) {
+            action = Some(HeaderAction::Toggle);
+        }
+        if menu::item(ui, MenuItem::new(t("Alle erweitern"))) {
+            action = Some(HeaderAction::ExpandAll);
+        }
+        menu::separator(ui);
+        ui.horizontal(|ui| {
+            ui.add_space(theme::SP_S);
+            ui.label(
+                egui::RichText::new(t("Spurfarbe"))
+                    .small()
+                    .color(theme::text_dim()),
+            );
+        });
+        if let Some(c) = color_swatches(
+            ui,
+            ui.make_persistent_id(("track_color", tr.id)),
+            tr.color,
+            t("Keine Farbe"),
+        ) {
+            tr.color = c;
+        }
+        menu::separator(ui);
+        if menu::item(ui, MenuItem::new(t("Neue Spur einfügen")).icon(Icon::Plus)) {
+            action = Some(HeaderAction::Insert);
+        }
+        if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
+            action = Some(HeaderAction::Duplicate);
+        }
+        if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash)) {
+            action = Some(HeaderAction::Delete);
+        }
+    });
     action
 }
 

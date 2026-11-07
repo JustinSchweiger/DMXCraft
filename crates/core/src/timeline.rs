@@ -67,6 +67,12 @@ pub struct Track {
     /// Unterspuren (Dimmer/Lautstärke) sichtbar.
     #[serde(default)]
     pub expanded: bool,
+    /// Eigener Name (leer = „Spur n“).
+    #[serde(default)]
+    pub name: String,
+    /// Farbe der Spur (Kopfleiste).
+    #[serde(default)]
+    pub color: Option<[u8; 3]>,
     #[serde(default)]
     pub clips: Vec<Clip>,
 }
@@ -162,6 +168,8 @@ impl Timeline {
             muted: false,
             locked: false,
             expanded: false,
+            name: String::new(),
+            color: None,
             clips: Vec::new(),
         };
         match at {
