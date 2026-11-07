@@ -12,6 +12,10 @@ use std::f32::consts::TAU;
 
 use serde::{Deserialize, Serialize};
 
+pub mod feature;
+pub mod mapping;
+pub mod motion;
+
 use crate::fixture::ChannelKind;
 use crate::plan;
 use crate::show::{ChannelRef, FixtureId, Show};
@@ -198,6 +202,13 @@ impl ColorFx {
             tempo: 1.0,
             amplitude: 70.0,
         }
+    }
+
+    /// VALUE FX: gleiche Vorlagen, Palette aus Grauwerten.
+    pub fn values() -> Self {
+        let mut fx = Self::new(ColorPreset::Rainbow);
+        fx.palette = vec![[255, 255, 255], [128, 128, 128], [0, 0, 0]];
+        fx
     }
 
     /// Andere Vorlage wählen: Palette und Einstellungen der Vorlage.
@@ -413,6 +424,133 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
         .collect()
 }
 
+/// Einen Effekt einer Szene ausgeben (überschreibt vorhandene Werte).
+pub fn apply_effect(
+    show: &Show,
+    fx: &crate::show::Effect,
+    cycles: f64,
+    out: &mut HashMap<ChannelRef, u8>,
+) {
+    use crate::show::EffectKind;
+    match fx.kind {
+        EffectKind::ColorFx => {
+            if let Some(c) = &fx.color {
+                apply(show, c, &fx.fixtures, cycles, out);
+            }
+        }
+        EffectKind::ColorMappings => {
+            if let Some(m) = &fx.mapping {
+                let beams = beams(show, &fx.fixtures);
+                let colors: Vec<Option<[u8; 3]>> = beams
+                    .iter()
+                    .map(|b| m.local(b.pos).map(|l| to_rgb(m.color_at(l, cycles))))
+                    .collect();
+                write_colors(&beams, &colors, out);
+            }
+        }
+        EffectKind::MoveFx => {
+            if let Some(m) = &fx.motion {
+                let beams = feature::fixture_beams(show, &fx.fixtures);
+                motion::apply(show, m, &beams, cycles, out);
+            }
+        }
+        k if k.uses_features() => {
+            let beams = feature::fixture_beams(show, &fx.fixtures);
+            let levels = feature_levels(fx, &beams, cycles);
+            let relative = fx.curve.as_ref().is_some_and(|c| c.relative);
+            feature::apply_levels(show, &beams, &levels, &fx.features, relative, out);
+        }
+        _ => {}
+    }
+}
+
+/// Pegel (0..1) je Beam eines Feature-Effekts; `None` = unberührt.
+pub fn feature_levels(
+    fx: &crate::show::Effect,
+    beams: &[feature::FixtureBeam],
+    cycles: f64,
+) -> Vec<Option<f32>> {
+    use crate::show::EffectKind;
+    let n = beams.len();
+    let all = |v: Vec<f32>| v.into_iter().map(Some).collect();
+    match fx.kind {
+        EffectKind::ChaserFx => fx
+            .chaser
+            .as_ref()
+            .map_or_else(Vec::new, |c| all(feature::chaser_levels(c, n, cycles))),
+        EffectKind::CurveFx => fx
+            .curve
+            .as_ref()
+            .map_or_else(Vec::new, |c| all(feature::curve_levels(c, n, cycles))),
+        EffectKind::ValueFx => {
+            let Some(c) = &fx.color else {
+                return Vec::new();
+            };
+            // gleiche Vorlagen wie COLOR FX, Pegel = Helligkeit
+            let pseudo: Vec<Beam> = beams
+                .iter()
+                .map(|b| Beam {
+                    fixture: b.fixture,
+                    pos: b.pos,
+                    red: None,
+                    green: None,
+                    blue: None,
+                    intensity: Some(0),
+                })
+                .collect();
+            render(c, &pseudo, cycles)
+                .into_iter()
+                .map(|c| Some(luma(c) / 255.0))
+                .collect()
+        }
+        EffectKind::Mappings => {
+            let Some(m) = &fx.mapping else {
+                return Vec::new();
+            };
+            beams
+                .iter()
+                .map(|b| {
+                    m.local(b.pos).map(|l| {
+                        let c = m.color_at(l, cycles);
+                        0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+                    })
+                })
+                .collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn luma(c: [u8; 3]) -> f32 {
+    0.299 * f32::from(c[0]) + 0.587 * f32::from(c[1]) + 0.114 * f32::from(c[2])
+}
+
+fn to_rgb(c: [f32; 3]) -> [u8; 3] {
+    c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
+}
+
+/// Farben auf die Beams schreiben (ohne Farbkanäle als Helligkeit).
+fn write_colors(beams: &[Beam], colors: &[Option<[u8; 3]>], out: &mut HashMap<ChannelRef, u8>) {
+    for (b, c) in beams.iter().zip(colors) {
+        let Some(c) = c else {
+            continue;
+        };
+        let ch = |channel: u16| ChannelRef {
+            fixture: b.fixture,
+            channel,
+        };
+        if let Some(i) = b.intensity {
+            out.insert(ch(i), luma(*c).round() as u8);
+            continue;
+        }
+        for (slot, v) in [(b.red, c[0]), (b.green, c[1]), (b.blue, c[2])] {
+            if let Some(i) = slot {
+                out.insert(ch(i), v);
+            }
+        }
+    }
+}
+
 /// Ausgabewerte des Effekts in `out` schreiben (überschreibt vorhandene).
 pub fn apply(
     show: &Show,
@@ -527,7 +665,7 @@ fn ranks(v: &[f32]) -> Vec<usize> {
 
 /// Farbe an Stelle `x` (zyklisch); `blend` 0 = harte Kanten, 1 = durchgehend
 /// überblendet.
-fn sample(palette: &[[f32; 3]], x: f32, blend: f32) -> [f32; 3] {
+pub(crate) fn sample(palette: &[[f32; 3]], x: f32, blend: f32) -> [f32; 3] {
     let k = palette.len();
     if k == 1 {
         return palette[0];
@@ -634,7 +772,7 @@ fn sparkle(fx: &ColorFx, palette: &[[f32; 3]], n: usize, cycles: f64) -> Vec<[f3
 
 /// Pseudozufall 0..1 aus zwei Werten (fest, damit sich der Effekt
 /// wiederholbar verhält).
-fn hash01(a: u64, b: u64) -> f32 {
+pub(crate) fn hash01(a: u64, b: u64) -> f32 {
     let mut x = a.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ b.wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
     x ^= x >> 33;
     x = x.wrapping_mul(0xFF51_AFD7_ED55_8CCD);
@@ -655,7 +793,7 @@ fn noise(x: f32, y: f32) -> f32 {
 }
 
 /// Mehrere Oktaven Rauschen, Ergebnis 0..1.
-fn fbm(x: f32, y: f32, octaves: u32) -> f32 {
+pub(crate) fn fbm(x: f32, y: f32, octaves: u32) -> f32 {
     let (mut sum, mut amp, mut freq, mut norm) = (0.0, 1.0, 1.0, 0.0);
     for _ in 0..octaves {
         sum += noise(x * freq, y * freq) * amp;

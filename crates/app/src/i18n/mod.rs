@@ -158,6 +158,16 @@ mod tests {
             .chain(crate::ui::theme::Theme::ALL.iter().map(|t| t.label()))
             .chain(dmxcraft_output::OutputKind::ALL.iter().map(|k| k.label()))
             .chain(dmxcraft_core::fx::Transform::ALL.iter().map(|k| k.label()))
+            .chain(
+                dmxcraft_core::fx::feature::CurveShape::ALL
+                    .iter()
+                    .map(|k| k.label()),
+            )
+            .chain(
+                dmxcraft_core::fx::motion::MoveShape::ALL
+                    .iter()
+                    .map(|k| k.label()),
+            )
             .collect();
         labels.extend(crate::views::fixture_menu::SIZES.iter().map(|(l, _)| *l));
         for l in labels {

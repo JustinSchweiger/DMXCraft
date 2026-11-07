@@ -12,10 +12,10 @@ use crate::ui::widgets::dialog::text_field;
 use crate::ui::widgets::{Dialog, Toggle};
 
 /// Breite der Beschriftungsspalte.
-const LABEL_W: f32 = 112.0;
+pub(super) const LABEL_W: f32 = 112.0;
 /// Breite der Wertanzeige vor einem Regler.
 const VALUE_W: f32 = 38.0;
-const ROW_H: f32 = 24.0;
+pub(super) const ROW_H: f32 = 24.0;
 
 /// Eigene Paletten und die zugehörigen Fenster.
 #[derive(Default)]
@@ -204,7 +204,7 @@ impl PaletteStore {
 
 /// Farbfelder bearbeiten: Klick = Farbwähler, Rechtsklick = entfernen,
 /// „+“ = hinzufügen. `true`, wenn sich etwas geändert hat.
-fn edit_colors(
+pub(super) fn edit_colors(
     ui: &mut egui::Ui,
     salt: impl std::hash::Hash + Copy + std::fmt::Debug,
     colors: &mut Vec<[u8; 3]>,
@@ -278,6 +278,7 @@ fn edit_colors(
 }
 
 /// Zeigt die Einstellungen; `true`, wenn sich etwas geändert hat.
+#[allow(clippy::too_many_arguments)]
 pub fn color_fx_ui(
     ui: &mut egui::Ui,
     salt: u32,
@@ -286,6 +287,7 @@ pub fn color_fx_ui(
     accent: Color32,
     enabled: bool,
     store: &mut PaletteStore,
+    values: bool,
 ) -> bool {
     let before = fx.clone();
     let id = |s: &str| egui::Id::unique(("color_fx", salt, s.to_owned()));
@@ -299,7 +301,12 @@ pub fn color_fx_ui(
             .show_ui(ui, |ui| {
                 for p in ColorPreset::ALL {
                     if ui.selectable_label(fx.preset == p, p.label()).clicked() && fx.preset != p {
+                        let keep = fx.palette.clone();
                         fx.set_preset(p);
+                        if values {
+                            // VALUE FX behält seine Grauwerte
+                            fx.palette = keep;
+                        }
                     }
                 }
             });
@@ -312,14 +319,20 @@ pub fn color_fx_ui(
 
     // Farbpalette
     // Zeile mit Paletten-Menü, darunter die Farbfelder über die volle Breite
-    label_row(ui, t("Farbpalette"), |ui| {
-        palette_editor(ui, salt, fx, enabled, store);
-    });
+    label_row(
+        ui,
+        if values { t("Werte") } else { t("Farbpalette") },
+        |ui| {
+            palette_editor(ui, &mut fx.palette, enabled, store);
+        },
+    );
     ui.horizontal_wrapped(|ui| {
         edit_colors(ui, ("fx", salt), &mut fx.palette, enabled, 18.0);
     });
     ui.add_space(theme::SP_XS);
-    toggle_row(ui, t("Graustufen"), &mut fx.grayscale, enabled);
+    if !values {
+        toggle_row(ui, t("Graustufen"), &mut fx.grayscale, enabled);
+    }
     label_row(ui, t("Transformieren"), |ui| {
         ui.add_enabled_ui(enabled, |ui| {
             egui::ComboBox::from_id_salt(id("transform"))
@@ -485,7 +498,7 @@ pub fn color_fx_ui(
 }
 
 /// Zeile: Beschriftung links, Inhalt rechts daneben.
-fn label_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
+pub(super) fn label_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         ui.set_min_height(ROW_H);
         let (r, _) = ui.allocate_exact_size(Vec2::new(LABEL_W, ROW_H), Sense::hover());
@@ -500,7 +513,7 @@ fn label_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     });
 }
 
-fn toggle_row(ui: &mut egui::Ui, label: &str, v: &mut bool, enabled: bool) {
+pub(super) fn toggle_row(ui: &mut egui::Ui, label: &str, v: &mut bool, enabled: bool) {
     ui.horizontal(|ui| {
         ui.set_min_height(ROW_H);
         ui.label(egui::RichText::new(label).color(theme::text_dim()));
@@ -512,7 +525,7 @@ fn toggle_row(ui: &mut egui::Ui, label: &str, v: &mut bool, enabled: bool) {
 
 /// Regler mit Wertanzeige; ganzzahlig bei `dec == 0`.
 #[allow(clippy::too_many_arguments)]
-fn slider_row(
+pub(super) fn slider_row(
     ui: &mut egui::Ui,
     id: egui::Id,
     label: &str,
@@ -595,10 +608,9 @@ fn slider_row(
 
 /// Farbfelder der Palette: Klick = Farbe wählen, Rechtsklick = entfernen,
 /// „+“ = Farbe hinzufügen, „…“ = gespeicherte Paletten.
-fn palette_editor(
+pub(super) fn palette_editor(
     ui: &mut egui::Ui,
-    _salt: u32,
-    fx: &mut ColorFx,
+    palette: &mut Vec<[u8; 3]>,
     enabled: bool,
     store: &mut PaletteStore,
 ) {
@@ -646,20 +658,20 @@ fn palette_editor(
                 pick = Some(vec![[0, 0, 0], [255, 255, 255]]);
             }
             if menu::item(ui, MenuItem::new(t("Speichern…"))) {
-                store.save = Some((String::new(), fx.palette.clone()));
+                store.save = Some((String::new(), palette.clone()));
             }
             if menu::item(ui, MenuItem::new(t("Verwalten…"))) {
                 store.manage = true;
             }
             if let Some(colors) = pick {
-                fx.palette = colors;
+                *palette = colors;
             }
         });
     });
 }
 
 /// Farbstreifen mit gleich breiten Feldern.
-fn paint_strip(p: &egui::Painter, r: Rect, colors: &[[u8; 3]]) {
+pub(super) fn paint_strip(p: &egui::Painter, r: Rect, colors: &[[u8; 3]]) {
     p.rect_filled(r, 2.0, theme::bg());
     if colors.is_empty() {
         return;

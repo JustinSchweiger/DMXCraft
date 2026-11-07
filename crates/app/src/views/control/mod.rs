@@ -1,6 +1,7 @@
 //! STEUERN: Szenen-Raster, Bühnenplan (Auswahl) und Programmer.
 
 pub mod fx_color;
+pub mod fx_ui;
 pub mod programmer;
 pub mod scene_grid;
 pub mod scene_props;

@@ -309,6 +309,14 @@ impl EffectKind {
     ];
 
     /// Anzeigename (Fachbegriff, nicht übersetzt).
+    /// Effekt bewegt zugeordnete Kanäle („Features“).
+    pub fn uses_features(self) -> bool {
+        matches!(
+            self,
+            EffectKind::ChaserFx | EffectKind::ValueFx | EffectKind::CurveFx | EffectKind::Mappings
+        )
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             EffectKind::Steps => "STEPS",
@@ -334,9 +342,20 @@ pub struct Effect {
     /// Geräte, auf die der Effekt wirkt (Reihenfolge = Beam-Reihenfolge).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fixtures: Vec<FixtureId>,
-    /// Einstellungen eines COLOR FX.
+    /// Einstellungen eines COLOR FX bzw. (mit Grauwerten) eines VALUE FX.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<crate::fx::ColorFx>,
+    /// Vom Effekt bewegte Kanäle (CHASER, VALUE, CURVE, MAPPINGS).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<crate::fx::feature::Feature>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chaser: Option<crate::fx::feature::ChaserFx>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curve: Option<crate::fx::feature::CurveFx>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion: Option<crate::fx::motion::MoveFx>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapping: Option<crate::fx::mapping::MappingFx>,
 }
 
 impl Effect {
@@ -346,7 +365,52 @@ impl Effect {
             kind,
             collapsed: false,
             fixtures: Vec::new(),
-            color: (kind == EffectKind::ColorFx).then(crate::fx::ColorFx::default),
+            color: match kind {
+                EffectKind::ColorFx => Some(crate::fx::ColorFx::default()),
+                EffectKind::ValueFx => Some(crate::fx::ColorFx::values()),
+                _ => None,
+            },
+            features: if kind.uses_features() {
+                vec![crate::fx::feature::Feature::new(
+                    crate::fixture::ChannelKind::Dimmer,
+                )]
+            } else {
+                Vec::new()
+            },
+            chaser: (kind == EffectKind::ChaserFx).then(Default::default),
+            curve: (kind == EffectKind::CurveFx).then(Default::default),
+            motion: (kind == EffectKind::MoveFx).then(Default::default),
+            mapping: match kind {
+                EffectKind::Mappings => Some(crate::fx::mapping::MappingFx::new(
+                    crate::fx::mapping::MapPreset::Rainbow,
+                    false,
+                )),
+                EffectKind::ColorMappings => Some(crate::fx::mapping::MappingFx::new(
+                    crate::fx::mapping::MapPreset::Rainbow,
+                    true,
+                )),
+                _ => None,
+            },
+        }
+    }
+
+    /// Fehlende Einstellungen ergänzen (ältere Shows/Importe).
+    pub fn ensure_settings(&mut self) {
+        let fresh = Effect::new(self.id, self.kind);
+        if self.color.is_none() {
+            self.color = fresh.color;
+        }
+        if self.chaser.is_none() {
+            self.chaser = fresh.chaser;
+        }
+        if self.curve.is_none() {
+            self.curve = fresh.curve;
+        }
+        if self.motion.is_none() {
+            self.motion = fresh.motion;
+        }
+        if self.mapping.is_none() {
+            self.mapping = fresh.mapping;
         }
     }
 }
@@ -611,6 +675,9 @@ impl Show {
     /// Ältere Shows: Szenen mit mehreren Schritten bekommen den
     /// STEPS-Effekt, damit ihre Schritte bearbeitbar sind.
     pub fn normalize(&mut self) {
+        for fx in self.scenes.iter_mut().flat_map(|s| s.effects.iter_mut()) {
+            fx.ensure_settings();
+        }
         for sc in &mut self.scenes {
             if sc.steps.len() > 1 && !sc.has_steps() {
                 sc.effects.insert(

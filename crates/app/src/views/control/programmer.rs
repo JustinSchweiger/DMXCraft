@@ -126,6 +126,27 @@ impl View for ProgrammerView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let groups = fader_groups(cx.engine, cx.state);
         let layer = Layer::of(cx.state.programmer_mode);
+        // angeklickter Feature-Effekt: Fader zeigen ihr FX-Symbol
+        let target = cx.state.fx_target.and_then(|(scene, fx)| {
+            let f = cx
+                .engine
+                .show()
+                .scene(scene)?
+                .effects
+                .iter()
+                .find(|f| f.id == fx)?;
+            f.kind.uses_features().then(|| FxTarget {
+                scene,
+                fx,
+                kinds: f.features.iter().map(|x| x.kind).collect(),
+            })
+        });
+        ui.data_mut(|d| match target {
+            Some(t) => {
+                d.insert_temp(fx_target_id(), t);
+            }
+            None => d.remove::<FxTarget>(fx_target_id()),
+        });
         toolbar(ui, cx.engine, cx.state);
         let dot = mode_color(cx.state.programmer_mode);
         ui.add_space(theme::SP_S);
@@ -407,6 +428,9 @@ fn fader(
     let active = layer.map(e).contains_key(&first);
     // nicht gespeicherte Kanäle stehen auf 0
     let value = layer.get(e, first).unwrap_or(0);
+    // FX-Symbol, solange ein Feature-Effekt angeklickt ist
+    let target: Option<FxTarget> = ui.data(|d| d.get_temp(fx_target_id()));
+    let assigned = target.as_ref().map(|t| t.kinds.contains(&grp.kind));
     let ev = Fader::new(value, grp.number, grp.kind)
         .active(active)
         .dot(dot)
@@ -414,7 +438,14 @@ fn fader(
         .height(height)
         .width(width)
         .hint(grp.name.clone())
+        .fx(assigned)
         .show(ui);
+    if ev == FaderEvent::ToggleFx {
+        if let Some(t) = target {
+            toggle_feature(e, t.scene, t.fx, grp.kind);
+        }
+        return;
+    }
     match ev {
         FaderEvent::Changed(v) => set_group(e, layer, grp, v),
         FaderEvent::Release => {
@@ -422,7 +453,41 @@ fn fader(
                 layer.clear(e, *ch);
             }
         }
-        FaderEvent::None => {}
+        FaderEvent::None | FaderEvent::ToggleFx => {}
+    }
+}
+
+/// Feature-Effekt, dem Fader zugeordnet werden können (für diesen Frame).
+#[derive(Clone)]
+struct FxTarget {
+    scene: dmxcraft_core::SceneId,
+    fx: u32,
+    kinds: Vec<dmxcraft_core::ChannelKind>,
+}
+
+fn fx_target_id() -> egui::Id {
+    egui::Id::unique("programmer_fx_target")
+}
+
+/// Kanaltyp dem Effekt zuordnen bzw. wieder entfernen.
+fn toggle_feature(
+    e: &mut Engine,
+    scene: dmxcraft_core::SceneId,
+    fx: u32,
+    kind: dmxcraft_core::ChannelKind,
+) {
+    let Some(f) = e
+        .show_mut()
+        .scene_mut(scene)
+        .and_then(|s| s.effects.iter_mut().find(|f| f.id == fx))
+    else {
+        return;
+    };
+    if let Some(i) = f.features.iter().position(|x| x.kind == kind) {
+        f.features.remove(i);
+    } else {
+        f.features
+            .push(dmxcraft_core::fx::feature::Feature::new(kind));
     }
 }
 

@@ -538,18 +538,15 @@ impl ScenePropsView {
         let mut edit_step = cx.state.edit_step;
         // Vorschau je COLOR FX: aktuelle Farbe jedes Beams
         let cycles = cx.engine.fx_cycles(id);
-        let previews: std::collections::HashMap<u32, Vec<[u8; 3]>> = effects
+        let previews: std::collections::HashMap<u32, FxPreview> = effects
             .iter()
-            .filter_map(|fx| {
-                let c = fx.color.as_ref()?;
-                let beams = dmxcraft_core::fx::beams(cx.engine.show(), &fx.fixtures);
-                Some((fx.id, dmxcraft_core::fx::render(c, &beams, cycles)))
-            })
+            .filter(|fx| fx.kind != EffectKind::Steps)
+            .map(|fx| (fx.id, FxPreview::of(cx.engine.show(), fx, cycles)))
             .collect();
         if !previews.is_empty() {
             ui.ctx().request_repaint();
         }
-        let mut color_changes: Vec<(u32, dmxcraft_core::fx::ColorFx)> = Vec::new();
+        let mut color_changes: Vec<dmxcraft_core::Effect> = Vec::new();
         let palettes = &mut self.palettes;
         let mut step_clicked = false;
         let mut toggle = None;
@@ -585,26 +582,24 @@ impl ScenePropsView {
                                         ) {
                                             step_clicked = true;
                                         }
-                                    } else if let Some(c) = &fx.color {
-                                        let mut c = c.clone();
-                                        let preview =
-                                            previews.get(&fx.id).cloned().unwrap_or_default();
-                                        if super::fx_color::color_fx_ui(
-                                            ui, fx.id, &mut c, &preview, color, !locked, palettes,
-                                        ) {
-                                            color_changes.push((fx.id, c));
+                                    } else if let Some(pv) = previews.get(&fx.id) {
+                                        let mut e = fx.clone();
+                                        let changed = super::fx_ui::effect_body(
+                                            ui,
+                                            &mut e,
+                                            super::fx_ui::BodyCtx {
+                                                preview: &pv.colors,
+                                                positions: &pv.positions,
+                                                cycles,
+                                                kinds: &pv.kinds,
+                                                accent: color,
+                                                enabled: !locked,
+                                                palettes,
+                                            },
+                                        );
+                                        if changed {
+                                            color_changes.push(e);
                                         }
-                                        let (r, _) = ui.allocate_exact_size(
-                                            Vec2::new(ui.available_width(), 20.0),
-                                            Sense::hover(),
-                                        );
-                                        ui.painter().text(
-                                            r.right_center(),
-                                            egui::Align2::RIGHT_CENTER,
-                                            tr!("{n} Beam(s)", n = preview.len()),
-                                            egui::FontId::proportional(theme::FS_CAPTION),
-                                            theme::text_dim(),
-                                        );
                                     } else {
                                         ui.label(
                                             egui::RichText::new(t("Einstellungen folgen"))
@@ -632,9 +627,9 @@ impl ScenePropsView {
         }
         if !locked {
             if let Some(sc) = cx.engine.show_mut().scene_mut(id) {
-                for (fid, c) in color_changes {
-                    if let Some(fx) = sc.effects.iter_mut().find(|e| e.id == fid) {
-                        fx.color = Some(c);
+                for changed in color_changes {
+                    if let Some(fx) = sc.effects.iter_mut().find(|e| e.id == changed.id) {
+                        *fx = changed;
                     }
                 }
             }
@@ -880,6 +875,60 @@ impl ScenePropsView {
                 }
                 Err(e) => cx.state.error(e),
             }
+        }
+    }
+}
+
+/// Vorschau eines Effekts für die Seitenleiste.
+struct FxPreview {
+    /// Farbe bzw. Pegel (grau) je Beam.
+    colors: Vec<[u8; 3]>,
+    /// MOVE FX: Pan/Tilt je Beam.
+    positions: Vec<[f32; 2]>,
+    /// Kanaltypen der Effekt-Geräte.
+    kinds: Vec<dmxcraft_core::ChannelKind>,
+}
+
+impl FxPreview {
+    fn of(show: &dmxcraft_core::Show, fx: &dmxcraft_core::Effect, cycles: f64) -> Self {
+        use dmxcraft_core::fx;
+        let mut kinds: Vec<dmxcraft_core::ChannelKind> = Vec::new();
+        for f in fx.fixtures.iter().filter_map(|id| show.fixture(*id)) {
+            for c in show
+                .type_of(f)
+                .map(|t| t.channels.as_slice())
+                .unwrap_or(&[])
+            {
+                if !kinds.contains(&c.kind) {
+                    kinds.push(c.kind);
+                }
+            }
+        }
+        let fbeams = fx::feature::fixture_beams(show, &fx.fixtures);
+        let colors = match fx.kind {
+            EffectKind::ColorFx => fx
+                .color
+                .as_ref()
+                .map(|c| fx::render(c, &fx::beams(show, &fx.fixtures), cycles))
+                .unwrap_or_default(),
+            k if k.uses_features() => fx::feature_levels(fx, &fbeams, cycles)
+                .into_iter()
+                .map(|l| [(l.unwrap_or(0.0).clamp(0.0, 1.0) * 255.0).round() as u8; 3])
+                .collect(),
+            _ => Vec::new(),
+        };
+        let positions = fx
+            .motion
+            .as_ref()
+            .map(|m| {
+                let n = fbeams.len();
+                (0..n).map(|i| m.position(i, n, cycles)).collect()
+            })
+            .unwrap_or_default();
+        Self {
+            colors,
+            positions,
+            kinds,
         }
     }
 }

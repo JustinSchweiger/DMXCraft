@@ -1,0 +1,795 @@
+//! Einstellungen der Effekte außer STEPS in der Seitenleiste „Effekte“:
+//! COLOR/VALUE FX (siehe `fx_color`), CHASER FX, CURVE FX, MOVE FX, MAPPINGS
+//! und COLOR MAPPINGS, dazu die Liste der zugeordneten Kanäle („Features“).
+
+use crate::i18n::t;
+use dmxcraft_core::fx::feature::{ChaserPreset, CurveFx, CurveShape, Feature};
+use dmxcraft_core::fx::mapping::{MapPreset, MappingFx};
+use dmxcraft_core::fx::motion::{MoveFx, MoveShape};
+use dmxcraft_core::fx::Transform;
+use dmxcraft_core::{ChannelKind, Effect, EffectKind};
+use eframe::egui::{self, pos2, Color32, Pos2, Rect, Sense, Shape, Stroke, Vec2};
+
+use super::fx_color::{
+    color_fx_ui, edit_colors, label_row, paint_strip, palette_editor, slider_row, toggle_row,
+    PaletteStore,
+};
+use crate::ui::theme;
+
+/// Was die Seitenleiste zum Zeichnen eines Effekts braucht.
+pub struct BodyCtx<'a> {
+    /// Aktuelle Farbe je Beam (Farbeffekte) bzw. Pegel als Grauwert.
+    pub preview: &'a [[u8; 3]],
+    /// Lage 0..1 (Pan/Tilt) je Beam (MOVE FX).
+    pub positions: &'a [[f32; 2]],
+    /// Effektzeit in Durchläufen.
+    pub cycles: f64,
+    /// Kanaltypen der Effekt-Geräte (für „Feature hinzufügen“).
+    pub kinds: &'a [ChannelKind],
+    pub accent: Color32,
+    pub enabled: bool,
+    pub palettes: &'a mut PaletteStore,
+}
+
+/// Inhalt eines Effekts; `true`, wenn sich etwas geändert hat.
+pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool {
+    let before = fx.clone();
+    let salt = fx.id;
+    let BodyCtx {
+        preview,
+        positions,
+        cycles,
+        kinds,
+        accent,
+        enabled,
+        palettes,
+    } = cx;
+    match fx.kind {
+        EffectKind::ColorFx | EffectKind::ValueFx => {
+            if let Some(c) = fx.color.as_mut() {
+                let values = fx.kind == EffectKind::ValueFx;
+                color_fx_ui(ui, salt, c, preview, accent, enabled, palettes, values);
+            }
+        }
+        EffectKind::ChaserFx => {
+            if let Some(c) = fx.chaser.as_mut() {
+                let id = |s: &str| egui::Id::unique(("chaser", salt, s.to_owned()));
+                combo(ui, id("preset"), c.preset.label(), enabled, |ui| {
+                    for p in ChaserPreset::ALL {
+                        ui.selectable_value(&mut c.preset, p, p.label());
+                    }
+                });
+                strip(ui, preview);
+                if c.preset != ChaserPreset::Random && c.preset != ChaserPreset::Fill {
+                    toggle_row(ui, t("Nur eine Richtung"), &mut c.one_direction, enabled);
+                }
+                toggle_row(ui, t("Überblendung"), &mut c.crossfade, enabled);
+                if c.preset != ChaserPreset::Fill {
+                    slider_row(
+                        ui,
+                        id("px"),
+                        t("Pixelanzahl"),
+                        &mut c.pixels,
+                        (1.0, 32.0),
+                        0,
+                        enabled,
+                        accent,
+                    );
+                }
+                if c.preset == ChaserPreset::Random {
+                    slider_row(
+                        ui,
+                        id("flash"),
+                        t("Leuchtdauer"),
+                        &mut c.flash,
+                        (1.0, 100.0),
+                        0,
+                        enabled,
+                        accent,
+                    );
+                    slider_row(
+                        ui,
+                        id("seed"),
+                        t("Zufallswert"),
+                        &mut c.seed,
+                        (0.0, 100.0),
+                        0,
+                        enabled,
+                        accent,
+                    );
+                    slider_row(
+                        ui,
+                        id("rep"),
+                        t("Wiederholungen"),
+                        &mut c.repeats,
+                        (1.0, 32.0),
+                        0,
+                        enabled,
+                        accent,
+                    );
+                }
+            }
+        }
+        EffectKind::CurveFx => {
+            if let Some(c) = fx.curve.as_mut() {
+                let id = |s: &str| egui::Id::unique(("curve", salt, s.to_owned()));
+                combo(ui, id("shape"), t(c.shape.label()), enabled, |ui| {
+                    for s in CurveShape::ALL {
+                        ui.selectable_value(&mut c.shape, s, t(s.label()));
+                    }
+                });
+                curve_graph(ui, id("graph"), c, cycles, accent, enabled);
+                slider_row(
+                    ui,
+                    id("rep"),
+                    t("Wiederholungsrate"),
+                    &mut c.repeat,
+                    (0.0, 16.0),
+                    0,
+                    enabled,
+                    accent,
+                );
+                slider_row(
+                    ui,
+                    id("size"),
+                    t("Größe"),
+                    &mut c.size,
+                    (0.0, 2.0),
+                    1,
+                    enabled,
+                    accent,
+                );
+                slider_row(
+                    ui,
+                    id("phase"),
+                    t("Phase"),
+                    &mut c.phase,
+                    (0.0, 1.0),
+                    2,
+                    enabled,
+                    accent,
+                );
+                slider_row(
+                    ui,
+                    id("off"),
+                    t("Offset"),
+                    &mut c.offset,
+                    (-1.0, 1.0),
+                    2,
+                    enabled,
+                    accent,
+                );
+                slider_row(
+                    ui,
+                    id("phasing"),
+                    t("Phasing"),
+                    &mut c.phasing,
+                    (0.0, 4.0),
+                    2,
+                    enabled,
+                    accent,
+                );
+                mode_row(ui, id("mode"), &mut c.relative, enabled);
+            }
+        }
+        EffectKind::MoveFx => {
+            if let Some(m) = fx.motion.as_mut() {
+                let id = |s: &str| egui::Id::unique(("move", salt, s.to_owned()));
+                let mut shape = m.shape;
+                combo(ui, id("shape"), t(m.shape.label()), enabled, |ui| {
+                    for s in MoveShape::ALL {
+                        ui.selectable_value(&mut shape, s, t(s.label()));
+                    }
+                });
+                if shape != m.shape {
+                    m.set_shape(shape);
+                }
+                move_editor(ui, id("editor"), m, positions, accent, enabled);
+                slider_row(
+                    ui,
+                    id("phasing"),
+                    t("Phasing"),
+                    &mut m.phasing,
+                    (0.0, 4.0),
+                    2,
+                    enabled,
+                    accent,
+                );
+                toggle_row(ui, t("Symmetrie"), &mut m.symmetry, enabled);
+                mode_row(ui, id("mode"), &mut m.relative, enabled);
+            }
+        }
+        EffectKind::Mappings | EffectKind::ColorMappings => {
+            let color = fx.kind == EffectKind::ColorMappings;
+            if let Some(m) = fx.mapping.as_mut() {
+                mapping_ui(ui, salt, m, color, accent, enabled, palettes);
+            }
+        }
+        EffectKind::Steps => {}
+    }
+    // Beam-Anzahl rechts unten
+    let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 20.0), Sense::hover());
+    ui.painter().text(
+        r.right_center(),
+        egui::Align2::RIGHT_CENTER,
+        tr!("{n} Beam(s)", n = fx.fixtures.len().max(preview.len())),
+        egui::FontId::proportional(theme::FS_CAPTION),
+        theme::text_dim(),
+    );
+    if fx.kind.uses_features() {
+        features_ui(ui, salt, &mut fx.features, kinds, enabled, accent);
+    }
+    *fx != before
+}
+
+fn combo(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    text: &str,
+    enabled: bool,
+    add: impl FnOnce(&mut egui::Ui),
+) {
+    ui.add_enabled_ui(enabled, |ui| {
+        egui::ComboBox::from_id_salt(id)
+            .selected_text(text)
+            .width(ui.available_width() - 4.0)
+            .height(400.0)
+            .show_ui(ui, add);
+    });
+    ui.add_space(theme::SP_XS);
+}
+
+/// Vorschau-Streifen wie bei COLOR FX.
+fn strip(ui: &mut egui::Ui, colors: &[[u8; 3]]) {
+    let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 22.0), Sense::hover());
+    paint_strip(ui.painter(), r, colors);
+    ui.add_space(theme::SP_XS);
+}
+
+/// „Funktionsweise“: absolut oder relativ zum Wert aus den Schritten.
+fn mode_row(ui: &mut egui::Ui, id: egui::Id, relative: &mut bool, enabled: bool) {
+    label_row(ui, t("Funktionsweise"), |ui| {
+        ui.add_enabled_ui(enabled, |ui| {
+            egui::ComboBox::from_id_salt(id)
+                .selected_text(if *relative {
+                    t("Relativ")
+                } else {
+                    t("Absolut")
+                })
+                .width(ui.available_width() - 4.0)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(relative, false, t("Absolut"));
+                    ui.selectable_value(relative, true, t("Relativ"));
+                });
+        });
+    });
+}
+
+fn transform_row(ui: &mut egui::Ui, id: egui::Id, tr: &mut Transform, enabled: bool) {
+    label_row(ui, t("Transformieren"), |ui| {
+        ui.add_enabled_ui(enabled, |ui| {
+            egui::ComboBox::from_id_salt(id)
+                .selected_text(t(tr.label()))
+                .width(ui.available_width() - 4.0)
+                .show_ui(ui, |ui| {
+                    for x in Transform::ALL {
+                        ui.selectable_value(tr, x, t(x.label()));
+                    }
+                });
+        });
+    });
+}
+
+fn mapping_ui(
+    ui: &mut egui::Ui,
+    salt: u32,
+    m: &mut MappingFx,
+    color: bool,
+    accent: Color32,
+    enabled: bool,
+    store: &mut PaletteStore,
+) {
+    let id = |s: &str| egui::Id::unique(("mapping", salt, s.to_owned()));
+    let mut preset = m.preset;
+    combo(ui, id("preset"), m.preset.label(), enabled, |ui| {
+        for p in MapPreset::ALL {
+            ui.selectable_value(&mut preset, p, p.label());
+        }
+    });
+    if preset != m.preset {
+        m.set_preset(preset, color);
+    }
+    label_row(
+        ui,
+        if color { t("Farbpalette") } else { t("Werte") },
+        |ui| {
+            palette_editor(ui, &mut m.palette, enabled, store);
+        },
+    );
+    ui.horizontal_wrapped(|ui| {
+        edit_colors(ui, ("map", salt), &mut m.palette, enabled, 18.0);
+    });
+    ui.add_space(theme::SP_XS);
+    if color {
+        toggle_row(ui, t("Graustufen"), &mut m.grayscale, enabled);
+    }
+    transform_row(ui, id("tr"), &mut m.transform, enabled);
+    let s = |ui: &mut egui::Ui, k: &str, l: &str, v: &mut f32, r: (f32, f32), d: usize| {
+        slider_row(ui, id(k), l, v, r, d, enabled, accent);
+    };
+    s(ui, "spin", t("Rotation"), &mut m.spin, (-4.0, 4.0), 1);
+    match m.preset {
+        MapPreset::Rainbow => {
+            s(ui, "w", t("Farbenbreite"), &mut m.width, (0.0, 100.0), 1);
+            s(ui, "a", t("Winkel"), &mut m.angle, (0.0, 360.0), 0);
+            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+        }
+        MapPreset::Spiral => {
+            s(ui, "r", t("Radius"), &mut m.radius, (0.0, 100.0), 0);
+            s(
+                ui,
+                "sw",
+                t("Anzahl der Wirbel"),
+                &mut m.swirls,
+                (1.0, 12.0),
+                0,
+            );
+            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+        }
+        MapPreset::Burst => {
+            s(ui, "w", t("Farbenbreite"), &mut m.width, (0.0, 100.0), 0);
+            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+        }
+        MapPreset::Butterfly => {
+            s(ui, "sw", t("Flügel"), &mut m.swirls, (1.0, 8.0), 0);
+            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+        }
+        MapPreset::Plasma | MapPreset::Tube => {
+            if m.preset == MapPreset::Tube {
+                s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 20.0), 0);
+            } else {
+                s(ui, "z", t("Zoom"), &mut m.zoom, (0.0, 100.0), 0);
+            }
+            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+        }
+        MapPreset::Bounce => {
+            s(ui, "o", t("Größe"), &mut m.object, (2.0, 100.0), 0);
+            s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 10.0), 0);
+        }
+        MapPreset::Fire => {
+            s(ui, "z", t("Zoom"), &mut m.zoom, (0.0, 100.0), 0);
+            s(ui, "amp", t("Amplitude"), &mut m.amplitude, (0.0, 100.0), 0);
+            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+        }
+        MapPreset::KnightRider => {
+            s(ui, "o", t("Größe"), &mut m.object, (2.0, 100.0), 0);
+            s(ui, "a", t("Winkel"), &mut m.angle, (0.0, 360.0), 0);
+        }
+        MapPreset::Text => {
+            label_row(ui, t("Text"), |ui| {
+                ui.add_enabled(
+                    enabled,
+                    egui::TextEdit::singleline(&mut m.text)
+                        .desired_width(ui.available_width() - 6.0),
+                );
+            });
+            s(ui, "o", t("Größe"), &mut m.object, (30.0, 100.0), 0);
+        }
+        MapPreset::Sweep => {
+            s(ui, "a", t("Winkel"), &mut m.angle, (0.0, 360.0), 0);
+        }
+        MapPreset::Sparkle => {
+            s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 20.0), 0);
+            s(ui, "o", t("Lebenszeit"), &mut m.object, (2.0, 100.0), 0);
+        }
+        MapPreset::RandomFill => {
+            s(ui, "c", t("Felder"), &mut m.count, (1.0, 20.0), 0);
+        }
+        MapPreset::Rain => {
+            s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 20.0), 0);
+            s(ui, "o", t("Länge"), &mut m.object, (2.0, 100.0), 0);
+        }
+        MapPreset::Perlin => {
+            s(ui, "oct", t("Oktaven"), &mut m.octaves, (1.0, 8.0), 0);
+            s(ui, "z", t("Zoom"), &mut m.zoom, (0.0, 100.0), 0);
+            s(ui, "amp", t("Amplitude"), &mut m.amplitude, (0.0, 100.0), 0);
+        }
+        MapPreset::Explosion => {
+            s(ui, "c", t("Ringe"), &mut m.count, (1.0, 8.0), 0);
+            s(ui, "o", t("Größe"), &mut m.object, (2.0, 100.0), 0);
+        }
+        MapPreset::Starfield => {
+            s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 20.0), 0);
+            s(ui, "o", t("Größe"), &mut m.object, (2.0, 100.0), 0);
+        }
+        MapPreset::Graph => {
+            s(ui, "c", t("Balken"), &mut m.count, (1.0, 32.0), 0);
+        }
+        MapPreset::Lines => {
+            s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 20.0), 0);
+            s(ui, "a", t("Winkel"), &mut m.angle, (0.0, 360.0), 0);
+            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+        }
+    }
+    ui.label(
+        egui::RichText::new(t(
+            "Das Rechteck lässt sich auf der Bühne verschieben, skalieren und drehen.",
+        ))
+        .small()
+        .color(theme::text_faint()),
+    );
+}
+
+/// Kurvenbild: eine Periode, der Punkt zeigt den ersten Beam. Bei „Eigene“
+/// lassen sich Stützpunkte ziehen, per Doppelklick setzen und per
+/// Rechtsklick entfernen.
+fn curve_graph(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    c: &mut CurveFx,
+    cycles: f64,
+    accent: Color32,
+    enabled: bool,
+) {
+    let w = ui.available_width();
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 110.0), Sense::click());
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, theme::R_S, theme::bg());
+    grid(&p, rect, 4, 2);
+    let inner = rect.shrink(6.0);
+    let to = |x: f32, y: f32| {
+        pos2(
+            inner.left() + x * inner.width(),
+            inner.bottom() - y * inner.height(),
+        )
+    };
+    let pts: Vec<Pos2> = (0..=120)
+        .map(|i| {
+            let x = i as f32 / 120.0;
+            to(x, c.level(x.min(0.9999), 0))
+        })
+        .collect();
+    p.add(Shape::line(pts, Stroke::new(1.5, theme::text_dim())));
+    // aktueller Wert des ersten Beams
+    let x = (cycles * f64::from(c.repeat) + f64::from(c.phase)).rem_euclid(1.0) as f32;
+    p.circle_filled(to(x, c.level(x, 0)), 4.0, Color32::WHITE);
+    if c.shape != CurveShape::Custom || !enabled {
+        return;
+    }
+    let from = |q: Pos2| {
+        [
+            ((q.x - inner.left()) / inner.width()).clamp(0.0, 1.0),
+            ((inner.bottom() - q.y) / inner.height()).clamp(0.0, 1.0),
+        ]
+    };
+    let mut remove = None;
+    for (i, pt) in c.custom.iter_mut().enumerate() {
+        let at = to(pt[0], pt[1]);
+        let r = ui.interact(
+            Rect::from_center_size(at, Vec2::splat(12.0)),
+            id.with(i),
+            Sense::click_and_drag(),
+        );
+        if r.dragged() {
+            if let Some(q) = r.interact_pointer_pos() {
+                *pt = from(q);
+            }
+        }
+        if r.secondary_clicked() {
+            remove = Some(i);
+        }
+        let hot = r.hovered() || r.dragged();
+        p.circle_stroke(
+            at,
+            if hot { 6.0 } else { 4.5 },
+            Stroke::new(1.5, if hot { accent } else { Color32::WHITE }),
+        );
+    }
+    if let Some(i) = remove.filter(|_| c.custom.len() > 2) {
+        c.custom.remove(i);
+    }
+    if resp.double_clicked() {
+        if let Some(q) = resp.interact_pointer_pos() {
+            c.custom.push(from(q));
+        }
+    }
+}
+
+fn grid(p: &egui::Painter, r: Rect, cols: usize, rows: usize) {
+    let s = Stroke::new(1.0, theme::border().gamma_multiply(0.6));
+    for i in 1..cols {
+        let x = r.left() + r.width() * i as f32 / cols as f32;
+        p.line_segment([pos2(x, r.top()), pos2(x, r.bottom())], s);
+    }
+    for i in 1..rows {
+        let y = r.top() + r.height() * i as f32 / rows as f32;
+        p.line_segment([pos2(r.left(), y), pos2(r.right(), y)], s);
+    }
+}
+
+/// Formeditor des MOVE FX: Feld = Pan (x) × Tilt (y). Rahmen ziehen
+/// verschiebt, Ecken skalieren, der Griff oben dreht, Stützpunkte lassen
+/// sich einzeln ziehen.
+fn move_editor(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    m: &mut MoveFx,
+    positions: &[[f32; 2]],
+    accent: Color32,
+    enabled: bool,
+) {
+    let w = ui.available_width();
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, w.min(200.0)), Sense::hover());
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, theme::R_S, theme::bg());
+    grid(&p, rect, 4, 4);
+    let to = |q: [f32; 2]| {
+        pos2(
+            rect.left() + q[0] * rect.width(),
+            rect.top() + q[1] * rect.height(),
+        )
+    };
+    let from = |s: Pos2| {
+        [
+            (s.x - rect.left()) / rect.width(),
+            (s.y - rect.top()) / rect.height(),
+        ]
+    };
+    // Bahn
+    let path: Vec<Pos2> = (0..=160)
+        .map(|i| to(m.to_field(m.local_at(i as f32 / 160.0))))
+        .collect();
+    p.add(Shape::line(path, Stroke::new(1.5, theme::text_dim())));
+    // Rahmen
+    let corners = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]].map(|c| to(m.to_field(c)));
+    for i in 0..4 {
+        p.add(Shape::dashed_line(
+            &[corners[i], corners[(i + 1) % 4]],
+            Stroke::new(1.0, theme::text_faint()),
+            4.0,
+            3.0,
+        ));
+    }
+    let rot_handle = to(m.to_field([0.0, -1.0 - 0.25 / m.size[1].max(0.05) * 0.1]));
+    let top_mid = to(m.to_field([0.0, -1.0]));
+    p.line_segment([top_mid, rot_handle], Stroke::new(1.0, theme::text_faint()));
+
+    let mut ids = 0usize;
+    let mut handle = |ui: &mut egui::Ui, at: Pos2, size: f32| {
+        ids += 1;
+        ui.interact(
+            Rect::from_center_size(at, Vec2::splat(size)),
+            id.with(ids),
+            if enabled {
+                Sense::drag()
+            } else {
+                Sense::hover()
+            },
+        )
+    };
+    // Mitte/Rahmen verschieben: Fläche des Rahmens
+    let body = Rect::from_points(&corners);
+    let r = ui.interact(
+        body,
+        id.with("body"),
+        if enabled {
+            Sense::drag()
+        } else {
+            Sense::hover()
+        },
+    );
+    if r.dragged() {
+        let d = r.drag_delta();
+        m.center[0] = (m.center[0] + d.x / rect.width()).clamp(0.0, 1.0);
+        m.center[1] = (m.center[1] + d.y / rect.height()).clamp(0.0, 1.0);
+    }
+    // Ecken skalieren
+    for c in corners {
+        let r = handle(ui, c, 12.0);
+        if r.dragged() {
+            if let Some(q) = r.interact_pointer_pos() {
+                let f = from(q);
+                let (s, co) = m.rotation.to_radians().sin_cos();
+                let (dx, dy) = (f[0] - m.center[0], f[1] - m.center[1]);
+                m.size = [
+                    (dx * co + dy * s).abs().max(0.01),
+                    (-dx * s + dy * co).abs().max(0.01),
+                ];
+            }
+        }
+        let hot = r.hovered() || r.dragged();
+        p.rect_filled(
+            Rect::from_center_size(c, Vec2::splat(7.0)),
+            1.0,
+            if hot { accent } else { theme::text_dim() },
+        );
+    }
+    // Drehen
+    let r = handle(ui, rot_handle, 14.0);
+    if r.dragged() {
+        if let Some(q) = r.interact_pointer_pos() {
+            let f = from(q);
+            let a = (f[1] - m.center[1]).atan2(f[0] - m.center[0]).to_degrees() + 90.0;
+            m.rotation = (a / 5.0).round() * 5.0;
+        }
+    }
+    let hot = r.hovered() || r.dragged();
+    p.circle_filled(
+        rot_handle,
+        4.0,
+        if hot { accent } else { theme::text_dim() },
+    );
+    // Stützpunkte
+    if m.shape != MoveShape::Circle {
+        let pts = m.points.clone();
+        for (i, pt) in pts.iter().enumerate() {
+            let at = to(m.to_field(*pt));
+            let r = handle(ui, at, 12.0);
+            if r.dragged() {
+                if let Some(q) = r.interact_pointer_pos() {
+                    let l = m.to_local(from(q));
+                    m.points[i] = [l[0].clamp(-1.0, 1.0), l[1].clamp(-1.0, 1.0)];
+                }
+            }
+            let hot = r.hovered() || r.dragged();
+            p.circle_stroke(
+                at,
+                4.5,
+                Stroke::new(1.5, if hot { accent } else { Color32::WHITE }),
+            );
+        }
+    }
+    // aktuelle Lage der Beams
+    for (i, q) in positions.iter().enumerate() {
+        p.circle_filled(to(*q), if i == 0 { 4.5 } else { 3.0 }, Color32::WHITE);
+    }
+}
+
+/// Liste der zugeordneten Kanäle mit Wertebereich; „+“ fügt einen hinzu.
+fn features_ui(
+    ui: &mut egui::Ui,
+    salt: u32,
+    features: &mut Vec<Feature>,
+    kinds: &[ChannelKind],
+    enabled: bool,
+    accent: Color32,
+) {
+    ui.add_space(theme::SP_S);
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(t("Zugeordnete Features")).color(theme::text()));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let add = ui
+                .add_enabled(enabled, egui::Button::new("+").frame(false))
+                .on_hover_text(t("Kanal hinzufügen (oder FX-Symbol am Fader)"));
+            crate::ui::widgets::menu::dropdown(&add, |ui| {
+                use crate::ui::widgets::menu::{self, MenuItem};
+                menu::begin(ui);
+                let free: Vec<ChannelKind> = kinds
+                    .iter()
+                    .copied()
+                    .filter(|k| !features.iter().any(|f| f.kind == *k))
+                    .collect();
+                if free.is_empty() {
+                    ui.label(
+                        egui::RichText::new(t("Keine weiteren Kanäle")).color(theme::text_faint()),
+                    );
+                }
+                for k in free {
+                    if menu::item(ui, MenuItem::new(t(k.label()))) {
+                        features.push(Feature::new(k));
+                    }
+                }
+            });
+        });
+    });
+    let frame = egui::Frame::new()
+        .fill(theme::bg())
+        .corner_radius(theme::R_S)
+        .inner_margin(egui::Margin::same(4));
+    frame.show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        ui.set_min_height(60.0);
+        if features.is_empty() {
+            ui.label(
+                egui::RichText::new(t("Noch keine Kanäle zugeordnet."))
+                    .small()
+                    .color(theme::text_faint()),
+            );
+        }
+        let mut remove = None;
+        for (i, f) in features.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                ui.set_min_height(24.0);
+                let (lr, _) = ui.allocate_exact_size(Vec2::new(90.0, 22.0), Sense::hover());
+                ui.painter().text(
+                    pos2(lr.left() + 4.0, lr.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    t(f.kind.label()),
+                    theme::caption(),
+                    theme::text_dim(),
+                );
+                let w = (ui.available_width() - 28.0).max(60.0);
+                range_bar(
+                    ui,
+                    egui::Id::unique(("feat", salt, i)),
+                    f,
+                    w,
+                    accent,
+                    enabled,
+                );
+                if ui
+                    .add_enabled(enabled, egui::Button::new("×").frame(false))
+                    .on_hover_text(t("Kanal entfernen"))
+                    .clicked()
+                {
+                    remove = Some(i);
+                }
+            });
+        }
+        if let Some(i) = remove {
+            features.remove(i);
+        }
+    });
+}
+
+/// Waagerechter Bereich mit zwei Griffen (Unter-/Obergrenze, 0..255).
+fn range_bar(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    f: &mut Feature,
+    w: f32,
+    accent: Color32,
+    enabled: bool,
+) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 22.0), Sense::hover());
+    let track = Rect::from_center_size(rect.center(), Vec2::new(rect.width() - 12.0, 3.0));
+    let x_of = |v: u8| track.left() + f32::from(v) / 255.0 * track.width();
+    let v_of =
+        |x: f32| (((x - track.left()) / track.width()).clamp(0.0, 1.0) * 255.0).round() as u8;
+    let sense = if enabled {
+        Sense::drag()
+    } else {
+        Sense::hover()
+    };
+    let hmin = Rect::from_center_size(pos2(x_of(f.min), rect.center().y), Vec2::new(10.0, 16.0));
+    let hmax = Rect::from_center_size(pos2(x_of(f.max), rect.center().y), Vec2::new(10.0, 16.0));
+    let rmin = ui.interact(hmin, id.with("min"), sense);
+    let rmax = ui.interact(hmax, id.with("max"), sense);
+    if let Some(q) = rmin.interact_pointer_pos().filter(|_| rmin.dragged()) {
+        f.min = v_of(q.x).min(f.max);
+    }
+    if let Some(q) = rmax.interact_pointer_pos().filter(|_| rmax.dragged()) {
+        f.max = v_of(q.x).max(f.min);
+    }
+    let p = ui.painter();
+    p.rect_filled(track, 1.5, theme::raised());
+    p.rect_filled(
+        Rect::from_min_max(
+            pos2(x_of(f.min), track.top()),
+            pos2(x_of(f.max), track.bottom()),
+        ),
+        1.5,
+        accent.gamma_multiply(0.7),
+    );
+    for (h, r) in [(hmin, &rmin), (hmax, &rmax)] {
+        let hot = r.hovered() || r.dragged();
+        p.circle_filled(
+            h.center(),
+            5.0,
+            if hot {
+                theme::text()
+            } else {
+                theme::text_dim()
+            },
+        );
+    }
+    let label = |v: u8| {
+        if v == 0 {
+            t("AUS").to_string()
+        } else {
+            v.to_string()
+        }
+    };
+    let r = ui.interact(rect, id.with("hover"), Sense::hover());
+    r.on_hover_text(format!("{} – {}", label(f.min), label(f.max)));
+}

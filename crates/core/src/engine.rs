@@ -634,9 +634,7 @@ impl Engine {
         out: &mut HashMap<ChannelRef, u8>,
     ) {
         for fx in &scene.effects {
-            if let Some(c) = &fx.color {
-                crate::fx::apply(show, c, &fx.fixtures, cycles, out);
-            }
+            crate::fx::apply_effect(show, fx, cycles, out);
         }
     }
 

@@ -30,6 +30,8 @@ pub enum FaderEvent {
     None,
     Changed(u8),
     Release,
+    /// FX-Symbol am Fader angeklickt (Kanal dem Effekt zuordnen/entfernen).
+    ToggleFx,
 }
 
 pub struct Fader {
@@ -43,6 +45,8 @@ pub struct Fader {
     color: Color32,
     height: Option<f32>,
     width: f32,
+    /// FX-Symbol zeigen: `Some(zugeordnet)`.
+    fx: Option<bool>,
 }
 
 impl Fader {
@@ -57,6 +61,7 @@ impl Fader {
             color: theme::accent(),
             height: None,
             width: FADER_W,
+            fx: None,
         }
     }
 
@@ -87,6 +92,12 @@ impl Fader {
     /// Spaltenbreite.
     pub fn width(mut self, w: f32) -> Self {
         self.width = w.max(FADER_W);
+        self
+    }
+
+    /// Kleines FX-Symbol am Kanalsymbol (rot = vom Effekt bewegt).
+    pub fn fx(mut self, assigned: Option<bool>) -> Self {
+        self.fx = assigned;
         self
     }
 
@@ -155,6 +166,47 @@ impl Fader {
         if let Some(h) = &self.hint {
             ui.interact(sym, id.with("symbol"), Sense::hover())
                 .on_hover_text(h);
+        }
+        if let Some(on) = self.fx {
+            let badge = Rect::from_min_size(
+                pos2(sym.right() - 6.0, sym.top() - 4.0),
+                Vec2::new(16.0, 11.0),
+            );
+            let r = ui
+                .interact(badge.expand(2.0), id.with("fx"), Sense::click())
+                .on_hover_text(if on {
+                    t("Vom Effekt entfernen")
+                } else {
+                    t("Dem Effekt zuordnen")
+                });
+            if r.clicked() {
+                event = FaderEvent::ToggleFx;
+            }
+            let fill = if on {
+                theme::DANGER
+            } else if r.hovered() {
+                theme::raised_hover()
+            } else {
+                theme::bg()
+            };
+            p.rect_filled(badge, 2.0, fill);
+            p.rect_stroke(
+                badge,
+                2.0,
+                Stroke::new(1.0, if on { theme::DANGER } else { theme::border() }),
+                StrokeKind::Inside,
+            );
+            p.text(
+                badge.center(),
+                egui::Align2::CENTER_CENTER,
+                "FX",
+                egui::FontId::new(8.0, egui::FontFamily::Name(theme::HEADING_FAMILY.into())),
+                if on {
+                    Color32::WHITE
+                } else {
+                    theme::text_dim()
+                },
+            );
         }
         y += SYMBOL_H;
 

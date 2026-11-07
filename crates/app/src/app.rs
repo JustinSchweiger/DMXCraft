@@ -752,8 +752,8 @@ impl eframe::App for DmxCraftApp {
                     // Seitenleiste mit den Einstellungen der ausgewählten Szene
                     egui::Panel::right("scene_props")
                         .resizable(true)
-                        .default_size(330.0)
-                        .min_size(280.0)
+                        .default_size(360.0)
+                        .min_size(340.0)
                         .frame(area)
                         .show(ui, |ui| control.props.ui(ui, &mut cx));
                     egui::CentralPanel::default_margins()
