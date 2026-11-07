@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "crates/app/Cargo.toml": {
-    "mtime": 1794083957.7729602,
-    "seen": 1794084584.1054707,
-    "ast_hash": "86180e5d31e4da4f1ebb304d7e38ea75",
+    "mtime": 1794085138.3819423,
+    "seen": 1794085279.2206702,
+    "ast_hash": "cbe7483e48ec52e8bacd4cf5c5ff49d9",
     "semantic_hash": ""
   },
   "crates/app/build.rs": {
@@ -438,9 +438,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/settings_window.rs": {
-    "mtime": 1794084735.303161,
-    "seen": 1794084789.7194004,
-    "ast_hash": "2448fe726393c7ab14858ad091b229c4",
+    "mtime": 1794085138.4305465,
+    "seen": 1794085279.2207003,
+    "ast_hash": "291cb650e25936fda784cbb388b4c9ec",
     "semantic_hash": ""
   },
   "crates/app/src/i18n/en.rs": {

@@ -244,7 +244,8 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
         section(ui, title);
         ui.horizontal(|ui| {
             let w = ui.available_width() - 40.0;
-            let mut text = code.clone();
+            // nur lesen, aber markierbar und kopierbar
+            let mut text: &str = &code;
             ui.add(
                 egui::TextEdit::multiline(&mut text)
                     .code_editor()
