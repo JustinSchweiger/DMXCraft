@@ -57,7 +57,6 @@ enum Action {
     Bank(BankAction),
     /// Umbenennung im Chip abgeschlossen.
     RenameBank(ZoneId, String),
-    OpenBanksWindow,
 }
 
 /// Aktionen aus dem Bank-Menü.
@@ -86,6 +85,10 @@ pub struct SceneGridView {
     /// Laufende Umbenennung einer Szene (direkt in der Karte).
     scene_rename: Option<(SceneId, String)>,
     scene_rename_focus: bool,
+    /// Ziel-Verschiebung der Bankleiste (Pfeile/Mausrad), wird animiert.
+    bar_scroll: f32,
+    /// Leiste ans Ende blättern, solange eine neue Bank benannt wird.
+    bar_to_end: bool,
 }
 
 impl View for SceneGridView {
@@ -98,19 +101,8 @@ impl View for SceneGridView {
                 .adopt_free_scenes(tr!("Bank {n}", n = n));
         }
         let mut actions = Vec::new();
-        ui.horizontal(|ui| {
-            self.page_bar(
-                ui,
-                cx.engine.show(),
-                cx.engine,
-                cx.state.locked,
-                &mut actions,
-            );
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                playback_controls(ui, cx.engine);
-            });
-        });
-        ui.add_space(theme::SP_XS);
+        self.bank_bar(ui, cx.engine, cx.state.locked, &mut actions);
+        ui.add_space(theme::SP_S);
 
         // ausgeblendete Bank als Filter ist nicht mehr wählbar
         if let PageFilter::Zone(z) = self.page {
@@ -188,6 +180,12 @@ impl View for SceneGridView {
         );
         if !renaming && self.rename.is_some() {
             self.rename_focus = true;
+            // neue Bank steht hinten: Leiste dorthin blättern
+            let last = cx.engine.show().zones.last().map(|z| z.id);
+            self.bar_to_end = self.rename.as_ref().map(|(id, _)| *id) == last;
+        }
+        if self.rename.is_none() {
+            self.bar_to_end = false;
         }
         let now = self.scene_rename.as_ref().map(|(id, _)| *id);
         if now.is_some() && now != scene_renaming {
@@ -197,6 +195,84 @@ impl View for SceneGridView {
 }
 
 impl SceneGridView {
+    /// Bankleiste als eigener Streifen; ist sie zu lang, blättern Pfeile ganz
+    /// außen (und das Mausrad) sie seitlich weiter.
+    fn bank_bar(&mut self, ui: &mut egui::Ui, e: &Engine, locked: bool, actions: &mut Vec<Action>) {
+        const ARROW_W: f32 = 26.0;
+        let full = ui.available_rect_before_wrap();
+        let bar_h = 40.0;
+        let rect = egui::Rect::from_min_size(full.min, Vec2::new(full.width(), bar_h));
+        ui.allocate_rect(rect, Sense::hover());
+        let p = ui.painter();
+        p.rect_filled(rect, theme::R_M, theme::bg());
+        p.rect_stroke(
+            rect,
+            theme::R_M,
+            Stroke::new(1.0, theme::border()),
+            StrokeKind::Inside,
+        );
+
+        // Breite des Inhalts aus dem letzten Frame
+        let content_id = ui.make_persistent_id("bank_bar_content");
+        let content_w: f32 = ui.ctx().data(|d| d.get_temp(content_id)).unwrap_or(0.0);
+        let inner_full = rect.shrink2(Vec2::new(theme::SP_S, 0.0));
+        let overflow = content_w > inner_full.width();
+        let view = if overflow {
+            rect.shrink2(Vec2::new(ARROW_W + 2.0, 0.0))
+        } else {
+            inner_full
+        };
+        let max = (content_w - view.width()).max(0.0);
+
+        // Mausrad über der Leiste blättert seitlich
+        if overflow && ui.rect_contains_pointer(rect) {
+            let d = ui.input(|i| i.smooth_scroll_delta);
+            let d = if d.x.abs() > d.y.abs() { d.x } else { d.y };
+            self.bar_scroll -= d;
+        }
+        if overflow {
+            let step = view.width() * 0.6;
+            let left = egui::Rect::from_min_size(rect.min, Vec2::new(ARROW_W, bar_h));
+            let right = egui::Rect::from_min_size(
+                rect.right_top() - Vec2::new(ARROW_W, 0.0),
+                Vec2::new(ARROW_W, bar_h),
+            );
+            if arrow(ui, left, Icon::ChevronLeft, self.bar_scroll > 0.5) {
+                self.bar_scroll -= step;
+            }
+            if arrow(ui, right, Icon::ChevronRight, self.bar_scroll < max - 0.5) {
+                self.bar_scroll += step;
+            }
+        }
+        if self.bar_to_end {
+            self.bar_scroll = max;
+        }
+        self.bar_scroll = self.bar_scroll.clamp(0.0, max);
+        let offset = ui.ctx().animate_value_with_time(
+            ui.make_persistent_id("bank_bar_anim"),
+            self.bar_scroll,
+            0.15,
+        );
+
+        let mut child = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(egui::Rect::from_min_size(
+                    egui::pos2(view.left() - offset, view.top()),
+                    Vec2::new(f32::INFINITY, bar_h),
+                ))
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        );
+        child.set_clip_rect(view.intersect(ui.clip_rect()));
+        let show = e.show();
+        self.page_bar(&mut child, show, e, locked, actions);
+        let used = child.min_rect().width();
+        if (used - content_w).abs() > 0.5 {
+            // Breite hat sich geändert: Pfeile/Verschiebung im nächsten Frame anpassen
+            ui.ctx().data_mut(|d| d.insert_temp(content_id, used));
+            ui.ctx().request_repaint();
+        }
+    }
+
     fn page_bar(
         &mut self,
         ui: &mut egui::Ui,
@@ -273,14 +349,6 @@ impl SceneGridView {
                     .clicked()
             {
                 actions.push(Action::Bank(BankAction::New));
-            }
-            if !locked
-                && ui
-                    .add(IconButton::new(Icon::Edit).flat())
-                    .on_hover_text(t("Bänke & Gruppen bearbeiten"))
-                    .clicked()
-            {
-                actions.push(Action::OpenBanksWindow);
             }
         });
     }
@@ -394,56 +462,30 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
     out.or(other)
 }
 
-/// Master, Speed, Blackout und Alle aus (rechts neben den Zonen-Chips).
-fn playback_controls(ui: &mut egui::Ui, e: &mut Engine) {
-    let bo = e.blackout();
-    let bo_btn = egui::Button::new(egui::RichText::new(t("Blackout")).strong().color(if bo {
-        Color32::WHITE
-    } else {
-        theme::text()
-    }))
-    .fill(if bo { theme::DANGER } else { theme::raised() })
-    .min_size(Vec2::new(88.0, 28.0));
-    if ui.add(bo_btn).on_hover_text(t("Taste B")).clicked() {
-        e.set_blackout(!bo);
+/// Blätterpfeil am Rand der Bankleiste.
+fn arrow(ui: &mut egui::Ui, rect: egui::Rect, icon: Icon, enabled: bool) -> bool {
+    let resp = ui.interact(
+        rect,
+        ui.make_persistent_id(("bar_arrow", icon == Icon::ChevronLeft)),
+        Sense::click(),
+    );
+    let p = ui.painter();
+    if enabled && resp.hovered() {
+        p.rect_filled(rect.shrink(3.0), theme::R_S, theme::raised_hover());
     }
-    if ui
-        .button(t("Alle aus"))
-        .on_hover_text(t("Alle Szenen stoppen"))
-        .clicked()
-    {
-        e.release_all();
-    }
-    ui.spacing_mut().slider_width = 110.0;
-    let mut speed = e.speed();
-    if ui
-        .add(
-            egui::Slider::new(&mut speed, 0.1..=4.0)
-                .logarithmic(true)
-                .fixed_decimals(2)
-                .suffix("x"),
-        )
-        .on_hover_text(t("Wiedergabegeschwindigkeit"))
-        .changed()
-    {
-        e.set_speed(speed);
-    }
-    ui.label(egui::RichText::new(t("Speed")).color(theme::text_dim()));
-    let mut master = e.master() * 100.0;
-    if ui
-        .add(
-            egui::Slider::new(&mut master, 0.0..=100.0)
-                .integer()
-                .suffix("%"),
-        )
-        .changed()
-    {
-        e.set_master(master / 100.0);
-    }
-    ui.label(egui::RichText::new(t("Master")).color(theme::text_dim()));
+    icon.paint(
+        p,
+        egui::Rect::from_center_size(rect.center(), Vec2::splat(14.0)),
+        if enabled {
+            theme::text()
+        } else {
+            theme::text_faint()
+        },
+    );
+    enabled && resp.clicked()
 }
 
-/// Filter-Chip; ein Punkt zeigt an, dass in der Bank etwas läuft.
+/// Bank-Reiter; ein Punkt zeigt an, dass in der Bank etwas läuft.
 fn chip(
     ui: &mut egui::Ui,
     page: &mut PageFilter,
@@ -457,25 +499,33 @@ fn chip(
         .painter()
         .layout_no_wrap(label.to_string(), theme::body(), color);
     let w = galley.size().x + 2.0 * theme::SP_M + if live { 12.0 } else { 0.0 };
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 28.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 30.0), Sense::click());
     let p = ui.painter();
-    let r = 14.0;
-    p.rect_filled(
-        rect,
-        r,
-        if selected {
-            color.gamma_multiply(0.22)
-        } else if resp.hovered() {
-            theme::raised_hover()
-        } else {
-            theme::raised()
-        },
+    if selected || resp.hovered() {
+        p.rect_filled(
+            rect,
+            theme::R_S,
+            if selected {
+                color.gamma_multiply(0.16)
+            } else {
+                theme::raised_hover()
+            },
+        );
+    }
+    // farbige Unterstreichung: dünn, ausgewählt kräftig
+    let line_h = if selected { 3.0 } else { 1.5 };
+    let line = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + 4.0, rect.bottom() - line_h),
+        egui::pos2(rect.right() - 4.0, rect.bottom()),
     );
-    p.rect_stroke(
-        rect,
-        r,
-        Stroke::new(1.0, if selected { color } else { theme::border() }),
-        StrokeKind::Inside,
+    p.rect_filled(
+        line,
+        1.0,
+        if selected {
+            color
+        } else {
+            color.gamma_multiply(0.45)
+        },
     );
     let mut x = rect.left() + theme::SP_M;
     if live {
@@ -949,7 +999,6 @@ fn apply(
                 }
             }
             Action::Bank(b) => apply_bank(e, st, rename, b),
-            Action::OpenBanksWindow => st.zones_open = true,
         }
     }
 }

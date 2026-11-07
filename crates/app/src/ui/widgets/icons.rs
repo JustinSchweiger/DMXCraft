@@ -55,6 +55,8 @@ pub enum Icon {
     ZoomFit,
     /// Musiknote (SuperSzene mit Musik).
     Music,
+    ChevronLeft,
+    ChevronRight,
 }
 
 impl Icon {
@@ -488,6 +490,21 @@ impl Icon {
                     pos2(c.x + s * 0.45, c.y + s * 0.65),
                 );
                 painter.rect_stroke(body, 1.5, stroke, egui::StrokeKind::Middle);
+            }
+            Icon::ChevronLeft | Icon::ChevronRight => {
+                let dir = if self == Icon::ChevronRight {
+                    1.0
+                } else {
+                    -1.0
+                };
+                painter.add(Shape::line(
+                    vec![
+                        pos2(c.x - dir * s * 0.25, c.y - s * 0.55),
+                        pos2(c.x + dir * s * 0.3, c.y),
+                        pos2(c.x - dir * s * 0.25, c.y + s * 0.55),
+                    ],
+                    Stroke::new(2.0, color),
+                ));
             }
             Icon::Music => {
                 // zwei Achtelnoten mit Balken
