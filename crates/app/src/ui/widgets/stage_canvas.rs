@@ -151,10 +151,7 @@ pub struct StageCanvas<'a> {
 
 /// Position eines Geräts (gespeichert oder Standard nach Patch-Reihenfolge).
 pub fn fixture_pos(show: &Show, id: FixtureId) -> [f32; 2] {
-    let idx = show.fixtures.iter().position(|f| f.id == id).unwrap_or(0);
-    show.fixture(id)
-        .and_then(|f| f.plan_pos)
-        .unwrap_or_else(|| plan::default_position(idx))
+    show.plan_position(id)
 }
 
 impl StageCanvas<'_> {

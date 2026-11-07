@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "crates/core/src/show.rs": {
-    "mtime": 1794082256.9909406,
-    "seen": 1794082319.263667,
-    "ast_hash": "b90b7c27405d91039b62893b015d6260",
+    "mtime": 1794082548.410958,
+    "seen": 1794082566.8966916,
+    "ast_hash": "7d3b3536d7b216860dd9c4e3f1e697cb",
     "semantic_hash": ""
   },
   "crates/ofl/Cargo.toml": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/stage_canvas.rs": {
-    "mtime": 1794069582.5729146,
-    "seen": 1794069591.4224184,
-    "ast_hash": "b84a7dc4716511ea93f325440593f977",
+    "mtime": 1794082484.3892367,
+    "seen": 1794082566.8966293,
+    "ast_hash": "78d5d04c21d6fe67777b179e292fc659",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/swatch.rs": {

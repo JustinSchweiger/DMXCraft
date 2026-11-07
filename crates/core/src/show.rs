@@ -965,14 +965,19 @@ impl Show {
             };
             let id = self.next_fixture_id();
             let name = self.next_fixture_name(&f.name);
+            let from = if self.fixture(f.id).is_some() {
+                self.plan_position(f.id)
+            } else {
+                f.plan_pos
+                    .unwrap_or_else(|| crate::plan::default_position(self.fixtures.len()))
+            };
+            let pos = self.free_plan_position(from);
             self.fixtures.push(Fixture {
                 id,
                 name,
                 universe: pu,
                 address: pa,
-                plan_pos: f
-                    .plan_pos
-                    .map(|p| [(p[0] + 0.03).min(1.0), (p[1] + 0.03).min(1.0)]),
+                plan_pos: Some(pos),
                 ..f.clone()
             });
             out.push(id);
@@ -980,6 +985,51 @@ impl Show {
             a = pa + ch;
         }
         out
+    }
+
+    /// Position im Bühnenplan (eigene oder automatische).
+    pub fn plan_position(&self, id: FixtureId) -> [f32; 2] {
+        let idx = self.fixtures.iter().position(|f| f.id == id).unwrap_or(0);
+        self.fixture(id)
+            .and_then(|f| f.plan_pos)
+            .unwrap_or_else(|| crate::plan::default_position(idx))
+    }
+
+    /// Nächster freier Platz im Bühnenplan neben `from` (ringförmig nach
+    /// außen gesucht), damit eingefügte Geräte nicht übereinander liegen.
+    pub fn free_plan_position(&self, from: [f32; 2]) -> [f32; 2] {
+        const STEP: f32 = 0.06;
+        const MIN_DIST: f32 = 0.035;
+        let taken: Vec<[f32; 2]> = self
+            .fixtures
+            .iter()
+            .map(|f| self.plan_position(f.id))
+            .collect();
+        let free = |p: [f32; 2]| {
+            taken
+                .iter()
+                .all(|q| (q[0] - p[0]).hypot(q[1] - p[1]) >= MIN_DIST)
+        };
+        let inside = |p: [f32; 2]| (0.02..=0.98).contains(&p[0]) && (0.02..=0.98).contains(&p[1]);
+        for ring in 1..20i32 {
+            // zuerst rechts daneben, dann links, dann darunter, zuletzt darüber
+            let mut cands = Vec::new();
+            for dy in -ring..=ring {
+                for dx in -ring..=ring {
+                    if dx.abs().max(dy.abs()) == ring {
+                        cands.push((dx, dy));
+                    }
+                }
+            }
+            cands.sort_by_key(|(dx, dy)| (dy.abs(), -dx.signum(), -*dy, *dx));
+            for (dx, dy) in cands {
+                let p = [from[0] + dx as f32 * STEP, from[1] + dy as f32 * STEP];
+                if inside(p) && free(p) {
+                    return p;
+                }
+            }
+        }
+        from
     }
 
     /// Freier Name: endet `name` auf eine Zahl, wird bis zum ersten freien
@@ -1360,6 +1410,13 @@ mod tests {
         // volles Universum: weiter im nächsten
         let ids = s.paste_fixtures(&src, 0, 510);
         assert_eq!(s.fixture(ids[0]).unwrap().universe, 1);
+        // keine zwei Geräte an derselben Stelle im Bühnenplan
+        let pos: Vec<[f32; 2]> = s.fixtures.iter().map(|f| s.plan_position(f.id)).collect();
+        for (i, a) in pos.iter().enumerate() {
+            for b in &pos[i + 1..] {
+                assert!((a[0] - b[0]).hypot(a[1] - b[1]) > 0.03, "{a:?} {b:?}");
+            }
+        }
     }
 
     #[test]
