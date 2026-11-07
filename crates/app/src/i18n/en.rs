@@ -416,6 +416,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{n} Szenen", "{n} scenes"),
     ("Alle einblenden", "Show all"),
     ("BLIND", "BLIND"),
+    ("Gerätedatei importieren", "Import fixture file"),
+    ("Gerätedateien", "Fixture files"),
     ("Alle ausgewählten Geräte ({n})", "All selected fixtures ({n})"),
     ("Bänke auswählen", "Select banks"),
     ("Szenen auswählen", "Select scenes"),

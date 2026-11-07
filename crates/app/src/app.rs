@@ -139,6 +139,16 @@ impl DmxCraftApp {
         }
     }
 
+    /// Angezeigter Name: der Dateiname der Show (ohne Endung), sonst der
+    /// Name der ungespeicherten Show.
+    fn display_name(&self, e: &Engine) -> String {
+        std::path::Path::new(&self.state.show_path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| e.show().name.clone())
+    }
+
     /// Ungespeicherte Änderungen an der Show?
     fn dirty(&self) -> bool {
         *Self::lock(&self.engine).show() != self.saved_show
@@ -194,6 +204,10 @@ impl DmxCraftApp {
     }
 
     fn save_show(&mut self, path: &str) {
+        // Name der Show = Dateiname
+        if let Some(stem) = std::path::Path::new(path).file_stem() {
+            Self::lock(&self.engine).show_mut().name = stem.to_string_lossy().into_owned();
+        }
         let result = Self::lock(&self.engine).show().save(path);
         match result {
             Ok(()) => {
@@ -232,6 +246,8 @@ impl DmxCraftApp {
                 self.history.reset(&Snapshot::of(&Self::lock(&self.engine)));
                 self.mark_saved();
                 self.state.reset_for_new_show();
+                // neue Datei: erstes Speichern fragt nach dem Ort
+                self.state.show_path.clear();
                 self.state.info(t("Neue, leere Show"));
             }
             MenuAction::OpenShow => self.start_file_dialog(ctx, Purpose::OpenShow),
@@ -479,7 +495,7 @@ impl DmxCraftApp {
             ),
             OutputStatus::Stopped => (0.0, (t("Ausgang gestoppt").into(), theme::text_dim())),
         };
-        (e.show().name.clone(), fps, status, e.blackout())
+        (self.display_name(&e), fps, status, e.blackout())
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
@@ -502,7 +518,10 @@ impl DmxCraftApp {
         // Vor dem Schließen: ungespeicherte Änderungen?
         if self.close_dialog {
             let mut open = true;
-            let name = Self::lock(&self.engine).show().name.clone();
+            let name = {
+                let e = Self::lock(&self.engine);
+                self.display_name(&e)
+            };
             let res = Dialog::new(t("Ungespeicherte Änderungen"))
                 .id("close_unsaved")
                 .width(380.0)

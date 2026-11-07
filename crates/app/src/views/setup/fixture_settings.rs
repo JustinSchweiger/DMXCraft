@@ -19,18 +19,9 @@ pub struct FixtureSettings;
 impl View for FixtureSettings {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
-        let title = match ids.len() {
-            0 => t("Gerät").to_string(),
-            1 => cx
-                .engine
-                .show()
-                .fixture(ids[0])
-                .map_or(t("Gerät").into(), |f| f.name.clone()),
-            n => tr!("{n} Geräte", n = n),
-        };
         let mut quick = None;
         let some = !ids.is_empty();
-        section_header(ui, &title, |ui| {
+        section_header(ui, "", |ui| {
             if ui
                 .add(IconButton::new(Icon::Center).enabled(some))
                 .on_hover_text(t("Moving Head zentrieren (Pan/Tilt 50 %)"))
@@ -57,10 +48,6 @@ impl View for FixtureSettings {
             quick_action(cx.engine, Layer::Programmer, &ids, q);
         }
         let Some(first) = ids.first().copied() else {
-            ui.label(
-                egui::RichText::new(t("Geräte im Bühnenplan oder im Patch auswählen."))
-                    .color(theme::text_dim()),
-            );
             return;
         };
 

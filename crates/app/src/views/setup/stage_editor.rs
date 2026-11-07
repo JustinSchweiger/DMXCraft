@@ -97,8 +97,8 @@ enum Arrange {
 impl View for StageEditorView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut arrange: Option<Arrange> = None;
-        section_header(ui, t("Bühnenplan"), |ui| {
-            ui.label(egui::RichText::new(t("Hilfe")).color(theme::text_faint())).on_hover_text(
+        section_header(ui, "", |ui| {
+            ui.add(IconButton::new(Icon::Info).flat()).on_hover_text(
                 t("Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nMittlere Maustaste = Ansicht ziehen\nMausrad = zoomen\nRechtsklick = Menü (Form, Größe, Gruppen …)"),
             );
             ui.separator();

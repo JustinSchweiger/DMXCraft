@@ -173,12 +173,6 @@ impl StageView {
                     actions.push(GroupAction::New);
                 }
             }
-            if show.groups.is_empty() {
-                ui.label(
-                    egui::RichText::new(t("Geräte auswählen und mit + eine Gruppe anlegen"))
-                        .color(theme::text_faint()),
-                );
-            }
         });
     }
 

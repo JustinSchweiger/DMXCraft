@@ -580,8 +580,9 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
         {
             layer.clear_all(e);
         }
-        let sel: Vec<ChannelRef> = e
-            .programmer()
+        // nur die Ebene des aktuellen Modus (Live bzw. Edit)
+        let sel: Vec<ChannelRef> = layer
+            .map(e)
             .keys()
             .filter(|c| st.selected.contains(&c.fixture))
             .copied()

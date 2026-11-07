@@ -83,8 +83,6 @@ impl View for PatchGrid {
             .map(|f| (f.address, ()));
         ui.horizontal(|ui| {
             ui.set_min_height(30.0);
-            ui.label(theme::heading_text(t("Patch")));
-            ui.add_space(theme::SP_S);
             Segmented::new(&[
                 (GridMode::Patch, t("Patch")),
                 (GridMode::Output, t("Ausgang")),

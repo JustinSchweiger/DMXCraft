@@ -11,7 +11,7 @@ use eframe::egui;
 
 use crate::state::{AppState, LibraryDrag};
 use crate::ui::theme;
-use crate::ui::widgets::{section_header, text_field};
+use crate::ui::widgets::text_field;
 use crate::views::{View, ViewCtx};
 
 /// Höchstens so viele Hersteller werden bei leerer Suche aufgeklappt angeboten.
@@ -22,41 +22,51 @@ pub struct LibraryPanel {
     query: String,
     /// Gewählter Gerätetyp (noch nicht unbedingt in der Show).
     chosen: Option<FixtureType>,
-    import_path: String,
-    show_import: bool,
+    /// Laufender Systemdialog zum Importieren einer Gerätedatei.
+    import_dialog: Option<std::sync::mpsc::Receiver<Option<std::path::PathBuf>>>,
 }
 
 impl View for LibraryPanel {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         drag_ghost(ui.ctx());
-        section_header(ui, t("Bibliothek"), |ui| {
-            if ui
-                .small_button(t("Gerätedatei"))
-                .on_hover_text(t(
-                    "Eigene Gerätedatei importieren (Open Fixture Library .json oder QLC+ .qxf)",
-                ))
-                .clicked()
-            {
-                self.show_import = !self.show_import;
+        // Ergebnis des Systemdialogs
+        if let Some(rx) = &self.import_dialog {
+            if let Ok(result) = rx.try_recv() {
+                self.import_dialog = None;
+                if let Some(path) = result {
+                    self.import(cx.state, &path);
+                }
+            }
+        }
+        ui.horizontal(|ui| {
+            let busy = self.import_dialog.is_some();
+            let r = ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let r = ui
+                    .add(crate::ui::widgets::IconButton::new(crate::ui::widgets::Icon::Import).enabled(!busy))
+                    .on_hover_text(t(
+                        "Eigene Gerätedatei importieren (Open Fixture Library .json oder QLC+ .qxf)",
+                    ));
+                ui.add(
+                    text_field(&mut self.query)
+                        .hint_text(t("Geräte suchen (Hersteller, Modell, Kategorie)"))
+                        .desired_width(f32::INFINITY),
+                );
+                r
+            });
+            if r.inner.clicked() {
+                let (tx, rx) = std::sync::mpsc::channel();
+                let ctx = ui.ctx().clone();
+                std::thread::spawn(move || {
+                    let path = rfd::FileDialog::new()
+                        .set_title(t("Gerätedatei importieren"))
+                        .add_filter(t("Gerätedateien"), &["json", "qxf"])
+                        .pick_file();
+                    let _ = tx.send(path);
+                    ctx.request_repaint();
+                });
+                self.import_dialog = Some(rx);
             }
         });
-        if self.show_import {
-            ui.horizontal(|ui| {
-                ui.add(
-                    text_field(&mut self.import_path)
-                        .hint_text(t("/pfad/hersteller/geraet.json"))
-                        .desired_width(ui.available_width() - 80.0),
-                );
-                if ui.button(t("Laden")).clicked() {
-                    self.import(cx.state);
-                }
-            });
-        }
-        ui.add(
-            text_field(&mut self.query)
-                .hint_text(t("Geräte suchen (Hersteller, Modell, Kategorie)"))
-                .desired_width(f32::INFINITY),
-        );
         ui.add_space(theme::SP_XS);
 
         // Patch-Formular unten fest, Liste füllt den Rest
@@ -233,10 +243,6 @@ impl LibraryPanel {
 
     fn patch_form(&mut self, ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
         let Some(ty) = self.chosen.clone() else {
-            ui.label(
-                egui::RichText::new(t("Gerät in der Liste wählen, dann patchen."))
-                    .color(theme::text_dim()),
-            );
             return;
         };
         ui.label(egui::RichText::new(ty.display_name()).strong());
@@ -291,9 +297,8 @@ impl LibraryPanel {
         }
     }
 
-    fn import(&mut self, st: &mut AppState) {
-        let path = std::path::PathBuf::from(self.import_path.trim());
-        let json = match std::fs::read_to_string(&path) {
+    fn import(&mut self, st: &mut AppState, path: &std::path::Path) {
+        let json = match std::fs::read_to_string(path) {
             Ok(j) => j,
             Err(err) => {
                 st.error(format!("{}: {err}", path.display()));

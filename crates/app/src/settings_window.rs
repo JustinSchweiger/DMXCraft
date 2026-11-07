@@ -404,9 +404,6 @@ fn midi(ui: &mut Ui) {
 fn project(ui: &mut Ui, e: &mut Engine, show_path: &str) {
     section(ui, t("Show"));
     form(ui, "settings_project", |f| {
-        f.row(t("Name"), |ui| {
-            ui.add(text_field(&mut e.show_mut().name).desired_width(f32::INFINITY));
-        });
         f.row(t("Datei"), |ui| {
             let text = if show_path.is_empty() {
                 t("noch nicht gespeichert")

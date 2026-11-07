@@ -62,10 +62,9 @@ Schrift: `FS_CAPTION=10.5` (Sektionstitel, GROSS), `FS_BODY=13`,
 * **Eigene Titelleiste** (`titlebar.rs`, Fenster ohne Betriebssystem-Leiste):
   links Menü (Datei, Bearbeiten, Ansicht, Tools, Mappings, Hilfe) · Modus
   Einrichten/Steuern;
-  Mitte „DMXCraft · Showname“; rechts Auslastungsleiste „LAST“ (Statuspunkt, Details im Tooltip),
-  Sperre-Knopf, Fensterknöpfe. Keine fps- oder Geräte-/Szenenzahlen.
-  Keine Bedienelemente der Wiedergabe (Master, Speed, Blackout) in der
-  Titelleiste – die liegen unter STEUERN über dem Szenen-Raster.
+  Mitte „DMXCraft · Showname“ (= Dateiname, `*` bei ungespeicherten
+  Änderungen); rechts Auslastungsleiste „LAST“ (Statuspunkt, Details im
+  Tooltip), Sperre-Knopf, Fensterknöpfe. Keine fps- oder Geräte-/Szenenzahlen.
 * **Keine Statusleiste.** Kurze Meldungen (`AppState::info/error`) erscheinen
   rechts in der Titelleiste und blenden nach 5 s (Fehler 10 s) aus; Update-
   Hinweise ebenfalls dort.
@@ -74,10 +73,11 @@ Schrift: `FS_CAPTION=10.5` (Sektionstitel, GROSS), `FS_BODY=13`,
   keine äußeren Rahmen oder Rundungen um ganze Bereiche (Canvas, Raster).
 * STEUERN: oben Szenen-Raster (flexibel), unten Bühnenplan + Programmer
   (Höhe per Splitter, Standard 40 %).
-* Jeder Bereich beginnt mit einem **Sektionskopf** (`widgets::section_header`):
-  Titel links, Aktionen rechts. Bereichsüberschriften **immer** über
-  `theme::heading_text()` (Noto Sans SemiBold, `FS_HEADING`, GROSSBUCHSTABEN) –
-  nie eigene `RichText` für Überschriften, damit sie überall gleich aussehen.
+* **Keine Bereichsüberschriften** („Bühne“, „Programmer“, „Patch“ …) – sie
+  kosten Platz und sagen nichts Neues. Eine Werkzeugzeile über einem Bereich
+  nutzt `widgets::section_header(ui, "", …)` (Aktionen rechts). Wo eine
+  Beschriftung nötig ist (z. B. „GRUPPEN |“ vor Pillen), immer über
+  `theme::heading_text()`.
 * **Sperre:** Ist die Oberfläche gesperrt (`AppState::locked`), gibt es nur
   STEUERN; Einrichten, Szenen-/Zonenbearbeitung, Kontextmenüs zum Ändern,
   Einstellungen und Show öffnen sind aus. Neue Bedienelemente, die etwas am
@@ -90,12 +90,20 @@ Wiederverwendbare Elemente sind eigene Typen mit `impl egui::Widget` oder
 einer `show(self, ui) -> Response`-Methode. Sie kennen **keine** Engine und
 keinen App-Zustand – nur ihre Eingabewerte.
 
-* **Fader**: vertikale Spur, füllt die übergebene Höhe; Pegel als gefüllte
-  Fläche von unten; Name oben, Wert unten in der Spur. Ziehen = setzen,
-  Mausrad = ±1 (Shift: ±10), Doppelklick = 0 ↔ voll, Rechtsklick =
-  Kontextmenü (Freigeben). Ungesetzt = gedämpft, im Programmer = `ACCENT`.
-* **SceneCard**: Name, Typzeile (STATISCH/ABLAUF), Fortschritt als
-  Leiste unten, Zonenfarbe als Rand, wenn aktiv.
+* **Fader** (Programmer): Statuspunkt oben (Farbe des Modus, anklickbar =
+  Kanal speichern/freigeben), Kanalnummer, Symbol der Kanalart (Name nur als
+  Hinweis am Symbol), Wert bzw. „OFF“ (Klick = eintippen, Ziehen hoch/runter =
+  ändern), Schiene mit Griff. Mausrad ±2, Doppelklick 0 ↔ voll, Rechtsklick
+  Menü (Freigeben, 0/25/50/75 %/Voll). In allen Kategorien außer „Alle
+  Kanäle“ steuert ein Fader die Kanalart **aller** ausgewählten Geräte.
+* **SceneCard**: Name in Szenenfarbe, Typ in Großbuchstaben (STATISCH, ABLAUF,
+  FX), rechts der Markier-Streifen (Klick = auswählen, Ziehen = in andere Bank
+  verschieben), Hauptfläche = starten/stoppen. Leiste unten: Laufzeit bzw.
+  Rampe beim Ein-/Ausblenden; kleine Symbole für Ablauf und Flash.
+* **Knob** (Drehregler): Bezeichnung darunter, Wert **nur beim Drehen** als
+  Hinweis am Mauszeiger; Akzent in der Farbe des Objekts (z. B. Szene).
+* **Zeitfeld** (`widgets::time_field`): `00h00m00s00` (Stunden nur, wo sinnvoll,
+  z. B. Dauer), jede Zahl per Ziehen hoch/runter, Hundertstel in 4er-Schritten.
 * **Dialog** (`widgets::Dialog`): **jedes** Fenster läuft hierüber, nie
   `egui::Window` direkt. Kopf: Titel zentriert in Überschrift-Schrift,
   Schließen-Symbol rechts. Inhalt auf `SURFACE`. Aktionsknöpfe (Abbrechen,
@@ -122,8 +130,8 @@ keinen App-Zustand – nur ihre Eingabewerte.
   Tooltip „Noch nicht verfügbar“ – Klick darauf tut nichts, das Menü bleibt
   offen (`menu::context`/`menu::dropdown`, nie `resp.context_menu`).
   Kürzel-Texte aus `titlebar::keys`. „…“ am Ende heißt: es öffnet sich ein
-  Dialog; Dateien immer über den Systemdialog (`file_dialog`), nie über ein
-  eigenes Pfad-Feld.
+  Dialog; Dateien **immer** über den Systemdialog (`rfd`, eigener Thread),
+  nie über ein eigenes Pfad-Feld.
 * **Toggle** (Schiebeschalter): für alle An/Aus-Optionen – **keine Checkboxen**.
 * **RangeSlider**: senkrechter Regler mit Unter- und Obergrenze (z. B. Dimmer-Limit).
 * **LimitPad**: XY-Feld mit Griffen für Bereiche (Pan/Tilt-Grenzen).
@@ -143,25 +151,52 @@ keinen App-Zustand – nur ihre Eingabewerte.
 * Ziehen beginnt erst nach der egui-Schwelle; Treffer werden am
   **Druckpunkt** (`press_origin`) ermittelt, nicht an der aktuellen Position.
 * Kontextmenüs für seltene Aktionen (Bearbeiten, Löschen, Freigeben).
-* Keine erklärenden Hinweistexte dauerhaft in Kopfzeilen; Hilfe gehört in
-  Tooltips (z. B. ein „Hilfe“-Label mit `on_hover_text`).
+* **Keine Hinweis- oder Leer-Texte** („Gerät auswählen …“, „Keine Szene
+  ausgewählt“, „Geräte auswählen und mit + …“, „keine Kanäle in dieser
+  Kategorie“): ist nichts da, bleibt die Fläche leer. Hilfe gehört in Tooltips,
+  bei Bedarf an einem Info-Symbol (`Icon::Info`).
 * Elemente, die abhängig von der Auswahl erscheinen (z. B. DIP-Schalter), dürfen
   die Höhe ihrer Zeile nicht verändern.
 * Alle Bereiche einer Seite sind an ihren Trennlinien in der Größe veränderbar.
   Widgets setzen den Mauszeiger nur, wenn sie ihn wirklich brauchen (z. B.
   Greifen beim Verschieben) – nie pauschal `Default`, sonst verschwindet der
   Größenänderungs-Cursor der Trennlinien.
-* Werkzeuge und Auswahlen mit wenigen festen Optionen (Formen, Anordnen)
-  als Symbol-Knöpfe mit Tooltip statt Auswahllisten; Symbole immer selbst
-  gezeichnet (`widgets::icons`, `stage_canvas::paint_shape_icon`).
+* Werkzeuge und Auswahlen mit wenigen festen Optionen (Formen, Anordnen,
+  Wiederholung) als Symbol-Knöpfe mit Tooltip statt Auswahllisten.
+* **Entf** wirkt auf das zuletzt angeklickte Element (`AppState::focus`:
+  Szenen, Bank, Effekt) – nie auf etwas anderes, das zufällig auch markiert ist.
+* **Umbenennen inline:** Feld erscheint an Ort und Stelle, der ganze Name ist
+  markiert (`dialog::select_all`, auch nach einem Doppelklick), Enter
+  übernimmt, Esc bricht ab. Neue Objekte (Szene, Bank, Gruppe) starten direkt
+  im Umbenennen.
+* **Drag & Drop**, wo es naheliegt: Szenen am Streifen in andere Bänke,
+  Geräte aus der Bibliothek ins Patch. Ziel zeigt Einfügemarke bzw. frei/belegt
+  (grün/rot), am Mauszeiger eine Beschriftung ohne Umbruch.
+* **Seitenleisten** (z. B. Szenen-Eigenschaften): Beschriftung links,
+  Bedienelement **rechtsbündig**; Auswahllisten mit Ein-Wort-Optionen
+  (Aus/Alle/Bank …). Lange Listen zum Auswählen (Szenen, Bänke) öffnen ein
+  eigenes Fenster mit Spalten je Bank und Mehrfachauswahl.
+* Bedienelemente einer Szene nutzen die **Szenenfarbe** als Akzent
+  (Ausnahme: Play/Pause).
+* Werte, die man ablesen muss (Zeiten, Laufzeit), groß genug und kontrastreich;
+  aktuelle Zeit links in Objektfarbe, Gesamtzeit rechts in Textfarbe.
+* Bühnenplan: Geräte ohne Licht sind schwarz (wie Dimmer zu), Strobe blinkt,
+  jede Geräteform ist unterscheidbar.
+* Größen von Fenster und Bereichen werden gespeichert (eframe-Persistenz).
 
 ## 6. Text & Symbole
 
 * Sprache: Deutsch, kurz, Verben im Infinitiv („Speichern“, „Freigeben“).
 * Nur Zeichen, die die eingebaute Schrift sicher darstellt: lateinische
   Buchstaben, Ziffern, gängige Satzzeichen, `·`, `–`, `„“`. **Keine Emojis
-  oder Pfeil-/Symbolzeichen** (▶ ❚ ● … usw.) – Symbole werden mit dem
-  Painter gezeichnet (`widgets::icons`).
+  oder Pfeil-/Symbolzeichen** (▶ ❚ ● … usw.) im Text.
+* **Symbole** kommen einheitlich aus der Phosphor-Icon-Schrift (MIT,
+  `assets/fonts/Phosphor*.ttf`) über `widgets::Icon` – neue Symbole dort als
+  Variante mit passender Glyphe ergänzen. Symbole müssen zur Funktion passen
+  (z. B. Zahnrad für Einstellungen, nicht Lupe). Selbst gezeichnet nur, wenn
+  es keine passende Glyphe gibt.
+* Fachbegriffe aus dem Lichtbereich (EDIT, LIVE, BLIND, FX, STEPS …) dürfen
+  englisch bleiben.
 
 ## 7. Architektur der Oberfläche
 

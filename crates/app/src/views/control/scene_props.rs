@@ -96,10 +96,6 @@ impl View for ScenePropsView {
         );
         let ui = &mut ui;
         let Some(id) = single_scene(cx) else {
-            ui.label(
-                egui::RichText::new(t("Eine Szene auswählen, um ihre Einstellungen zu sehen."))
-                    .color(theme::text_faint()),
-            );
             return;
         };
         header(ui, cx.engine, id);
