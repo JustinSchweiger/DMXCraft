@@ -48,8 +48,8 @@ pub struct TimelineView {
     ruler_axis: Option<bool>,
     /// Bewegung, bis die Achse feststeht.
     ruler_acc: Vec2,
-    /// Letzte Zeigerposition beim Ziehen im Lineal.
-    ruler_last: Option<egui::Pos2>,
+    /// Erwarteter Sprung nach dem Zurücksetzen des Zeigers.
+    ruler_jump: Option<Vec2>,
     /// Frames, die nach dem Zurücksetzen des Zeigers noch gewartet werden.
     ruler_warp: u8,
     ruler_no_warp: bool,
@@ -77,7 +77,7 @@ impl Default for TimelineView {
             ruler_grab: None,
             ruler_axis: None,
             ruler_acc: Vec2::ZERO,
-            ruler_last: None,
+            ruler_jump: None,
             ruler_warp: 0,
             ruler_no_warp: false,
             paste_track: None,
@@ -1137,43 +1137,38 @@ impl TimelineView {
         }
         if resp.drag_started() {
             self.ruler_grab = resp.interact_pointer_pos();
-            self.ruler_last = self.ruler_grab;
+            self.ruler_jump = None;
             self.ruler_warp = 0;
             self.ruler_no_warp = false;
             self.ruler_axis = None;
             self.ruler_acc = Vec2::ZERO;
-            // Zeiger im Fenster halten (Wayland/X11) …
-            ui.ctx()
-                .send_viewport_cmd(egui::ViewportCommand::CursorGrab(
-                    egui::CursorGrab::Confined,
-                ));
         }
         if let Some(origin) = self.ruler_grab {
             if resp.dragged() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::None);
-                // … und regelmäßig an den Startpunkt zurücksetzen, damit er nie
-                // an den Bildschirmrand (oder auf einen anderen Bildschirm) wandert
-                let q = ui.input(|i| i.pointer.latest_pos());
-                let mut d = Vec2::ZERO;
-                if let Some(q) = q {
-                    if self.ruler_warp > 0 {
-                        // warten, bis der Zeiger tatsächlich zurück ist
-                        self.ruler_warp -= 1;
-                        let back = (q - origin).length() < 4.0;
-                        if back || self.ruler_warp == 0 {
-                            // kam nie an (z. B. Wayland): für dieses Ziehen nicht mehr versetzen
-                            self.ruler_no_warp |= !back;
-                            self.ruler_warp = 0;
-                            self.ruler_last = Some(q);
-                        }
+                // Bewegung wie gewohnt aus egui; weit vom Startpunkt entfernt wird
+                // der (unsichtbare) Zeiger zurückgesetzt, damit er nicht auf einen
+                // anderen Bildschirm wandert. Der Sprung wird herausgerechnet.
+                let (mut d, q) = ui.input(|i| (i.pointer.delta(), i.pointer.latest_pos()));
+                if let Some(jump) = self.ruler_jump {
+                    if (d - jump).length() < jump.length() * 0.5 {
+                        d -= jump;
+                        self.ruler_jump = None;
+                        self.ruler_warp = 0;
                     } else {
-                        d = q - self.ruler_last.unwrap_or(q);
-                        self.ruler_last = Some(q);
-                        if !self.ruler_no_warp && (q - origin).length() > 60.0 {
-                            ui.ctx()
-                                .send_viewport_cmd(egui::ViewportCommand::CursorPosition(origin));
-                            self.ruler_warp = 10;
+                        self.ruler_warp = self.ruler_warp.saturating_sub(1);
+                        if self.ruler_warp == 0 {
+                            // Versetzen wird nicht unterstützt (z. B. Wayland)
+                            self.ruler_jump = None;
+                            self.ruler_no_warp = true;
                         }
+                    }
+                } else if let Some(q) = q.filter(|q| (*q - origin).length() > 150.0) {
+                    if !self.ruler_no_warp {
+                        ui.ctx()
+                            .send_viewport_cmd(egui::ViewportCommand::CursorPosition(origin));
+                        self.ruler_jump = Some(origin - q);
+                        self.ruler_warp = 20;
                     }
                 }
                 // immer nur eine Achse: die zuletzt deutlich überwiegende Richtung
@@ -1200,8 +1195,6 @@ impl TimelineView {
                 // Zeiger zurück an die Stelle, an der gezogen wurde
                 ui.ctx()
                     .send_viewport_cmd(egui::ViewportCommand::CursorPosition(origin));
-                ui.ctx()
-                    .send_viewport_cmd(egui::ViewportCommand::CursorGrab(egui::CursorGrab::None));
                 self.ruler_grab = None;
             }
         }
