@@ -5,7 +5,9 @@
 //! Bank-Menü (Umbenennen, Farbe, Duplizieren, Ausblenden, Löschen …).
 //! Szenenkarten: Klick auf den Hauptbereich startet/stoppt, Klick auf den
 //! farbigen Streifen rechts wählt die Szene aus (Strg/Umschalt: mehrere).
-//! Entf löscht ausgewählte Szenen. **+** im Spaltenkopf legt eine Szene an und startet
+//! Entf löscht ausgewählte Szenen. Am Streifen zieht man Szenen per Drag &
+//! Drop in eine andere Bank oder an eine andere Stelle (ausgewählte Szenen
+//! wandern gemeinsam). **+** im Spaltenkopf legt eine Szene an und startet
 //! gleich das Umbenennen.
 
 use std::collections::BTreeSet;
@@ -18,6 +20,7 @@ use crate::state::AppState;
 use crate::ui::theme;
 use crate::ui::widgets::color_picker::color_swatches;
 use crate::ui::widgets::menu::{self, MenuItem};
+use crate::ui::widgets::scene_card::CARD_H;
 use crate::ui::widgets::{text_field, Icon, IconButton, SceneCard};
 use crate::views::control::programmer::programmer_values;
 use crate::views::{View, ViewCtx};
@@ -47,6 +50,8 @@ enum Action {
     /// Umbenennung einer Szene abgeschlossen.
     SetSceneName(SceneId, String),
     DuplicateScene(SceneId),
+    /// Gezogene Szene (samt Auswahl) in Bank `.1` vor Szene `.2` ablegen.
+    MoveScenes(SceneId, ZoneId, Option<SceneId>),
     /// Farbe für Szenen setzen (`None` = Bankfarbe).
     SceneColor(Vec<SceneId>, Option<[u8; 3]>),
     Bank(BankAction),
@@ -148,6 +153,8 @@ impl View for SceneGridView {
                     }
                 });
             });
+
+        drag_ghost(ui.ctx(), cx.engine.show(), &cx.state.selected_scenes);
 
         // Tastatur: Entf löscht markierte Szenen, Esc hebt die Markierung auf
         let typing = ui.ctx().memory(|m| m.focused().is_some());
@@ -559,7 +566,10 @@ fn column(
             });
         }
         ui.add_space(theme::SP_XS);
+        let mut cards = Vec::new();
         for id in scenes {
+            let top = ui.cursor().top();
+            cards.push((id, top + CARD_H * 0.5));
             scene_card(
                 ui,
                 e,
@@ -573,7 +583,100 @@ fn column(
             );
             ui.add_space(theme::SP_XS);
         }
+        if !locked {
+            drop_target(ui, zone, color, &cards, actions);
+        }
     });
+}
+
+/// Beschriftung neben dem Mauszeiger, solange eine Szene gezogen wird.
+fn drag_ghost(ctx: &egui::Context, show: &Show, selected: &BTreeSet<SceneId>) {
+    let Some(id) = egui::DragAndDrop::payload::<SceneId>(ctx) else {
+        return;
+    };
+    let (Some(scene), Some(pos)) = (show.scene(*id), ctx.pointer_interact_pos()) else {
+        return;
+    };
+    ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+    let label = if selected.contains(&*id) && selected.len() > 1 {
+        tr!("{n} Szenen", n = selected.len())
+    } else {
+        scene.name.clone()
+    };
+    let color = scene
+        .color
+        .map_or_else(|| theme::zone_color(show, scene.zone), theme::rgb);
+    egui::Area::new(egui::Id::unique("scene_drag_ghost"))
+        .order(egui::Order::Tooltip)
+        .fixed_pos(pos + Vec2::new(14.0, 6.0))
+        .interactable(false)
+        .show(ctx, |ui| {
+            egui::Frame::new()
+                .fill(theme::raised())
+                .stroke(Stroke::new(1.0, color))
+                .corner_radius(theme::R_S)
+                .inner_margin(egui::Margin::symmetric(10, 6))
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::new(label).color(color));
+                });
+        });
+}
+
+/// Ablegen einer gezogenen Szene in dieser Bank-Spalte: Einfügemarke zeigen
+/// und beim Loslassen verschieben.
+fn drop_target(
+    ui: &mut egui::Ui,
+    zone: ZoneId,
+    color: Color32,
+    cards: &[(SceneId, f32)],
+    actions: &mut Vec<Action>,
+) {
+    let Some(dragged) = egui::DragAndDrop::payload::<SceneId>(ui.ctx()) else {
+        return;
+    };
+    let col = ui.min_rect();
+    // Spalte bis zum unteren Rand des sichtbaren Bereichs als Ablagefläche
+    let area = egui::Rect::from_min_max(
+        col.min,
+        egui::pos2(
+            col.left() + COLUMN_W,
+            ui.clip_rect().bottom().max(col.bottom() + CARD_H),
+        ),
+    );
+    let Some(pos) = ui
+        .ctx()
+        .pointer_interact_pos()
+        .filter(|p| area.contains(*p))
+    else {
+        return;
+    };
+    let before = cards.iter().find(|(_, y)| pos.y < *y).map(|(id, _)| *id);
+    let gap = theme::SP_XS * 0.5;
+    let y = match before {
+        Some(b) => cards
+            .iter()
+            .find(|(id, _)| *id == b)
+            .map_or(col.bottom(), |(_, y)| y - CARD_H * 0.5 - gap),
+        None => col.bottom() + gap,
+    };
+    let p = ui.painter();
+    p.rect_stroke(
+        area,
+        theme::R_M,
+        Stroke::new(1.0, color.gamma_multiply(0.5)),
+        StrokeKind::Outside,
+    );
+    p.line_segment(
+        [
+            egui::pos2(col.left(), y),
+            egui::pos2(col.left() + COLUMN_W, y),
+        ],
+        Stroke::new(2.5, color),
+    );
+    if ui.input(|i| i.pointer.any_released()) {
+        actions.push(Action::MoveScenes(*dragged, zone, before));
+        egui::DragAndDrop::clear_payload(ui.ctx());
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -616,6 +719,9 @@ fn scene_card(
         sequence: scene.steps.len() > 1,
     }
     .show(ui);
+    if !locked {
+        resp.select.dnd_set_drag_payload(id);
+    }
 
     // Umbenennen direkt in der Karte (über dem Namen)
     if let Some((_, text)) = rename.as_mut().filter(|(r, _)| *r == id) {
@@ -771,6 +877,21 @@ fn apply(
                 };
                 e.show_mut()
                     .duplicate_scene(id, tr!("{name} (Kopie)", name = name));
+            }
+            Action::MoveScenes(dragged, zone, before) => {
+                // ausgewählte Szenen wandern mit, wenn die gezogene dazugehört
+                let ids: Vec<SceneId> = if st.selected_scenes.contains(&dragged) {
+                    e.show()
+                        .scenes
+                        .iter()
+                        .map(|s| s.id)
+                        .filter(|id| st.selected_scenes.contains(id))
+                        .collect()
+                } else {
+                    vec![dragged]
+                };
+                e.show_mut().move_scenes(&ids, zone, before);
+                e.sync();
             }
             Action::SceneColor(ids, c) => {
                 for id in ids {

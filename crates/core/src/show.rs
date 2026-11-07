@@ -646,6 +646,41 @@ impl Show {
         true
     }
 
+    /// Szenen in eine Bank verschieben, vor `before` (sonst ans Ende der
+    /// Bank). Die Reihenfolge der verschobenen Szenen bleibt erhalten.
+    pub fn move_scenes(&mut self, ids: &[SceneId], zone: ZoneId, before: Option<SceneId>) {
+        let moving = |id: SceneId| ids.contains(&id);
+        // Ziel darf keine der verschobenen Szenen sein: nächste andere in der Bank
+        let before = before.and_then(|b| {
+            let start = self.scenes.iter().position(|s| s.id == b)?;
+            self.scenes[start..]
+                .iter()
+                .find(|s| s.zone == Some(zone) && !moving(s.id))
+                .map(|s| s.id)
+        });
+        let mut taken = Vec::new();
+        self.scenes.retain(|s| {
+            if moving(s.id) {
+                taken.push(s.clone());
+                false
+            } else {
+                true
+            }
+        });
+        for s in &mut taken {
+            s.zone = Some(zone);
+        }
+        let at = match before.and_then(|b| self.scenes.iter().position(|s| s.id == b)) {
+            Some(i) => i,
+            None => self
+                .scenes
+                .iter()
+                .rposition(|s| s.zone == Some(zone))
+                .map_or(self.scenes.len(), |i| i + 1),
+        };
+        self.scenes.splice(at..at, taken);
+    }
+
     pub fn remove_zone(&mut self, id: ZoneId) {
         self.zones.retain(|z| z.id != id);
         for s in &mut self.scenes {
@@ -700,6 +735,33 @@ impl Show {
 #[cfg(test)]
 mod zone_tests {
     use super::*;
+
+    #[test]
+    fn move_scenes_between_banks() {
+        let mut s = Show::new("T", 8);
+        let z1 = s.add_zone("1");
+        let z2 = s.add_zone("2");
+        let a = s.add_scene("A", Some(z1), vec![]);
+        let b = s.add_scene("B", Some(z1), vec![]);
+        let c = s.add_scene("C", Some(z2), vec![]);
+        let order = |s: &Show, z| -> Vec<SceneId> {
+            s.scenes
+                .iter()
+                .filter(|x| x.zone == Some(z))
+                .map(|x| x.id)
+                .collect()
+        };
+        s.move_scenes(&[a], z2, Some(c));
+        assert_eq!(order(&s, z2), vec![a, c]);
+        assert_eq!(order(&s, z1), vec![b]);
+        s.move_scenes(&[a, c], z1, None);
+        assert_eq!(order(&s, z1), vec![b, a, c]);
+        // vor sich selbst einfügen = vor die nächste nicht verschobene Szene
+        s.move_scenes(&[a], z1, Some(a));
+        assert_eq!(order(&s, z1), vec![b, a, c]);
+        s.move_scenes(&[c], z1, Some(b));
+        assert_eq!(order(&s, z1), vec![c, b, a]);
+    }
 
     #[test]
     fn free_scenes_get_a_bank() {

@@ -239,7 +239,11 @@ mod tests {
         let rec = RecordingOutput::default();
         let frames = rec.frames.clone();
         let mut rt = Runtime::start(engine, Box::new(rec), 50);
-        std::thread::sleep(Duration::from_millis(200));
+        // auf langsamen CI-Rechnern (macOS) großzügig warten
+        let t0 = std::time::Instant::now();
+        while frames.lock().unwrap().len() < 3 && t0.elapsed() < Duration::from_secs(3) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
         rt.stop();
         let frames = frames.lock().unwrap();
         assert!(frames.len() >= 3, "nur {} Frames", frames.len());

@@ -3,7 +3,8 @@
 //! Aufbau: links der Hauptbereich (Name in der Szenenfarbe, darunter der Typ
 //! in Großbuchstaben), rechts ein schmaler Streifen. Ein Klick auf den
 //! Hauptbereich startet/stoppt die Szene, ein Klick auf den Streifen
-//! markiert sie (der Streifen leuchtet dann in der Szenenfarbe).
+//! wählt sie aus (der Streifen leuchtet dann in der Szenenfarbe). Am Streifen
+//! lässt sich die Szene auch in eine andere Bank ziehen.
 
 use eframe::egui::{
     self, pos2, Color32, CornerRadius, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2,
@@ -56,7 +57,7 @@ impl SceneCard<'_> {
         let strip = Rect::from_min_max(pos2(main_rect.right(), rect.top()), rect.max);
         let id = ui.next_auto_id();
         let play = ui.interact(main_rect, id.with("play"), Sense::click());
-        let select = ui.interact(strip, id.with("select"), Sense::click());
+        let select = ui.interact(strip, id.with("select"), Sense::click_and_drag());
 
         let p = ui.painter();
         let r = theme::R_S;
@@ -80,7 +81,7 @@ impl SceneCard<'_> {
         // Streifen: markiert = Szenenfarbe, sonst Grau
         let strip_fill = if self.selected {
             self.color
-        } else if select.hovered() {
+        } else if select.hovered() || select.dragged() {
             theme::text_faint()
         } else {
             theme::raised_hover()
