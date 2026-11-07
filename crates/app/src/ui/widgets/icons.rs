@@ -50,6 +50,8 @@ pub enum Icon {
     ZoomReset,
     /// Lupe ohne Zeichen (Mauszeiger im Zeitlineal).
     Magnifier,
+    /// KI-Assistent (MCP).
+    Robot,
     Cube,
     Levels,
     Builder,
@@ -131,6 +133,7 @@ impl Icon {
             Icon::ZoomIn => Some(("\u{E310}", false)),
             Icon::ZoomOut => Some(("\u{E30E}", false)),
             Icon::ZoomReset | Icon::Magnifier => Some(("\u{E30C}", false)),
+            Icon::Robot => Some(("\u{E762}", false)),
             Icon::Cube => Some(("\u{E1DA}", false)),
             Icon::Levels => Some(("\u{E150}", false)),
             Icon::Builder => Some(("\u{E5D4}", false)),

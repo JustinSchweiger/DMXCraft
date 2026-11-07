@@ -16,6 +16,7 @@ Windows und macOS, Ausgabe später über USB an eine Daslight DVC Gold.
 crates/core    Datenmodell (Show, Patch, Szenen, Zonen, Gruppen) + Engine – ohne I/O, mit Tests
 crates/output  DmxOutput-Trait, Ausgabe-Thread, Backends (dvc_gold.rs = USB, noch Platzhalter)
 crates/ofl     Open-Fixture-Library-Konverter + eingebettete Bibliothek (data/)
+crates/mcp     MCP-Server (KI-Assistent): tools.rs, protocol.rs, server.rs, bridge.rs – docs/MCP.md
 crates/app     Oberfläche
   src/ui/        Design-System: theme.rs (Tokens), widgets/ (Fader, SceneCard, …)
   src/views/     Ansichten, je ein Typ mit `impl View` (control/, setup/, windows.rs)

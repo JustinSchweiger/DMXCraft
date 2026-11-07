@@ -11,6 +11,7 @@ mod fullscreen;
 mod history;
 mod icon;
 mod lock;
+mod mcp;
 mod palettes;
 mod settings;
 mod settings_window;
@@ -21,6 +22,11 @@ mod updater;
 mod views;
 
 fn main() -> eframe::Result {
+    // `dmxcraft mcp`: stdio-Brücke für KI-Assistenten (ohne Fenster)
+    if std::env::args().nth(1).as_deref() == Some("mcp") {
+        dmxcraft_mcp::bridge::run(settings::Settings::load().mcp_port);
+        return Ok(());
+    }
     desktop::ensure_linux_menu_entry();
     let settings = settings::Settings::load();
     i18n::set_lang(i18n::Lang::from_key(&settings.language));

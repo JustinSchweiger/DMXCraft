@@ -33,6 +33,10 @@ pub struct Settings {
     pub open_dmx: Vec<String>,
     /// Szenen am unteren Rand in weitere Spalten umbrechen (statt Scrollen).
     pub wrap_scenes: bool,
+    /// MCP-Server für KI-Assistenten (nur lokal erreichbar).
+    pub mcp_enabled: bool,
+    /// Port des MCP-Servers (http://127.0.0.1:<port>/mcp).
+    pub mcp_port: u16,
 }
 
 impl Default for Settings {
@@ -50,6 +54,8 @@ impl Default for Settings {
             output: "simulation".into(),
             open_dmx: Vec::new(),
             wrap_scenes: false,
+            mcp_enabled: false,
+            mcp_port: dmxcraft_mcp::DEFAULT_PORT,
         }
     }
 }

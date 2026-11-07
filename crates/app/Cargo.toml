@@ -26,6 +26,7 @@ path = "src/main.rs"
 dmxcraft-core.workspace = true
 dmxcraft-output.workspace = true
 dmxcraft-ofl.workspace = true
+dmxcraft-mcp.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"

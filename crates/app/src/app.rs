@@ -65,6 +65,8 @@ pub struct DmxCraftApp {
     setup: SetupView,
     windows: Windows,
     history: History,
+    /// MCP-Server für KI-Assistenten.
+    mcp: crate::mcp::McpLink,
     fullscreen: Fullscreen,
     /// Vollbild beim nächsten Frame umschalten.
     toggle_fullscreen: bool,
@@ -128,6 +130,7 @@ impl DmxCraftApp {
             setup: SetupView::default(),
             windows: Windows::default(),
             history: History::default(),
+            mcp: crate::mcp::McpLink::default(),
             usb_ports: Vec::new(),
             fullscreen: Fullscreen::default(),
             toggle_fullscreen: false,
@@ -438,6 +441,10 @@ impl DmxCraftApp {
         let free = !self.state.locked;
         let cmd = Modifiers::COMMAND;
         let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
+        // Strg+D dupliziert im Patch bzw. in der Zeitleiste, sonst DMX-Werte
+        let duplicate = (self.state.mode == Mode::Setup && !self.state.selected.is_empty())
+            || (self.state.focus == crate::state::Focus::Timeline
+                && !self.state.timeline_sel.is_empty());
         ctx.input_mut(|i| {
             let mut out = Vec::new();
             let mut key =
@@ -456,7 +463,7 @@ impl DmxCraftApp {
             key(i, cmd, Key::Y, free && !typing, MenuAction::Redo);
             key(i, cmd, Key::L, true, MenuAction::ToggleLock);
             key(i, cmd, Key::Comma, free, MenuAction::Settings);
-            key(i, cmd, Key::D, free, MenuAction::DmxLevels);
+            key(i, cmd, Key::D, free && !duplicate, MenuAction::DmxLevels);
             key(i, cmd, Key::Plus, true, MenuAction::Zoom(0.1));
             key(i, cmd, Key::Equals, true, MenuAction::Zoom(0.1));
             key(i, cmd, Key::Minus, true, MenuAction::Zoom(-0.1));
@@ -563,9 +570,13 @@ impl DmxCraftApp {
                     engine: &mut e,
                     usb_ports: &mut self.usb_ports,
                     show_path: &self.state.show_path,
+                    mcp: &self.mcp.status,
                 },
             );
             drop(e);
+            if ch.mcp_retry {
+                self.mcp.retry();
+            }
             if let Some(z) = ch.zoom {
                 ctx.set_zoom_factor(z);
             }
@@ -644,6 +655,33 @@ impl eframe::App for DmxCraftApp {
             self.logo = crate::icon::texture(&ctx);
             if self.settings.check_updates {
                 self.updater.check(ctx.clone());
+            }
+        }
+
+        // ----- KI-Assistent (MCP) -----
+        let events = self.mcp.update(
+            &ctx,
+            &self.engine,
+            &self.settings,
+            &self.state.show_path,
+            self.state.locked,
+        );
+        for ev in events {
+            match ev {
+                dmxcraft_mcp::AppEvent::ToolCalled(name) => {
+                    self.state.info(tr!("KI-Assistent: {name}", name = name));
+                }
+                dmxcraft_mcp::AppEvent::Saved(path) => {
+                    self.mark_saved();
+                    self.state.show_path = path.clone();
+                    self.settings.remember(&path);
+                    self.save_settings();
+                }
+                dmxcraft_mcp::AppEvent::SelectScene(id) => {
+                    self.state.selected_scenes = [id].into();
+                    self.state.focus = crate::state::Focus::Scenes;
+                    self.state.mode = Mode::Control;
+                }
             }
         }
 

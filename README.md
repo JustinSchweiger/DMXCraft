@@ -155,6 +155,13 @@ Die Oberfläche hat zwei Bereiche:
 4. **Live**: Szenen-Buttons nach Zone. Ein Klick schaltet die Szene ein
    oder aus.
 
+## KI-Assistent (MCP)
+
+DMXCraft lässt sich von einem KI-Assistenten wie Claude bedienen (Geräte
+patchen, Szenen, Effekte und SUPER SCENES anlegen, Szenen starten …).
+Einschalten unter *Einstellungen → KI-Assistent*; Details und Einrichtung
+für Claude Code und Claude Desktop in [docs/MCP.md](docs/MCP.md).
+
 ## Aufbau
 
 ```
@@ -166,6 +173,7 @@ crates/
            open_dmx.rs  USB-DMX über FTDI-Kabel (Open DMX)
            dvc_gold.rs  Ergebnisse zur DVC Gold (verschlüsselt)
   ofl/     Open-Fixture-Library-Konverter + eingebettete Bibliothek (data/)
+  mcp/     MCP-Server für KI-Assistenten (Werkzeuge, HTTP, stdio-Brücke)
   app/     Oberfläche mit egui/eframe, Updater
            ui/      Design-System: theme.rs (Tokens) + widgets/ (Fader, SceneCard, StageCanvas, …)
            views/   Ansichten (je ein Typ mit `impl View`): control/ und setup/

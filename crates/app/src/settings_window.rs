@@ -29,17 +29,19 @@ pub enum Tab {
     General,
     Outputs,
     Midi,
+    Ai,
     Project,
 }
 
 impl Tab {
-    const ALL: [Tab; 4] = [Tab::General, Tab::Outputs, Tab::Midi, Tab::Project];
+    const ALL: [Tab; 5] = [Tab::General, Tab::Outputs, Tab::Midi, Tab::Ai, Tab::Project];
 
     fn label(self) -> &'static str {
         match self {
             Tab::General => t("Allgemein"),
             Tab::Outputs => t("Ausgänge"),
             Tab::Midi => t("MIDI"),
+            Tab::Ai => t("KI-Assistent"),
             Tab::Project => t("Projekt"),
         }
     }
@@ -49,6 +51,7 @@ impl Tab {
             Tab::General => Icon::Settings,
             Tab::Outputs => Icon::Levels,
             Tab::Midi => Icon::Midi,
+            Tab::Ai => Icon::Robot,
             Tab::Project => Icon::FileOpen,
         }
     }
@@ -62,6 +65,8 @@ pub struct SettingsChanges {
     pub zoom: Option<f32>,
     /// Theme gewechselt – egui-Stil neu setzen.
     pub theme: bool,
+    /// MCP-Server neu starten.
+    pub mcp_retry: bool,
 }
 
 #[derive(Default)]
@@ -75,6 +80,7 @@ pub struct SettingsCx<'a> {
     pub engine: &'a mut Engine,
     pub usb_ports: &'a mut Vec<UsbDmxPort>,
     pub show_path: &'a str,
+    pub mcp: &'a crate::mcp::McpStatus,
 }
 
 impl SettingsWindow {
@@ -119,6 +125,7 @@ impl SettingsWindow {
                                 outputs(ui, cx.settings, cx.engine, cx.usb_ports, &mut ch)
                             }
                             Tab::Midi => midi(ui),
+                            Tab::Ai => ai(ui, cx.settings, cx.mcp, &mut ch),
                             Tab::Project => project(ui, cx.engine, cx.show_path),
                         }
                     });
@@ -181,6 +188,88 @@ fn section(ui: &mut Ui, title: &str) {
     ui.add_space(theme::SP_XS);
     ui.label(theme::heading_text(title));
     ui.add_space(theme::SP_XS);
+}
+
+/// KI-Assistent: MCP-Server ein/aus, Port und Anleitungen zum Verbinden.
+fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut SettingsChanges) {
+    use crate::mcp::McpStatus;
+    section(ui, t("KI-Assistent (MCP)"));
+    hint(
+        ui,
+        t("Über das Model Context Protocol kann ein KI-Assistent wie Claude DMXCraft bedienen: Geräte patchen, Szenen, Effekte und SUPER SCENES anlegen, Szenen starten … Der Server ist nur auf diesem Rechner erreichbar."),
+    );
+    ui.add_space(theme::SP_S);
+    ch.save |= ui
+        .add(Toggle::new(&mut s.mcp_enabled, t("MCP-Server einschalten")))
+        .changed();
+    ui.add_space(theme::SP_S);
+    form(ui, "settings_mcp", |f| {
+        f.row(t("Port"), |ui| {
+            let mut port = s.mcp_port;
+            let r = ui.add(egui::DragValue::new(&mut port).range(1024..=65535).speed(1));
+            if port != s.mcp_port {
+                s.mcp_port = port;
+            }
+            if r.lost_focus() || r.drag_stopped() {
+                ch.save = true;
+            }
+        });
+        f.row(t("Status"), |ui| {
+            let (text, color) = match status {
+                McpStatus::Off => (t("aus").to_string(), theme::text_dim()),
+                McpStatus::Running(p) => {
+                    (tr!("läuft – http://127.0.0.1:{p}/mcp", p = p), theme::OK)
+                }
+                McpStatus::Error(e) => (tr!("Fehler: {e}", e = e), theme::DANGER),
+            };
+            ui.label(egui::RichText::new(text).color(color));
+            if matches!(status, McpStatus::Error(_)) && ui.button(t("Erneut versuchen")).clicked() {
+                ch.mcp_retry = true;
+            }
+        });
+    });
+    ui.add_space(theme::SP_M);
+    let url = format!("http://127.0.0.1:{}/mcp", s.mcp_port);
+    let exe = crate::mcp::bridge_command();
+    let snippets = [
+        (
+            t("Claude Code (Terminal)"),
+            format!("claude mcp add --transport http dmxcraft {url}"),
+        ),
+        (
+            t("Claude Desktop (claude_desktop_config.json)"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "mcpServers": { "dmxcraft": { "command": exe, "args": ["mcp"] } }
+            }))
+            .unwrap_or_default(),
+        ),
+        (t("Andere Clients (Streamable HTTP)"), url.clone()),
+    ];
+    for (title, code) in snippets {
+        section(ui, title);
+        ui.horizontal(|ui| {
+            let w = ui.available_width() - 40.0;
+            let mut text = code.clone();
+            ui.add(
+                egui::TextEdit::multiline(&mut text)
+                    .code_editor()
+                    .desired_width(w)
+                    .desired_rows(code.lines().count().max(1)),
+            );
+            if ui
+                .add(IconButton::new(Icon::Copy))
+                .on_hover_text(t("Kopieren"))
+                .clicked()
+            {
+                ui.ctx().copy_text(code.clone());
+            }
+        });
+        ui.add_space(theme::SP_S);
+    }
+    hint(
+        ui,
+        t("Claude Desktop startet DMXCraft dafür mit dem Argument „mcp“ als Brücke; DMXCraft selbst muss laufen und der Server eingeschaltet sein. Änderungen der KI lassen sich mit Strg+Z rückgängig machen; ist DMXCraft gesperrt, darf die KI nur lesen."),
+    );
 }
 
 fn hint(ui: &mut Ui, text: &str) {
