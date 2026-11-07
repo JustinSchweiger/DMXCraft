@@ -120,10 +120,16 @@ pub fn fader_groups(e: &Engine, st: &AppState) -> Vec<FaderGroup> {
 #[derive(Default)]
 pub struct ProgrammerView {
     category: Category,
+    timeline: super::timeline::TimelineView,
 }
 
 impl View for ProgrammerView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        // SUPER SCENE markiert: Zeitleiste statt Fadern
+        if let Some(id) = super::timeline::super_scene(cx.engine, cx.state) {
+            self.timeline.ui(ui, cx.engine, cx.state, id);
+            return;
+        }
         let groups = fader_groups(cx.engine, cx.state);
         let layer = Layer::of(cx.state.programmer_mode);
         // angeklickter Feature-Effekt: Fader zeigen ihr FX-Symbol
@@ -676,7 +682,7 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
     });
 }
 
-fn tool_separator(ui: &mut egui::Ui) {
+pub(super) fn tool_separator(ui: &mut egui::Ui) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(theme::SP_M, 24.0), Sense::hover());
     ui.painter().line_segment(
         [
@@ -689,7 +695,7 @@ fn tool_separator(ui: &mut egui::Ui) {
 
 /// Drei zusammenhängende Knöpfe EDIT · BLIND · LIVE; der aktive Modus ist in
 /// seiner Farbe gefüllt.
-fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: bool) {
+pub(super) fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: bool) {
     let items = [
         (
             ProgrammerMode::Edit,

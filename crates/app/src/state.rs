@@ -46,6 +46,11 @@ pub struct AppState {
     pub edit_step_seen: usize,
     /// Zuletzt angeklickter Effekt (Szene, Effekt): Ziel des FX-Knopfs der Bühne.
     pub fx_target: Option<(SceneId, u32)>,
+    /// Zeitleiste (SUPER SCENE): ausgewählte Blöcke und Abspielposition (ms).
+    pub timeline_sel: BTreeSet<u32>,
+    pub timeline_cursor: f64,
+    /// Audiowiedergabe und Wellenformen.
+    pub audio: crate::audio::AudioPlayer,
     /// Worauf die Entf-Taste unter STEUERN wirkt (zuletzt angeklickt).
     pub focus: Focus,
     /// Betriebsmodus des Programmers.
@@ -110,6 +115,9 @@ impl AppState {
             edit_step: 0,
             edit_step_seen: 0,
             fx_target: None,
+            timeline_sel: BTreeSet::new(),
+            timeline_cursor: 0.0,
+            audio: Default::default(),
             patch: PatchForm {
                 name: String::new(),
                 count: 1,

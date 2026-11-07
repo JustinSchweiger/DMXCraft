@@ -780,7 +780,9 @@ fn scene_card(
         return;
     };
     let progress = e.progress(id);
+    let is_super = scene.timeline().is_some();
     let kind = match (scene.steps.len(), progress) {
+        _ if is_super => t("SUPER SCENE").to_string(),
         _ if !scene.effects.is_empty() => t("FX").to_string(),
         (_, Some(p)) if p.step_count > 1 => tr!(
             "ABLAUF · {step_nr}/{step_count}",
@@ -805,6 +807,7 @@ fn scene_card(
         sequence: scene.steps.len() > 1,
         fade: e.fade_state(id),
         flash: scene.settings.flash,
+        super_scene: is_super,
     }
     .show(ui);
     if e.fade_state(id).is_some() {
@@ -964,9 +967,10 @@ fn apply(
                 // Werte aus dem Programmer übernehmen, sonst leere Szene
                 let values = programmer_values(e);
                 let name = tr!("Szene {n}", n = e.show().scenes.len() + 1);
-                let id = e
-                    .show_mut()
-                    .add_scene(name.clone(), Some(zone), vec![Step::new(values)]);
+                // neue Szenen dauern 5 s
+                let mut step = Step::new(values);
+                step.hold_ms = 5000;
+                let id = e.show_mut().add_scene(name.clone(), Some(zone), vec![step]);
                 // neue Szene gleich markieren
                 st.selected_scenes.clear();
                 st.selected_scenes.insert(id);

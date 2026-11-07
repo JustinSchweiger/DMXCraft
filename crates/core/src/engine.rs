@@ -79,6 +79,8 @@ pub struct Engine {
     speed: f32,
     /// Laufende Uhr für die Effektvorschau nicht gestarteter Szenen.
     clock_ms: f64,
+    /// Vorschau-Stelle in Zeitleisten (SUPER SCENE, ms).
+    timeline_cursor: f64,
 }
 
 impl Engine {
@@ -96,6 +98,7 @@ impl Engine {
             blackout: false,
             speed: 1.0,
             clock_ms: 0.0,
+            timeline_cursor: 0.0,
         }
     }
 
@@ -554,10 +557,19 @@ impl Engine {
 
     /// Aktuelle (überblendete) Werte einer laufenden Szene.
     fn scene_values(&self, show: &Show, p: &PlayingScene) -> HashMap<ChannelRef, u8> {
+        self.scene_values_d(show, p, 0)
+    }
+
+    /// Werte einer Szene; `depth` begrenzt verschachtelte SUPER SCENES.
+    fn scene_values_d(&self, show: &Show, p: &PlayingScene, depth: u8) -> HashMap<ChannelRef, u8> {
         let mut out = HashMap::new();
         let Some(scene) = show.scene(p.scene) else {
             return out;
         };
+        if let Some(tl) = scene.timeline() {
+            let len = tl.length_ms().max(1) as f64;
+            return self.timeline_values(show, tl, p.fx_ms.rem_euclid(len), depth);
+        }
         let len = scene.steps.len();
         let Some(step) = scene.steps.get(p.step.min(len.saturating_sub(1))) else {
             return out;
@@ -602,6 +614,109 @@ impl Engine {
         }
         Self::apply_effects(show, scene, self.fx_cycles_of(scene, p.fx_ms), &mut out);
         out
+    }
+
+    /// Werte einer Zeitleiste zum Zeitpunkt `t` (ms): Blöcke späterer Spuren
+    /// überschreiben frühere; Ein-/Ausblenden und Dimmer der Blöcke wirken
+    /// auf die Helligkeit.
+    fn timeline_values(
+        &self,
+        show: &Show,
+        tl: &crate::timeline::Timeline,
+        t: f64,
+        depth: u8,
+    ) -> HashMap<ChannelRef, u8> {
+        let mut out: HashMap<ChannelRef, u8> = HashMap::new();
+        if depth > 3 {
+            return out;
+        }
+        let now = t.max(0.0) as u64;
+        for (_, clip) in tl.active_at(now) {
+            let Some(id) = clip.scene() else {
+                continue;
+            };
+            let Some(scene) = show.scene(id) else {
+                continue;
+            };
+            let dur = scene.duration_ms().max(1) as f64;
+            let mut local = (t - clip.start_ms as f64) * f64::from(clip.speed.max(0.01));
+            local = if clip.looped {
+                local.rem_euclid(dur)
+            } else {
+                local.min(dur - 1.0)
+            };
+            let p = Self::virtual_play(scene, local);
+            let k = f64::from(clip.fade_at(now) * clip.level.clamp(0.0, 1.0));
+            for (ch, v) in self.scene_values_d(show, &p, depth + 1) {
+                let v = if k >= 1.0 {
+                    v
+                } else if Self::is_intensity(show, ch) {
+                    (f64::from(v) * k).round() as u8
+                } else {
+                    out.get(&ch).map_or(v, |&base| lerp(base, v, k))
+                };
+                out.insert(ch, v);
+            }
+        }
+        out
+    }
+
+    /// Wiedergabestand einer Szene an Stelle `local` (ms) ihres Ablaufs.
+    fn virtual_play(scene: &crate::show::Scene, local: f64) -> PlayingScene {
+        let mut rest = local.max(0.0);
+        let mut step = 0;
+        for (i, s) in scene.steps.iter().enumerate() {
+            let d = s.duration_ms() as f64;
+            if rest < d || i + 1 == scene.steps.len() {
+                step = i;
+                break;
+            }
+            rest -= d;
+        }
+        PlayingScene {
+            scene: scene.id,
+            seq: 0,
+            step,
+            elapsed_ms: rest,
+            first_entry: step == 0,
+            finished: false,
+            paused: false,
+            age_ms: local,
+            releasing: None,
+            cycles: 0,
+            fx_ms: local,
+        }
+    }
+
+    /// Laufzeit (ms) einer laufenden SUPER SCENE in ihrer Zeitleiste.
+    pub fn timeline_time(&self, id: SceneId) -> Option<f64> {
+        let len = self.show.scene(id)?.timeline()?.length_ms().max(1) as f64;
+        self.playing
+            .iter()
+            .find(|p| p.scene == id && p.releasing.is_none())
+            .map(|p| p.fx_ms.rem_euclid(len))
+    }
+
+    /// Läuft die SUPER SCENE gerade (nicht pausiert)?
+    pub fn timeline_running(&self, id: SceneId) -> bool {
+        self.playing
+            .iter()
+            .any(|p| p.scene == id && p.releasing.is_none() && !p.paused && !p.finished)
+    }
+
+    /// Wiedergabe einer SUPER SCENE auf `ms` setzen.
+    pub fn seek_timeline(&mut self, id: SceneId, ms: f64) {
+        for p in self.playing.iter_mut().filter(|p| p.scene == id) {
+            p.fx_ms = ms.max(0.0);
+            p.elapsed_ms = ms.max(0.0);
+            p.step = 0;
+            p.finished = false;
+        }
+    }
+
+    /// Stelle der Zeitleiste, die die Vorschau zeigt, solange die Szene nicht läuft.
+    pub fn set_timeline_cursor(&mut self, ms: f64) {
+        self.timeline_cursor = ms;
     }
 
     /// Effektzeit in Durchläufen (eine Szenendauer = 1.0) samt Phase.
@@ -712,6 +827,15 @@ impl Engine {
         let preview: &[SceneId] = if edit { &self.preview } else { &[] };
         for id in preview {
             if self.is_active(*id) {
+                continue;
+            }
+            // SUPER SCENE: Stand der Zeitleiste an der Vorschau-Stelle
+            if let Some(tl) = show.scene(*id).and_then(|s| s.timeline()) {
+                for (ch, v) in self.timeline_values(show, tl, self.timeline_cursor, 0) {
+                    if let Some(slot) = values.get_mut(&ch) {
+                        *slot = v;
+                    }
+                }
                 continue;
             }
             let Some(step) = show
@@ -906,6 +1030,29 @@ mod tests {
         let a = s.add_fixture("A", "generic/drgb-4ch", 0, 1).unwrap();
         let b = s.add_fixture("B", "generic/rgb-3ch", 1, 10).unwrap();
         (s, a, b)
+    }
+
+    #[test]
+    fn super_scene_plays_clips_on_its_timeline() {
+        let (mut s, a, _) = setup();
+        let inner = s.add_scene("A", None, vec![Step::new(vec![cv(a, 0, 200)])]);
+        let sup = s.add_scene("S", None, vec![Step::new(Vec::new())]);
+        let sc = s.scene_mut(sup).unwrap();
+        sc.add_effect(crate::show::EffectKind::SuperScene);
+        let tl = sc.timeline_mut().unwrap();
+        tl.add_clip(0, crate::timeline::ClipContent::Scene(inner), 1000, 2000);
+        tl.add_clip(1, crate::timeline::ClipContent::Scene(inner), 4000, 1000);
+        sc.sync_timeline_length();
+        assert_eq!(sc.duration_ms(), 5000);
+        let mut e = Engine::new(s);
+        e.activate(sup);
+        e.tick(Duration::from_millis(500));
+        assert_eq!(e.render_frame().get(0, 1), Some(0));
+        e.tick(Duration::from_millis(1000));
+        assert_eq!(e.render_frame().get(0, 1), Some(200));
+        e.seek_timeline(sup, 3500.0);
+        assert_eq!(e.render_frame().get(0, 1), Some(0));
+        assert!((e.timeline_time(sup).unwrap() - 3500.0).abs() < 1.0);
     }
 
     #[test]

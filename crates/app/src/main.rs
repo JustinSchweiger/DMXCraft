@@ -3,6 +3,7 @@
 #[macro_use]
 mod i18n;
 mod app;
+mod audio;
 mod demo;
 mod desktop;
 mod file_dialog;

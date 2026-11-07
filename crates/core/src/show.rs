@@ -294,10 +294,12 @@ pub enum EffectKind {
     CurveFx,
     Mappings,
     ColorMappings,
+    /// Zeitleiste mit Szenen und Audio (kein weiterer Effekt möglich).
+    SuperScene,
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 8] = [
+    pub const ALL: [EffectKind; 9] = [
         EffectKind::Steps,
         EffectKind::ColorFx,
         EffectKind::ChaserFx,
@@ -306,7 +308,13 @@ impl EffectKind {
         EffectKind::CurveFx,
         EffectKind::Mappings,
         EffectKind::ColorMappings,
+        EffectKind::SuperScene,
     ];
+
+    /// Effekt steht allein in einer Szene (STEPS, SUPER SCENE).
+    pub fn exclusive(self) -> bool {
+        matches!(self, EffectKind::Steps | EffectKind::SuperScene)
+    }
 
     /// Anzeigename (Fachbegriff, nicht übersetzt).
     /// Effekt bewegt zugeordnete Kanäle („Features“).
@@ -327,6 +335,7 @@ impl EffectKind {
             EffectKind::CurveFx => "CURVE FX",
             EffectKind::Mappings => "MAPPINGS",
             EffectKind::ColorMappings => "COLOR MAPPINGS",
+            EffectKind::SuperScene => "SUPER SCENE",
         }
     }
 }
@@ -356,6 +365,9 @@ pub struct Effect {
     pub motion: Option<crate::fx::motion::MoveFx>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mapping: Option<crate::fx::mapping::MappingFx>,
+    /// Zeitleiste einer SUPER SCENE.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeline: Option<crate::timeline::Timeline>,
 }
 
 impl Effect {
@@ -391,6 +403,7 @@ impl Effect {
                 )),
                 _ => None,
             },
+            timeline: (kind == EffectKind::SuperScene).then(Default::default),
         }
     }
 
@@ -412,6 +425,9 @@ impl Effect {
         if self.mapping.is_none() {
             self.mapping = fresh.mapping;
         }
+        if self.timeline.is_none() {
+            self.timeline = fresh.timeline;
+        }
     }
 }
 
@@ -420,6 +436,7 @@ impl Effect {
 pub enum SceneKind {
     Static,
     Fx,
+    Super,
 }
 
 /// Bezug auf Bänke für Freigabe und Freigabeschutz.
@@ -526,9 +543,34 @@ impl Scene {
     pub fn kind(&self) -> SceneKind {
         if self.effects.is_empty() {
             SceneKind::Static
+        } else if self.timeline().is_some() {
+            SceneKind::Super
         } else {
             SceneKind::Fx
         }
+    }
+
+    /// Zeitleiste, falls es eine SUPER SCENE ist.
+    pub fn timeline(&self) -> Option<&crate::timeline::Timeline> {
+        self.effects.iter().find_map(|e| e.timeline.as_ref())
+    }
+
+    pub fn timeline_mut(&mut self) -> Option<&mut crate::timeline::Timeline> {
+        self.effects.iter_mut().find_map(|e| e.timeline.as_mut())
+    }
+
+    /// SUPER SCENE: einzigen Schritt auf die Länge der Zeitleiste setzen,
+    /// damit Wiederholen/Freigeben am Ende wie bei anderen Szenen wirken.
+    pub fn sync_timeline_length(&mut self) {
+        let Some(len) = self.timeline().map(|t| t.length_ms()) else {
+            return;
+        };
+        if self.steps.is_empty() {
+            self.steps.push(Step::new(Vec::new()));
+        }
+        self.steps.truncate(1);
+        self.steps[0].fade_ms = 0;
+        self.steps[0].hold_ms = len.clamp(100, u64::from(u32::MAX)) as u32;
     }
 
     /// Szene mit STEPS-Effekt (Schrittfolge; kein weiterer Effekt möglich).
@@ -1077,6 +1119,9 @@ impl Show {
 
     pub fn remove_scene(&mut self, id: SceneId) {
         self.scenes.retain(|s| s.id != id);
+        for tl in self.scenes.iter_mut().filter_map(|s| s.timeline_mut()) {
+            tl.forget_scene(id);
+        }
     }
 }
 

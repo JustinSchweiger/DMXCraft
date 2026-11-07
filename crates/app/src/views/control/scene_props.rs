@@ -487,7 +487,10 @@ impl ScenePropsView {
                     let fx = scene.add_effect(kind);
                     self.selected_fx = Some((id, fx));
                     self.step_focus = kind == EffectKind::Steps;
-                    if kind != EffectKind::Steps {
+                    if kind == EffectKind::SuperScene {
+                        scene.sync_timeline_length();
+                    }
+                    if !kind.exclusive() {
                         // wirkt auf die ausgewählten Geräte (sonst die der Szene)
                         // Reihenfolge der Auswahl = Beam-Reihenfolge
                         let mut ids: Vec<dmxcraft_core::FixtureId> =
@@ -503,10 +506,6 @@ impl ScenePropsView {
                         }
                         if let Some(e) = scene.effects.iter_mut().find(|e| e.id == fx) {
                             e.fixtures = ids.clone();
-                        }
-                        // eine frische Szene läuft sonst in 1 s durch
-                        if scene.steps.len() == 1 && scene.steps[0].hold_ms == 1000 {
-                            scene.steps[0].hold_ms = 4000;
                         }
                         cx.state.fx_target = Some((id, fx));
                         cx.state.select_ordered(&ids);
@@ -543,7 +542,7 @@ impl ScenePropsView {
         let cycles = cx.engine.fx_cycles(id);
         let previews: std::collections::HashMap<u32, FxPreview> = effects
             .iter()
-            .filter(|fx| fx.kind != EffectKind::Steps)
+            .filter(|fx| !fx.kind.exclusive())
             .map(|fx| (fx.id, FxPreview::of(cx.engine.show(), fx, cycles)))
             .collect();
         if !previews.is_empty() {
@@ -551,6 +550,27 @@ impl ScenePropsView {
         }
         let mut color_changes: Vec<dmxcraft_core::Effect> = Vec::new();
         let palettes = &mut self.palettes;
+        // SUPER SCENE: gewählter Block und sein Name
+        let block = (cx.state.timeline_sel.len() == 1)
+            .then(|| cx.state.timeline_sel.iter().next().copied())
+            .flatten()
+            .and_then(|cid| {
+                let tl = scene.timeline()?;
+                let (_, c) = tl.clip(cid)?;
+                let name = match &c.content {
+                    dmxcraft_core::timeline::ClipContent::Scene(s) => cx
+                        .engine
+                        .show()
+                        .scene(*s)
+                        .map_or_else(|| t("Gelöscht").to_string(), |s| s.name.clone()),
+                    dmxcraft_core::timeline::ClipContent::Audio { path, .. } => {
+                        std::path::Path::new(path)
+                            .file_name()
+                            .map_or(path.clone(), |n| n.to_string_lossy().into_owned())
+                    }
+                };
+                Some((cid, name, tl.beat_ms()))
+            });
         let mut step_clicked = false;
         let mut toggle = None;
         let mut select = None;
@@ -584,6 +604,13 @@ impl ScenePropsView {
                                             !locked,
                                         ) {
                                             step_clicked = true;
+                                        }
+                                    } else if fx.kind == EffectKind::SuperScene {
+                                        let mut e = fx.clone();
+                                        if let Some(tl) = e.timeline.as_mut() {
+                                            if block_props(ui, tl, block.as_ref(), color, !locked) {
+                                                color_changes.push(e);
+                                            }
                                         }
                                     } else if let Some(pv) = previews.get(&fx.id) {
                                         let mut e = fx.clone();
@@ -773,8 +800,11 @@ impl ScenePropsView {
                         cx.state.focus = crate::state::Focus::Scenes;
                     }
                 }
+                let has_super = effects.iter().any(|e| e.kind == EffectKind::SuperScene);
                 let (tip, icon) = if has_steps {
                     (t("Schritt hinzufügen"), Icon::Plus)
+                } else if has_super {
+                    (t("Spur hinzufügen"), Icon::Plus)
                 } else {
                     (t("Effekt hinzufügen"), Icon::Plus)
                 };
@@ -783,7 +813,16 @@ impl ScenePropsView {
                     .on_hover_text(tip)
                     .clicked()
                 {
-                    if has_steps {
+                    if has_super {
+                        if let Some(tl) = cx
+                            .engine
+                            .show_mut()
+                            .scene_mut(id)
+                            .and_then(|s| s.timeline_mut())
+                        {
+                            tl.add_track(None);
+                        }
+                    } else if has_steps {
                         // neuer Schritt nach dem bearbeiteten (Kopie seiner Werte)
                         if let Some(scene) = cx.engine.show_mut().scene_mut(id) {
                             cx.state.edit_step = scene.insert_step(cx.state.edit_step);
@@ -880,6 +919,60 @@ impl ScenePropsView {
             }
         }
     }
+}
+
+/// BLOCK-EIGENSCHAFTEN einer SUPER SCENE: Start, Dauer, Ein-/Ausblenden,
+/// Tempo und Schleife des gewählten Blocks. `true` bei Änderung.
+fn block_props(
+    ui: &mut egui::Ui,
+    tl: &mut dmxcraft_core::timeline::Timeline,
+    block: Option<&(u32, String, f64)>,
+    accent: Color32,
+    enabled: bool,
+) -> bool {
+    let before = tl.clone();
+    let caption = |ui: &mut egui::Ui, s: &str| {
+        ui.label(
+            egui::RichText::new(s.to_uppercase())
+                .font(theme::caption())
+                .color(theme::text_dim()),
+        );
+    };
+    caption(ui, t("Block-Eigenschaften"));
+    let Some((cid, name, beat)) = block else {
+        ui.label(egui::RichText::new(t("Keine Auswahl")).color(theme::text_faint()));
+        return false;
+    };
+    let Some(c) = tl.clip_mut(*cid) else {
+        return false;
+    };
+    ui.label(egui::RichText::new(name).color(accent).strong());
+    ui.add_space(theme::SP_XS);
+    let time_row = |ui: &mut egui::Ui, label: &str, salt: &str, v: &mut u32| {
+        row(ui, label, |ui| {
+            time_field(ui, salt, v, enabled, false, accent);
+        });
+    };
+    let mut start = c.start_ms.min(u64::from(u32::MAX)) as u32;
+    let mut dur = c.duration_ms.min(u64::from(u32::MAX)) as u32;
+    time_row(ui, t("Start"), "blk_start", &mut start);
+    time_row(ui, t("Dauer"), "blk_dur", &mut dur);
+    time_row(ui, t("Fade In"), "blk_fin", &mut c.fade_in_ms);
+    time_row(ui, t("Ausfaden"), "blk_fout", &mut c.fade_out_ms);
+    c.start_ms = u64::from(start);
+    c.duration_ms = u64::from(dur).max(40);
+    row(ui, t("Dem Tempo anpassen"), |ui| {
+        ui.add(crate::ui::widgets::Toggle::new(&mut c.tempo_sync, "").enabled(enabled));
+    });
+    row(ui, t("Endlosschleife (Loop)"), |ui| {
+        ui.add(crate::ui::widgets::Toggle::new(&mut c.looped, "").enabled(enabled));
+    });
+    if c.tempo_sync {
+        // Länge auf ganze Schläge runden
+        let beats = (c.duration_ms as f64 / beat).round().max(1.0);
+        c.duration_ms = (beats * beat).round() as u64;
+    }
+    *tl != before
 }
 
 /// Rechteck eines neuen Mappings um seine Geräte legen.
@@ -1056,8 +1149,8 @@ fn effect_tiles(ui: &mut egui::Ui, enabled: bool, allow_steps: bool) -> Option<E
             let total = w * row.len() as f32 + gap * (row.len() as f32 - 1.0);
             ui.add_space(((ui.available_width() - total) / 2.0).max(0.0));
             for kind in row {
-                // STEPS nur als einziger Effekt einer Szene
-                let enabled = enabled && (allow_steps || *kind != EffectKind::Steps);
+                // STEPS und SUPER SCENE nur als einziger Effekt einer Szene
+                let enabled = enabled && (allow_steps || !kind.exclusive());
                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
                 let hot = enabled && resp.hovered();
                 let p = ui.painter();

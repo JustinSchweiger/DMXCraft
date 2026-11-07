@@ -205,7 +205,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                 mapping_ui(ui, salt, m, color, accent, enabled, palettes);
             }
         }
-        EffectKind::Steps => {}
+        EffectKind::Steps | EffectKind::SuperScene => {}
     }
     // Beam-Anzahl rechts unten
     let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 20.0), Sense::hover());

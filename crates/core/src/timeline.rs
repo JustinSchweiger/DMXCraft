@@ -1,0 +1,332 @@
+//! Zeitleiste einer SUPER SCENE: Spuren mit Blöcken (Szenen oder Audio),
+//! wie in einem Schnittprogramm. Die Engine spielt die Blöcke der Szenen
+//! ab; Audio gibt die Oberfläche wieder.
+
+use serde::{Deserialize, Serialize};
+
+use crate::show::SceneId;
+
+/// Raster der Zeitleiste.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridMode {
+    #[default]
+    Time,
+    Beat,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Timeline {
+    pub tracks: Vec<Track>,
+    /// Laufende Nummer für Spur- und Block-IDs.
+    pub next_id: u32,
+    /// Längenänderung wiederholt die Szene (Schleife) …
+    pub loop_resize: bool,
+    /// … oder dehnt/staucht sie (Geschwindigkeit).
+    pub stretch_resize: bool,
+    /// Blöcke dürfen sich auf einer Spur überlappen.
+    pub allow_overlap: bool,
+    pub auto_scroll: bool,
+    pub snap: bool,
+    pub grid: GridMode,
+    pub bpm: f32,
+    pub offset_ms: u32,
+}
+
+impl Default for Timeline {
+    fn default() -> Self {
+        let mut t = Self {
+            tracks: Vec::new(),
+            next_id: 1,
+            loop_resize: true,
+            stretch_resize: false,
+            allow_overlap: true,
+            auto_scroll: true,
+            snap: true,
+            grid: GridMode::Time,
+            bpm: 120.0,
+            offset_ms: 0,
+        };
+        for _ in 0..4 {
+            t.add_track(None);
+        }
+        t
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Track {
+    pub id: u32,
+    /// Stumm (Auge aus).
+    #[serde(default)]
+    pub muted: bool,
+    /// Gesperrt (Schloss).
+    #[serde(default)]
+    pub locked: bool,
+    /// Unterspuren (Dimmer/Lautstärke) sichtbar.
+    #[serde(default)]
+    pub expanded: bool,
+    #[serde(default)]
+    pub clips: Vec<Clip>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum ClipContent {
+    Scene(SceneId),
+    /// Audiodatei; `offset_ms` = Beginn innerhalb der Datei, `length_ms` =
+    /// Länge der Datei (0 = unbekannt).
+    Audio {
+        path: String,
+        #[serde(default)]
+        offset_ms: u64,
+        #[serde(default)]
+        length_ms: u64,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Clip {
+    pub id: u32,
+    pub start_ms: u64,
+    pub duration_ms: u64,
+    #[serde(default)]
+    pub fade_in_ms: u32,
+    #[serde(default)]
+    pub fade_out_ms: u32,
+    /// Szene wiederholt sich im Block (sonst bleibt der letzte Stand).
+    #[serde(default = "yes")]
+    pub looped: bool,
+    /// Länge an das Tempo (ganze Schläge) anpassen.
+    #[serde(default)]
+    pub tempo_sync: bool,
+    /// Abspielgeschwindigkeit der Szene (Dehnen).
+    #[serde(default = "one")]
+    pub speed: f32,
+    /// Dimmer (Szene) bzw. Lautstärke (Audio), 0..=1.
+    #[serde(default = "one")]
+    pub level: f32,
+    pub content: ClipContent,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn one() -> f32 {
+    1.0
+}
+
+impl Clip {
+    pub fn end_ms(&self) -> u64 {
+        self.start_ms + self.duration_ms
+    }
+
+    pub fn scene(&self) -> Option<SceneId> {
+        match self.content {
+            ClipContent::Scene(id) => Some(id),
+            ClipContent::Audio { .. } => None,
+        }
+    }
+
+    /// Pegel durch Ein-/Ausblenden zum Zeitpunkt `t` (0..=1, ohne `level`).
+    pub fn fade_at(&self, t: u64) -> f32 {
+        let since = t.saturating_sub(self.start_ms) as f32;
+        let until = self.end_ms().saturating_sub(t) as f32;
+        let a = if self.fade_in_ms > 0 {
+            (since / self.fade_in_ms as f32).min(1.0)
+        } else {
+            1.0
+        };
+        let b = if self.fade_out_ms > 0 {
+            (until / self.fade_out_ms as f32).min(1.0)
+        } else {
+            1.0
+        };
+        a.min(b)
+    }
+}
+
+impl Timeline {
+    fn next(&mut self) -> u32 {
+        let id = self.next_id.max(1);
+        self.next_id = id + 1;
+        id
+    }
+
+    /// Spur einfügen (vor `at`, sonst am Ende); gibt ihre ID zurück.
+    pub fn add_track(&mut self, at: Option<usize>) -> u32 {
+        let id = self.next();
+        let t = Track {
+            id,
+            muted: false,
+            locked: false,
+            expanded: false,
+            clips: Vec::new(),
+        };
+        match at {
+            Some(i) if i <= self.tracks.len() => self.tracks.insert(i, t),
+            _ => self.tracks.push(t),
+        }
+        id
+    }
+
+    /// Ende des letzten Blocks.
+    pub fn length_ms(&self) -> u64 {
+        self.tracks
+            .iter()
+            .flat_map(|t| t.clips.iter())
+            .map(Clip::end_ms)
+            .max()
+            .unwrap_or(0)
+    }
+
+    pub fn clip(&self, id: u32) -> Option<(usize, &Clip)> {
+        self.tracks
+            .iter()
+            .enumerate()
+            .find_map(|(i, t)| t.clips.iter().find(|c| c.id == id).map(|c| (i, c)))
+    }
+
+    pub fn clip_mut(&mut self, id: u32) -> Option<&mut Clip> {
+        self.tracks
+            .iter_mut()
+            .flat_map(|t| t.clips.iter_mut())
+            .find(|c| c.id == id)
+    }
+
+    /// Block anlegen; gibt seine ID zurück.
+    pub fn add_clip(
+        &mut self,
+        track: usize,
+        content: ClipContent,
+        start_ms: u64,
+        duration_ms: u64,
+    ) -> u32 {
+        while self.tracks.len() <= track {
+            self.add_track(None);
+        }
+        let id = self.next();
+        self.tracks[track].clips.push(Clip {
+            id,
+            start_ms,
+            duration_ms: duration_ms.max(40),
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            looped: true,
+            tempo_sync: false,
+            speed: 1.0,
+            level: 1.0,
+            content,
+        });
+        id
+    }
+
+    pub fn remove_clip(&mut self, id: u32) -> Option<Clip> {
+        for t in &mut self.tracks {
+            if let Some(i) = t.clips.iter().position(|c| c.id == id) {
+                return Some(t.clips.remove(i));
+            }
+        }
+        None
+    }
+
+    /// Block auf eine andere Spur legen.
+    pub fn move_clip_to_track(&mut self, id: u32, track: usize) {
+        if track >= self.tracks.len() {
+            return;
+        }
+        if let Some(c) = self.remove_clip(id) {
+            self.tracks[track].clips.push(c);
+        }
+    }
+
+    /// Block an der Stelle `at` teilen; gibt die ID des zweiten Teils zurück.
+    pub fn split_clip(&mut self, id: u32, at: u64) -> Option<u32> {
+        let (track, c) = self.clip(id).map(|(t, c)| (t, c.clone()))?;
+        if at <= c.start_ms + 40 || at + 40 >= c.end_ms() {
+            return None;
+        }
+        let first = at - c.start_ms;
+        let new_id = self.next();
+        let mut second = c.clone();
+        second.id = new_id;
+        second.start_ms = at;
+        second.duration_ms = c.duration_ms - first;
+        second.fade_in_ms = 0;
+        if let ClipContent::Audio { offset_ms, .. } = &mut second.content {
+            *offset_ms += first;
+        }
+        if let Some(a) = self.clip_mut(id) {
+            a.duration_ms = first;
+            a.fade_out_ms = 0;
+        }
+        self.tracks[track].clips.push(second);
+        Some(new_id)
+    }
+
+    /// Würde der Block (Spur, Bereich) einen anderen überlappen?
+    pub fn overlaps(&self, track: usize, start: u64, end: u64, except: u32) -> bool {
+        self.tracks.get(track).is_some_and(|t| {
+            t.clips
+                .iter()
+                .any(|c| c.id != except && c.start_ms < end && start < c.end_ms())
+        })
+    }
+
+    /// Länge eines Schlags in ms.
+    pub fn beat_ms(&self) -> f64 {
+        60_000.0 / f64::from(self.bpm.clamp(20.0, 400.0))
+    }
+
+    /// Blöcke, die eine Szene enthalten (für Aufräumen beim Löschen).
+    pub fn forget_scene(&mut self, id: SceneId) {
+        for t in &mut self.tracks {
+            t.clips.retain(|c| c.scene() != Some(id));
+        }
+    }
+
+    /// Aktive Szenenblöcke zum Zeitpunkt `t` in Spurreihenfolge.
+    pub fn active_at(&self, t: u64) -> impl Iterator<Item = (usize, &Clip)> {
+        self.tracks
+            .iter()
+            .enumerate()
+            .filter(|(_, tr)| !tr.muted)
+            .flat_map(move |(i, tr)| {
+                tr.clips
+                    .iter()
+                    .filter(move |c| c.start_ms <= t && t < c.end_ms())
+                    .map(move |c| (i, c))
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_and_length() {
+        let mut t = Timeline::default();
+        let a = t.add_clip(0, ClipContent::Scene(SceneId(1)), 1000, 5000);
+        assert_eq!(t.length_ms(), 6000);
+        let b = t.split_clip(a, 3000).unwrap();
+        assert_eq!(t.clip(a).unwrap().1.duration_ms, 2000);
+        assert_eq!(t.clip(b).unwrap().1.start_ms, 3000);
+        assert_eq!(t.clip(b).unwrap().1.duration_ms, 3000);
+        assert!(t.overlaps(0, 2500, 2600, 0));
+        assert!(!t.overlaps(1, 2500, 2600, 0));
+    }
+
+    #[test]
+    fn fades() {
+        let mut t = Timeline::default();
+        let a = t.add_clip(0, ClipContent::Scene(SceneId(1)), 0, 1000);
+        let c = t.clip_mut(a).unwrap();
+        c.fade_in_ms = 200;
+        c.fade_out_ms = 200;
+        assert!((c.fade_at(100) - 0.5).abs() < 1e-3);
+        assert!((c.fade_at(500) - 1.0).abs() < 1e-3);
+        assert!((c.fade_at(900) - 0.5).abs() < 1e-3);
+    }
+}

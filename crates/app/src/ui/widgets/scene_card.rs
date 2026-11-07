@@ -35,6 +35,8 @@ pub struct SceneCard<'a> {
     pub fade: Option<dmxcraft_core::FadeState>,
     /// Flash-Szene (kleiner Blitz auf der Karte).
     pub flash: bool,
+    /// SUPER SCENE: Notensymbol.
+    pub super_scene: bool,
 }
 
 /// Antworten der beiden Bereiche einer Karte.
@@ -155,6 +157,15 @@ impl SceneCard<'_> {
                 Vec2::splat(13.0),
             );
             Icon::Lightning.paint(p, r, if self.active { self.color } else { theme::WARN });
+        }
+        // SUPER SCENE: Musiknote (enthält Audio und Szenen)
+        if self.super_scene {
+            let x = if self.flash { 50.0 } else { 32.0 };
+            let r = Rect::from_center_size(
+                pos2(main_rect.right() - x, main_rect.top() + 13.0),
+                Vec2::splat(13.0),
+            );
+            Icon::Music.paint(p, r, self.color);
         }
         // Ein-/Ausblenden: Rampe in der Leiste (steigt beim Ein-, fällt beim
         // Ausblenden), gefüllt bis zum aktuellen Stand

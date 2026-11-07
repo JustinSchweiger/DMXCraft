@@ -13,6 +13,7 @@ pub mod fx;
 pub mod library;
 pub mod plan;
 pub mod show;
+pub mod timeline;
 
 pub use dmx::{DmxFrame, UNIVERSE_SIZE};
 pub use engine::{Engine, FadeState, SceneProgress};

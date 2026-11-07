@@ -762,6 +762,8 @@ impl eframe::App for DmxCraftApp {
                 }
             }
             edit_preview(cx.engine, cx.state);
+            cx.engine.set_timeline_cursor(cx.state.timeline_cursor);
+            cx.state.audio.update(cx.engine);
         }
         self.dialogs(&ctx);
         self.lock_window(&ctx);

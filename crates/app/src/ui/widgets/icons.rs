@@ -76,6 +76,15 @@ pub enum Icon {
     Magnet,
     GridFour,
     TextAa,
+    Cursor,
+    ArrowsH,
+    Stack,
+    Eye,
+    FollowRight,
+    Scissors,
+    Waveform,
+    Clock,
+    MusicNote,
     /// Abspielen rückwärts (Dreieck nach links).
     PlayBack,
     /// Schriftzug „FX“ (Effekte).
@@ -148,6 +157,15 @@ impl Icon {
             Icon::Magnet => Some(("\u{E680}", false)),
             Icon::GridFour => Some(("\u{E296}", false)),
             Icon::TextAa => Some(("\u{E6EE}", false)),
+            Icon::Cursor => Some(("\u{E1DC}", false)),
+            Icon::ArrowsH => Some(("\u{EB06}", false)),
+            Icon::Stack => Some(("\u{E466}", false)),
+            Icon::Eye => Some(("\u{E220}", false)),
+            Icon::FollowRight => Some(("\u{E064}", false)),
+            Icon::Scissors => Some(("\u{EAE0}", false)),
+            Icon::Waveform => Some(("\u{E802}", false)),
+            Icon::Clock => Some(("\u{E19A}", false)),
+            Icon::MusicNote => Some(("\u{E33C}", false)),
             Icon::PlayBack | Icon::Fx => None,
         }
     }

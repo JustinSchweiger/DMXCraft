@@ -19,3 +19,7 @@ install-updater = true
 pr-run-mode = "plan"
 # main.wxs ist angepasst (Startmenü-/Desktop-Verknüpfung) – nicht überschreiben
 allow-dirty = ["msi"]
+
+# Audio (rodio/cpal) braucht unter Linux ALSA
+[dist.dependencies.apt]
+libasound2-dev = "*"
