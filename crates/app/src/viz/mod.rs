@@ -122,6 +122,113 @@ pub struct VizView {
     fps: (Instant, u32, f32),
     /// Geräte aus dem letzten Import ohne Gegenstück im Patch.
     missing: Vec<String>,
+    /// Griff, an dem gerade gezogen wird (Achse 0–2, 3 = Drehung um y),
+    /// Ausgangslage und Startpunkt des Zeigers.
+    gizmo: Option<(usize, Placement, egui::Pos2)>,
+    /// Zielpunkt zum Ausrichten von Geräten.
+    aim: [f32; 3],
+    /// Nächster Klick ins Bild setzt den Zielpunkt.
+    aim_pick: bool,
+}
+
+/// Achsenfarben der Griffe (x rot, y grün, z blau).
+const AXIS_COLORS: [Color32; 4] = [
+    Color32::from_rgb(230, 80, 80),
+    Color32::from_rgb(90, 200, 90),
+    Color32::from_rgb(80, 140, 240),
+    Color32::from_rgb(235, 190, 60),
+];
+
+/// Welt- in Bildschirmkoordinaten.
+fn project(vp: Mat4, rect: Rect, p: Vec3) -> Option<egui::Pos2> {
+    let c = vp * p.extend(1.0);
+    if c.w <= 0.01 {
+        return None;
+    }
+    let n = c.truncate() / c.w;
+    Some(pos2(
+        rect.left() + (n.x * 0.5 + 0.5) * rect.width(),
+        rect.top() + (0.5 - n.y * 0.5) * rect.height(),
+    ))
+}
+
+/// Griffe um `pos`: drei Achsen (Anfang, Ende) und der Drehring (Punkte).
+struct Handles {
+    center: egui::Pos2,
+    axes: [Option<(egui::Pos2, egui::Pos2)>; 3],
+    ring: Vec<egui::Pos2>,
+    /// Weltlänge einer Achse
+    len: f32,
+}
+
+fn handles(vp: Mat4, eye: Vec3, rect: Rect, pos: Vec3) -> Option<Handles> {
+    let center = project(vp, rect, pos)?;
+    let len = (pos.distance(eye) * 0.12).clamp(0.15, 3.0);
+    let axes =
+        [Vec3::X, Vec3::Y, Vec3::Z].map(|a| Some((center, project(vp, rect, pos + a * len)?)));
+    let ring = (0..=48)
+        .filter_map(|k| {
+            let a = k as f32 / 48.0 * std::f32::consts::TAU;
+            project(
+                vp,
+                rect,
+                pos + Vec3::new(a.cos(), 0.0, a.sin()) * len * 0.75,
+            )
+        })
+        .collect();
+    Some(Handles {
+        center,
+        axes,
+        ring,
+        len,
+    })
+}
+
+fn seg_dist(p: egui::Pos2, a: egui::Pos2, b: egui::Pos2) -> f32 {
+    let ab = b - a;
+    let t = ((p - a).dot(ab) / ab.length_sq().max(1e-3)).clamp(0.0, 1.0);
+    (a + ab * t).distance(p)
+}
+
+impl Handles {
+    /// Griff unter dem Zeiger (Achsen vor dem Ring).
+    fn hit(&self, p: egui::Pos2) -> Option<usize> {
+        let axis = self
+            .axes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, a)| a.map(|(s, e)| (i, seg_dist(p, s, e))))
+            .filter(|(_, d)| *d < 7.0)
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        if let Some((i, _)) = axis {
+            return Some(i);
+        }
+        self.ring
+            .windows(2)
+            .any(|w| seg_dist(p, w[0], w[1]) < 6.0)
+            .then_some(3)
+    }
+
+    fn paint(&self, painter: &egui::Painter, active: Option<usize>, hover: Option<usize>) {
+        let width = |i: usize| {
+            if active == Some(i) || hover == Some(i) {
+                4.0
+            } else {
+                2.5
+            }
+        };
+        painter.add(egui::Shape::line(
+            self.ring.clone(),
+            egui::Stroke::new(width(3), AXIS_COLORS[3]),
+        ));
+        for (i, a) in self.axes.iter().enumerate() {
+            if let Some((s, e)) = a {
+                painter.line_segment([*s, *e], egui::Stroke::new(width(i), AXIS_COLORS[i]));
+                painter.circle_filled(*e, width(i) + 2.5, AXIS_COLORS[i]);
+            }
+        }
+        painter.circle_filled(self.center, 3.5, Color32::WHITE);
+    }
 }
 
 impl Default for VizView {
@@ -137,6 +244,9 @@ impl Default for VizView {
             dialog: None,
             fps: (Instant::now(), 0, 0.0),
             missing: Vec::new(),
+            gizmo: None,
+            aim: [0.0; 3],
+            aim_pick: false,
         }
     }
 }
@@ -318,7 +428,73 @@ impl VizView {
             )
         };
         let building = self.mode == Mode::Build && !cx.state.locked;
-        if resp.dragged_by(egui::PointerButton::Secondary)
+        // Griffe der Auswahl (Achsen verschieben, Ring dreht um y)
+        let vp = cam.proj(aspect) * cam.view();
+        let sel_place = match self.selected {
+            Some(Pick::Object(id)) if building => {
+                cx.engine.show().venue.find(id).map(|o| Placement {
+                    position: o.transform.position,
+                    rotation: o.transform.rotation,
+                })
+            }
+            Some(Pick::Fixture(id)) if building => Some(rig::placement(cx.engine.show(), id)),
+            _ => None,
+        };
+        let gizmo = sel_place.and_then(|p| handles(vp, cam.eye(), rect, Vec3::from(p.position)));
+        let gizmo_hover = gizmo.as_ref().zip(ptr).and_then(|(g, p)| g.hit(p));
+        if resp.drag_started_by(egui::PointerButton::Primary) {
+            // dort prüfen, wo die Taste gedrückt wurde (bei wenig Bildern pro Sekunde
+            // ist der Zeiger beim Erkennen des Ziehens schon weiter)
+            let origin = ui.input(|i| i.pointer.press_origin());
+            let hit = gizmo
+                .as_ref()
+                .zip(origin)
+                .and_then(|(g, o)| g.hit(o).map(|i| (i, o)));
+            if let (Some((i, o)), Some(p0)) = (hit, sel_place) {
+                self.gizmo = Some((i, p0, o));
+            }
+        }
+        if let (Some((axis, p0, start)), Some(g), Some(p), Some(sel)) =
+            (self.gizmo, gizmo.as_ref(), ptr, self.selected)
+        {
+            let mut np = p0;
+            if axis < 3 {
+                if let Some((a, b)) = g.axes[axis] {
+                    let s = b - a;
+                    let along = (p - start).dot(s) / s.length_sq().max(1.0) * g.len;
+                    let v = p0.position[axis] + along;
+                    np.position[axis] = if mods.command {
+                        v
+                    } else {
+                        (v * 20.0).round() / 20.0
+                    };
+                }
+            } else {
+                let ang = |q: egui::Pos2| (q.y - g.center.y).atan2(q.x - g.center.x);
+                let mut d = (ang(p) - ang(start)).to_degrees();
+                // Bildschirm-y zeigt nach unten: Drehsinn hängt von der Blickrichtung ab
+                if cam.eye().y < p0.position[1] {
+                    d = -d;
+                }
+                let d = if mods.command {
+                    d
+                } else {
+                    (d / 5.0).round() * 5.0
+                };
+                match sel {
+                    Pick::Object(_) => np.rotation[1] = p0.rotation[1] - d,
+                    Pick::Fixture(_) => {
+                        let dir = Vec3::from(p0.direction());
+                        let rot = glam::Quat::from_rotation_y(-d.to_radians());
+                        np.aim_at((Vec3::from(p0.position) + rot * dir).into());
+                    }
+                }
+            }
+            apply_placement(cx, sel, np);
+        }
+        if self.gizmo.is_some() {
+            // Griff zieht – die Kamera bleibt stehen
+        } else if resp.dragged_by(egui::PointerButton::Secondary)
             || resp.dragged_by(egui::PointerButton::Middle)
         {
             cam.pan(Vec2::new(delta.x, delta.y), rect.height());
@@ -381,9 +557,19 @@ impl VizView {
         }
         if !resp.dragged() {
             self.drag = None;
+            self.gizmo = None;
         }
         let cam = *self.camera.as_ref().expect("Kamera");
-        if resp.clicked() {
+        if resp.clicked() && self.aim_pick {
+            self.aim_pick = false;
+            if let Some(p) = ptr {
+                let (o, d) = cam.ray(uv(p), aspect);
+                if let Some(h) = hit_y(o, d, 0.0) {
+                    self.aim = (h * 100.0).round().to_array().map(|v| v / 100.0);
+                    aim_selected(cx, self.selected, self.aim);
+                }
+            }
+        } else if resp.clicked() {
             if let Some(p) = ptr {
                 let (o, d) = cam.ray(uv(p), aspect);
                 let hit = Self::pick(cx.engine.show(), o, d);
@@ -452,8 +638,20 @@ impl VizView {
             Color32::from_black_alpha(140),
         );
         painter.galley(at, galley, theme::text_dim());
+        if let Some(g) = &gizmo {
+            g.paint(&painter, self.gizmo.map(|g| g.0), gizmo_hover);
+        }
+        if self.aim_pick {
+            painter.text(
+                rect.center_top() + vec2(0.0, 12.0),
+                egui::Align2::CENTER_TOP,
+                t("Zielpunkt auf dem Boden anklicken"),
+                theme::body(),
+                theme::accent(),
+            );
+        }
         if building {
-            let hint = t("Linke Maustaste: drehen · auf der Auswahl: verschieben (Strg: ohne Raster) · Rechts/Mitte: verschieben · Rad: zoomen");
+            let hint = t("Linke Maustaste: drehen · auf der Auswahl: verschieben · Griffe: Achse bzw. Drehung (Strg: ohne Raster) · Rechts/Mitte: verschieben · Rad: zoomen");
             painter.text(
                 rect.left_bottom() + vec2(8.0, -8.0),
                 egui::Align2::LEFT_BOTTOM,
@@ -710,7 +908,7 @@ impl VizView {
             ui.add_space(theme::SP_M);
             match self.selected {
                 Some(Pick::Object(id)) => self.object_props(ui, cx, id),
-                Some(Pick::Fixture(id)) => fixture_props(ui, cx, id),
+                Some(Pick::Fixture(id)) => self.fixture_props(ui, cx, id),
                 None => {
                     ui.label(egui::RichText::new(t("Objekt oder Gerät anklicken, um es zu bearbeiten.")).color(theme::text_faint()));
                 }
@@ -1027,32 +1225,123 @@ fn vec3_row(ui: &mut egui::Ui, label: &str, v: &mut [f32; 3], speed: f64) {
     });
 }
 
-fn fixture_props(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, id: FixtureId) {
-    let show = cx.engine.show();
-    let Some(f) = show.fixture(id) else {
-        return;
-    };
-    ui.label(theme::heading_text(&f.name));
-    ui.label(
-        egui::RichText::new(format!("U{} · {}", f.universe + 1, f.address))
-            .color(theme::text_dim()),
-    );
-    let auto = f.place3d.is_none();
-    let mut p: Placement = rig::placement(show, id);
-    let before = p;
-    vec3_row(ui, t("Position (m)"), &mut p.position, 0.01);
-    vec3_row(ui, t("Drehung (°)"), &mut p.rotation, 0.5);
-    let reset = ui
-        .add_enabled(
-            !auto,
-            egui::Button::new(t("Automatisch (aus dem Bühnenplan)")),
-        )
-        .clicked();
-    if let Some(fm) = cx.engine.show_mut().fixture_mut(id) {
-        if reset {
-            fm.place3d = None;
-        } else if p != before {
-            fm.place3d = Some(p);
+/// Lage eines Objekts oder Geräts setzen (gesperrte Objekte bleiben).
+fn apply_placement(cx: &mut ViewCtx<'_>, sel: Pick, p: Placement) {
+    match sel {
+        Pick::Object(id) => {
+            if let Some(ob) = cx.engine.show_mut().venue.find_mut(id) {
+                if !ob.locked {
+                    ob.transform.position = p.position;
+                    ob.transform.rotation = p.rotation;
+                }
+            }
+        }
+        Pick::Fixture(id) => {
+            if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
+                f.place3d = Some(p);
+            }
+        }
+    }
+}
+
+/// Geräte, auf die eine Aktion wirkt: alle ausgewählten, mindestens das angeklickte.
+fn targets(cx: &ViewCtx<'_>, sel: Option<Pick>) -> Vec<FixtureId> {
+    let mut ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
+    if let Some(Pick::Fixture(id)) = sel {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    ids
+}
+
+fn aim_selected(cx: &mut ViewCtx<'_>, sel: Option<Pick>, target: [f32; 3]) {
+    for id in targets(cx, sel) {
+        let mut p = rig::placement(cx.engine.show(), id);
+        p.aim_at(target);
+        apply_placement(cx, Pick::Fixture(id), p);
+    }
+}
+
+impl VizView {
+    fn fixture_props(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, id: FixtureId) {
+        let show = cx.engine.show();
+        let Some(f) = show.fixture(id) else {
+            return;
+        };
+        ui.label(theme::heading_text(&f.name));
+        ui.label(
+            egui::RichText::new(format!("U{} · {}", f.universe + 1, f.address))
+                .color(theme::text_dim()),
+        );
+        let auto = f.place3d.is_none();
+        let mut p: Placement = rig::placement(show, id);
+        let before = p;
+        vec3_row(ui, t("Position (m)"), &mut p.position, 0.01);
+        vec3_row(ui, t("Drehung (°)"), &mut p.rotation, 0.5);
+        if p != before {
+            apply_placement(cx, Pick::Fixture(id), p);
+        }
+        let n = targets(cx, self.selected).len();
+        ui.add_space(theme::SP_S);
+        let title = if n > 1 {
+            tr!("Ausrichten ({n} Geräte)", n = n)
+        } else {
+            t("Ausrichten").to_string()
+        };
+        ui.label(theme::heading_text(&title));
+        vec3_row(ui, t("Zielpunkt (m)"), &mut self.aim, 0.05);
+        ui.horizontal_wrapped(|ui| {
+            if ui.button(t("Auf Zielpunkt richten")).clicked() {
+                aim_selected(cx, self.selected, self.aim);
+            }
+            if ui
+                .selectable_label(self.aim_pick, t("Zielpunkt im Bild wählen"))
+                .clicked()
+            {
+                self.aim_pick = !self.aim_pick;
+            }
+            if ui.button(t("Senkrecht nach unten")).clicked() {
+                for fid in targets(cx, self.selected) {
+                    let mut p = rig::placement(cx.engine.show(), fid);
+                    p.rotation = [0.0; 3];
+                    apply_placement(cx, Pick::Fixture(fid), p);
+                }
+            }
+        });
+        let has_truss = cx
+            .engine
+            .show()
+            .venue
+            .flatten()
+            .iter()
+            .any(|(o, _)| matches!(o.shape, Shape::Truss { .. }));
+        if ui
+            .add_enabled(
+                has_truss,
+                egui::Button::new(t("An nächste Traverse hängen")),
+            )
+            .clicked()
+        {
+            for fid in targets(cx, self.selected) {
+                let mut p = rig::placement(cx.engine.show(), fid);
+                if let Some(h) = cx.engine.show().venue.nearest_truss(p.position) {
+                    p.position = h.point;
+                    apply_placement(cx, Pick::Fixture(fid), p);
+                }
+            }
+        }
+        ui.add_space(theme::SP_S);
+        if ui
+            .add_enabled(
+                !auto,
+                egui::Button::new(t("Automatisch (aus dem Bühnenplan)")),
+            )
+            .clicked()
+        {
+            if let Some(fm) = cx.engine.show_mut().fixture_mut(id) {
+                fm.place3d = None;
+            }
         }
     }
 }

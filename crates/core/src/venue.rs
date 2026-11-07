@@ -191,6 +191,44 @@ impl Default for Placement {
     }
 }
 
+impl Placement {
+    /// Richtet das Gerät so aus, dass es auf `target` strahlt
+    /// (Drehung um X, dann Z; Y bleibt 0).
+    pub fn aim_at(&mut self, target: [f32; 3]) {
+        let d = [
+            target[0] - self.position[0],
+            target[1] - self.position[1],
+            target[2] - self.position[2],
+        ];
+        let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+        if len < 1e-4 {
+            return;
+        }
+        let d = d.map(|v| v / len);
+        // Richtung = Rz·Rx·(0,−1,0) = (cos a·sin c, −cos a·cos c, −sin a)
+        let a = (-d[2]).clamp(-1.0, 1.0).asin();
+        let c = d[0].atan2(-d[1]);
+        let r = |v: f32| (v.to_degrees() * 100.0).round() / 100.0;
+        self.rotation = [r(a), 0.0, r(c)];
+    }
+
+    /// Richtung, in die das Gerät strahlt (Einheitsvektor).
+    pub fn direction(&self) -> [f32; 3] {
+        let m = rotation(self.rotation);
+        [-m[1][0], -m[1][1], -m[1][2]]
+    }
+}
+
+/// Aufhängepunkt an einer Traverse.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TrussHang {
+    pub object: u32,
+    /// Punkt unter der Traverse (Welt, m)
+    pub point: [f32; 3],
+    /// Abstand des gesuchten Punkts zur Traversenachse (m)
+    pub distance: f32,
+}
+
 impl Default for Venue {
     fn default() -> Self {
         Self::room("Raum", [12.0, 5.0, 16.0])
@@ -342,6 +380,46 @@ impl Venue {
     }
 
     /// Alle sichtbaren Objekte mit ihrer Weltmatrix (Spalten, 4×4).
+    /// Nächste Traverse zu `p` und der Punkt darunter, an dem ein Gerät hängt.
+    pub fn nearest_truss(&self, p: [f32; 3]) -> Option<TrussHang> {
+        let mut best: Option<TrussHang> = None;
+        for (ob, m) in self.flatten() {
+            let Shape::Truss { length, width, .. } = ob.shape else {
+                continue;
+            };
+            let at = |x: f32| -> [f32; 3] {
+                [
+                    m[0][0] * x + m[3][0],
+                    m[0][1] * x + m[3][1],
+                    m[0][2] * x + m[3][2],
+                ]
+            };
+            let (a, b) = (at(-length * 0.5), at(length * 0.5));
+            let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+            let ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+            let ll = ab.iter().map(|v| v * v).sum::<f32>().max(1e-6);
+            let t = (ab.iter().zip(ap).map(|(x, y)| x * y).sum::<f32>() / ll).clamp(0.0, 1.0);
+            let c = [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t];
+            let distance = c
+                .iter()
+                .zip(p)
+                .map(|(x, y)| (x - y) * (x - y))
+                .sum::<f32>()
+                .sqrt();
+            if best.is_none_or(|b| distance < b.distance) {
+                // Bügel unter dem unteren Gurt
+                let scale = (m[1][0] * m[1][0] + m[1][1] * m[1][1] + m[1][2] * m[1][2]).sqrt();
+                let drop = width * 0.5 * scale + 0.12;
+                best = Some(TrussHang {
+                    object: ob.id,
+                    point: [c[0], c[1] - drop, c[2]],
+                    distance,
+                });
+            }
+        }
+        best
+    }
+
     pub fn flatten(&self) -> Vec<(&Object, [[f32; 4]; 4])> {
         fn walk<'a>(
             o: &'a [Object],
@@ -430,6 +508,49 @@ mod tests {
 
     fn close(a: [f32; 3], b: [f32; 3]) -> bool {
         a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-4)
+    }
+
+    #[test]
+    fn aim_at_points_beam_to_target() {
+        for target in [
+            [3.0, 0.0, -2.0],
+            [0.0, 0.0, 0.0],
+            [-4.0, 1.0, 5.0],
+            [2.0, 6.0, 0.0],
+        ] {
+            let mut p = Placement {
+                position: [0.5, 4.0, 1.0],
+                rotation: [0.0; 3],
+            };
+            p.aim_at(target);
+            let d = p.direction();
+            let w = [target[0] - 0.5, target[1] - 4.0, target[2] - 1.0];
+            let l = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
+            assert!(close(d, w.map(|v| v / l)), "{target:?} → {d:?}");
+        }
+    }
+
+    #[test]
+    fn hang_below_nearest_truss() {
+        let mut v = Venue::room("t", [10.0, 6.0, 10.0]);
+        let o = v.object(
+            "Traverse",
+            Shape::Truss {
+                length: 4.0,
+                profile: TrussProfile::Square,
+                width: 0.3,
+            },
+            Transform {
+                position: [0.0, 5.0, 0.0],
+                ..Default::default()
+            },
+            Material::default(),
+        );
+        let id = o.id;
+        v.objects.push(o);
+        let h = v.nearest_truss([1.0, 4.0, 0.2]).unwrap();
+        assert_eq!(h.object, id);
+        assert!(close(h.point, [1.0, 5.0 - 0.27, 0.0]), "{:?}", h.point);
     }
 
     #[test]
