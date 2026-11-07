@@ -38,6 +38,8 @@ pub struct AppState {
     pub programmer_mode_seen: ProgrammerMode,
     /// Edit-Werte neu aus der Szene laden (nach Rückgängig/Wiederholen).
     pub edit_reload: bool,
+    /// Worauf die Entf-Taste unter STEUERN wirkt (zuletzt angeklickt).
+    pub focus: Focus,
     /// Betriebsmodus des Programmers.
     pub programmer_mode: ProgrammerMode,
     pub patch: PatchForm,
@@ -66,6 +68,7 @@ impl AppState {
             selected: BTreeSet::new(),
             selected_scenes: BTreeSet::new(),
             programmer_mode: ProgrammerMode::default(),
+            focus: Focus::default(),
             scene_selection_seen: BTreeSet::new(),
             programmer_mode_seen: ProgrammerMode::default(),
             edit_reload: false,
@@ -130,3 +133,15 @@ impl ProgrammerMode {
 /// Drag-&-Drop-Inhalt: Gerätetyp aus der Bibliothek, der ins Patch gezogen wird.
 #[derive(Clone)]
 pub struct LibraryDrag(pub FixtureType);
+
+/// Zuletzt angeklicktes Element unter STEUERN (Ziel der Entf-Taste).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Focus {
+    /// Markierte Szenen.
+    #[default]
+    Scenes,
+    /// Eine Bank (Reiter der Bankleiste).
+    Bank(dmxcraft_core::ZoneId),
+    /// Ein Effekt einer Szene (Seitenleiste).
+    Effect(SceneId, u32),
+}

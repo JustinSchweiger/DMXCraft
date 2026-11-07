@@ -1,5 +1,6 @@
 //! Drehregler: Ziehen nach oben/unten ändert den Wert, Doppelklick setzt
-//! ihn auf den Standard zurück. Darunter stehen Bezeichnung und Wert.
+//! ihn auf den Standard zurück. Darunter steht die Bezeichnung; der Wert
+//! erscheint nur beim Drehen als Hinweis am Mauszeiger.
 
 use eframe::egui::{self, pos2, Color32, Sense, Shape, Stroke, Ui, Vec2};
 
@@ -52,7 +53,7 @@ impl<'a> Knob<'a> {
     /// Zeichnet den Regler; `true`, wenn sich der Wert geändert hat.
     pub fn show(self, ui: &mut Ui) -> bool {
         let w = 64.0;
-        let (rect, _) = ui.allocate_exact_size(Vec2::new(w, SIZE + 34.0), Sense::hover());
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(w, SIZE + 20.0), Sense::hover());
         let knob = egui::Rect::from_center_size(
             pos2(rect.center().x, rect.top() + SIZE * 0.5 + 2.0),
             Vec2::splat(SIZE),
@@ -132,13 +133,29 @@ impl<'a> Knob<'a> {
             theme::caption(),
             theme::text_dim(),
         );
-        p.text(
-            pos2(rect.center().x, knob.bottom() + 23.0),
-            egui::Align2::CENTER_CENTER,
-            &self.text,
-            theme::caption(),
-            theme::text(),
-        );
+        if resp.dragged() {
+            if let Some(pos) = ui.ctx().pointer_interact_pos() {
+                egui::Area::new(egui::Id::unique(("knob_value", self.label)))
+                    .order(egui::Order::Tooltip)
+                    .fixed_pos(pos + Vec2::new(14.0, -10.0))
+                    .interactable(false)
+                    .show(ui.ctx(), |ui| {
+                        egui::Frame::new()
+                            .fill(theme::raised())
+                            .stroke(Stroke::new(1.0, self.color))
+                            .corner_radius(theme::R_S)
+                            .inner_margin(egui::Margin::symmetric(8, 4))
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(&self.text).color(theme::text()),
+                                    )
+                                    .wrap_mode(egui::TextWrapMode::Extend),
+                                );
+                            });
+                    });
+            }
+        }
         changed
     }
 }

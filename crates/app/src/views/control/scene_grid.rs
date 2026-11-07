@@ -38,6 +38,8 @@ enum PageFilter {
 }
 
 enum Action {
+    /// Bank angeklickt (Ziel der Entf-Taste).
+    FocusBank(ZoneId),
     /// Flash-Szene gedrückt (`true`) bzw. losgelassen.
     Flash(SceneId, bool),
     Toggle(SceneId),
@@ -152,9 +154,21 @@ impl View for SceneGridView {
 
         drag_ghost(ui.ctx(), cx.engine.show(), &cx.state.selected_scenes);
 
-        // Tastatur: Entf löscht markierte Szenen, Esc hebt die Markierung auf
+        // Tastatur: Entf löscht die zuletzt angeklickte Bank bzw. die markierten
+        // Szenen, Esc hebt die Markierung auf
         let typing = ui.ctx().memory(|m| m.focused().is_some());
-        if !typing && !locked && !cx.state.selected_scenes.is_empty() {
+        if let (false, false, crate::state::Focus::Bank(z)) = (typing, locked, cx.state.focus) {
+            if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete))
+                && cx.engine.show().zone(z).is_some()
+            {
+                actions.push(Action::Bank(BankAction::Delete(z)));
+            }
+        }
+        if !typing
+            && !locked
+            && cx.state.focus == crate::state::Focus::Scenes
+            && !cx.state.selected_scenes.is_empty()
+        {
             let (del, esc) = ui.input_mut(|i| {
                 (
                     i.consume_key(egui::Modifiers::NONE, egui::Key::Delete),
@@ -329,6 +343,9 @@ impl SceneGridView {
                 }
                 let live = e.active_in_zone(z.id).is_some();
                 let resp = chip(ui, &mut self.page, PageFilter::Zone(z.id), &z.name, c, live);
+                if resp.clicked() {
+                    actions.push(Action::FocusBank(z.id));
+                }
                 if !locked {
                     if resp.double_clicked() {
                         self.rename = Some((z.id, z.name.clone()));
@@ -934,7 +951,11 @@ fn apply(
 ) {
     for a in actions {
         match a {
-            Action::Toggle(id) => e.toggle(id),
+            Action::FocusBank(z) => st.focus = crate::state::Focus::Bank(z),
+            Action::Toggle(id) => {
+                st.focus = crate::state::Focus::Scenes;
+                e.toggle(id);
+            }
             Action::Flash(id, true) => e.activate(id),
             Action::Flash(id, false) => e.release(id),
             Action::Pause(id) => e.toggle_pause(id),
@@ -1006,10 +1027,12 @@ fn apply(
                 st.selected_scenes.remove(&id);
             }
             Action::Select(id) => {
+                st.focus = crate::state::Focus::Scenes;
                 st.selected_scenes.clear();
                 st.selected_scenes.insert(id);
             }
             Action::Mark(id) => {
+                st.focus = crate::state::Focus::Scenes;
                 if !st.selected_scenes.remove(&id) {
                     st.selected_scenes.insert(id);
                 }

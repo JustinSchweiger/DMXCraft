@@ -15,9 +15,7 @@ use crate::state::AppState;
 use crate::ui::theme;
 use crate::ui::widgets::dialog::select_all;
 use crate::ui::widgets::menu::{self, MenuItem};
-use crate::ui::widgets::{
-    section_header, text_field, CanvasMode, Icon, IconButton, StageCanvas, StageInteraction,
-};
+use crate::ui::widgets::{text_field, CanvasMode, Icon, IconButton, StageCanvas, StageInteraction};
 use crate::views::fixture_menu::{self, MenuPlace};
 use crate::views::{View, ViewCtx};
 
@@ -40,7 +38,6 @@ enum GroupAction {
 
 impl View for StageView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        section_header(ui, t("Bühne"), |_| {});
         let mut actions = Vec::new();
         self.group_bar(ui, cx.engine, cx.state, &mut actions);
         self.apply(cx.engine, cx.state, actions);
@@ -103,6 +100,8 @@ impl StageView {
         let locked = st.locked;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = theme::SP_S;
+            ui.label(theme::heading_text(t("Gruppen")));
+            ui.label(egui::RichText::new("|").color(theme::text_faint()));
             let all: BTreeSet<FixtureId> = show.fixtures.iter().map(|f| f.id).collect();
             if let Some(a) = group_pill(ui, t("Alle"), &all, &st.selected) {
                 actions.push(a);

@@ -277,13 +277,14 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     ui.horizontal(|ui| {
         ui.label(
             egui::RichText::new(time_text(elapsed, hours))
-                .font(theme::caption())
+                .font(egui::FontId::proportional(theme::FS_BODY + 1.0))
+                .strong()
                 .color(color),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.label(
                 egui::RichText::new(time_text(total, hours))
-                    .font(theme::caption())
+                    .font(egui::FontId::proportional(theme::FS_BODY + 1.0))
                     .color(theme::text()),
             );
         });
@@ -482,6 +483,19 @@ impl ScenePropsView {
         });
         if let Some(f) = select {
             self.selected_fx = Some((id, f));
+            cx.state.focus = crate::state::Focus::Effect(id, f);
+        }
+        // Entf löscht den angeklickten Effekt (nicht die Szene)
+        let typing = ui.ctx().memory(|m| m.focused().is_some());
+        let mut delete = false;
+        if let (false, false, crate::state::Focus::Effect(s, f)) = (typing, locked, cx.state.focus)
+        {
+            if s == id
+                && selected == Some(f)
+                && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete))
+            {
+                delete = true;
+            }
         }
         if let (Some(f), false) = (toggle, locked) {
             if let Some(fx) = cx
@@ -524,19 +538,21 @@ impl ScenePropsView {
                 {
                     self.start_dialog(ui.ctx(), id, false);
                 }
-                if ui
+                let clicked_delete = ui
                     .add(
                         IconButton::new(Icon::Trash)
+                            .size(30.0)
                             .flat()
                             .enabled(on && selected.is_some()),
                     )
                     .on_hover_text(t("Ausgewählten Effekt löschen"))
-                    .clicked()
-                {
+                    .clicked();
+                if clicked_delete || delete {
                     if let (Some(f), Some(scene)) = (selected, cx.engine.show_mut().scene_mut(id)) {
                         // keine Effekte mehr -> wieder STATIC
                         scene.effects.retain(|e| e.id != f);
                         self.selected_fx = scene.effects.last().map(|e| (id, e.id));
+                        cx.state.focus = crate::state::Focus::Scenes;
                     }
                 }
                 if ui

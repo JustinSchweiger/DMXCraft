@@ -8,7 +8,7 @@ use eframe::egui::{self, Color32, Sense, Stroke, Vec2};
 use crate::state::{AppState, ProgrammerMode};
 use crate::ui::theme;
 use crate::ui::widgets::fader::FADER_W;
-use crate::ui::widgets::{section_header, Fader, FaderEvent, Icon, IconButton, Swatch, XyPad};
+use crate::ui::widgets::{Fader, FaderEvent, Icon, IconButton, Swatch, XyPad};
 use crate::views::quick::{quick_action, Layer, Quick};
 use crate::views::{View, ViewCtx};
 
@@ -126,7 +126,6 @@ impl View for ProgrammerView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let groups = fader_groups(cx.engine, cx.state);
         let layer = Layer::of(cx.state.programmer_mode);
-        section_header(ui, t("Programmer"), |_| {});
         toolbar(ui, cx.engine, cx.state);
         let dot = mode_color(cx.state.programmer_mode);
         // Trennlinie zwischen Werkzeugleiste und Fader-Bereich
@@ -160,13 +159,22 @@ impl View for ProgrammerView {
                 if cx.state.selected.is_empty() {
                     return;
                 }
-                let visible: Vec<&FaderGroup> = groups
-                    .iter()
-                    .filter(|g| self.category.contains(g.kind))
-                    .collect();
-                let blocks = fixture_blocks(cx.engine, cx.state, &visible);
+                // „Alle Kanäle“ einzeln je Gerätetyp, alle anderen Kategorien
+                // gemeinsam: ein Fader steuert die Kanäle aller ausgewählten Geräte
+                let merged;
+                let (visible, blocks): (Vec<&FaderGroup>, Vec<FixtureBlock<'_>>) =
+                    if self.category == Category::All {
+                        let v: Vec<&FaderGroup> = groups.iter().collect();
+                        let b = fixture_blocks(cx.engine, cx.state, &v);
+                        (v, b)
+                    } else {
+                        merged = merge_groups(&groups, self.category);
+                        let v: Vec<&FaderGroup> = merged.iter().collect();
+                        let b = merged_block(cx.engine, cx.state, &v);
+                        (v, b)
+                    };
                 if self.category == Category::Color {
-                    color_bar(ui, cx.engine, layer, &groups, cx.frame);
+                    color_bar(ui, cx.engine, layer, &merged_or(&visible), cx.frame);
                 }
                 if visible.is_empty() {
                     return;
@@ -180,7 +188,14 @@ impl View for ProgrammerView {
                     .show(ui, |ui| {
                         ui.horizontal_top(|ui| {
                             if self.category == Category::Position {
-                                xy_pad(ui, cx.engine, layer, &groups, cx.frame, height);
+                                xy_pad(
+                                    ui,
+                                    cx.engine,
+                                    layer,
+                                    &merged_or(&visible),
+                                    cx.frame,
+                                    height,
+                                );
                                 ui.add_space(theme::SP_S);
                             }
                             ui.spacing_mut().item_spacing.x = 2.0;
@@ -219,6 +234,73 @@ fn mode_color(m: ProgrammerMode) -> Color32 {
         ProgrammerMode::Blind => theme::OK,
         ProgrammerMode::Live => theme::WARN,
     }
+}
+
+/// Fader einer Kategorie über alle Gerätetypen zusammenfassen: gleiche
+/// Kanalart (bei „Sonstiges“ gleicher Name) wird zu einem Fader.
+fn merge_groups(groups: &[FaderGroup], cat: Category) -> Vec<FaderGroup> {
+    let mut out: Vec<FaderGroup> = Vec::new();
+    for g in groups.iter().filter(|g| cat.contains(g.kind)) {
+        let by_name = g.kind == ChannelKind::Generic;
+        match out
+            .iter_mut()
+            .find(|o| o.kind == g.kind && (!by_name || o.name == g.name))
+        {
+            Some(o) => {
+                o.channels.extend(g.channels.iter().copied());
+                if o.type_key != g.type_key {
+                    o.type_key.clear();
+                }
+            }
+            None => out.push(FaderGroup {
+                name: g.name.clone(),
+                kind: g.kind,
+                number: out.len() as u16 + 1,
+                type_key: g.type_key.clone(),
+                channels: g.channels.clone(),
+            }),
+        }
+    }
+    out
+}
+
+/// Gemeinsamer Block für zusammengefasste Fader.
+fn merged_block<'a>(e: &Engine, st: &AppState, faders: &[&'a FaderGroup]) -> Vec<FixtureBlock<'a>> {
+    if faders.is_empty() {
+        return Vec::new();
+    }
+    let show = e.show();
+    let fixtures: Vec<_> = st
+        .selected
+        .iter()
+        .filter_map(|id| show.fixture(*id))
+        .collect();
+    let one_type = fixtures.windows(2).all(|w| w[0].type_key == w[1].type_key);
+    let type_name = match (one_type, fixtures.first()) {
+        (true, Some(f)) => show.type_of(f).map_or_else(
+            || f.type_key.clone(),
+            |t| format!("{} {}", t.manufacturer, t.model).trim().to_string(),
+        ),
+        _ => tr!("Alle ausgewählten Geräte ({n})", n = fixtures.len()),
+    };
+    vec![FixtureBlock {
+        type_name,
+        names: fixtures.iter().map(|f| f.name.clone()).collect(),
+        faders: faders.to_vec(),
+    }]
+}
+
+/// Besitzende Kopie der sichtbaren Fader (für Farb- und Positionsfeld).
+fn merged_or(v: &[&FaderGroup]) -> Vec<FaderGroup> {
+    v.iter()
+        .map(|g| FaderGroup {
+            name: g.name.clone(),
+            kind: g.kind,
+            number: g.number,
+            type_key: g.type_key.clone(),
+            channels: g.channels.clone(),
+        })
+        .collect()
 }
 
 /// Fader nach Gerätetyp bündeln (Reihenfolge wie in der Auswahl).
@@ -701,7 +783,11 @@ fn category_list(
             Vec2::new(full.width() - 6.0, row_h),
         );
         y += row_h + 1.0;
-        let n = groups.iter().filter(|g| c.contains(g.kind)).count();
+        let n = if *c == Category::All {
+            groups.len()
+        } else {
+            merge_groups(groups, *c).len()
+        };
         let resp = ui.interact(row, ui.make_persistent_id(("prog_cat", i)), Sense::click());
         let active = *current == *c;
         let empty = n == 0;
