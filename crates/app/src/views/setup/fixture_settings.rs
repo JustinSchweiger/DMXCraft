@@ -16,6 +16,17 @@ pub struct FixtureSettings;
 /// Schnelltest über den Programmer.
 impl View for FixtureSettings {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        // Der Inhalt darf die Panelgröße nicht erzwingen: ist der Bereich
+        // kleiner als der Inhalt, wird gescrollt statt das Panel zu sperren
+        egui::ScrollArea::both()
+            .id_salt("fixture_settings_scroll")
+            .auto_shrink([false, false])
+            .show(ui, |ui| body(ui, cx));
+    }
+}
+
+fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+    {
         let ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
         let mut quick = None;
         let some = !ids.is_empty();
@@ -69,10 +80,10 @@ impl View for FixtureSettings {
         let before = lim;
 
         // Grenzen: Dimmer | Bewegung (XY) | Werte & Schalter
-        let h = ui.available_height().clamp(150.0, 320.0);
+        let h = (ui.available_height() - 4.0).clamp(120.0, 420.0);
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
-                caption(ui, t("Dimmer"));
+                caption(ui, t("Dimmer Limit"));
                 RangeSlider {
                     min: &mut lim.dimmer_min,
                     max: &mut lim.dimmer_max,
@@ -83,7 +94,7 @@ impl View for FixtureSettings {
             });
             ui.separator();
             ui.vertical(|ui| {
-                caption(ui, t("Bewegung"));
+                caption(ui, t("Bewegung Limit"));
                 let side = (h - 24.0).min(ui.available_width() - 150.0).max(110.0);
                 LimitPad {
                     pan: (&mut lim.pan_min, &mut lim.pan_max),

@@ -416,6 +416,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{n} Szenen", "{n} scenes"),
     ("Alle einblenden", "Show all"),
     ("BLIND", "BLIND"),
+    ("Dimmer Limit", "Dimmer limit"),
+    ("Bewegung Limit", "Movement limit"),
     ("Drehen", "Rotate"),
     ("15° nach links", "15° left"),
     ("5° nach links", "5° left"),
