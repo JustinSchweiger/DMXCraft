@@ -216,7 +216,7 @@ fn current(e: &Engine, layer: Layer, ch: ChannelRef, frame: &DmxFrame) -> u8 {
 fn mode_color(m: ProgrammerMode) -> Color32 {
     match m {
         ProgrammerMode::Edit => theme::OK,
-        ProgrammerMode::Blind => theme::DANGER,
+        ProgrammerMode::Blind => theme::OK,
         ProgrammerMode::Live => theme::WARN,
     }
 }
@@ -548,8 +548,8 @@ fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: bool) {
             ProgrammerMode::Blind,
             None,
             Some(Icon::EyeOff),
-            theme::DANGER,
-            t("Blind Edit: Werte bearbeiten, ohne sie auszugeben"),
+            theme::OK,
+            t("Blind Edit: wie Edit, aber der DMX-Ausgang bleibt unverändert"),
         ),
         (
             ProgrammerMode::Live,
@@ -585,7 +585,8 @@ fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: bool) {
         let resp = ui
             .interact(seg, ui.make_persistent_id(("prog_mode", i)), Sense::click())
             .on_hover_text(tip);
-        let active = *mode == m;
+        // Blind ist ein Zusatz zu Edit: beide Knöpfe leuchten
+        let active = *mode == m || (m == ProgrammerMode::Edit && *mode == ProgrammerMode::Blind);
         let corner = egui::CornerRadius {
             nw: if i == 0 { r } else { 0 },
             sw: if i == 0 { r } else { 0 },
@@ -597,6 +598,13 @@ fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: bool) {
             p.rect_filled(seg, corner, color);
         } else if resp.hovered() && !locked {
             p.rect_filled(seg, corner, theme::raised_hover());
+        }
+        if i == 1 && *mode == ProgrammerMode::Blind {
+            // Edit + Blind: feine Fuge zwischen den beiden leuchtenden Knöpfen
+            p.line_segment(
+                [seg.left_top(), seg.left_bottom()],
+                Stroke::new(1.0, theme::bg()),
+            );
         }
         if i > 0 && !active && *mode != items_mode(i - 1) {
             p.line_segment(
@@ -632,7 +640,11 @@ fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: bool) {
             _ => {}
         }
         if resp.clicked() && !locked {
-            *mode = m;
+            // Auge schaltet Blind ein/aus (immer zusammen mit Edit)
+            *mode = match (m, *mode) {
+                (ProgrammerMode::Blind, ProgrammerMode::Blind) => ProgrammerMode::Edit,
+                (m, _) => m,
+            };
         }
     }
     ui.painter().rect_stroke(

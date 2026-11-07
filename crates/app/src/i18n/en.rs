@@ -416,6 +416,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{n} Szenen", "{n} scenes"),
     ("Alle einblenden", "Show all"),
     ("BLIND", "BLIND"),
+    ("Blind Edit: wie Edit, aber der DMX-Ausgang bleibt unverändert", "Blind edit: like edit, but the DMX output stays unchanged"),
     ("Eigene Farbe wählen", "Choose a custom color"),
     ("Ungespeicherte Änderungen", "Unsaved changes"),
     ("Nicht speichern", "Don't save"),
