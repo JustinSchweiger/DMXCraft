@@ -1,7 +1,7 @@
 # Graph Report - dmxcraft-src  (2026-11-07)
 
 ## Corpus Check
-- 91 files · ~93,118 words
+- 91 files · ~93,165 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 14 file(s) not represented in the graph (top: (none) 5, .ttf 3, .ico 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e9ac75fc`
+- Built from commit: `f68774ea`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -524,7 +524,7 @@ Nodes (9): Fullscreen, SETTLE, Step, Enter, Maximize, ICON_PNG, texture(), windo
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Show` connect `Show` to `Engine`, `AppState`, `runtime.rs`, `theme.rs`, `fx.rs`, `app.rs`, `t`, `stage.rs`, `stage_canvas.rs`, `.check_placement`, `.add_scene`, `Timeline`, `stage.rs`, `DmxCraftApp`, `ChannelValue`, `feature.rs`, `motion.rs`, `show.rs`, `ShowError`, `EffectKind`, `BankScope`, `core/src/lib.rs`?**
-  _High betweenness centrality (0.140) - this node is a cross-community bridge._
+  _High betweenness centrality (0.142) - this node is a cross-community bridge._
 - **Are the 78 inferred relationships involving `t()` (e.g. with `.apply_menu()` and `.dialogs()`) actually correct?**
   _`t()` has 78 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Move`, `Left`, `Right` to the rest of the system?**
@@ -532,8 +532,8 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Engine` be split into smaller, more focused modules?**
   _Cohesion score 0.053838484546360914 - nodes in this community are weakly interconnected._
 - **Why does `Engine` connect `Engine` to `hashmap`, `AppState`, `runtime.rs`, `t`, `app.rs`, `t`, `stage.rs`, `Timeline`, `ProgrammerMode`, `audio.rs`, `stage.rs`, `DmxCraftApp`, `settings_window.rs`, `programmer.rs`, `Show`, `Layer`, `Category`, `.ui`, `ViewCtx`, `control/timeline.rs`, `core/src/lib.rs`?**
-  _High betweenness centrality (0.111) - this node is a cross-community bridge._
+  _High betweenness centrality (0.107) - this node is a cross-community bridge._
 - **Should `AppState` be split into smaller, more focused modules?**
   _Cohesion score 0.06458635703918723 - nodes in this community are weakly interconnected._
 - **Why does `t()` connect `t` to `AppState`, `pal`, `app.rs`, `t`, `file_dialog.rs`, `fx_ui.rs`, `stage.rs`, `titlebar.rs`, `super`, `ProgrammerMode`, `stage.rs`, `Fader`, `super`, `DmxCraftApp`, `settings_window.rs`, `color_picker.rs`, `programmer.rs`, `stage_editor.rs`, `dialog.rs`, `Layer`, `PatchGrid`, `Dialog<'a>`, `Category`, `.ui`, `ViewCtx`, `control/timeline.rs`?**
-  _High betweenness centrality (0.096) - this node is a cross-community bridge._
+  _High betweenness centrality (0.095) - this node is a cross-community bridge._

@@ -416,6 +416,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("LIVE – nur Ansicht", "LIVE – view only"),
     ("Spur {n}", "Track {n}"),
     ("Spurfarbe", "Track colour"),
+    ("Gitter", "Grid"),
     ("Keine Farbe", "No colour"),
     ("Klick: Position setzen · Ziehen: hoch/runter zoomen, links/rechts scrollen", "Click: set position · Drag: up/down zooms, left/right scrolls"),
     ("Kommt in einer späteren Version", "Coming in a later version"),

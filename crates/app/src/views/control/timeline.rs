@@ -1290,58 +1290,64 @@ fn toggle_play(e: &mut Engine, scene: SceneId, cursor: f64) {
 }
 
 fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {
+    const W: f32 = 220.0;
     menu::begin(ui);
+    ui.set_min_width(W);
+    ui.set_max_width(W);
+    menu::title(ui, t("Gitter"));
+    // Zeile: Beschriftung links, Bedienelement rechts (feste Breite)
+    let row = |ui: &mut egui::Ui, label: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
+        ui.allocate_ui_with_layout(
+            Vec2::new(W, 28.0),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.add_space(theme::SP_S);
+                ui.label(egui::RichText::new(label).color(theme::text()));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add_space(theme::SP_S);
+                    add(ui);
+                });
+            },
+        );
+    };
     ui.add_enabled_ui(!locked, |ui| {
-        ui.label(egui::RichText::new(t("Gitter-Optionen")).strong());
-        ui.add_space(theme::SP_XS);
-        ui.horizontal(|ui| {
-            ui.label(t("Display"));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        row(ui, t("Display"), &mut |ui| {
+            for (mode, icon, tip) in [
+                (GridMode::Beat, Icon::MusicNote, t("Beat-basiert")),
+                (GridMode::Time, Icon::Clock, t("Zeitbasiert")),
+            ] {
                 if ui
                     .add(
-                        IconButton::new(Icon::MusicNote)
+                        IconButton::new(icon)
+                            .size(24.0)
                             .flat()
-                            .active(tl.grid == GridMode::Beat),
+                            .active(tl.grid == mode),
                     )
-                    .on_hover_text(t("Beat-basiert"))
+                    .on_hover_text(tip)
                     .clicked()
                 {
-                    tl.grid = GridMode::Beat;
+                    tl.grid = mode;
                 }
-                if ui
-                    .add(
-                        IconButton::new(Icon::Clock)
-                            .flat()
-                            .active(tl.grid == GridMode::Time),
-                    )
-                    .on_hover_text(t("Zeitbasiert"))
-                    .clicked()
-                {
-                    tl.grid = GridMode::Time;
-                }
-            });
+            }
         });
+        menu::separator(ui);
         ui.add_enabled_ui(tl.grid == GridMode::Beat, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(t("Tempo (BPM)"));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add(
-                        egui::DragValue::new(&mut tl.bpm)
-                            .range(20.0..=400.0)
-                            .speed(0.5)
-                            .fixed_decimals(1),
-                    );
-                });
+            row(ui, t("Tempo (BPM)"), &mut |ui| {
+                ui.add_sized(
+                    Vec2::new(64.0, 22.0),
+                    egui::DragValue::new(&mut tl.bpm)
+                        .range(20.0..=400.0)
+                        .speed(0.5)
+                        .fixed_decimals(1),
+                );
             });
-            ui.horizontal(|ui| {
-                ui.label(t("Offset (ms)"));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add(
-                        egui::DragValue::new(&mut tl.offset_ms)
-                            .range(0..=60_000)
-                            .speed(5),
-                    );
-                });
+            row(ui, t("Offset (ms)"), &mut |ui| {
+                ui.add_sized(
+                    Vec2::new(64.0, 22.0),
+                    egui::DragValue::new(&mut tl.offset_ms)
+                        .range(0..=60_000)
+                        .speed(5),
+                );
             });
         });
     });
