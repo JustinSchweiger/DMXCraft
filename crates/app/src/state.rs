@@ -36,13 +36,10 @@ pub struct AppState {
     pub patch: PatchForm,
     /// Per Datei importierte Gerätetypen (noch nicht gepatcht).
     pub imported_types: Vec<FixtureType>,
-    /// Szenen-Editor als Fenster geöffnet.
-    pub scene_editor_open: bool,
     /// Fenster „Zonen & Gruppen“ geöffnet.
     pub zones_open: bool,
     /// Gerät, das im Patch-Raster umbenannt werden soll.
     pub rename_request: Option<FixtureId>,
-    pub edit_scene: Option<SceneId>,
     pub append_target: Option<SceneId>,
     pub new_scene_name: String,
     pub new_scene_zone: Option<ZoneId>,
@@ -71,10 +68,8 @@ impl AppState {
                 address: 1,
             },
             imported_types: Vec::new(),
-            scene_editor_open: false,
             zones_open: false,
             rename_request: None,
-            edit_scene: None,
             append_target: None,
             new_scene_name: t("Neue Szene").into(),
             new_scene_zone: None,
@@ -104,13 +99,6 @@ impl AppState {
     /// Nach dem Laden/Ersetzen einer Show.
     pub fn reset_for_new_show(&mut self) {
         self.selected.clear();
-        self.edit_scene = None;
         self.append_target = None;
-    }
-
-    /// Szene im Szenen-Editor öffnen.
-    pub fn open_scene_editor(&mut self, id: SceneId) {
-        self.edit_scene = Some(id);
-        self.scene_editor_open = true;
     }
 }

@@ -630,6 +630,22 @@ impl Show {
         self.groups.retain(|g| g.id != id);
     }
 
+    /// Szenen ohne Bank in eine Bank übernehmen (erste Bank, sonst neue mit
+    /// `name`). Gibt `true` zurück, wenn etwas geändert wurde.
+    pub fn adopt_free_scenes(&mut self, name: impl Into<String>) -> bool {
+        if !self.scenes.iter().any(|s| s.zone.is_none()) {
+            return false;
+        }
+        let zone = match self.zones.first() {
+            Some(z) => z.id,
+            None => self.add_zone(name),
+        };
+        for s in self.scenes.iter_mut().filter(|s| s.zone.is_none()) {
+            s.zone = Some(zone);
+        }
+        true
+    }
+
     pub fn remove_zone(&mut self, id: ZoneId) {
         self.zones.retain(|z| z.id != id);
         for s in &mut self.scenes {
@@ -684,6 +700,20 @@ impl Show {
 #[cfg(test)]
 mod zone_tests {
     use super::*;
+
+    #[test]
+    fn free_scenes_get_a_bank() {
+        let mut s = Show::new("T", 8);
+        let a = s.add_scene("A", None, vec![]);
+        assert!(s.adopt_free_scenes("Bank 1"));
+        let z = s.scene(a).unwrap().zone.unwrap();
+        assert_eq!(s.zone(z).unwrap().name, "Bank 1");
+        assert!(!s.adopt_free_scenes("x"));
+        let b = s.add_scene("B", None, vec![]);
+        s.adopt_free_scenes("x");
+        assert_eq!(s.scene(b).unwrap().zone, Some(z));
+        assert_eq!(s.zones.len(), 1);
+    }
 
     #[test]
     fn duplicate_zone_copies_scenes_behind_original() {

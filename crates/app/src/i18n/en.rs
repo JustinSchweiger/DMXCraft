@@ -402,6 +402,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Szenenfarbe", "Scene color"),
     ("Bankfarbe übernehmen", "Use bank color"),
     ("{n} Szenen", "{n} scenes"),
+    ("Löscht die Bank mit allen Szenen", "Deletes the bank with all its scenes"),
     ("Ausgeblendete Bänke", "Hidden banks"),
     ("Einblenden", "Show"),
     ("Duplizieren", "Duplicate"),

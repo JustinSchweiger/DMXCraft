@@ -53,6 +53,8 @@ pub enum Icon {
     Copy,
     Paste,
     ZoomFit,
+    /// Musiknote (SuperSzene mit Musik).
+    Music,
 }
 
 impl Icon {
@@ -486,6 +488,23 @@ impl Icon {
                     pos2(c.x + s * 0.45, c.y + s * 0.65),
                 );
                 painter.rect_stroke(body, 1.5, stroke, egui::StrokeKind::Middle);
+            }
+            Icon::Music => {
+                // zwei Achtelnoten mit Balken
+                let l = pos2(c.x - s * 0.45, c.y + s * 0.5);
+                let r = pos2(c.x + s * 0.55, c.y + s * 0.35);
+                for h in [l, r] {
+                    painter.add(Shape::ellipse_filled(
+                        h,
+                        Vec2::new(s * 0.26, s * 0.2),
+                        color,
+                    ));
+                }
+                let lt = pos2(l.x + s * 0.24, c.y - s * 0.65);
+                let rt = pos2(r.x + s * 0.24, c.y - s * 0.8);
+                painter.line_segment([pos2(lt.x, l.y), lt], stroke);
+                painter.line_segment([pos2(rt.x, r.y), rt], stroke);
+                painter.line_segment([lt, rt], Stroke::new(s * 0.22, color));
             }
             Icon::Group => {
                 for (dx, dy) in [(-0.35, -0.3), (0.35, -0.3), (0.0, 0.35)] {

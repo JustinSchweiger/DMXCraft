@@ -1,11 +1,11 @@
 //! STEUERN → Szenen-Raster: Bänke als Spalten, Szenen als Karten.
 //!
-//! Oben die Bankleiste: „Alle“, eine Chip je Bank, „Frei“ und **+** für eine
-//! neue Bank. Rechtsklick auf eine Bank (Chip oder Spaltenkopf) öffnet das
+//! Oben die Bankleiste: „Alle“, eine Chip je Bank und **+** für eine neue
+//! Bank. Jede Szene gehört zu einer Bank. Rechtsklick auf eine Bank (Chip oder Spaltenkopf) öffnet das
 //! Bank-Menü (Umbenennen, Farbe, Duplizieren, Ausblenden, Löschen …).
 //! Szenenkarten: Klick auf den Hauptbereich startet/stoppt, Klick auf den
-//! farbigen Streifen rechts markiert (auch Strg/Umschalt+Klick). Entf löscht
-//! markierte Szenen. **+** im Spaltenkopf legt eine Szene an und startet
+//! farbigen Streifen rechts wählt die Szene aus (Strg/Umschalt: mehrere).
+//! Entf löscht ausgewählte Szenen. **+** im Spaltenkopf legt eine Szene an und startet
 //! gleich das Umbenennen.
 
 use std::collections::BTreeSet;
@@ -30,17 +30,17 @@ enum PageFilter {
     #[default]
     All,
     Zone(ZoneId),
-    Free,
 }
 
 enum Action {
     Toggle(SceneId),
     Pause(SceneId),
     Jump(SceneId, i32),
-    NewScene(Option<ZoneId>),
-    Edit(SceneId),
+    NewScene(ZoneId),
     Delete(SceneId),
-    /// Szene markieren/entmarkieren (Streifen oder Strg/Umschalt+Klick).
+    /// Nur diese Szene auswählen (Klick auf den Streifen).
+    Select(SceneId),
+    /// Szene zur Auswahl hinzufügen/entfernen (Strg/Umschalt+Streifen).
     Mark(SceneId),
     /// Umbenennen einer Szene starten.
     RenameScene(SceneId),
@@ -66,10 +66,8 @@ enum BankAction {
     SetColor(ZoneId, Option<[u8; 3]>),
     ColorToScenes(ZoneId),
     SelectScenes(ZoneId),
-    /// Bank löschen, Szenen werden „frei“.
-    DeleteKeep(ZoneId),
     /// Bank samt Szenen löschen.
-    DeleteAll(ZoneId),
+    Delete(ZoneId),
 }
 
 #[derive(Default)]
@@ -87,6 +85,13 @@ pub struct SceneGridView {
 
 impl View for SceneGridView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        // Szenen ohne Bank (ältere Shows, Import) in eine Bank übernehmen
+        if cx.engine.show().scenes.iter().any(|s| s.zone.is_none()) {
+            let n = cx.engine.show().zones.len() + 1;
+            cx.engine
+                .show_mut()
+                .adopt_free_scenes(tr!("Bank {n}", n = n));
+        }
         let mut actions = Vec::new();
         ui.horizontal(|ui| {
             self.page_bar(
@@ -108,20 +113,18 @@ impl View for SceneGridView {
                 self.page = PageFilter::All;
             }
         }
-        let mut columns: Vec<(Option<ZoneId>, String)> = cx
+        let columns: Vec<(ZoneId, String)> = cx
             .engine
             .show()
             .zones
             .iter()
             .filter(|z| !z.hidden)
-            .map(|z| (Some(z.id), z.name.clone()))
+            .filter(|z| match self.page {
+                PageFilter::All => true,
+                PageFilter::Zone(id) => z.id == id,
+            })
+            .map(|z| (z.id, z.name.clone()))
             .collect();
-        columns.push((None, t("Frei").into()));
-        columns.retain(|(z, _)| match self.page {
-            PageFilter::All => true,
-            PageFilter::Zone(id) => *z == Some(id),
-            PageFilter::Free => z.is_none(),
-        });
 
         let locked = cx.state.locked;
         egui::ScrollArea::both()
@@ -255,14 +258,6 @@ impl SceneGridView {
                     });
                 }
             }
-            chip(
-                ui,
-                &mut self.page,
-                PageFilter::Free,
-                t("Frei"),
-                theme::text_dim(),
-                false,
-            );
             if !locked
                 && ui
                     .add(IconButton::new(Icon::Plus).flat())
@@ -360,24 +355,14 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
         BankAction::SelectScenes(zone),
     );
     menu::separator(ui);
-    let mut hidden_actions = Vec::new();
-    hidden_banks_menu(ui, show, &mut hidden_actions);
-    if let Some(Action::Bank(a)) = hidden_actions.pop() {
-        other = Some(a);
-    }
-    menu::sub(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash), |ui| {
-        if menu::item(ui, MenuItem::new(t("Bank löschen, Szenen behalten"))) {
-            other = Some(BankAction::DeleteKeep(zone));
-        }
-        if menu::item(
-            ui,
-            MenuItem::new(t("Bank mit allen Szenen löschen"))
-                .icon(Icon::Trash)
-                .danger(),
-        ) {
-            other = Some(BankAction::DeleteAll(zone));
-        }
-    });
+    act(
+        ui,
+        MenuItem::new(t("Löschen"))
+            .icon(Icon::Trash)
+            .danger()
+            .tooltip(t("Löscht die Bank mit allen Szenen")),
+        BankAction::Delete(zone),
+    );
     out.or(other)
 }
 
@@ -486,7 +471,7 @@ fn chip(
 fn column(
     ui: &mut egui::Ui,
     e: &Engine,
-    zone: Option<ZoneId>,
+    zone: ZoneId,
     name: &str,
     locked: bool,
     marked: &BTreeSet<SceneId>,
@@ -494,23 +479,16 @@ fn column(
     rename_focus: &mut bool,
     actions: &mut Vec<Action>,
 ) {
-    let color = theme::zone_color(e.show(), zone);
+    let color = theme::zone_color(e.show(), Some(zone));
     let scenes: Vec<SceneId> = e
         .show()
         .scenes
         .iter()
-        .filter(|s| s.zone == zone)
+        .filter(|s| s.zone == Some(zone))
         .map(|s| s.id)
         .collect();
-    // Ziel der Transport-Tasten: aktive Szene der Bank bzw. zuletzt gestartete freie Szene
-    let target = match zone {
-        Some(z) => e.active_in_zone(z),
-        None => e
-            .active_scenes()
-            .into_iter()
-            .rev()
-            .find(|id| e.show().scene(*id).is_some_and(|s| s.zone.is_none())),
-    };
+    // Ziel der Transport-Tasten: aktive Szene der Bank
+    let target = e.active_in_zone(zone);
     let paused = target.and_then(|t| e.progress(t)).is_some_and(|p| p.paused);
 
     ui.vertical(|ui| {
@@ -571,7 +549,8 @@ fn column(
                 });
         });
         // Rechtsklick auf den Spaltenkopf: Bank-Menü
-        if let (Some(z), false) = (zone, locked) {
+        if !locked {
+            let z = zone;
             let resp = header.response;
             menu::context(&resp, |ui| {
                 if let Some(a) = bank_menu(ui, e.show(), z) {
@@ -675,22 +654,18 @@ fn scene_card(
         return;
     }
 
+    // Streifen: auswählen (Strg/Umschalt: mehrere), Hauptbereich: starten/stoppen
     if resp.select.clicked() && !locked {
-        actions.push(Action::Mark(id));
+        let mods = ui.input(|i| i.modifiers);
+        actions.push(if mods.command || mods.shift {
+            Action::Mark(id)
+        } else {
+            Action::Select(id)
+        });
     }
     if resp.play.clicked() {
-        let mods = ui.input(|i| i.modifiers);
-        if !locked && (mods.command || mods.shift) {
-            actions.push(Action::Mark(id));
-        } else {
-            actions.push(Action::Toggle(id));
-        }
+        actions.push(Action::Toggle(id));
     }
-    resp.select.clone().on_hover_text(if is_marked {
-        t("Markierung aufheben")
-    } else {
-        t("Markieren")
-    });
     if locked {
         return;
     }
@@ -718,21 +693,13 @@ fn scene_card(
         ) {
             actions.push(Action::RenameScene(id));
         }
-        if menu::item(
-            ui,
-            MenuItem::new(t("Bearbeiten …"))
-                .icon(Icon::Builder)
-                .enabled(single),
-        ) {
-            actions.push(Action::Edit(id));
-        }
         if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
             actions.extend(targets.iter().map(|s| Action::DuplicateScene(*s)));
         }
         menu::item(
             ui,
             MenuItem::new(t("SuperSzene erstellen"))
-                .icon(Icon::Group)
+                .icon(Icon::Music)
                 .enabled(false)
                 .tooltip(t("Kommt in einer späteren Version")),
         );
@@ -752,18 +719,6 @@ fn scene_card(
             t("Bankfarbe übernehmen"),
         ) {
             actions.push(Action::SceneColor(targets.clone(), c));
-        }
-        menu::separator(ui);
-        if menu::item(
-            ui,
-            MenuItem::new(if is_marked {
-                t("Markierung aufheben")
-            } else {
-                t("Markieren")
-            })
-            .icon(Icon::ArrangeGrid),
-        ) {
-            actions.push(Action::Mark(id));
         }
         menu::separator(ui);
         if menu::item(
@@ -796,7 +751,7 @@ fn apply(
                 let name = tr!("Szene {n}", n = e.show().scenes.len() + 1);
                 let id = e
                     .show_mut()
-                    .add_scene(name.clone(), zone, vec![Step::new(values)]);
+                    .add_scene(name.clone(), Some(zone), vec![Step::new(values)]);
                 st.append_target = Some(id);
                 *scene_rename = Some((id, name));
             }
@@ -824,14 +779,14 @@ fn apply(
                     }
                 }
             }
-            Action::Edit(id) => st.open_scene_editor(id),
             Action::Delete(id) => {
                 e.show_mut().remove_scene(id);
                 e.sync();
                 st.selected_scenes.remove(&id);
-                if st.edit_scene == Some(id) {
-                    st.edit_scene = None;
-                }
+            }
+            Action::Select(id) => {
+                st.selected_scenes.clear();
+                st.selected_scenes.insert(id);
             }
             Action::Mark(id) => {
                 if !st.selected_scenes.remove(&id) {
@@ -914,11 +869,7 @@ fn apply_bank(
                 .map(|s| s.id)
                 .collect();
         }
-        BankAction::DeleteKeep(id) => {
-            e.show_mut().remove_zone(id);
-            e.sync();
-        }
-        BankAction::DeleteAll(id) => {
+        BankAction::Delete(id) => {
             e.show_mut().remove_zone_with_scenes(id);
             e.sync();
             st.selected_scenes.retain(|s| e.show().scene(*s).is_some());

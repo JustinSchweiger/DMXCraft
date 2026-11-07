@@ -121,7 +121,7 @@ pub fn demo_show() -> Show {
             st
         })
         .collect();
-    s.add_scene("Lauflicht", None, chase);
+    s.add_scene("Lauflicht", Some(farben), chase);
 
     // Moving Heads: 0 Pan, 2 Tilt, 5 Dimmer
     let pos = |pan: u8, tilt: u8| -> Vec<ChannelValue> {

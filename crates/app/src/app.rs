@@ -289,7 +289,6 @@ impl DmxCraftApp {
     fn lock_ui(&mut self) {
         self.state.locked = true;
         self.state.mode = Mode::Control;
-        self.state.scene_editor_open = false;
         self.state.zones_open = false;
         self.settings_open = false;
         self.state.info(t("Oberfläche gesperrt"));

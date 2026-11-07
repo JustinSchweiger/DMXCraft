@@ -5,7 +5,6 @@
 pub mod fixture_settings;
 pub mod library_panel;
 pub mod patch_grid;
-pub mod scenes;
 pub mod stage_editor;
 pub mod zones;
 
