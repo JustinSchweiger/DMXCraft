@@ -5,6 +5,7 @@
 //! Bank-Menü (Umbenennen, Farbe, Duplizieren, Ausblenden, Löschen …).
 //! Szenenkarten: Klick auf den Hauptbereich startet/stoppt, Klick auf den
 //! farbigen Streifen rechts wählt die Szene aus (Strg/Umschalt: mehrere).
+//! Eine gestartete Szene wird automatisch (allein) ausgewählt.
 //! Entf löscht ausgewählte Szenen. Am Streifen zieht man Szenen per Drag &
 //! Drop in eine andere Bank oder an eine andere Stelle (ausgewählte Szenen
 //! wandern gemeinsam). **+** im Spaltenkopf legt eine Szene an und startet
@@ -828,6 +829,11 @@ fn scene_card(
     }
     if resp.play.clicked() {
         actions.push(Action::Toggle(id));
+        // eine gestartete Szene wird zugleich (allein) ausgewählt;
+        // Mehrfachauswahl gibt es nur über den Streifen
+        if progress.is_none() && !locked {
+            actions.push(Action::Select(id));
+        }
     }
     if locked {
         return;
