@@ -14,7 +14,6 @@ pub struct StageEditorView {
     interaction: StageInteraction,
     snap: bool,
     cells: u32,
-    labels: bool,
     grid: bool,
 }
 
@@ -24,7 +23,6 @@ impl Default for StageEditorView {
             interaction: StageInteraction::default(),
             snap: true,
             cells: 24,
-            labels: true,
             grid: false,
         }
     }
@@ -84,7 +82,6 @@ impl View for StageEditorView {
                 for (on, icon, hint) in [
                     (&mut self.snap, Icon::Magnet, t("Einrasten")),
                     (&mut self.grid, Icon::GridFour, t("Raster")),
-                    (&mut self.labels, Icon::TextAa, t("Namen")),
                 ] {
                     if ui
                         .add(IconButton::new(icon).size(26.0).active(*on))
@@ -94,11 +91,20 @@ impl View for StageEditorView {
                         *on = !*on;
                     }
                 }
-                ui.add_enabled(
+                let mut cells = self.cells;
+                if crate::ui::widgets::drag::drag_number(
+                    ui,
+                    "snap_cells",
+                    &mut cells,
+                    4..=64,
                     self.snap,
-                    egui::DragValue::new(&mut self.cells).range(4..=64),
+                    egui::vec2(26.0, 22.0),
                 )
-                .on_hover_text(t("Felder zum Einrasten"));
+                .on_hover_text(t("Felder zum Einrasten"))
+                .changed()
+                {
+                    self.cells = cells;
+                }
                 tool_sep(ui);
                 let st = &mut self.interaction;
                 if ui
@@ -139,7 +145,6 @@ impl View for StageEditorView {
                     frame: cx.frame,
                     mode: CanvasMode::Edit,
                     snap: self.snap.then_some(self.cells),
-                    show_labels: self.labels,
                     show_grid: self.grid,
                     auto_fit: false,
                 }

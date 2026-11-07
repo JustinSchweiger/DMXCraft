@@ -19,34 +19,32 @@ impl View for FixtureSettings {
         let ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
         let mut quick = None;
         let some = !ids.is_empty();
-        // Schnelltest unten fest: Licht an/aus, zentrieren
-        egui::Panel::bottom("fixture_quick")
-            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4)))
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    if ui
-                        .add(IconButton::new(Icon::Center).enabled(some))
-                        .on_hover_text(t("Moving Head zentrieren (Pan/Tilt 50 %)"))
-                        .clicked()
-                    {
-                        quick = Some(Quick::Center);
-                    }
-                    if ui
-                        .add(IconButton::new(Icon::LightOn).enabled(some))
-                        .on_hover_text(t("Licht an (Dimmer und Weiß voll)"))
-                        .clicked()
-                    {
-                        quick = Some(Quick::On);
-                    }
-                    if ui
-                        .add(IconButton::new(Icon::LightOff).enabled(some))
-                        .on_hover_text(t("Licht aus"))
-                        .clicked()
-                    {
-                        quick = Some(Quick::Off);
-                    }
-                })
-            });
+        // Schnelltest oben, wie im Programmer: Licht aus/an, zentrieren
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = theme::SP_XS;
+            for (q, icon, tip) in [
+                (Quick::Off, Icon::LightOff, t("Licht aus")),
+                (
+                    Quick::On,
+                    Icon::LightOn,
+                    t("Licht an (Dimmer und Weiß voll)"),
+                ),
+                (
+                    Quick::Center,
+                    Icon::Center,
+                    t("Moving Head zentrieren (Pan/Tilt 50 %)"),
+                ),
+            ] {
+                if ui
+                    .add(IconButton::new(icon).size(34.0).flat().enabled(some))
+                    .on_hover_text(tip)
+                    .clicked()
+                {
+                    quick = Some(q);
+                }
+            }
+        });
+        ui.add_space(theme::SP_S);
         if let Some(q) = quick {
             quick_action(cx.engine, Layer::Programmer, &ids, q);
         }

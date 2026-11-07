@@ -65,8 +65,9 @@ impl<'a> Knob<'a> {
         };
         let resp = ui.interact(knob, ui.make_persistent_id(("knob", self.label)), sense);
         let mut changed = false;
+        let delta = crate::ui::widgets::drag::endless_delta(ui, &resp);
         if resp.dragged() {
-            let d = -resp.drag_delta().y / 150.0;
+            let d = -delta.y / 150.0;
             let fine = ui.input(|i| i.modifiers.shift);
             let v = (*self.value + if fine { d * 0.2 } else { d }).clamp(0.0, 1.0);
             if v != *self.value {
@@ -78,7 +79,7 @@ impl<'a> Knob<'a> {
             *self.value = self.default;
             changed = true;
         }
-        if resp.hovered() || resp.dragged() {
+        if resp.hovered() && !resp.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
         }
 

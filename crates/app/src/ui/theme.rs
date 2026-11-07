@@ -26,8 +26,6 @@ pub struct Palette {
     pub text_faint: Color32,
     /// Geräte-Balken im DMX-Patch.
     pub fixture_bar: Color32,
-    /// Füllung ausgeschalteter Geräte im Bühnenplan.
-    pub fixture_off: Color32,
 }
 
 const fn c(r: u8, g: u8, b: u8) -> Color32 {
@@ -48,7 +46,6 @@ pub const NAVY: Palette = Palette {
     text_dim: c(0x95, 0xa2, 0xb0),
     text_faint: c(0x55, 0x60, 0x6c),
     fixture_bar: c(0x2b, 0x35, 0x42),
-    fixture_off: c(0x1e, 0x25, 0x2e),
 };
 
 /// Neutrales Grau ohne Farbstich, Akzent bleibt Cyan.
@@ -65,7 +62,6 @@ pub const GRAY: Palette = Palette {
     text_dim: c(0xa8, 0xa8, 0xaa),
     text_faint: c(0x6c, 0x6c, 0x70),
     fixture_bar: c(0x42, 0x42, 0x45),
-    fixture_off: c(0x2e, 0x2e, 0x30),
 };
 
 /// Wählbare Themes.
@@ -160,9 +156,6 @@ pub fn text_faint() -> Color32 {
 }
 pub fn fixture_bar() -> Color32 {
     pal().fixture_bar
-}
-pub fn fixture_off() -> Color32 {
-    pal().fixture_off
 }
 
 pub const DANGER: Color32 = Color32::from_rgb(0xef, 0x44, 0x55);

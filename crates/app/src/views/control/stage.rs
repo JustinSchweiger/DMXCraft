@@ -48,7 +48,6 @@ impl View for StageView {
             frame: cx.frame,
             mode: CanvasMode::Select,
             snap: None,
-            show_labels: false,
             show_grid: false,
             auto_fit: true,
         };

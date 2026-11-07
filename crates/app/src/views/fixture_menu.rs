@@ -48,6 +48,10 @@ pub enum FixtureAction {
     /// `None` = automatisch nach Gerätetyp.
     SetShape(Option<PlanShape>),
     SetSize(f32),
+    /// Drehung setzen (Grad).
+    SetRotation(f32),
+    /// Um einen Winkel weiterdrehen (Grad).
+    RotateBy(f32),
     NextFreeAddress,
     ShowInSetup,
     Rename,
@@ -180,6 +184,32 @@ pub fn menu(
                 );
             }
         });
+        let current_rot = (n == 1)
+            .then(|| selected.iter().next().map(|id| show.plan_rotation(*id)))
+            .flatten();
+        menu::sub(
+            ui,
+            MenuItem::new(t("Drehen")).icon(Icon::Reset).enabled(some),
+            |ui| {
+                for deg in [0.0f32, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0] {
+                    act(
+                        ui,
+                        MenuItem::new(&format!("{deg:.0}°"))
+                            .checked(current_rot.is_some_and(|c| (c - deg).abs() < 0.01)),
+                        FixtureAction::SetRotation(deg),
+                    );
+                }
+                menu::separator(ui);
+                for (label, d) in [
+                    (t("15° nach links"), -15.0),
+                    (t("5° nach links"), -5.0),
+                    (t("5° nach rechts"), 5.0),
+                    (t("15° nach rechts"), 15.0),
+                ] {
+                    act(ui, MenuItem::new(label), FixtureAction::RotateBy(d));
+                }
+            },
+        );
     }
 
     // Anordnung
@@ -387,6 +417,22 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
             for id in &ids {
                 if let Some(f) = e.show_mut().fixture_mut(*id) {
                     f.plan_size = (size != 1.0).then_some(size);
+                }
+            }
+        }
+        FixtureAction::SetRotation(deg) => {
+            for id in &ids {
+                if let Some(f) = e.show_mut().fixture_mut(*id) {
+                    f.plan_rotation =
+                        (deg.rem_euclid(360.0) != 0.0).then_some(deg.rem_euclid(360.0));
+                }
+            }
+        }
+        FixtureAction::RotateBy(d) => {
+            for id in &ids {
+                if let Some(f) = e.show_mut().fixture_mut(*id) {
+                    let deg = (f.plan_rotation.unwrap_or(0.0) + d).rem_euclid(360.0);
+                    f.plan_rotation = (deg != 0.0).then_some(deg);
                 }
             }
         }

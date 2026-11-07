@@ -204,9 +204,10 @@ impl Fader {
             if r.drag_started() {
                 ui.data_mut(|d| d.insert_temp(acc_id, 0.0f32));
             }
+            let delta = crate::ui::widgets::drag::endless_delta(ui, &r);
             if r.dragged() {
                 let mut acc: f32 = ui.data(|d| d.get_temp(acc_id)).unwrap_or(0.0);
-                acc -= r.drag_delta().y / 2.0; // 1 Schritt je 2 Punkte
+                acc -= delta.y / 2.0; // 1 Schritt je 2 Punkte
                 let steps = acc.trunc();
                 if steps != 0.0 {
                     acc -= steps;

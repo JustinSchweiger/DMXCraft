@@ -128,11 +128,6 @@ impl View for ProgrammerView {
         let layer = Layer::of(cx.state.programmer_mode);
         toolbar(ui, cx.engine, cx.state);
         let dot = mode_color(cx.state.programmer_mode);
-        // Trennlinie zwischen Werkzeugleiste und Fader-Bereich
-        ui.add_space(theme::SP_S);
-        let (line, _) =
-            ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), Sense::hover());
-        ui.painter().rect_filled(line, 0.0, theme::border());
         ui.add_space(theme::SP_S);
 
         egui::Panel::left("programmer_categories")
@@ -148,7 +143,6 @@ impl View for ProgrammerView {
             .frame(
                 egui::Frame::new()
                     .fill(theme::bg())
-                    .corner_radius(theme::R_M)
                     .outer_margin(egui::Margin {
                         left: 8,
                         ..Default::default()
@@ -179,10 +173,17 @@ impl View for ProgrammerView {
                 if visible.is_empty() {
                     return;
                 }
-                // eigener Platz für die Scrollleiste unter den Fadern
+                // eigener Platz für die Scrollleiste unter den Fadern – nur wenn
+                // sie gebraucht wird (Stand aus dem letzten Frame)
                 ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
-                let height = ui.available_height() - ui.spacing().scroll.allocated_width() - 4.0;
-                egui::ScrollArea::horizontal()
+                let overflow_id = ui.make_persistent_id("faders_overflow");
+                let overflow: bool = ui.data(|d| d.get_temp(overflow_id)).unwrap_or(false);
+                let height = if overflow {
+                    ui.available_height() - ui.spacing().scroll.allocated_width() - 4.0
+                } else {
+                    ui.available_height()
+                };
+                let out = egui::ScrollArea::horizontal()
                     .id_salt("faders")
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
@@ -210,6 +211,11 @@ impl View for ProgrammerView {
                             }
                         });
                     });
+                let needs = out.content_size.x > out.inner_rect.width() + 0.5;
+                if needs != overflow {
+                    ui.data_mut(|d| d.insert_temp(overflow_id, needs));
+                    ui.ctx().request_repaint();
+                }
             });
     }
 }

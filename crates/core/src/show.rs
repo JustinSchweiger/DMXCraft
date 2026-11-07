@@ -50,6 +50,9 @@ pub struct Fixture {
     /// Größenfaktor im Bühnenplan (1.0 = normal).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_size: Option<f32>,
+    /// Drehung im Bühnenplan in Grad (im Uhrzeigersinn).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_rotation: Option<f32>,
     /// Ausgangsgrenzen (Dimmer-Limit, Pan/Tilt-Bereich, Invertieren).
     #[serde(default, skip_serializing_if = "FixtureLimits::is_default")]
     pub limits: FixtureLimits,
@@ -136,12 +139,12 @@ impl FixtureLimits {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanShape {
-    /// Runder Scheinwerfer (PAR, Spot).
+    /// Runder Scheinwerfer (PAR, Spot, Moving Head). Ältere Shows mit
+    /// „moving_head“ werden als rund gelesen.
+    #[serde(alias = "moving_head")]
     Round,
     /// Quadratisches Gerät (Fluter, Panel).
     Square,
-    /// Rund mit mehreren LEDs als Segmente (z. B. Moving Head mit LED-Ring).
-    MovingHead,
     /// Quadratisches Pixel-Raster (Matrix-Panel).
     Matrix,
     /// Waagerechte Leiste (LED-Bar, Pixel-Leiste).
@@ -153,10 +156,9 @@ pub enum PlanShape {
 }
 
 impl PlanShape {
-    pub const ALL: [PlanShape; 7] = [
+    pub const ALL: [PlanShape; 6] = [
         PlanShape::Round,
         PlanShape::Square,
-        PlanShape::MovingHead,
         PlanShape::Matrix,
         PlanShape::BarHorizontal,
         PlanShape::BarVertical,
@@ -167,7 +169,6 @@ impl PlanShape {
         match self {
             PlanShape::Round => "Rund (PAR/Spot)",
             PlanShape::Square => "Quadrat (Fluter/Panel)",
-            PlanShape::MovingHead => "Rund mit LED-Segmenten",
             PlanShape::Matrix => "Pixel-Raster (Matrix)",
             PlanShape::BarHorizontal => "Leiste waagerecht",
             PlanShape::BarVertical => "Leiste senkrecht",
@@ -181,7 +182,7 @@ impl PlanShape {
         let reds = ty.channels.iter().filter(|c| c.kind == K::Red).count();
         let moving = ty.has_kind(K::Pan) || ty.has_kind(K::Tilt);
         if moving {
-            PlanShape::MovingHead
+            PlanShape::Round
         } else if reds >= 9 && (reds as f32).sqrt().fract() == 0.0 {
             PlanShape::Matrix
         } else if reds > 1 {
@@ -680,6 +681,7 @@ impl Show {
             plan_pos: None,
             plan_shape: None,
             plan_size: None,
+            plan_rotation: None,
             limits: FixtureLimits::default(),
         });
         Ok(id)
@@ -724,6 +726,14 @@ impl Show {
         f.plan_shape
             .or_else(|| self.type_of(f).map(PlanShape::guess))
             .unwrap_or(PlanShape::Round)
+    }
+
+    /// Drehung eines Geräts im Bühnenplan (Grad, 0..360).
+    pub fn plan_rotation(&self, id: FixtureId) -> f32 {
+        self.fixture(id)
+            .and_then(|f| f.plan_rotation)
+            .unwrap_or(0.0)
+            .rem_euclid(360.0)
     }
 
     /// Größenfaktor eines Geräts im Bühnenplan.
@@ -1075,7 +1085,7 @@ mod tests {
             .add_fixture("M", "generic/moving-head-spot-11ch", 0, 20)
             .unwrap();
         assert_eq!(s.plan_shape(par), PlanShape::Round);
-        assert_eq!(s.plan_shape(mh), PlanShape::MovingHead);
+        assert_eq!(s.plan_shape(mh), PlanShape::Round);
         s.fixture_mut(par).unwrap().plan_shape = Some(PlanShape::BarVertical);
         assert_eq!(s.plan_shape(par), PlanShape::BarVertical);
         assert_eq!(s.plan_size(par), 1.0);

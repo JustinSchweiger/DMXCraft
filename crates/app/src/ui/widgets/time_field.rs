@@ -90,10 +90,11 @@ pub fn time_field(
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
             p.rect_filled(cell, 3.0, theme::raised_hover());
         }
+        let delta = crate::ui::widgets::drag::endless_delta(ui, &resp);
         if resp.dragged() {
             let acc_id = id.with(("acc", i));
             let mut acc: f32 = ui.data(|d| d.get_temp(acc_id)).unwrap_or(0.0);
-            acc -= resp.drag_delta().y / PX_PER_STEP;
+            acc -= delta.y / PX_PER_STEP;
             let steps = acc.trunc();
             acc -= steps;
             ui.data_mut(|d| d.insert_temp(acc_id, acc));

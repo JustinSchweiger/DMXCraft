@@ -4,6 +4,7 @@
 pub mod color_picker;
 pub mod dialog;
 pub mod dip_switch;
+pub mod drag;
 pub mod fader;
 pub mod icons;
 pub mod knob;

@@ -133,7 +133,6 @@ pub struct StageCanvas<'a> {
     pub mode: CanvasMode,
     /// Raster zum Einrasten beim Verschieben (Felder pro Achse), `None` = frei.
     pub snap: Option<u32>,
-    pub show_labels: bool,
     /// Hintergrundraster zeichnen.
     pub show_grid: bool,
     /// Immer alles einpassen (ohne Zoom- und Ziehbedienung, z. B. STEUERN).
@@ -364,30 +363,32 @@ impl StageCanvas<'_> {
                 &painter,
                 self.show.plan_shape(*id),
                 b,
+                self.show.plan_rotation(*id),
                 &colors,
                 sel,
                 Some(*id) == hovered,
             );
-            if self.show_labels || Some(*id) == hovered {
-                if let Some(f) = self.show.fixture(*id) {
-                    let text = if Some(*id) == hovered {
-                        format!("{} · U{}/{}", f.name, f.universe + 1, f.address)
-                    } else {
-                        f.name.clone()
-                    };
-                    painter.text(
-                        b.center_bottom() + Vec2::new(0.0, 4.0),
-                        egui::Align2::CENTER_TOP,
-                        text,
-                        theme::caption(),
-                        if sel {
-                            theme::accent()
-                        } else {
-                            theme::text_dim()
-                        },
-                    );
-                }
-            }
+        }
+        // Infos zum Gerät nur beim Überfahren
+        if let Some(f) = hovered.and_then(|id| self.show.fixture(id)) {
+            let ty = self
+                .show
+                .type_of(f)
+                .map(|t| format!("{} {}", t.manufacturer, t.model).trim().to_string())
+                .unwrap_or_else(|| f.type_key.clone());
+            let ch = self.show.fixture_channels(f.id);
+            let addr = tr!(
+                "Universum {u} · Adresse {a}–{b}",
+                u = f.universe + 1,
+                a = f.address,
+                b = f.address + ch.max(1) - 1
+            );
+            let name = f.name.clone();
+            resp.clone().on_hover_ui_at_pointer(|ui| {
+                ui.label(egui::RichText::new(name).strong());
+                ui.label(egui::RichText::new(ty).color(theme::text_dim()));
+                ui.label(egui::RichText::new(addr).color(theme::text_dim()));
+            });
         }
         if let Some(l) = lasso {
             painter.rect_filled(l, 2.0, theme::accent().gamma_multiply(0.07));
@@ -540,11 +541,13 @@ pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32
 }
 
 /// Zeichnet ein Gerät in seiner Form – vollflächig in der aktuellen Farbe,
-/// mit dünner Kontur. Mehrere Pixel werden als Segmente gezeigt.
+/// mit dünner Kontur, um `rot` Grad gedreht. Pixel-Geräte (Leisten, Matrix)
+/// zeigen ihre Pixel als Segmente, alle anderen eine Farbe.
 fn paint_fixture(
     p: &egui::Painter,
     shape: PlanShape,
     r: Rect,
+    rot: f32,
     colors: &[(Color32, f32)],
     sel: bool,
     hovered: bool,
@@ -556,83 +559,53 @@ fn paint_fixture(
     } else {
         Stroke::new(1.0, theme::border())
     };
-    // aus = schwarz (wie Dimmer zu), damit Ein-/Ausblenden ohne Sprung wirkt
-    let fill = |c: Color32, _l: f32| c;
-    let glow = |center: Pos2, radius: f32, c: Color32, l: f32| {
+    let c = r.center();
+    let (sin, cos) = rot.to_radians().sin_cos();
+    // Punkt um die Mitte drehen
+    let turn = |q: Pos2| -> Pos2 {
+        let d = q - c;
+        c + Vec2::new(d.x * cos - d.y * sin, d.x * sin + d.y * cos)
+    };
+    let quad = |q: Rect| -> Vec<Pos2> {
+        [
+            q.left_top(),
+            q.right_top(),
+            q.right_bottom(),
+            q.left_bottom(),
+        ]
+        .into_iter()
+        .map(turn)
+        .collect()
+    };
+    let glow = |radius: f32, col: Color32, l: f32| {
         if l > 0.02 {
-            p.circle_filled(center, radius, c.gamma_multiply(0.12 * l));
+            p.circle_filled(c, radius, col.gamma_multiply(0.12 * l));
         }
     };
-    let (c0, l0) = colors.first().copied().unwrap_or((theme::bg(), 0.0));
+    // hellste Farbe für einfarbige Formen
+    let (c0, l0) = colors
+        .iter()
+        .copied()
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .unwrap_or((Color32::BLACK, 0.0));
     let n = colors.len().max(1);
     match shape {
-        PlanShape::MovingHead => {
-            // Kopf: dunkler Körper mit Bügel links/rechts, farbige Linse innen
-            let rad = r.width().min(r.height()) * 0.5;
-            let max_l = colors.iter().map(|c| c.1).fold(0.0, f32::max);
-            glow(r.center(), rad * 1.6, c0, max_l);
-            for dx in [-1.0, 1.0] {
-                let yoke = Rect::from_center_size(
-                    r.center() + Vec2::new(dx * rad * 0.98, rad * 0.15),
-                    Vec2::new(rad * 0.28, rad * 1.3),
-                );
-                p.rect_filled(yoke, 2.0, theme::fixture_off());
-                p.rect_stroke(yoke, 2.0, stroke, StrokeKind::Outside);
-            }
-            p.circle_filled(r.center(), rad * 0.85, theme::fixture_off());
-            p.circle_stroke(r.center(), rad * 0.85, stroke);
-            let lens = rad * 0.55;
-            if n == 1 {
-                p.circle_filled(r.center(), lens, fill(c0, l0));
-            } else {
-                for (i, (c, l)) in colors.iter().enumerate() {
-                    let a = std::f32::consts::TAU * i as f32 / n as f32;
-                    p.circle_filled(
-                        r.center() + Vec2::angled(a) * lens * 0.55,
-                        lens * 0.42,
-                        fill(*c, *l),
-                    );
-                }
-            }
-            p.circle_stroke(r.center(), lens, Stroke::new(1.0, theme::border()));
-        }
         PlanShape::Round => {
             let rad = r.width().min(r.height()) * 0.5;
-            let max_l = colors.iter().map(|c| c.1).fold(0.0, f32::max);
-            glow(r.center(), rad * 1.6, c0, max_l);
-            if n == 1 {
-                p.circle_filled(r.center(), rad, fill(c0, l0));
-            } else {
-                // Segmente wie ein LED-Ring
-                let steps = 48 / n.min(48) + 1;
-                for (i, (c, l)) in colors.iter().enumerate() {
-                    let a0 =
-                        std::f32::consts::TAU * i as f32 / n as f32 - std::f32::consts::FRAC_PI_2;
-                    let a1 = std::f32::consts::TAU * (i + 1) as f32 / n as f32
-                        - std::f32::consts::FRAC_PI_2;
-                    let mut pts = vec![r.center()];
-                    for k in 0..=steps {
-                        let a = a0 + (a1 - a0) * k as f32 / steps as f32;
-                        pts.push(r.center() + Vec2::angled(a) * rad);
-                    }
-                    p.add(egui::Shape::convex_polygon(
-                        pts,
-                        fill(*c, *l),
-                        Stroke::new(0.5, theme::bg()),
-                    ));
-                }
-            }
-            p.circle_stroke(r.center(), rad, stroke);
+            glow(rad * 1.6, c0, l0);
+            p.circle_filled(c, rad, c0);
+            p.circle_stroke(c, rad, stroke);
         }
         PlanShape::Square => {
-            glow(r.center(), r.width() * 0.8, c0, l0);
-            p.rect_filled(r, 2.0, fill(c0, l0));
-            p.rect_stroke(r, 2.0, stroke, StrokeKind::Outside);
+            glow(r.width() * 0.8, c0, l0);
+            p.add(egui::Shape::convex_polygon(quad(r), c0, stroke));
         }
         PlanShape::Matrix => {
             let side = (n as f32).sqrt().ceil().max(1.0) as usize;
             let (cw, ch) = (r.width() / side as f32, r.height() / side as f32);
-            for (i, (c, l)) in colors.iter().enumerate() {
+            glow(r.width() * 0.8, c0, l0);
+            for i in 0..side * side {
+                let (col, _) = colors.get(i).copied().unwrap_or((c0, l0));
                 let cell = Rect::from_min_size(
                     Pos2::new(
                         r.left() + cw * (i % side) as f32,
@@ -640,24 +613,18 @@ fn paint_fixture(
                     ),
                     Vec2::new(cw, ch),
                 );
-                p.rect_filled(cell.shrink(0.5), 0.0, fill(*c, *l));
+                p.add(egui::Shape::convex_polygon(
+                    quad(cell.shrink(0.5)),
+                    col,
+                    Stroke::NONE,
+                ));
             }
-            if n == 1 {
-                // ein Pixel: Raster andeuten, damit es sich vom Quadrat abhebt
-                p.rect_filled(r, 0.0, fill(c0, l0));
-                let grid = Stroke::new(1.0, theme::bg());
-                for k in 1..3 {
-                    let x = r.left() + r.width() * k as f32 / 3.0;
-                    let y = r.top() + r.height() * k as f32 / 3.0;
-                    p.line_segment([Pos2::new(x, r.top()), Pos2::new(x, r.bottom())], grid);
-                    p.line_segment([Pos2::new(r.left(), y), Pos2::new(r.right(), y)], grid);
-                }
-            }
-            p.rect_stroke(r, 2.0, stroke, StrokeKind::Outside);
+            p.add(egui::Shape::closed_line(quad(r), stroke));
         }
         PlanShape::BarHorizontal | PlanShape::BarVertical => {
             let horizontal = shape == PlanShape::BarHorizontal;
-            for (i, (c, l)) in colors.iter().enumerate() {
+            glow(r.width().max(r.height()) * 0.6, c0, l0);
+            for (i, (col, _)) in colors.iter().enumerate() {
                 let seg = if horizontal {
                     let w = r.width() / n as f32;
                     Rect::from_min_size(
@@ -671,19 +638,22 @@ fn paint_fixture(
                         Vec2::new(r.width(), h),
                     )
                 };
-                glow(seg.center(), seg.width().max(seg.height()) * 0.8, *c, *l);
-                p.rect_filled(if n > 1 { seg.shrink(0.5) } else { seg }, 0.0, fill(*c, *l));
+                let seg = if n > 1 { seg.shrink(0.5) } else { seg };
+                p.add(egui::Shape::convex_polygon(quad(seg), *col, Stroke::NONE));
             }
-            p.rect_stroke(r, 2.0, stroke, StrokeKind::Outside);
+            p.add(egui::Shape::closed_line(quad(r), stroke));
         }
         PlanShape::Effect => {
-            let pts = vec![
-                Pos2::new(r.center().x, r.top()),
+            let pts = [
+                Pos2::new(c.x, r.top()),
                 Pos2::new(r.right(), r.bottom()),
                 Pos2::new(r.left(), r.bottom()),
-            ];
-            glow(r.center(), r.width() * 0.8, c0, l0);
-            p.add(egui::Shape::convex_polygon(pts, fill(c0, l0), stroke));
+            ]
+            .into_iter()
+            .map(turn)
+            .collect();
+            glow(r.width() * 0.8, c0, l0);
+            p.add(egui::Shape::convex_polygon(pts, c0, stroke));
         }
     }
 }
@@ -709,19 +679,6 @@ pub fn paint_shape_icon(p: &egui::Painter, shape: Option<PlanShape>, r: Rect, co
         }
         Some(PlanShape::Square) => {
             p.rect_filled(Rect::from_center_size(c, Vec2::splat(s * 0.8)), 1.5, color);
-        }
-        Some(PlanShape::MovingHead) => {
-            let rad = s * 0.42;
-            for i in 0..6 {
-                let a0 = std::f32::consts::TAU * i as f32 / 6.0;
-                let a1 = std::f32::consts::TAU * (i as f32 + 0.8) / 6.0;
-                let mut pts = vec![c];
-                for k in 0..=4 {
-                    let a = a0 + (a1 - a0) * k as f32 / 4.0;
-                    pts.push(c + Vec2::angled(a) * rad);
-                }
-                p.add(egui::Shape::convex_polygon(pts, color, Stroke::NONE));
-            }
         }
         Some(PlanShape::Matrix) => {
             let cell = s * 0.8 / 3.0;
