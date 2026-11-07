@@ -1244,7 +1244,7 @@ impl Profile {
                 .and_then(Value::as_array)
                 .map(|a| {
                     a.iter()
-                        .map(|e| e.as_str().map(&rename).unwrap_or_default())
+                        .map(|e| e.as_str().map(rename).unwrap_or_default())
                         .collect()
                 })
                 .unwrap_or_default();
