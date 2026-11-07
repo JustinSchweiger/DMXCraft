@@ -384,10 +384,23 @@ impl StageCanvas<'_> {
                 b = f.address + ch.max(1) - 1
             );
             let name = f.name.clone();
+            // Einrichten: alles inkl. DIP-Schalter; Steuern: nur Name und Adresse
+            let full = self.mode == CanvasMode::Edit;
+            let address = f.address;
             resp.clone().on_hover_ui_at_pointer(|ui| {
                 ui.label(egui::RichText::new(name).strong());
-                ui.label(egui::RichText::new(ty).color(theme::text_dim()));
+                if full {
+                    ui.label(egui::RichText::new(ty).color(theme::text_dim()));
+                }
                 ui.label(egui::RichText::new(addr).color(theme::text_dim()));
+                if full {
+                    ui.add_space(theme::SP_XS);
+                    crate::ui::widgets::DipSwitch {
+                        address,
+                        compact: false,
+                    }
+                    .show(ui);
+                }
             });
         }
         if let Some(l) = lasso {
@@ -577,11 +590,6 @@ fn paint_fixture(
         .map(turn)
         .collect()
     };
-    let glow = |radius: f32, col: Color32, l: f32| {
-        if l > 0.02 {
-            p.circle_filled(c, radius, col.gamma_multiply(0.12 * l));
-        }
-    };
     // hellste Farbe für einfarbige Formen
     let (c0, l0) = colors
         .iter()
@@ -592,18 +600,15 @@ fn paint_fixture(
     match shape {
         PlanShape::Round => {
             let rad = r.width().min(r.height()) * 0.5;
-            glow(rad * 1.6, c0, l0);
             p.circle_filled(c, rad, c0);
             p.circle_stroke(c, rad, stroke);
         }
         PlanShape::Square => {
-            glow(r.width() * 0.8, c0, l0);
             p.add(egui::Shape::convex_polygon(quad(r), c0, stroke));
         }
         PlanShape::Matrix => {
             let side = (n as f32).sqrt().ceil().max(1.0) as usize;
             let (cw, ch) = (r.width() / side as f32, r.height() / side as f32);
-            glow(r.width() * 0.8, c0, l0);
             for i in 0..side * side {
                 let (col, _) = colors.get(i).copied().unwrap_or((c0, l0));
                 let cell = Rect::from_min_size(
@@ -623,7 +628,6 @@ fn paint_fixture(
         }
         PlanShape::BarHorizontal | PlanShape::BarVertical => {
             let horizontal = shape == PlanShape::BarHorizontal;
-            glow(r.width().max(r.height()) * 0.6, c0, l0);
             for (i, (col, _)) in colors.iter().enumerate() {
                 let seg = if horizontal {
                     let w = r.width() / n as f32;
@@ -652,7 +656,6 @@ fn paint_fixture(
             .into_iter()
             .map(turn)
             .collect();
-            glow(r.width() * 0.8, c0, l0);
             p.add(egui::Shape::convex_polygon(pts, c0, stroke));
         }
     }

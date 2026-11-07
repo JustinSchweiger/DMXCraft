@@ -83,14 +83,18 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let h = (ui.available_height() - 4.0).clamp(120.0, 420.0);
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
-                caption(ui, t("Dimmer Limit"));
-                RangeSlider {
-                    min: &mut lim.dimmer_min,
-                    max: &mut lim.dimmer_max,
-                    height: h - 24.0,
-                    enabled: has_dimmer,
-                }
-                .show(ui);
+                let cw = caption(ui, t("Dimmer Limit")).rect.width();
+                // Regler unter der (breiteren) Überschrift mittig ausrichten
+                ui.horizontal(|ui| {
+                    ui.add_space(((cw - crate::ui::widgets::fader::FADER_W) * 0.5).max(0.0));
+                    RangeSlider {
+                        min: &mut lim.dimmer_min,
+                        max: &mut lim.dimmer_max,
+                        height: h - 24.0,
+                        enabled: has_dimmer,
+                    }
+                    .show(ui);
+                });
             });
             ui.separator();
             ui.vertical(|ui| {
@@ -150,13 +154,13 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
     }
 }
 
-fn caption(ui: &mut egui::Ui, text: &str) {
+fn caption(ui: &mut egui::Ui, text: &str) -> egui::Response {
     ui.label(
         egui::RichText::new(text.to_uppercase())
             .font(theme::caption())
             .color(theme::text_dim())
             .strong(),
-    );
+    )
 }
 
 /// Eine Zeile „Pan  von … bis …“ in Prozent.

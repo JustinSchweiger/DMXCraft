@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/stage_canvas.rs": {
-    "mtime": 1794060615.881016,
-    "seen": 1794060718.5595903,
-    "ast_hash": "aaea2166a70135a833ff95fb2b5cfed8",
+    "mtime": 1794061816.9299798,
+    "seen": 1794061916.4633632,
+    "ast_hash": "205b96956121bdedc72794248eb5c35a",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/swatch.rs": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/fixture_settings.rs": {
-    "mtime": 1794061273.8422155,
-    "seen": 1794061441.3619487,
-    "ast_hash": "49eee370c8e2bbc065415de5e79ceb21",
+    "mtime": 1794061837.4212422,
+    "seen": 1794061916.4633827,
+    "ast_hash": "579a62e161c3daaaecc89c1b4aa85507",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/library_panel.rs": {
