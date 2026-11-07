@@ -7,6 +7,7 @@ use eframe::egui::{self, Color32, Sense, Stroke, Vec2};
 
 use crate::state::{AppState, ProgrammerMode};
 use crate::ui::theme;
+use crate::ui::widgets::fader::FADER_W;
 use crate::ui::widgets::{section_header, Fader, FaderEvent, Icon, IconButton, Swatch, XyPad};
 use crate::views::quick::{quick_action, Quick};
 use crate::views::{View, ViewCtx};
@@ -65,11 +66,21 @@ fn kind_color(k: ChannelKind) -> Color32 {
     }
 }
 
-/// Ein Fader steuert gleichnamige Kanäle aller ausgewählten Geräte gemeinsam.
+/// Ein Fader steuert denselben Kanal aller ausgewählten Geräte eines Typs.
 pub struct FaderGroup {
     pub name: String,
     pub kind: ChannelKind,
+    /// Kanalnummer im Gerät (1-basiert).
+    pub number: u16,
+    /// Gerätetyp ([`dmxcraft_core::FixtureType::key`]).
+    pub type_key: String,
     pub channels: Vec<ChannelRef>,
+}
+
+/// Fader eines Gerätetyps samt Namen der ausgewählten Geräte dieses Typs.
+struct FixtureBlock<'a> {
+    names: Vec<String>,
+    faders: Vec<&'a FaderGroup>,
 }
 
 pub fn fader_groups(e: &Engine, st: &AppState) -> Vec<FaderGroup> {
@@ -88,12 +99,14 @@ pub fn fader_groups(e: &Engine, st: &AppState) -> Vec<FaderGroup> {
             };
             match groups
                 .iter_mut()
-                .find(|g| g.kind == def.kind && g.name == def.name)
+                .find(|g| g.type_key == f.type_key && g.number == i as u16 + 1)
             {
                 Some(g) => g.channels.push(ch),
                 None => groups.push(FaderGroup {
                     name: def.name.clone(),
                     kind: def.kind,
+                    number: i as u16 + 1,
+                    type_key: f.type_key.clone(),
                     channels: vec![ch],
                 }),
             }
@@ -123,13 +136,16 @@ impl View for ProgrammerView {
             );
         });
         toolbar(ui, cx.engine, cx.state);
+        let dot = mode_color(cx.state.programmer_mode);
         ui.add_space(theme::SP_S);
 
         egui::Panel::left("programmer_categories")
             .resizable(false)
             .exact_size(132.0)
             .frame(egui::Frame::new())
-            .show(ui, |ui| category_list(ui, &groups, &mut self.category));
+            .show(ui, |ui| {
+                category_list(ui, cx.engine, &groups, &mut self.category, dot)
+            });
 
         egui::CentralPanel::default_margins()
             .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(8, 0)))
@@ -141,6 +157,7 @@ impl View for ProgrammerView {
                     .iter()
                     .filter(|g| self.category.contains(g.kind))
                     .collect();
+                let blocks = fixture_blocks(cx.engine, cx.state, &visible);
                 if self.category == Category::Color {
                     color_bar(ui, cx.engine, &groups, cx.frame);
                 }
@@ -163,8 +180,9 @@ impl View for ProgrammerView {
                                 xy_pad(ui, cx.engine, &groups, cx.frame, height);
                                 ui.add_space(theme::SP_S);
                             }
-                            for grp in visible {
-                                fader(ui, cx.engine, grp, cx.frame, height);
+                            ui.spacing_mut().item_spacing.x = 2.0;
+                            for block in &blocks {
+                                fixture_block(ui, cx.engine, block, cx.frame, height, dot);
                             }
                         });
                     });
@@ -186,11 +204,111 @@ fn current(e: &Engine, ch: ChannelRef, frame: &DmxFrame) -> u8 {
         .unwrap_or(0)
 }
 
-fn fader(ui: &mut egui::Ui, e: &mut Engine, grp: &FaderGroup, frame: &DmxFrame, height: f32) {
+/// Farbe des Statuspunkts je Betriebsmodus.
+fn mode_color(m: ProgrammerMode) -> Color32 {
+    match m {
+        ProgrammerMode::Edit => theme::OK,
+        ProgrammerMode::Blind => theme::DANGER,
+        ProgrammerMode::Live => theme::WARN,
+    }
+}
+
+/// Fader nach Gerätetyp bündeln (Reihenfolge wie in der Auswahl).
+fn fixture_blocks<'a>(
+    e: &Engine,
+    st: &AppState,
+    faders: &[&'a FaderGroup],
+) -> Vec<FixtureBlock<'a>> {
+    let mut blocks: Vec<(String, FixtureBlock<'a>)> = Vec::new();
+    for f in st.selected.iter().filter_map(|id| e.show().fixture(*id)) {
+        match blocks.iter_mut().find(|(k, _)| *k == f.type_key) {
+            Some((_, b)) => b.names.push(f.name.clone()),
+            None => blocks.push((
+                f.type_key.clone(),
+                FixtureBlock {
+                    names: vec![f.name.clone()],
+                    faders: faders
+                        .iter()
+                        .copied()
+                        .filter(|g| g.type_key == f.type_key)
+                        .collect(),
+                },
+            )),
+        }
+    }
+    blocks
+        .into_iter()
+        .map(|(_, b)| b)
+        .filter(|b| !b.faders.is_empty())
+        .collect()
+}
+
+/// Ein Block: Kopfzeile mit den Gerätenamen, darunter die Fader.
+fn fixture_block(
+    ui: &mut egui::Ui,
+    e: &mut Engine,
+    block: &FixtureBlock<'_>,
+    frame: &DmxFrame,
+    height: f32,
+    dot: Color32,
+) {
+    const HEAD_H: f32 = 22.0;
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::ZERO;
+        let w = block.faders.len() as f32 * FADER_W;
+        let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, HEAD_H), Sense::hover());
+        let p = ui.painter();
+        p.rect_filled(
+            rect,
+            egui::CornerRadius {
+                nw: theme::R_S,
+                ne: theme::R_S,
+                sw: 0,
+                se: 0,
+            },
+            theme::bg(),
+        );
+        let title = block.names.join(", ");
+        let galley = p.layout_no_wrap(title.clone(), theme::heading_font(), theme::text_dim());
+        let text = if galley.size().x > w - 12.0 && block.names.len() > 1 {
+            tr!(
+                "{name} + {n} weitere",
+                name = block.names[0],
+                n = block.names.len() - 1
+            )
+        } else {
+            title.clone()
+        };
+        p.with_clip_rect(rect.shrink2(Vec2::new(4.0, 0.0))).text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            text.to_uppercase(),
+            theme::heading_font(),
+            theme::text_dim(),
+        );
+        resp.on_hover_text(title);
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::ZERO;
+            for grp in &block.faders {
+                fader(ui, e, grp, frame, height - HEAD_H, dot);
+            }
+        });
+    });
+}
+
+fn fader(
+    ui: &mut egui::Ui,
+    e: &mut Engine,
+    grp: &FaderGroup,
+    frame: &DmxFrame,
+    height: f32,
+    dot: Color32,
+) {
     let first = grp.channels[0];
     let active = e.programmer().contains_key(&first);
-    let ev = Fader::new(current(e, first, frame), &grp.name)
+    let ev = Fader::new(current(e, first, frame), grp.number, grp.kind)
         .active(active)
+        .dot(dot)
         .color(kind_color(grp.kind))
         .height(height)
         .hint(tr!("{v} · {label} – {n} Kanal/Kanäle\nZiehen, Mausrad, Doppelklick = 0/voll, Rechtsklick = Menü", v = grp.name, label = t(grp.kind.label()), n = grp.channels.len()))
@@ -496,7 +614,13 @@ fn items_mode(i: usize) -> ProgrammerMode {
 
 /// Seitenleiste der Kategorien: Liste mit Markierungsbalken links; die Zahl
 /// rechts nennt die Fader der Auswahl in dieser Kategorie.
-fn category_list(ui: &mut egui::Ui, groups: &[FaderGroup], current: &mut Category) {
+fn category_list(
+    ui: &mut egui::Ui,
+    e: &Engine,
+    groups: &[FaderGroup],
+    current: &mut Category,
+    dot: Color32,
+) {
     let full = ui.available_rect_before_wrap();
     let p = ui.painter().clone();
     p.rect_filled(full, theme::R_M, theme::bg());
@@ -554,6 +678,14 @@ fn category_list(ui: &mut egui::Ui, groups: &[FaderGroup], current: &mut Categor
             theme::body(),
             fg,
         );
+        // Punkt: in dieser Kategorie gibt der Programmer Werte aus
+        let set = groups
+            .iter()
+            .filter(|g| c.contains(g.kind))
+            .any(|g| g.channels.iter().any(|ch| e.programmer().contains_key(ch)));
+        if set {
+            p.circle_filled(egui::pos2(row.right() - 26.0, row.center().y), 3.5, dot);
+        }
         if n > 0 {
             p.text(
                 egui::pos2(row.right() - theme::SP_S, row.center().y),

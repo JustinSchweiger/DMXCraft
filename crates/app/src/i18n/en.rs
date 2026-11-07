@@ -415,6 +415,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Bankfarbe übernehmen", "Use bank color"),
     ("{n} Szenen", "{n} scenes"),
     ("Alle einblenden", "Show all"),
+    ("{name} + {n} weitere", "{name} + {n} more"),
+    ("Klicken, um einen Wert einzutippen", "Click to type a value"),
     ("Löscht die Bank mit allen Szenen", "Deletes the bank with all its scenes"),
     ("Ausgeblendete Bänke", "Hidden banks"),
     ("Einblenden", "Show"),

@@ -1,15 +1,28 @@
-//! Vertikaler Fader, der die ihm gegebene Höhe vollständig nutzt.
+//! Kanal-Fader des Programmers.
 //!
-//! Bedienung: Ziehen/Klicken = setzen, Mausrad = ±1 (Shift ±10),
+//! Aufbau von oben nach unten: Statuspunkt (leuchtet in der Farbe des
+//! Betriebsmodus, wenn der Kanal einen Programmer-Wert ausgibt), Kanalnummer,
+//! Symbol der Kanalart, Wert (Klick = eintippen, „OFF“ = nicht gesetzt) und
+//! die Schiene mit Griff.
+//!
+//! Bedienung: Ziehen/Klicken = setzen, Mausrad = ±2 (Umschalt ±10),
 //! Doppelklick = 0 ↔ voll, Rechtsklick = Menü (Freigeben, 0, Voll).
 
 use crate::i18n::t;
-use eframe::egui::{self, pos2, Color32, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
+use dmxcraft_core::ChannelKind;
+use eframe::egui::{self, pos2, Color32, Rect, Sense, Shape, Stroke, StrokeKind, Ui, Vec2};
 
 use crate::ui::theme;
 
-const LABEL_H: f32 = 18.0;
-const VALUE_H: f32 = 20.0;
+/// Breite einer Fader-Spalte.
+pub const FADER_W: f32 = 44.0;
+const DOT_H: f32 = 20.0;
+const NUM_H: f32 = 18.0;
+const SYMBOL_H: f32 = 30.0;
+const VALUE_H: f32 = 24.0;
+const HANDLE: Vec2 = Vec2::new(24.0, 34.0);
+/// Schritt je Mausrad-Raste.
+const WHEEL_STEP: u8 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FaderEvent {
@@ -18,36 +31,45 @@ pub enum FaderEvent {
     Release,
 }
 
-pub struct Fader<'a> {
+pub struct Fader {
     value: u8,
-    label: &'a str,
+    number: u16,
+    kind: ChannelKind,
     hint: Option<String>,
     active: bool,
+    /// Farbe des Statuspunkts (Betriebsmodus).
+    dot: Color32,
     color: Color32,
-    width: f32,
     height: Option<f32>,
 }
 
-impl<'a> Fader<'a> {
-    pub fn new(value: u8, label: &'a str) -> Self {
+impl Fader {
+    pub fn new(value: u8, number: u16, kind: ChannelKind) -> Self {
         Self {
             value,
-            label,
+            number,
+            kind,
             hint: None,
             active: false,
+            dot: theme::OK,
             color: theme::accent(),
-            width: 56.0,
             height: None,
         }
     }
 
-    /// Wert liegt im Programmer (hervorgehoben).
+    /// Wert liegt im Programmer (Punkt leuchtet, Griff hell).
     pub fn active(mut self, on: bool) -> Self {
         self.active = on;
         self
     }
 
-    /// Pegelfarbe (z. B. Rot für einen Rot-Kanal).
+    /// Farbe des Statuspunkts.
+    pub fn dot(mut self, c: Color32) -> Self {
+        self.dot = c;
+        self
+    }
+
+    /// Farbe des Symbols (Farbkanäle).
     pub fn color(mut self, c: Color32) -> Self {
         self.color = c;
         self
@@ -65,47 +87,167 @@ impl<'a> Fader<'a> {
     }
 
     pub fn show(self, ui: &mut Ui) -> FaderEvent {
+        let head = DOT_H + NUM_H + SYMBOL_H + VALUE_H;
         let h = self
             .height
             .unwrap_or_else(|| ui.available_height())
-            .max(LABEL_H + VALUE_H + 60.0);
-        let (outer, _) = ui.allocate_exact_size(Vec2::new(self.width, h), Sense::hover());
-        let track = Rect::from_min_max(
-            pos2(outer.left() + 6.0, outer.top() + LABEL_H),
-            pos2(outer.right() - 6.0, outer.bottom() - VALUE_H),
-        );
-        let id = ui
-            .scope_id()
-            .with(("fader", self.label, outer.min.x as i32));
-        let resp = ui.interact(track, id, Sense::click_and_drag());
+            .max(head + HANDLE.y + 40.0);
+        let (outer, _) = ui.allocate_exact_size(Vec2::new(FADER_W, h), Sense::hover());
+        let id = ui.make_persistent_id(("fader", outer.min.x as i32, self.number));
         let mut event = FaderEvent::None;
         let mut value = self.value;
 
-        // Eingaben
+        let p = ui.painter().clone();
+        // Spalte
+        p.rect_filled(outer, 0.0, theme::raised());
+        p.line_segment(
+            [outer.right_top(), outer.right_bottom()],
+            Stroke::new(1.0, theme::bg()),
+        );
+
+        // Statuspunkt
+        let dot_c = pos2(outer.center().x, outer.top() + DOT_H * 0.55);
+        if self.active {
+            p.circle_filled(dot_c, 5.0, self.dot);
+            p.circle_filled(dot_c, 8.0, self.dot.gamma_multiply(0.18));
+        } else {
+            p.circle_filled(dot_c, 5.0, theme::bg());
+            p.circle_stroke(dot_c, 5.0, Stroke::new(1.0, theme::border()));
+        }
+        // Kanalnummer
+        let mut y = outer.top() + DOT_H;
+        p.text(
+            pos2(outer.center().x, y + NUM_H * 0.5),
+            egui::Align2::CENTER_CENTER,
+            self.number.to_string(),
+            theme::heading_font(),
+            theme::text(),
+        );
+        y += NUM_H;
+        // Symbol
+        let sym = Rect::from_center_size(
+            pos2(outer.center().x, y + SYMBOL_H * 0.5),
+            Vec2::splat(24.0),
+        );
+        paint_symbol(&p, sym, self.kind, self.color);
+        y += SYMBOL_H;
+
+        // Wert – Klick zum Eintippen
+        let value_rect = Rect::from_min_size(
+            pos2(outer.left() + 3.0, y + 2.0),
+            Vec2::new(FADER_W - 6.0, VALUE_H - 4.0),
+        );
+        let edit_id = id.with("edit");
+        let editing: Option<String> = ui.data(|d| d.get_temp(edit_id));
+        if let Some(mut text) = editing {
+            let r = ui.put(
+                value_rect,
+                egui::TextEdit::singleline(&mut text)
+                    .font(theme::caption())
+                    .align(egui::Align2::CENTER_CENTER)
+                    .margin(egui::Margin::symmetric(2, 1)),
+            );
+            if !r.has_focus() && !r.lost_focus() {
+                r.request_focus();
+                crate::ui::widgets::dialog::select_all(ui.ctx(), r.id, &text);
+            }
+            let (enter, esc) = ui.input(|i| {
+                (
+                    i.key_pressed(egui::Key::Enter),
+                    i.key_pressed(egui::Key::Escape),
+                )
+            });
+            if esc {
+                ui.data_mut(|d| d.remove::<String>(edit_id));
+            } else if enter || r.lost_focus() {
+                ui.data_mut(|d| d.remove::<String>(edit_id));
+                if let Ok(v) = text.trim().parse::<u16>() {
+                    value = v.min(255) as u8;
+                    event = FaderEvent::Changed(value);
+                }
+            } else {
+                ui.data_mut(|d| d.insert_temp(edit_id, text));
+            }
+        } else {
+            let r = ui
+                .interact(value_rect, id.with("value"), Sense::click())
+                .on_hover_text(t("Klicken, um einen Wert einzutippen"));
+            if r.hovered() {
+                p.rect_filled(value_rect, theme::R_S, theme::raised_hover());
+            }
+            let (txt, color) = if self.active {
+                (value.to_string(), theme::text())
+            } else {
+                ("OFF".to_string(), theme::text_faint())
+            };
+            p.text(
+                value_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                txt,
+                theme::caption(),
+                color,
+            );
+            if r.clicked() {
+                ui.data_mut(|d| d.insert_temp(edit_id, value.to_string()));
+            }
+        }
+        y += VALUE_H;
+
+        // Schiene
+        let track_area = Rect::from_min_max(pos2(outer.left(), y), outer.max - Vec2::new(0.0, 6.0));
+        let travel = Rect::from_min_max(
+            pos2(track_area.left(), track_area.top() + HANDLE.y * 0.5),
+            pos2(track_area.right(), track_area.bottom() - HANDLE.y * 0.5),
+        );
+        let resp = ui.interact(track_area, id, Sense::click_and_drag());
         if resp.double_clicked() {
             value = if value > 0 { 0 } else { 255 };
             event = FaderEvent::Changed(value);
         } else if resp.dragged() || resp.clicked() {
-            if let Some(p) = resp.interact_pointer_pos() {
-                let t = 1.0 - ((p.y - track.top()) / track.height()).clamp(0.0, 1.0);
-                let v = (t * 255.0).round() as u8;
+            if let Some(pos) = resp.interact_pointer_pos() {
+                let tv = 1.0 - ((pos.y - travel.top()) / travel.height()).clamp(0.0, 1.0);
+                let v = (tv * 255.0).round() as u8;
                 if v != value || !self.active {
                     value = v;
                     event = FaderEvent::Changed(v);
                 }
             }
         }
-        if resp.hovered() {
-            let (scroll, shift) = ui.input(|i| (i.smooth_scroll_delta.y, i.modifiers.shift));
-            if scroll.abs() >= 1.0 {
-                let step = if shift { 10 } else { 1 };
-                value = if scroll > 0.0 {
-                    value.saturating_add(step)
-                } else {
-                    value.saturating_sub(step)
-                };
+        if ui.rect_contains_pointer(outer) {
+            // je Raste ein Schritt; Touchpad-Pixel werden gesammelt
+            let acc_id = id.with("wheel");
+            let mut acc: f32 = ui.data(|d| d.get_temp(acc_id)).unwrap_or(0.0);
+            let shift = ui.input(|i| i.modifiers.shift);
+            let mut notches = 0i32;
+            // Ereignisse nur einmal je Frame auswerten (egui kann einen Frame
+            // in mehreren Durchläufen zeichnen)
+            let frame_id = id.with("wheel_frame");
+            let nr = ui.ctx().cumulative_frame_nr();
+            let fresh = ui.data(|d| d.get_temp::<u64>(frame_id)) != Some(nr);
+            ui.data_mut(|d| d.insert_temp(frame_id, nr));
+            ui.input(|i| {
+                for ev in i.events.iter().filter(|_| fresh) {
+                    if let egui::Event::MouseWheel { unit, delta, .. } = ev {
+                        let d = if delta.y != 0.0 { delta.y } else { delta.x };
+                        match unit {
+                            egui::MouseWheelUnit::Point => acc += d / 40.0,
+                            _ => acc += d.signum(),
+                        }
+                    }
+                }
+            });
+            while acc.abs() >= 1.0 {
+                notches += acc.signum() as i32;
+                acc -= acc.signum();
+            }
+            ui.data_mut(|d| d.insert_temp(acc_id, acc));
+            if notches != 0 {
+                let step = i32::from(if shift { 10 } else { WHEEL_STEP });
+                value = (i32::from(value) + notches * step).clamp(0, 255) as u8;
                 event = FaderEvent::Changed(value);
             }
+            // nicht zusätzlich die Fader-Leiste scrollen
+            ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
         }
         crate::ui::widgets::menu::context(&resp, |ui| {
             use crate::ui::widgets::menu::{self, MenuItem};
@@ -125,59 +267,51 @@ impl<'a> Fader<'a> {
             }
         });
 
-        // Zeichnen
-        let p = ui.painter();
-        let r = theme::R_M as f32;
-        p.rect_filled(track, r, theme::bg());
-        let level_color = if self.active {
-            self.color
-        } else {
-            self.color.gamma_multiply(0.35)
-        };
-        let t = f32::from(value) / 255.0;
-        if t > 0.0 {
-            let fill = Rect::from_min_max(
-                pos2(track.left(), track.bottom() - track.height() * t),
-                track.max,
-            );
-            p.rect_filled(fill, r, level_color.gamma_multiply(0.55));
-            // Kante am Pegel
-            let y = fill.top();
-            p.line_segment(
-                [pos2(track.left() + 3.0, y), pos2(track.right() - 3.0, y)],
-                Stroke::new(2.0, level_color),
-            );
-        }
-        let border = if resp.hovered() || resp.dragged() {
-            theme::accent_dim()
-        } else {
-            theme::border()
-        };
-        p.rect_stroke(track, r, Stroke::new(1.0, border), StrokeKind::Inside);
-
-        let label_color = if self.active {
-            theme::accent()
-        } else {
-            theme::text_dim()
-        };
-        p.text(
-            pos2(outer.center().x, outer.top() + LABEL_H / 2.0),
-            egui::Align2::CENTER_CENTER,
-            truncate(self.label, 9),
-            theme::caption(),
-            label_color,
+        // Schlitz
+        let slot = Rect::from_center_size(
+            pos2(travel.center().x, track_area.center().y),
+            Vec2::new(6.0, track_area.height() - 6.0),
         );
-        let pct = (t * 100.0).round() as u32;
-        p.text(
-            pos2(outer.center().x, outer.bottom() - VALUE_H / 2.0),
-            egui::Align2::CENTER_CENTER,
-            format!("{value} · {pct}%"),
-            theme::caption(),
-            if self.active {
-                theme::text()
-            } else {
-                theme::text_faint()
-            },
+        p.rect_filled(slot, 3.0, theme::bg());
+        // Griff
+        let tv = f32::from(value) / 255.0;
+        let hy = travel.bottom() - travel.height() * tv;
+        let handle = Rect::from_center_size(pos2(travel.center().x, hy), HANDLE);
+        let hot = resp.hovered() || resp.dragged();
+        let (fill, edge, line) = if self.active {
+            (
+                theme::raised_hover(),
+                if hot {
+                    theme::text()
+                } else {
+                    theme::text_dim()
+                },
+                theme::text(),
+            )
+        } else {
+            (
+                theme::raised(),
+                if hot {
+                    theme::text_dim()
+                } else {
+                    theme::border()
+                },
+                theme::text_faint(),
+            )
+        };
+        p.rect_filled(handle, theme::R_S, fill);
+        p.rect_stroke(
+            handle,
+            theme::R_S,
+            Stroke::new(1.5, edge),
+            StrokeKind::Inside,
+        );
+        p.line_segment(
+            [
+                pos2(handle.left() + 7.0, handle.center().y),
+                pos2(handle.right() - 7.0, handle.center().y),
+            ],
+            Stroke::new(2.5, line),
         );
         if let Some(h) = self.hint {
             resp.on_hover_text(h);
@@ -186,10 +320,125 @@ impl<'a> Fader<'a> {
     }
 }
 
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        format!("{}.", s.chars().take(max - 1).collect::<String>())
+/// Symbol der Kanalart (eigene, schlichte Zeichnungen).
+fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Color32) {
+    use ChannelKind as K;
+    let c = rect.center();
+    let r = rect.width() * 0.5;
+    let fg = theme::text();
+    match kind {
+        K::Red | K::Green | K::Blue | K::White | K::Amber | K::Uv => {
+            p.circle_filled(c, r * 0.8, color);
+            p.circle_stroke(c, r * 0.8, Stroke::new(1.0, Color32::from_black_alpha(90)));
+        }
+        K::ColorWheel => {
+            let cols = [
+                Color32::from_rgb(0xff, 0x40, 0x40),
+                Color32::from_rgb(0xff, 0xd0, 0x30),
+                Color32::from_rgb(0x40, 0xd0, 0x60),
+                Color32::from_rgb(0x40, 0x80, 0xff),
+            ];
+            for (i, col) in cols.iter().enumerate() {
+                let a0 = std::f32::consts::FRAC_PI_2 * i as f32;
+                let mut pts = vec![c];
+                for k in 0..=8 {
+                    let a = a0 + std::f32::consts::FRAC_PI_2 * k as f32 / 8.0;
+                    pts.push(c + Vec2::angled(a) * r * 0.8);
+                }
+                p.add(Shape::convex_polygon(pts, *col, Stroke::NONE));
+            }
+        }
+        _ => {
+            // Kachel mit Zeichen
+            p.rect_filled(rect, theme::R_S, theme::bg());
+            p.rect_stroke(
+                rect,
+                theme::R_S,
+                Stroke::new(1.0, theme::border()),
+                StrokeKind::Inside,
+            );
+            let s = Stroke::new(1.6, fg);
+            match kind {
+                K::Dimmer => super::Icon::LightOn.paint(p, rect.shrink(4.0), color),
+                K::Pan | K::PanFine => {
+                    let w = r * 0.6;
+                    p.line_segment([c - Vec2::new(w, 0.0), c + Vec2::new(w, 0.0)], s);
+                    for d in [-1.0, 1.0] {
+                        let tip = c + Vec2::new(d * w, 0.0);
+                        p.line_segment([tip, tip + Vec2::new(-d * 4.0, -4.0)], s);
+                        p.line_segment([tip, tip + Vec2::new(-d * 4.0, 4.0)], s);
+                    }
+                    if kind == K::PanFine {
+                        fine_mark(p, rect);
+                    }
+                }
+                K::Tilt | K::TiltFine => {
+                    let w = r * 0.6;
+                    p.line_segment([c - Vec2::new(0.0, w), c + Vec2::new(0.0, w)], s);
+                    for d in [-1.0, 1.0] {
+                        let tip = c + Vec2::new(0.0, d * w);
+                        p.line_segment([tip, tip + Vec2::new(-4.0, -d * 4.0)], s);
+                        p.line_segment([tip, tip + Vec2::new(4.0, -d * 4.0)], s);
+                    }
+                    if kind == K::TiltFine {
+                        fine_mark(p, rect);
+                    }
+                }
+                K::Strobe => {
+                    let pts = [
+                        c + Vec2::new(2.0, -r * 0.7),
+                        c + Vec2::new(-r * 0.45, 1.0),
+                        c + Vec2::new(-0.5, 1.0),
+                        c + Vec2::new(-2.0, r * 0.7),
+                        c + Vec2::new(r * 0.45, -1.0),
+                        c + Vec2::new(0.5, -1.0),
+                    ];
+                    p.add(Shape::closed_line(
+                        pts.to_vec(),
+                        Stroke::new(1.3, theme::WARN),
+                    ));
+                }
+                K::Gobo => {
+                    p.circle_stroke(c, r * 0.65, s);
+                    for k in 0..3 {
+                        let a = std::f32::consts::TAU * k as f32 / 3.0 - 1.57;
+                        p.circle_filled(c + Vec2::angled(a) * r * 0.32, 2.0, fg);
+                    }
+                }
+                K::Speed => {
+                    let n = 12;
+                    let pts: Vec<_> = (0..=n)
+                        .map(|i| {
+                            let a = std::f32::consts::PI * (1.0 + i as f32 / n as f32);
+                            c + Vec2::new(0.0, 3.0) + Vec2::angled(a) * r * 0.6
+                        })
+                        .collect();
+                    p.add(Shape::line(pts, s));
+                    p.line_segment(
+                        [c + Vec2::new(0.0, 3.0), c + Vec2::new(r * 0.35, -r * 0.25)],
+                        s,
+                    );
+                }
+                _ => {
+                    p.text(
+                        c,
+                        egui::Align2::CENTER_CENTER,
+                        "?",
+                        theme::heading_font(),
+                        fg,
+                    );
+                }
+            }
+        }
     }
+}
+
+fn fine_mark(p: &egui::Painter, rect: Rect) {
+    p.text(
+        rect.right_bottom() - Vec2::new(3.0, 1.0),
+        egui::Align2::RIGHT_BOTTOM,
+        "F",
+        egui::FontId::proportional(8.0),
+        theme::text_dim(),
+    );
 }
