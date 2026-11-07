@@ -1,22 +1,22 @@
 # Graph Report - dmxcraft-src  (2026-11-07)
 
 ## Corpus Check
-- 74 files · ~47,917 words
+- 74 files · ~47,985 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 9 file(s) not represented in the graph (top: (none) 3, .ico 2, .ttf 1)
 
 ## Summary
-- 1322 nodes · 2988 edges · 109 communities (59 shown, 50 thin omitted)
+- 1322 nodes · 2983 edges · 105 communities (54 shown, 51 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 123 edges (avg confidence: 0.84)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `092de93d`
+- Built from commit: `7f49eeda`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- file_dialog.rs
+- egui
 - Engine
 - runtime.rs
 - open_dmx.rs
@@ -28,12 +28,11 @@
 - OutputError
 - AppState
 - dialog.rs
-- app.rs
-- plan.rs
+- Category
+- library_panel.rs
 - jobs
 - steps
 - DmxCraft
-- ViewCtx
 - announce
 - build-local-artifacts
 - Icon
@@ -52,14 +51,12 @@
 - stage_editor.rs
 - MenuItem<'a>
 - DmxCraft – UI-Richtlinien
-- send_frame
-- egui
+- FixtureAction
 - settings_window.rs
-- OutputStatus
-- ofl/src/lib.rs
+- FixtureType
 - Camera
 - DmxCraft – Hinweise für KI-Assistenten
-- scene_card.rs
+- widgets/mod.rs
 - general
 - menu.rs
 - Settings
@@ -70,7 +67,6 @@
 - convert.rs
 - OutputKind
 - sense
-- Segmented
 - LibraryPanel
 - Dialog<'a>
 - DmxFrame
@@ -78,12 +74,9 @@
 - Toggle<'a>
 - Arrange
 - super
-- Value
 - Tab
 - arc
-- Matrix
 - en.rs
-- ofl-bundle.rs
 - Grip
 - i18n/mod.rs
 
@@ -91,7 +84,7 @@
 1. `Engine` - 80 edges
 2. `Show` - 66 edges
 3. `Icon` - 64 edges
-4. `t()` - 60 edges
+4. `t()` - 61 edges
 5. `DmxFrame` - 38 edges
 6. `ChannelKind` - 35 edges
 7. `DmxCraftApp` - 34 edges
@@ -108,8 +101,8 @@
   crates/app/src/ui/widgets/stage_canvas.rs → crates/app/src/i18n/mod.rs
 - `menu()` --calls--> `paint_shape_icon()`  [INFERRED]
   crates/app/src/views/fixture_menu.rs → crates/app/src/ui/widgets/stage_canvas.rs
-- `selection_tools()` --calls--> `t()`  [INFERRED]
-  crates/app/src/views/control/stage.rs → crates/app/src/i18n/mod.rs
+- `menu()` --calls--> `t()`  [INFERRED]
+  crates/app/src/views/fixture_menu.rs → crates/app/src/i18n/mod.rs
 
 ## Import Cycles
 - 1-file cycle: `crates/app/src/views/fixture_menu.rs -> crates/app/src/views/fixture_menu.rs`
@@ -120,31 +113,31 @@
 - 2-file cycle: `crates/output/src/lib.rs -> crates/output/src/open_dmx.rs -> crates/output/src/lib.rs`
 - 3-file cycle: `crates/output/src/backends.rs -> crates/output/src/lib.rs -> crates/output/src/runtime.rs -> crates/output/src/backends.rs`
 
-## Communities (109 total, 50 thin omitted)
+## Communities (105 total, 51 thin omitted)
 
-### Community 0 - "file_dialog.rs"
-Cohesion: 0.22
-Nodes (7): Pending, Purpose, OpenShow, SaveShowAs, save_as_gets_show_extension(), SHOW_EXT, with_show_extension()
+### Community 0 - "egui"
+Cohesion: 0.20
+Nodes (5): Fullscreen, SETTLE, Step, Enter, Maximize
 
 ### Community 1 - "Engine"
-Cohesion: 0.09
-Nodes (23): cv(), defaults_are_rendered(), Engine, fades_between_steps_and_loops(), first_step_fades_intensity_in(), htp_highest_wins_ltp_latest_wins(), lerp(), limits_cap_dimmer_and_position() (+15 more)
+Cohesion: 0.06
+Nodes (44): color_bar(), current(), fader(), fader_groups(), FaderGroup, kind_color(), programmer_values(), save_bar() (+36 more)
 
 ### Community 2 - "runtime.rs"
-Cohesion: 0.14
-Nodes (6): engine_keeps_running_without_device(), Failing, RECONNECT_DELAY, record_load(), Runtime, runtime_sends_rendered_frames()
+Cohesion: 0.12
+Nodes (10): engine_keeps_running_without_device(), OutputStatus, Connecting, Error, Running, Stopped, RECONNECT_DELAY, record_load() (+2 more)
 
 ### Community 3 - "open_dmx.rs"
-Cohesion: 0.16
-Nodes (11): BREAK, DMX_BAUD, FRAME_TIME, FTDI_VENDOR_ID, list_ports(), MAB, resolve(), RETRY (+3 more)
+Cohesion: 0.09
+Nodes (18): Box<dyn serialport::SerialPort>, BREAK, DMX_BAUD, DmxLine, frame_is_break_mark_startcode_and_512_channels(), frame_over_pseudo_terminal(), FRAME_TIME, FTDI_VENDOR_ID (+10 more)
 
 ### Community 4 - "theme.rs"
 Cohesion: 0.06
-Nodes (61): sidebar(), load_meter(), show(), accent(), accent_dim(), accent_hover(), active(), ACTIVE (+53 more)
+Nodes (58): sidebar(), load_meter(), show(), accent(), accent_dim(), accent_hover(), active(), ACTIVE (+50 more)
 
 ### Community 5 - "fader.rs"
-Cohesion: 0.29
-Nodes (4): Fader, LABEL_H, truncate(), VALUE_H
+Cohesion: 0.18
+Nodes (8): Fader, FaderEvent, Changed, None, Release, LABEL_H, truncate(), VALUE_H
 
 ### Community 6 - "Show"
 Cohesion: 0.06
@@ -159,24 +152,20 @@ Cohesion: 0.13
 Nodes (11): APP_NAME, Updater, UpdateState, Available, Checking, Error, Idle, Installed (+3 more)
 
 ### Community 9 - "OutputError"
-Cohesion: 0.14
-Nodes (7): NullOutput, RecordingOutput, DmxOutput, OutputError, NotFound, NotImplemented, Transfer
+Cohesion: 0.12
+Nodes (8): NullOutput, RecordingOutput, DmxOutput, OutputError, NotFound, NotImplemented, Transfer, Failing
 
 ### Community 10 - "AppState"
-Cohesion: 0.16
-Nodes (7): AppState, Mode, Control, Setup, PatchForm, group_bar(), selection_tools()
+Cohesion: 0.17
+Nodes (5): AppState, Mode, Control, Setup, PatchForm
 
 ### Community 11 - "dialog.rs"
 Cohesion: 0.11
 Nodes (9): Button, Dialog, FOOTER_H, FooterButton, Form, form(), HEADER_H, LABEL_W (+1 more)
 
-### Community 12 - "app.rs"
-Cohesion: 0.31
-Nodes (6): ControlViews, LockDialog, OUTPUT_HZ, ProgrammerView, SceneGridView, StageView
-
-### Community 13 - "plan.rs"
-Cohesion: 0.31
-Nodes (9): clamp(), default_position(), grid(), grid_fits_inside(), MARGIN, row(), row_is_evenly_spread(), snap() (+1 more)
+### Community 12 - "Category"
+Cohesion: 0.20
+Nodes (9): Category, All, Beam, Color, Dimmer, Gobo, .ITEMS, Other (+1 more)
 
 ### Community 14 - "jobs"
 Cohesion: 0.17
@@ -189,10 +178,6 @@ Nodes (11): steps, steps, steps, steps, steps, id, if, name (+3 more)
 ### Community 17 - "DmxCraft"
 Cohesion: 0.20
 Nodes (9): Aufbau, Bauen und starten, Bedienung in Kürze, DMXCraft, Installieren, Neue Version veröffentlichen, Oberfläche, Show-Format (+1 more)
-
-### Community 19 - "ViewCtx"
-Cohesion: 0.16
-Nodes (8): View, ViewCtx, FixtureSettings, SetupView, ScenesView, StageEditorView, ZonesView, Windows
 
 ### Community 20 - "announce"
 Cohesion: 0.25
@@ -207,12 +192,16 @@ Cohesion: 0.04
 Nodes (48): Icon, AlignH, AlignV, ArrangeGrid, ArrangeRow, Builder, Center, Close (+40 more)
 
 ### Community 23 - "ChannelKind"
-Cohesion: 0.08
-Nodes (21): ChannelDef, ChannelKind, .ALL, Amber, Blue, ColorWheel, Dimmer, Generic (+13 more)
+Cohesion: 0.10
+Nodes (18): ChannelKind, .ALL, Amber, Blue, ColorWheel, Dimmer, Generic, Gobo (+10 more)
 
 ### Community 24 - "fixture_settings.rs"
-Cohesion: 0.22
-Nodes (6): RangeSlider, Quick, quick_action(), Center, Off, On
+Cohesion: 0.24
+Nodes (5): Quick, quick_action(), Center, Off, On
+
+### Community 25 - "t"
+Cohesion: 0.05
+Nodes (27): ControlViews, DmxCraftApp, LockDialog, OUTPUT_HZ, Pending, Purpose, OpenShow, SaveShowAs (+19 more)
 
 ### Community 26 - "host"
 Cohesion: 0.29
@@ -231,8 +220,8 @@ Cohesion: 0.23
 Nodes (10): CELL_H_MAX, CELL_H_MIN, clip(), COLUMNS, Drag, GridMode, Output, Patch (+2 more)
 
 ### Community 31 - "stage_canvas.rs"
-Cohesion: 0.22
-Nodes (9): BOX, fit(), fixture_pos(), fixture_rect(), live_colors(), MenuFn, paint_fixture(), paint_shape_icon() (+1 more)
+Cohesion: 0.19
+Nodes (10): BOX, fit(), fixture_pos(), fixture_rect(), live_colors(), MenuFn, paint_fixture(), paint_shape_icon() (+2 more)
 
 ### Community 32 - "env"
 Cohesion: 0.40
@@ -243,48 +232,44 @@ Cohesion: 0.83
 Nodes (4): dmxcraft, dmxcraft-core, dmxcraft-ofl, dmxcraft-output
 
 ### Community 34 - "PlanShape"
-Cohesion: 0.15
-Nodes (10): ShapeButton, PlanShape, .ALL, BarHorizontal, BarVertical, Effect, Matrix, MovingHead (+2 more)
+Cohesion: 0.18
+Nodes (9): PlanShape, .ALL, BarHorizontal, BarVertical, Effect, Matrix, MovingHead, Round (+1 more)
 
 ### Community 36 - "stage_editor.rs"
-Cohesion: 0.17
-Nodes (9): CanvasMode, Edit, Select, StageCanvas, StageInteraction, ZOOM_MAX, ZOOM_MIN, set_pos() (+1 more)
+Cohesion: 0.28
+Nodes (7): CanvasMode, Edit, Select, StageCanvas, ZOOM_MAX, ZOOM_MIN, set_pos()
 
 ### Community 38 - "DmxCraft – UI-Richtlinien"
 Cohesion: 0.20
 Nodes (9): 1. Grundprinzipien, 2. Design-Tokens (`ui/theme.rs`), 3. Layout, 4. Komponenten (`ui/widgets/`), 5. Interaktion, 6. Text & Symbole, 7. Architektur der Oberfläche, 8. Prüfen vor jedem Commit (+1 more)
 
-### Community 39 - "send_frame"
-Cohesion: 0.17
-Nodes (7): Box<dyn serialport::SerialPort>, DmxLine, frame_is_break_mark_startcode_and_512_channels(), frame_over_pseudo_terminal(), packet(), Recorder, send_frame()
-
-### Community 40 - "egui"
-Cohesion: 0.18
-Nodes (7): section_header(), apply(), MenuPlace, Patch, Stage, StageEditor, SIZES
+### Community 40 - "FixtureAction"
+Cohesion: 0.08
+Nodes (26): apply(), FixtureAction, AddToGroup, CopyLayout, Delete, InvertOrder, MirrorH, MirrorV (+18 more)
 
 ### Community 41 - "settings_window.rs"
 Cohesion: 0.18
 Nodes (8): HEIGHT, SCALES, SettingsCx, SIDEBAR_W, TAB_H, WIDTH, INPUT_H, UsbDmxPort
 
-### Community 43 - "OutputStatus"
+### Community 44 - "FixtureType"
 Cohesion: 0.29
-Nodes (5): OutputStatus, Connecting, Error, Running, Stopped
-
-### Community 44 - "ofl/src/lib.rs"
-Cohesion: 0.20
-Nodes (4): EMBEDDED, embedded_library_loads(), Library, LibraryFixture
+Nodes (3): ChannelDef, FixtureType, ft()
 
 ### Community 46 - "DmxCraft – Hinweise für KI-Assistenten"
 Cohesion: 0.40
 Nodes (4): DMXCraft – Hinweise für KI-Assistenten, Orientierung (Tokens sparen), Regeln, Struktur
+
+### Community 47 - "widgets/mod.rs"
+Cohesion: 0.25
+Nodes (4): RangeSlider, Segmented, ShapeButton, XyPad
 
 ### Community 48 - "general"
 Cohesion: 0.24
 Nodes (11): set_lang(), main(), full_combo(), general(), hint(), midi(), outputs(), project() (+3 more)
 
 ### Community 50 - "menu.rs"
-Cohesion: 0.06
-Nodes (49): begin(), context(), dropdown(), ICON_SLOT, IconFn, item(), ITEM_H, MenuItem (+41 more)
+Cohesion: 0.10
+Nodes (28): begin(), context(), dropdown(), ICON_SLOT, IconFn, item(), ITEM_H, MenuItem (+20 more)
 
 ### Community 65 - "Settings"
 Cohesion: 0.15
@@ -299,40 +284,36 @@ Cohesion: 0.27
 Nodes (3): missing_cable_is_reported_not_fatal(), open_without_assignment_fails_clearly(), OpenDmx
 
 ### Community 71 - "titlebar.rs"
-Cohesion: 0.05
-Nodes (48): Fullscreen, SETTLE, Step, Enter, Maximize, delete(), HEIGHT, k() (+40 more)
+Cohesion: 0.07
+Nodes (43): delete(), HEIGHT, k(), levels(), lock(), main_menu(), MenuAction, About (+35 more)
 
 ### Community 73 - "convert.rs"
-Cohesion: 0.21
-Nodes (13): convert_fixture(), kinds(), matrix_pixel_count_and_order(), matrix_pixel_keys_abc_and_groups(), moving_head_fine_channels_and_wheels(), OflError, Invalid, Json (+5 more)
+Cohesion: 0.07
+Nodes (32): git(), main(), run(), capabilities(), channel_kind(), convert_fixture(), default_value(), fine_aliases() (+24 more)
 
 ### Community 74 - "OutputKind"
 Cohesion: 0.18
 Nodes (6): OutputConfig, OutputKind, .ALL, DvcGoldUsb, OpenDmx, Simulation
 
-### Community 80 - "LibraryPanel"
-Cohesion: 0.23
-Nodes (3): LibraryPanel, MAX_FIXTURES_PER_SEARCH, patch()
+### Community 77 - "sense"
+Cohesion: 0.15
+Nodes (3): clip(), SceneCard, Toggle
 
 ### Community 87 - "Dialog<'a>"
 Cohesion: 0.20
 Nodes (4): Dialog<'a>, Kind, Cancel, Primary
 
 ### Community 88 - "DmxFrame"
-Cohesion: 0.07
-Nodes (33): Category, All, Beam, Color, Dimmer, Gobo, .ITEMS, Other (+25 more)
+Cohesion: 0.20
+Nodes (3): addresses_are_one_based(), DmxFrame, UNIVERSE_SIZE
 
 ### Community 93 - "Arrange"
 Cohesion: 0.33
 Nodes (6): Arrange, AlignH, AlignV, Grid, Reset, Row
 
 ### Community 94 - "super"
-Cohesion: 0.12
-Nodes (14): History, LIMIT, undo_redo_roundtrip(), digest(), hash_and_verify(), hash_password(), hex(), verify() (+6 more)
-
-### Community 98 - "Value"
-Cohesion: 0.31
-Nodes (8): capabilities(), channel_kind(), default_value(), fine_aliases(), Lookup, Lookup<'a>, Resolved, wheel_kind()
+Cohesion: 0.09
+Nodes (23): History, LIMIT, undo_redo_roundtrip(), digest(), hash_and_verify(), hash_password(), hex(), verify() (+15 more)
 
 ### Community 100 - "Tab"
 Cohesion: 0.25
@@ -342,41 +323,33 @@ Nodes (7): SettingsWindow, Tab, .ALL, General, Midi, Outputs, Project
 Cohesion: 0.25
 Nodes (3): ICON_PNG, texture(), window_icon()
 
-### Community 105 - "Matrix"
-Cohesion: 0.29
-Nodes (4): Matrix, natural_cmp(), natural_sort(), Pixel
-
-### Community 111 - "ofl-bundle.rs"
-Cohesion: 0.38
-Nodes (3): git(), main(), run()
-
 ### Community 117 - "Grip"
-Cohesion: 0.25
-Nodes (6): Grip, Body, Corner, EdgeX, EdgeY, LimitPad
+Cohesion: 0.16
+Nodes (7): Grip, Body, Corner, EdgeX, EdgeY, LimitPad, Segmented<'a, T>
 
 ### Community 119 - "i18n/mod.rs"
 Cohesion: 0.11
 Nodes (12): all_texts_translated(), EN, fill(), fill_replaces_names(), Lang, lang(), .ALL, De (+4 more)
 
 ## Knowledge Gaps
-- **173 isolated node(s):** `Play`, `Pause`, `Prev`, `Next`, `Plus` (+168 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 496 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **50 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **173 isolated node(s):** `Select`, `Edit`, `Stage`, `StageEditor`, `Patch` (+168 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 498 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **51 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Engine` connect `Engine` to `runtime.rs`, `theme.rs`, `Show`, `egui`, `settings_window.rs`, `AppState`, `app.rs`, `general`, `LibraryPanel`, `menu.rs`, `ViewCtx`, `DmxFrame`, `t`, `fixture_settings.rs`?**
-  _High betweenness centrality (0.110) - this node is a cross-community bridge._
+- **Why does `Icon` connect `Icon` to `Tab`, `MenuItem<'a>`, `stage_editor.rs`, `titlebar.rs`, `FixtureAction`, `settings_window.rs`, `dialog.rs`, `widgets/mod.rs`, `menu.rs`, `fixture_settings.rs`, `Stroke`, `patch_grid.rs`?**
+  _High betweenness centrality (0.123) - this node is a cross-community bridge._
 - **Are the 55 inferred relationships involving `t()` (e.g. with `.apply_menu()` and `.dialogs()`) actually correct?**
   _`t()` has 55 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Play`, `Pause`, `Prev` to the rest of the system?**
+- **What connects `Select`, `Edit`, `Stage` to the rest of the system?**
   _173 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Engine` be split into smaller, more focused modules?**
-  _Cohesion score 0.09344262295081968 - nodes in this community are weakly interconnected._
-- **Why does `Show` connect `Show` to `Engine`, `theme.rs`, `stage_editor.rs`, `egui`, `menu.rs`, `ChannelKind`, `super`, `stage_canvas.rs`?**
-  _High betweenness centrality (0.067) - this node is a cross-community bridge._
+  _Cohesion score 0.06258958432871477 - nodes in this community are weakly interconnected._
+- **Why does `Engine` connect `Engine` to `runtime.rs`, `theme.rs`, `Show`, `FixtureAction`, `settings_window.rs`, `library_panel.rs`, `general`, `LibraryPanel`, `menu.rs`, `fixture_settings.rs`, `t`?**
+  _High betweenness centrality (0.103) - this node is a cross-community bridge._
 - **Should `runtime.rs` be split into smaller, more focused modules?**
-  _Cohesion score 0.14130434782608695 - nodes in this community are weakly interconnected._
-- **Why does `t()` connect `t` to `file_dialog.rs`, `Settings`, `theme.rs`, `stage_editor.rs`, `titlebar.rs`, `egui`, `AppState`, `general`, `LibraryPanel`, `menu.rs`, `ViewCtx`, `i18n/mod.rs`, `DmxFrame`, `stage_canvas.rs`?**
-  _High betweenness centrality (0.059) - this node is a cross-community bridge._
+  _Cohesion score 0.11965811965811966 - nodes in this community are weakly interconnected._
+- **Why does `Show` connect `Show` to `Engine`, `theme.rs`, `stage_editor.rs`, `FixtureAction`, `FixtureType`, `super`, `stage_canvas.rs`?**
+  _High betweenness centrality (0.065) - this node is a cross-community bridge._

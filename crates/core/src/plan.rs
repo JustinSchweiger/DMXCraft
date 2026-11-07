@@ -1,4 +1,8 @@
-//! Hilfsfunktionen für den Bühnenplan. Positionen sind normiert (0.0..=1.0).
+//! Hilfsfunktionen für den Bühnenplan.
+//!
+//! Der Plan ist unbegrenzt. Eine Einheit entspricht der Breite des Bereichs,
+//! in dem neue Geräte automatisch angeordnet werden (0.0..=1.0); Geräte
+//! dürfen beliebig außerhalb liegen.
 
 /// Rand, den automatisch angeordnete Geräte zum Planrand halten.
 pub const MARGIN: f32 = 0.06;
@@ -7,10 +11,10 @@ pub fn clamp(p: [f32; 2]) -> [f32; 2] {
     [p[0].clamp(0.0, 1.0), p[1].clamp(0.0, 1.0)]
 }
 
-/// Rastet eine Position auf ein Raster mit `cells` Feldern pro Achse ein.
+/// Rastet eine Position auf ein Raster mit `cells` Feldern pro Einheit ein.
 pub fn snap(p: [f32; 2], cells: u32) -> [f32; 2] {
     let n = cells.max(1) as f32;
-    clamp([(p[0] * n).round() / n, (p[1] * n).round() / n])
+    [(p[0] * n).round() / n, (p[1] * n).round() / n]
 }
 
 /// `n` Positionen gleichmäßig in einer Reihe auf Höhe `y`.
@@ -69,7 +73,8 @@ mod tests {
     #[test]
     fn snapping() {
         assert_eq!(snap([0.26, 0.74], 4), [0.25, 0.75]);
-        assert_eq!(snap([1.2, -0.3], 10), [1.0, 0.0]);
+        // unbegrenzt: auch außerhalb von 0..1
+        assert_eq!(snap([1.26, -0.34], 10), [1.3, -0.3]);
     }
 
     #[test]

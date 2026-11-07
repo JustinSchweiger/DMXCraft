@@ -5,7 +5,7 @@
 use crate::i18n::t;
 use std::collections::BTreeSet;
 
-use dmxcraft_core::{plan, Engine, FixtureId, GroupId, PlanShape, Show};
+use dmxcraft_core::{Engine, FixtureId, GroupId, PlanShape, Show};
 use eframe::egui;
 
 use crate::state::{AppState, Mode};
@@ -352,7 +352,7 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
             };
             for (id, rel) in ids.iter().zip(clip.iter()) {
                 if let Some(f) = e.show_mut().fixture_mut(*id) {
-                    f.plan_pos = Some(plan::clamp([anchor[0] + rel[0], anchor[1] + rel[1]]));
+                    f.plan_pos = Some([anchor[0] + rel[0], anchor[1] + rel[1]]);
                 }
             }
         }

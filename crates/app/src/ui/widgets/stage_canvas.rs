@@ -7,10 +7,11 @@
 //! Treffer werden am Druckpunkt ermittelt (`press_origin`), damit ein Ziehen,
 //! das erst nach der Bewegungsschwelle erkannt wird, das richtige Gerät greift.
 //!
-//! **Feste Bühne:** Positionen sind normiert (0..1) und liegen auf einer
-//! quadratischen Bühne mit fester Größe [`WORLD`]. Eine Kamera (Zoom +
-//! Mittelpunkt, [`StageInteraction`]) bildet sie auf die Fläche ab – ändert
-//! sich die Größe der Fläche, ändert sich nur der Ausschnitt, nie das Layout.
+//! **Unbegrenzter Plan:** Positionen sind Planeinheiten (eine Einheit =
+//! [`WORLD`] Punkte bei Zoom 100 %), Geräte dürfen überall liegen. Eine Kamera
+//! (Zoom + Mittelpunkt, [`StageInteraction`]) bildet den Plan auf die Fläche ab
+//! – ändert sich die Größe der Fläche, ändert sich nur der Ausschnitt, nie
+//! das Layout.
 //! Mittlere Maustaste zieht die Ansicht, das Mausrad zoomt zur Mausposition.
 
 use crate::i18n::t;
@@ -22,7 +23,7 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec
 use crate::ui::theme;
 
 const BOX: f32 = 28.0;
-/// Kantenlänge der Bühne in Punkten bei Zoom 100 %.
+/// Länge einer Planeinheit in Punkten bei Zoom 100 %.
 pub const WORLD: f32 = 720.0;
 /// Zoom-Bereich.
 pub const ZOOM_MIN: f32 = 0.2;
@@ -273,7 +274,7 @@ impl StageCanvas<'_> {
             let (dx, dy) = (d.x, d.y);
             for id in selected.iter() {
                 let p = fixture_pos(self.show, *id);
-                moves.push((*id, plan::clamp([p[0] + dx, p[1] + dy])));
+                moves.push((*id, [p[0] + dx, p[1] + dy]));
             }
         }
         let pointer = ui.input(|i| i.pointer.latest_pos());
@@ -409,37 +410,40 @@ impl StageCanvas<'_> {
         moves
     }
 
-    /// Bühnenfläche (etwas heller als der Hintergrund) und optional das Raster.
+    /// Optional ein Raster über die ganze sichtbare Fläche (unbegrenzt).
     fn paint_stage(&self, painter: &egui::Painter, rect: Rect, cam: Camera) {
-        let stage = Rect::from_two_pos(cam.to_screen([0.0, 0.0]), cam.to_screen([1.0, 1.0]));
-        painter.rect_filled(stage, theme::R_S as f32, theme::surface());
-        if self.show_grid {
-            let cells = self.snap.unwrap_or(24).max(1);
-            let line = Stroke::new(1.0, theme::border().gamma_multiply(0.6));
-            for i in 0..=cells {
-                let f = i as f32 / cells as f32;
-                let x = stage.left() + stage.width() * f;
-                let y = stage.top() + stage.height() * f;
-                if (rect.left()..=rect.right()).contains(&x) {
-                    painter.line_segment(
-                        [Pos2::new(x, stage.top()), Pos2::new(x, stage.bottom())],
-                        line,
-                    );
-                }
-                if (rect.top()..=rect.bottom()).contains(&y) {
-                    painter.line_segment(
-                        [Pos2::new(stage.left(), y), Pos2::new(stage.right(), y)],
-                        line,
-                    );
-                }
-            }
+        if !self.show_grid {
+            return;
         }
-        painter.rect_stroke(
-            stage,
-            theme::R_S as f32,
-            Stroke::new(1.0, theme::border()),
-            StrokeKind::Inside,
-        );
+        let cells = self.snap.unwrap_or(24).max(1) as f32;
+        let step = cam.scale() / cells;
+        // Bei starkem Herauszoomen nur jede n-te Linie, damit es ruhig bleibt
+        let mut every = 1.0;
+        while step * every < 8.0 {
+            every *= 2.0;
+        }
+        let unit = every / cells;
+        let tl = cam.to_world(rect.min);
+        let br = cam.to_world(rect.max);
+        let line = Stroke::new(1.0, theme::border().gamma_multiply(0.6));
+        let mut x = (tl[0] / unit).floor() * unit;
+        while x <= br[0] {
+            let sx = cam.to_screen([x, 0.0]).x;
+            painter.line_segment(
+                [Pos2::new(sx, rect.top()), Pos2::new(sx, rect.bottom())],
+                line,
+            );
+            x += unit;
+        }
+        let mut y = (tl[1] / unit).floor() * unit;
+        while y <= br[1] {
+            let sy = cam.to_screen([0.0, y]).y;
+            painter.line_segment(
+                [Pos2::new(rect.left(), sy), Pos2::new(rect.right(), sy)],
+                line,
+            );
+            y += unit;
+        }
     }
 }
 
