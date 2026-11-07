@@ -41,6 +41,8 @@ pub struct ScenePropsView {
     step_focus: bool,
     /// Laufender Import/Export-Dialog.
     fx_dialog: Option<FxDialog>,
+    /// Eigene Farbpaletten (COLOR FX).
+    palettes: super::fx_color::PaletteStore,
     /// Auswahlfenster für Szenen/Bänke.
     picker: Option<Picker>,
 }
@@ -484,6 +486,32 @@ impl ScenePropsView {
                     let fx = scene.add_effect(kind);
                     self.selected_fx = Some((id, fx));
                     self.step_focus = kind == EffectKind::Steps;
+                    if kind != EffectKind::Steps {
+                        // wirkt auf die ausgewählten Geräte (sonst die der Szene)
+                        let mut ids: Vec<dmxcraft_core::FixtureId> =
+                            cx.state.selected.iter().copied().collect();
+                        if ids.is_empty() {
+                            ids = scene
+                                .steps
+                                .iter()
+                                .flat_map(|s| s.values.iter().map(|v| v.fixture))
+                                .collect();
+                            ids.sort();
+                            ids.dedup();
+                        }
+                        // Reihenfolge wie im Patch
+                        let order = |f: &dmxcraft_core::FixtureId| f.0;
+                        ids.sort_by_key(order);
+                        if let Some(e) = scene.effects.iter_mut().find(|e| e.id == fx) {
+                            e.fixtures = ids.clone();
+                        }
+                        // eine frische Szene läuft sonst in 1 s durch
+                        if scene.steps.len() == 1 && scene.steps[0].hold_ms == 1000 {
+                            scene.steps[0].hold_ms = 4000;
+                        }
+                        cx.state.fx_target = Some((id, fx));
+                        cx.state.selected = ids.into_iter().collect();
+                    }
                 }
                 self.adding = false;
             }
@@ -509,6 +537,21 @@ impl ScenePropsView {
             .filter(|p| !p.finished)
             .map(|p| p.step);
         let mut edit_step = cx.state.edit_step;
+        // Vorschau je COLOR FX: aktuelle Farbe jedes Beams
+        let cycles = cx.engine.fx_cycles(id);
+        let previews: std::collections::HashMap<u32, Vec<[u8; 3]>> = effects
+            .iter()
+            .filter_map(|fx| {
+                let c = fx.color.as_ref()?;
+                let beams = dmxcraft_core::fx::beams(cx.engine.show(), &fx.fixtures);
+                Some((fx.id, dmxcraft_core::fx::render(c, &beams, cycles)))
+            })
+            .collect();
+        if !previews.is_empty() {
+            ui.ctx().request_repaint();
+        }
+        let mut color_changes: Vec<(u32, dmxcraft_core::fx::ColorFx)> = Vec::new();
+        let palettes = &mut self.palettes;
         let mut step_clicked = false;
         let mut toggle = None;
         let mut select = None;
@@ -543,6 +586,26 @@ impl ScenePropsView {
                                         ) {
                                             step_clicked = true;
                                         }
+                                    } else if let Some(c) = &fx.color {
+                                        let mut c = c.clone();
+                                        let preview =
+                                            previews.get(&fx.id).cloned().unwrap_or_default();
+                                        if super::fx_color::color_fx_ui(
+                                            ui, fx.id, &mut c, &preview, color, !locked, palettes,
+                                        ) {
+                                            color_changes.push((fx.id, c));
+                                        }
+                                        let (r, _) = ui.allocate_exact_size(
+                                            Vec2::new(ui.available_width(), 20.0),
+                                            Sense::hover(),
+                                        );
+                                        ui.painter().text(
+                                            r.right_center(),
+                                            egui::Align2::RIGHT_CENTER,
+                                            tr!("{n} Beam(s)", n = preview.len()),
+                                            egui::FontId::proportional(theme::FS_CAPTION),
+                                            theme::text_dim(),
+                                        );
                                     } else {
                                         ui.label(
                                             egui::RichText::new(t("Einstellungen folgen"))
@@ -564,6 +627,19 @@ impl ScenePropsView {
             }
         }
         cx.state.edit_step = edit_step;
+        self.palettes.windows(ui.ctx());
+        if let Some(e) = self.palettes.error.take() {
+            cx.state.error(e);
+        }
+        if !locked {
+            if let Some(sc) = cx.engine.show_mut().scene_mut(id) {
+                for (fid, c) in color_changes {
+                    if let Some(fx) = sc.effects.iter_mut().find(|e| e.id == fid) {
+                        fx.color = Some(c);
+                    }
+                }
+            }
+        }
         if step_clicked {
             // ein Schritt gehört zum STEPS-Effekt: diesen mit auswählen
             if let Some(fx) = effects.iter().find(|e| e.kind == EffectKind::Steps) {
@@ -574,6 +650,16 @@ impl ScenePropsView {
             self.selected_fx = Some((id, f));
             self.step_focus = step_clicked;
             cx.state.focus = crate::state::Focus::Effect(id, f);
+            // Effekt anklicken wählt seine Geräte (FX-Knopf der Bühne)
+            if let Some(fx) = effects
+                .iter()
+                .find(|e| e.id == f && e.kind != EffectKind::Steps)
+            {
+                cx.state.fx_target = Some((id, f));
+                cx.state.selected = fx.fixtures.iter().copied().collect();
+            } else {
+                cx.state.fx_target = None;
+            }
         }
         // Entf löscht den angeklickten Effekt (nicht die Szene)
         let typing = ui.ctx().memory(|m| m.focused().is_some());
@@ -863,9 +949,10 @@ fn import_fx(s: &mut dmxcraft_core::Scene, file: FxFile) -> Result<String, Strin
     }
     let n = file.effects.len();
     for fx in file.effects {
+        // Einstellungen und Geräte übernehmen, nur mit neuer ID
         let id = s.add_effect(fx.kind);
         if let Some(new) = s.effects.iter_mut().find(|e| e.id == id) {
-            new.collapsed = fx.collapsed;
+            *new = dmxcraft_core::Effect { id, ..fx };
         }
     }
     Ok(tr!("{n} Effekt(e) importiert", n = n))

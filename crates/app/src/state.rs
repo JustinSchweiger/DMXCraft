@@ -41,6 +41,8 @@ pub struct AppState {
     /// Bearbeiteter Schritt der markierten Szene (Edit-Modus).
     pub edit_step: usize,
     pub edit_step_seen: usize,
+    /// Zuletzt angeklickter Effekt (Szene, Effekt): Ziel des FX-Knopfs der Bühne.
+    pub fx_target: Option<(SceneId, u32)>,
     /// Worauf die Entf-Taste unter STEUERN wirkt (zuletzt angeklickt).
     pub focus: Focus,
     /// Betriebsmodus des Programmers.
@@ -77,6 +79,7 @@ impl AppState {
             edit_reload: false,
             edit_step: 0,
             edit_step_seen: 0,
+            fx_target: None,
             patch: PatchForm {
                 name: String::new(),
                 count: 1,

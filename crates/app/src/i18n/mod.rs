@@ -157,6 +157,7 @@ mod tests {
             .chain(dmxcraft_core::ChannelKind::ALL.iter().map(|k| k.label()))
             .chain(crate::ui::theme::Theme::ALL.iter().map(|t| t.label()))
             .chain(dmxcraft_output::OutputKind::ALL.iter().map(|k| k.label()))
+            .chain(dmxcraft_core::fx::Transform::ALL.iter().map(|k| k.label()))
             .collect();
         labels.extend(crate::views::fixture_menu::SIZES.iter().map(|(l, _)| *l));
         for l in labels {

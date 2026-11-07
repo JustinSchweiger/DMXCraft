@@ -10,6 +10,7 @@ mod fullscreen;
 mod history;
 mod icon;
 mod lock;
+mod palettes;
 mod settings;
 mod settings_window;
 mod state;

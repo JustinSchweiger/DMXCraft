@@ -262,7 +262,7 @@ pub enum LoopMode {
     Once,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Scene {
     pub id: SceneId,
     pub name: String,
@@ -323,14 +323,32 @@ impl EffectKind {
     }
 }
 
-/// Ein Effekt einer FX-Szene. Die Einstellungen je Art folgen.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Ein Effekt einer FX-Szene.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Effect {
     pub id: u32,
     pub kind: EffectKind,
     /// In der Seitenleiste zugeklappt.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
+    /// Geräte, auf die der Effekt wirkt (Reihenfolge = Beam-Reihenfolge).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixtures: Vec<FixtureId>,
+    /// Einstellungen eines COLOR FX.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<crate::fx::ColorFx>,
+}
+
+impl Effect {
+    pub fn new(id: u32, kind: EffectKind) -> Self {
+        Self {
+            id,
+            kind,
+            collapsed: false,
+            fixtures: Vec::new(),
+            color: (kind == EffectKind::ColorFx).then(crate::fx::ColorFx::default),
+        }
+    }
 }
 
 /// Art einer Szene (für Anzeige und Seitenleiste).
@@ -481,11 +499,7 @@ impl Scene {
     /// Effekt anhängen; gibt seine ID zurück.
     pub fn add_effect(&mut self, kind: EffectKind) -> u32 {
         let id = self.effects.iter().map(|e| e.id).max().unwrap_or(0) + 1;
-        self.effects.push(Effect {
-            id,
-            kind,
-            collapsed: false,
-        });
+        self.effects.push(Effect::new(id, kind));
         id
     }
 
@@ -601,11 +615,10 @@ impl Show {
             if sc.steps.len() > 1 && !sc.has_steps() {
                 sc.effects.insert(
                     0,
-                    Effect {
-                        id: sc.effects.iter().map(|e| e.id).max().unwrap_or(0) + 1,
-                        kind: EffectKind::Steps,
-                        collapsed: false,
-                    },
+                    Effect::new(
+                        sc.effects.iter().map(|e| e.id).max().unwrap_or(0) + 1,
+                        EffectKind::Steps,
+                    ),
                 );
             }
         }

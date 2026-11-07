@@ -829,8 +829,11 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
     }
     if st.selected_scenes != st.scene_selection_seen {
         st.scene_selection_seen = st.selected_scenes.clone();
-        // neue Szene: beim ersten Schritt beginnen
+        // neue Szene: beim ersten Schritt beginnen, kein Effekt als FX-Ziel
         st.edit_step = 0;
+        st.fx_target = st
+            .fx_target
+            .filter(|(s, _)| st.selected_scenes.len() == 1 && st.selected_scenes.contains(s));
         st.edit_step_seen = 0;
         e.set_preview_step(0);
         if edit {
@@ -840,8 +843,12 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
                     .selected_scenes
                     .iter()
                     .filter_map(|id| show.scene(*id))
-                    .flat_map(|s| s.steps.iter())
-                    .flat_map(|step| step.values.iter().map(|v| v.fixture))
+                    .flat_map(|s| {
+                        s.steps
+                            .iter()
+                            .flat_map(|step| step.values.iter().map(|v| v.fixture))
+                            .chain(s.effects.iter().flat_map(|e| e.fixtures.iter().copied()))
+                    })
                     .filter(|f| show.fixture(*f).is_some())
                     .collect();
             }

@@ -38,6 +38,8 @@ struct PlayingScene {
     releasing: Option<f64>,
     /// Abgeschlossene Durchläufe (für „X-mal abspielen“).
     cycles: u32,
+    /// Effektzeit in ms (läuft mit Speed, steht bei Pause).
+    fx_ms: f64,
 }
 
 /// Ein-/Ausblendzustand einer Szene (Pegel 0..=1).
@@ -75,6 +77,8 @@ pub struct Engine {
     master: f32,
     blackout: bool,
     speed: f32,
+    /// Laufende Uhr für die Effektvorschau nicht gestarteter Szenen.
+    clock_ms: f64,
 }
 
 impl Engine {
@@ -91,6 +95,7 @@ impl Engine {
             master: 1.0,
             blackout: false,
             speed: 1.0,
+            clock_ms: 0.0,
         }
     }
 
@@ -203,6 +208,7 @@ impl Engine {
             age_ms: 0.0,
             releasing: None,
             cycles: 0,
+            fx_ms: 0.0,
         });
         self.next_seq += 1;
     }
@@ -449,12 +455,16 @@ impl Engine {
             }
             None => true,
         });
+        self.clock_ms += dt_ms;
         let mut ended = Vec::new();
         for p in &mut self.playing {
             let Some(scene) = self.show.scene(p.scene) else {
                 continue;
             };
             p.age_ms += real_ms;
+            if !p.paused {
+                p.fx_ms += dt_ms * f64::from(scene.settings.speed_pct) / 100.0;
+            }
             let len = scene.steps.len();
             if len == 0 {
                 continue;
@@ -590,7 +600,44 @@ impl Engine {
                 }
             }
         }
+        Self::apply_effects(show, scene, self.fx_cycles_of(scene, p.fx_ms), &mut out);
         out
+    }
+
+    /// Effektzeit in Durchläufen (eine Szenendauer = 1.0) samt Phase.
+    fn fx_cycles_of(&self, scene: &crate::show::Scene, ms: f64) -> f64 {
+        let dur = scene.duration_ms().max(100) as f64;
+        ms / dur + f64::from(scene.settings.phase_deg) / 360.0
+    }
+
+    /// Effektzeit einer Szene: läuft sie, ihre eigene, sonst die Vorschau-Uhr.
+    pub fn fx_cycles(&self, id: SceneId) -> f64 {
+        let Some(scene) = self.show.scene(id) else {
+            return 0.0;
+        };
+        let ms = self
+            .playing
+            .iter()
+            .find(|p| p.scene == id && p.releasing.is_none())
+            .map_or(
+                self.clock_ms * f64::from(scene.settings.speed_pct) / 100.0,
+                |p| p.fx_ms,
+            );
+        self.fx_cycles_of(scene, ms)
+    }
+
+    /// Effekte der Szene über die Schrittwerte legen.
+    fn apply_effects(
+        show: &Show,
+        scene: &crate::show::Scene,
+        cycles: f64,
+        out: &mut HashMap<ChannelRef, u8>,
+    ) {
+        for fx in &scene.effects {
+            if let Some(c) = &fx.color {
+                crate::fx::apply(show, c, &fx.fixtures, cycles, out);
+            }
+        }
     }
 
     /// Berechnet den aktuellen DMX-Frame für den Ausgang. Im Blind-Modus ohne
@@ -690,6 +737,19 @@ impl Engine {
         for (ch, v) in self.programmer.iter().filter(|_| edit) {
             if let Some(slot) = values.get_mut(ch) {
                 *slot = *v;
+            }
+        }
+        // 4b) Effekte der bearbeiteten Szenen liegen über ihren Grundwerten
+        for id in preview {
+            let Some(scene) = show.scene(*id).filter(|s| !s.effects.is_empty()) else {
+                continue;
+            };
+            let mut fx = HashMap::new();
+            Self::apply_effects(show, scene, self.fx_cycles(*id), &mut fx);
+            for (ch, v) in fx {
+                if let Some(slot) = values.get_mut(&ch) {
+                    *slot = v;
+                }
             }
         }
 
@@ -848,6 +908,27 @@ mod tests {
         let a = s.add_fixture("A", "generic/drgb-4ch", 0, 1).unwrap();
         let b = s.add_fixture("B", "generic/rgb-3ch", 1, 10).unwrap();
         (s, a, b)
+    }
+
+    #[test]
+    fn color_fx_drives_rgb_and_moves() {
+        let (mut s, a, b) = setup();
+        let id = s.add_scene("FX", None, vec![Step::new(vec![cv(a, 0, 255)])]);
+        let sc = s.scene_mut(id).unwrap();
+        let fx = sc.add_effect(crate::show::EffectKind::ColorFx);
+        sc.effects.iter_mut().find(|e| e.id == fx).unwrap().fixtures = vec![a, b];
+        let mut e = Engine::new(s);
+        e.activate(id);
+        let rgb = |f: &DmxFrame| (f.get(0, 2), f.get(0, 3), f.get(0, 4), f.get(1, 10));
+        let first = rgb(&e.render_frame());
+        e.tick(Duration::from_millis(300));
+        let later = rgb(&e.render_frame());
+        assert_ne!(first, later, "Farben laufen");
+        assert_eq!(
+            e.render_frame().get(0, 1),
+            Some(255),
+            "Dimmer aus dem Schritt"
+        );
     }
 
     #[test]

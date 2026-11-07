@@ -39,7 +39,22 @@ enum GroupAction {
 impl View for StageView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut actions = Vec::new();
-        self.group_bar(ui, cx.engine, cx.state, &mut actions);
+        // Gruppenleiste links, rechts der FX-Knopf
+        let full = ui.available_rect_before_wrap();
+        const FX_W: f32 = 40.0;
+        let mut bar = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(full.with_max_x(full.right() - FX_W - theme::SP_S))
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+        );
+        self.group_bar(&mut bar, cx.engine, cx.state, &mut actions);
+        let bar_h = bar.min_rect().height().max(28.0);
+        let fx_rect = egui::Rect::from_min_size(
+            egui::pos2(full.right() - 28.0, full.top()),
+            Vec2::new(28.0, 28.0),
+        );
+        fx_button(ui, fx_rect, cx.engine, cx.state);
+        ui.allocate_exact_size(Vec2::new(full.width(), bar_h), Sense::hover());
         self.apply(cx.engine, cx.state, actions);
         ui.add_space(theme::SP_S);
         let show = cx.engine.show();
@@ -207,6 +222,52 @@ impl StageView {
                     }
                 }
                 GroupAction::Delete(id) => e.show_mut().remove_group(id),
+            }
+        }
+    }
+}
+
+/// FX-Knopf: übernimmt die aktuelle Geräteauswahl in den zuletzt
+/// angeklickten Effekt. Grau, solange die Auswahl den Geräten des Effekts
+/// entspricht; rot, wenn sie davon abweicht.
+fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppState) {
+    let target = st.fx_target.filter(|(scene, fx)| {
+        e.show()
+            .scene(*scene)
+            .is_some_and(|s| s.effects.iter().any(|f| f.id == *fx))
+    });
+    let current: Option<BTreeSet<FixtureId>> = target.and_then(|(scene, fx)| {
+        e.show()
+            .scene(scene)?
+            .effects
+            .iter()
+            .find(|f| f.id == fx)
+            .map(|f| f.fixtures.iter().copied().collect())
+    });
+    let pending = !st.locked
+        && current
+            .as_ref()
+            .is_some_and(|c| *c != st.selected && !st.selected.is_empty());
+    // rot hinterlegt, sobald sich die Auswahl vom Effekt unterscheidet
+    let btn = IconButton::new(Icon::Fx)
+        .size(28.0)
+        .enabled(pending)
+        .active(pending)
+        .tint(theme::DANGER);
+    let r = ui
+        .place(rect, btn)
+        .on_hover_text(t("Effekt mit der aktuellen Auswahl aktualisieren"))
+        .on_disabled_hover_text(t("Effekt anklicken, dann Geräte ändern"));
+    if r.clicked() && pending {
+        if let Some((scene, fx)) = target {
+            let mut ids: Vec<FixtureId> = st.selected.iter().copied().collect();
+            ids.sort();
+            if let Some(f) = e
+                .show_mut()
+                .scene_mut(scene)
+                .and_then(|s| s.effects.iter_mut().find(|f| f.id == fx))
+            {
+                f.fixtures = ids;
             }
         }
     }

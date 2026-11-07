@@ -9,6 +9,7 @@ pub mod dip;
 pub mod dmx;
 pub mod engine;
 pub mod fixture;
+pub mod fx;
 pub mod library;
 pub mod plan;
 pub mod show;
