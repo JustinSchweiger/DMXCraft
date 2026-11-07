@@ -68,6 +68,31 @@ pub struct Library {
 static EMBEDDED_OFL: &[u8] = include_bytes!("../data/ofl-library.json.gz");
 static EMBEDDED_QLC: &[u8] = include_bytes!("../data/qlc-library.json.gz");
 
+/// Ergänzt bei Gerätetypen einer Show die physischen Angaben (Abstrahlwinkel,
+/// Pan/Tilt-Bereich) aus der eingebauten Bibliothek, falls sie fehlen
+/// (ältere Shows wurden ohne diese Angaben gepatcht).
+pub fn fill_physical(show: &mut dmxcraft_core::Show) {
+    if show.fixture_types.iter().all(|t| t.physical.is_some()) {
+        return;
+    }
+    let lib = Library::embedded();
+    for t in show
+        .fixture_types
+        .iter_mut()
+        .filter(|t| t.physical.is_none())
+    {
+        if let Some(p) = lib
+            .fixtures
+            .iter()
+            .flat_map(|f| f.modes.iter())
+            .find(|m| m.key == t.key)
+            .and_then(|m| m.physical)
+        {
+            t.physical = Some(p);
+        }
+    }
+}
+
 impl Library {
     /// Die mit dem Programm ausgelieferte Bibliothek: OFL und QLC+ zusammen,
     /// nach Hersteller und Name sortiert (wird beim ersten Zugriff entpackt).

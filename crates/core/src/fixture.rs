@@ -109,8 +109,84 @@ impl ChannelDef {
     }
 }
 
+/// Physische Angaben eines Geräts (für den 3D-Visualisierer).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Physics {
+    /// Abstrahlwinkel in Grad (min, max); gleich bei fester Optik.
+    pub beam_angle: [f32; 2],
+    /// Schwenkbereich in Grad (0 = kein Pan).
+    pub pan_range: f32,
+    /// Neigebereich in Grad (0 = kein Tilt).
+    pub tilt_range: f32,
+    /// Breite, Höhe, Tiefe in mm (0 = unbekannt).
+    pub size_mm: [f32; 3],
+}
+
+impl Default for Physics {
+    fn default() -> Self {
+        Self {
+            beam_angle: [25.0, 25.0],
+            pan_range: 540.0,
+            tilt_range: 270.0,
+            size_mm: [0.0; 3],
+        }
+    }
+}
+
+impl Physics {
+    /// Aus dem `physical`-Block einer OFL-Gerätedatei (fehlende Angaben = Standard).
+    pub fn from_ofl(v: Option<&serde_json::Value>) -> Option<Self> {
+        let v = v?;
+        let num = |p: &[&str]| {
+            let mut cur = v;
+            for k in p {
+                cur = cur.get(*k)?;
+            }
+            cur.as_f64().map(|f| f as f32)
+        };
+        let mut out = Self::default();
+        let mut any = false;
+        if let Some(a) = v
+            .get("lens")
+            .and_then(|l| l.get("degreesMinMax"))
+            .and_then(|d| d.as_array())
+        {
+            let n: Vec<f32> = a
+                .iter()
+                .filter_map(|x| x.as_f64())
+                .map(|f| f as f32)
+                .collect();
+            if n.len() == 2 && n[0] > 0.0 {
+                out.beam_angle = [n[0], n[1].max(n[0])];
+                any = true;
+            }
+        }
+        if let Some(p) = num(&["focus", "panMax"]) {
+            out.pan_range = p;
+            any = true;
+        }
+        if let Some(t) = num(&["focus", "tiltMax"]) {
+            out.tilt_range = t;
+            any = true;
+        }
+        if let Some(d) = v.get("dimensions").and_then(|d| d.as_array()) {
+            let n: Vec<f32> = d
+                .iter()
+                .filter_map(|x| x.as_f64())
+                .map(|f| f as f32)
+                .collect();
+            if n.len() == 3 {
+                out.size_mm = [n[0], n[1], n[2]];
+                any = true;
+            }
+        }
+        any.then_some(out)
+    }
+}
+
 /// Ein Gerätetyp in einem bestimmten DMX-Modus.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FixtureType {
     /// Eindeutiger Schlüssel, z. B. `generic/rgb-par-3ch`.
     pub key: String,
@@ -118,6 +194,9 @@ pub struct FixtureType {
     pub model: String,
     pub mode: String,
     pub channels: Vec<ChannelDef>,
+    /// Abstrahlwinkel, Pan/Tilt-Bereich, Maße – falls bekannt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub physical: Option<Physics>,
 }
 
 impl FixtureType {

@@ -6,6 +6,7 @@ use crate::fixture::{ChannelDef, ChannelKind as K, FixtureType};
 
 fn ft(key: &str, model: &str, mode: &str, channels: Vec<ChannelDef>) -> FixtureType {
     FixtureType {
+        physical: None,
         key: key.into(),
         manufacturer: "Generisch".into(),
         model: model.into(),

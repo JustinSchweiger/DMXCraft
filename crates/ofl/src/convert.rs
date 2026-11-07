@@ -510,7 +510,11 @@ pub fn convert_fixture(
         let n = used_keys.entry(base.clone()).or_insert(0);
         *n += 1;
         let key = if *n == 1 { base } else { format!("{base}-{n}") };
+        // physische Angaben: im Modus überschrieben, sonst die des Geräts
+        let physical = dmxcraft_core::fixture::Physics::from_ofl(mode.get("physical"))
+            .or_else(|| dmxcraft_core::fixture::Physics::from_ofl(fixture.get("physical")));
         out_modes.push(FixtureType {
+            physical,
             key,
             manufacturer: manufacturer.to_string(),
             model: name.clone(),

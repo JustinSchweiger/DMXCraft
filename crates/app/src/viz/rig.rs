@@ -196,6 +196,16 @@ pub fn build(
         } else {
             true
         };
+        // Abstrahlwinkel aus den Gerätedaten (mit Zoomkanal zwischen min und max)
+        let zoom = ty
+            .channels
+            .iter()
+            .position(|c| c.name.to_lowercase().contains("zoom"))
+            .map(value);
+        let phys_half = ty.physical.map(|p| {
+            let [a, b] = p.beam_angle;
+            (a + (b - a) * zoom.unwrap_or(0.0)) * 0.5
+        });
         let sel = selected.contains(&f.id);
         let body = if sel {
             Vec3::new(0.0, 0.45, 0.5)
@@ -235,13 +245,13 @@ pub fn build(
                     (0.11, 0.28, 13.0)
                 };
                 let name = ty.model.to_lowercase();
-                let half = if name.contains("cob") || name.contains("revue") {
+                let half = phys_half.unwrap_or(if name.contains("cob") || name.contains("revue") {
                     25.0
                 } else if name.contains("wash") {
                     18.0
                 } else {
                     half
-                };
+                });
                 parts.push(Part {
                     prim: Prim::Cylinder,
                     matrix: base
@@ -306,7 +316,7 @@ pub fn build(
                         light,
                         o,
                         d,
-                        17.0,
+                        phys_half.unwrap_or(17.0),
                         0.04,
                         5.0,
                     );
@@ -319,8 +329,12 @@ pub fn build(
                     let f = by_kind(fine).first().map(|i| value(*i)).unwrap_or(0.0);
                     Some(c + f / 255.0)
                 };
-                let pan = (fine(K::Pan, K::PanFine).unwrap_or(0.5) - 0.5) * 540f32.to_radians();
-                let tilt = (fine(K::Tilt, K::TiltFine).unwrap_or(0.5) - 0.5) * 270f32.to_radians();
+                let (pan_range, tilt_range) = ty
+                    .physical
+                    .map_or((540.0, 270.0), |p| (p.pan_range, p.tilt_range));
+                let pan = (fine(K::Pan, K::PanFine).unwrap_or(0.5) - 0.5) * pan_range.to_radians();
+                let tilt =
+                    (fine(K::Tilt, K::TiltFine).unwrap_or(0.5) - 0.5) * tilt_range.to_radians();
                 cube(
                     &mut parts,
                     base * trs(
@@ -364,7 +378,7 @@ pub fn build(
                     light,
                     o,
                     d,
-                    9.0,
+                    phys_half.unwrap_or(9.0),
                     0.08,
                     12.0,
                 );

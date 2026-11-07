@@ -93,6 +93,7 @@ impl DmxCraftApp {
             Some(p) => match Show::load(p) {
                 Ok(mut s) => {
                     demo::ensure_builtin_types(&mut s);
+                    dmxcraft_ofl::fill_physical(&mut s);
                     message = Some((tr!("Show „{v}“ geladen", v = s.name), false));
                     s
                 }
@@ -195,6 +196,7 @@ impl DmxCraftApp {
         match Show::load(path) {
             Ok(mut s) => {
                 demo::ensure_builtin_types(&mut s);
+                dmxcraft_ofl::fill_physical(&mut s);
                 let name = s.name.clone();
                 Self::lock(&self.engine).replace_show(s);
                 self.history.reset(&Snapshot::of(&Self::lock(&self.engine)));
