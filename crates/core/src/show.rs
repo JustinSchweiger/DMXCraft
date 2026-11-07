@@ -56,6 +56,9 @@ pub struct Fixture {
     /// Ausgangsgrenzen (Dimmer-Limit, Pan/Tilt-Bereich, Invertieren).
     #[serde(default, skip_serializing_if = "FixtureLimits::is_default")]
     pub limits: FixtureLimits,
+    /// Lage im 3D-Visualisierer. `None` = automatisch aus dem Bühnenplan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place3d: Option<crate::venue::Placement>,
 }
 
 /// Grenzen, die beim Ausgeben auf ein Gerät angewendet werden – unabhängig
@@ -694,6 +697,9 @@ pub struct Show {
     pub scenes: Vec<Scene>,
     #[serde(default)]
     pub groups: Vec<Group>,
+    /// Veranstaltungsort für den 3D-Visualisierer.
+    #[serde(default)]
+    pub venue: crate::venue::Venue,
 }
 
 impl Default for Show {
@@ -714,6 +720,7 @@ impl Show {
             zones: Vec::new(),
             scenes: Vec::new(),
             groups: Vec::new(),
+            venue: crate::venue::Venue::default(),
         }
     }
 
@@ -855,6 +862,7 @@ impl Show {
             plan_size: None,
             plan_rotation: None,
             limits: FixtureLimits::default(),
+            place3d: None,
         });
         Ok(id)
     }

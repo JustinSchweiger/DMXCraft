@@ -12,4 +12,5 @@ authors.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+roxmltree = "0.20"
 thiserror.workspace = true

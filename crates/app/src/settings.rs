@@ -37,6 +37,8 @@ pub struct Settings {
     pub mcp_enabled: bool,
     /// Port des MCP-Servers (http://127.0.0.1:<port>/mcp).
     pub mcp_port: u16,
+    /// Qualität des 3D-Visualisierers (0 = niedrig … 3 = ultra).
+    pub viz_quality: u8,
 }
 
 impl Default for Settings {
@@ -56,6 +58,7 @@ impl Default for Settings {
             wrap_scenes: false,
             mcp_enabled: false,
             mcp_port: dmxcraft_mcp::DEFAULT_PORT,
+            viz_quality: 1,
         }
     }
 }

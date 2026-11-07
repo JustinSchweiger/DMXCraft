@@ -20,6 +20,7 @@ mod titlebar;
 mod ui;
 mod updater;
 mod views;
+mod viz;
 
 fn main() -> eframe::Result {
     // `dmxcraft mcp`: stdio-Brücke für KI-Assistenten (ohne Fenster)

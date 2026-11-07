@@ -67,6 +67,8 @@ pub struct DmxCraftApp {
     history: History,
     /// MCP-Server für KI-Assistenten.
     mcp: crate::mcp::McpLink,
+    /// 3D-Visualisierer.
+    viz: crate::viz::VizView,
     fullscreen: Fullscreen,
     /// Vollbild beim nächsten Frame umschalten.
     toggle_fullscreen: bool,
@@ -131,6 +133,7 @@ impl DmxCraftApp {
             windows: Windows::default(),
             history: History::default(),
             mcp: crate::mcp::McpLink::default(),
+            viz: crate::viz::VizView::default(),
             usb_ports: Vec::new(),
             fullscreen: Fullscreen::default(),
             toggle_fullscreen: false,
@@ -294,6 +297,10 @@ impl DmxCraftApp {
                         self.state.info(t("Nichts rückgängig zu machen"));
                     }
                 }
+            }
+            MenuAction::Visualizer => {
+                self.state.mode = Mode::Visual;
+                self.state.viz_window = !self.state.viz_window;
             }
             MenuAction::DmxLevels => {
                 self.state.mode = Mode::Setup;
@@ -642,7 +649,8 @@ impl DmxCraftApp {
 }
 
 impl eframe::App for DmxCraftApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame_: &mut eframe::Frame) {
+        let rs = frame_.wgpu_render_state().cloned();
         let ctx = ui.ctx().clone();
         // Laufende Szenen und Live-Farben flüssig anzeigen.
         ctx.request_repaint_after(Duration::from_millis(33));
@@ -755,6 +763,7 @@ impl eframe::App for DmxCraftApp {
         {
             let mut e = Self::lock(&engine);
             self.state.wrap_scenes = self.settings.wrap_scenes;
+            self.state.viz_quality = crate::viz::Quality::from_key(self.settings.viz_quality);
             let mut cx = ViewCtx {
                 engine: &mut e,
                 state: &mut self.state,
@@ -799,10 +808,67 @@ impl eframe::App for DmxCraftApp {
                         .frame(area)
                         .show(ui, |ui| control.grid.ui(ui, &mut cx));
                 }
+                Mode::Visual => {
+                    let viz = &mut self.viz;
+                    egui::CentralPanel::default_margins()
+                        .frame(area)
+                        .show(ui, |ui| {
+                            if cx.state.viz_window {
+                                // läuft im eigenen Fenster
+                                ui.centered_and_justified(|ui| {
+                                    if ui
+                                        .button(t("Der 3D-Visualisierer läuft im eigenen Fenster – hier zurückholen"))
+                                        .clicked()
+                                    {
+                                        cx.state.viz_window = false;
+                                    }
+                                });
+                            } else {
+                                viz.ui(ui, &mut cx, rs.as_ref(), false);
+                            }
+                        });
+                }
             }
             edit_preview(cx.engine, cx.state);
             cx.engine.set_timeline_cursor(cx.state.timeline_cursor);
             cx.state.audio.update(cx.engine);
+        }
+        // 3D-Visualisierer im eigenen Fenster (z. B. auf dem zweiten Bildschirm)
+        if self.state.viz_window {
+            let engine = self.engine.clone();
+            let viz = &mut self.viz;
+            let state = &mut self.state;
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of("dmxcraft_viz"),
+                egui::ViewportBuilder::default()
+                    .with_title("DMXCraft 3D")
+                    .with_inner_size([1280.0, 760.0])
+                    .with_min_inner_size([480.0, 320.0]),
+                |vctx, _class| {
+                    egui::CentralPanel::default()
+                        .frame(
+                            egui::Frame::new()
+                                .fill(theme::surface())
+                                .inner_margin(egui::Margin::same(6)),
+                        )
+                        .show(vctx, |ui| {
+                            let mut e = Self::lock(&engine);
+                            let mut cx = ViewCtx {
+                                engine: &mut e,
+                                state,
+                                frame: &frame,
+                            };
+                            viz.ui(ui, &mut cx, rs.as_ref(), true);
+                        });
+                    if vctx.input(|i| i.viewport().close_requested()) {
+                        state.viz_window = false;
+                    }
+                },
+            );
+        }
+        if self.state.viz_quality.key() != self.settings.viz_quality {
+            self.settings.viz_quality = self.state.viz_quality.key();
+            self.save_settings();
         }
         self.dialogs(&ctx);
         self.lock_window(&ctx);

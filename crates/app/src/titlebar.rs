@@ -58,6 +58,8 @@ pub enum MenuAction {
     Zoom(f32),
     ToggleBlackout,
     DmxLevels,
+    /// 3D-Visualisierer im eigenen Fenster öffnen/schließen.
+    Visualizer,
     Settings,
     CheckUpdates,
     InstallUpdate,
@@ -66,7 +68,7 @@ pub enum MenuAction {
 }
 
 pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<MenuAction> {
-    if info.locked {
+    if info.locked && *mode == Mode::Setup {
         *mode = Mode::Control;
     }
     let mut actions = Vec::new();
@@ -118,11 +120,13 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
         main_menu(ui, info, &mut actions);
         ui.add_space(theme::SP_XS);
         if info.locked {
-            Segmented::new(&[(Mode::Control, t("Steuern"))]).show(ui, mode);
+            Segmented::new(&[(Mode::Control, t("Steuern")), (Mode::Visual, t("3D"))])
+                .show(ui, mode);
         } else {
             Segmented::new(&[
                 (Mode::Setup, t("Einrichten")),
                 (Mode::Control, t("Steuern")),
+                (Mode::Visual, t("3D")),
             ])
             .show(ui, mode);
         }
@@ -409,11 +413,10 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             );
         });
         menu::sub(ui, MenuItem::new(t("Tools")).plain(), |ui| {
-            ui.add(
-                MenuItem::new(t("3D-Visualisierer"))
-                    .icon(Icon::Cube)
-                    .enabled(false)
-                    .tooltip(soon),
+            act(
+                ui,
+                MenuItem::new(t("3D-Visualisierer")).icon(Icon::Cube),
+                MenuAction::Visualizer,
             );
             act(
                 ui,

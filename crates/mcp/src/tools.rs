@@ -1074,6 +1074,7 @@ fn add_fixtures(e: &mut Engine, a: &Value) -> R {
             plan_size: None,
             plan_rotation: None,
             limits: Default::default(),
+            place3d: None,
         })
         .collect();
     let ids = e.show_mut().paste_fixtures(&templates, universe, address);

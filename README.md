@@ -155,6 +155,13 @@ Die Oberfläche hat zwei Bereiche:
 4. **Live**: Szenen-Buttons nach Zone. Ein Klick schaltet die Szene ein
    oder aus.
 
+## 3D-Visualisierer
+
+Reiter *3D*: Veranstaltungsort bauen oder aus Easy View 2 (XML) importieren
+und die Geräte live sehen – auf der Grafikkarte (Vulkan/Metal/DirectX 12),
+auch im eigenen Fenster auf einem zweiten Bildschirm. Details in
+[docs/VISUALIZER.md](docs/VISUALIZER.md).
+
 ## KI-Assistent (MCP)
 
 DMXCraft lässt sich von einem KI-Assistenten wie Claude bedienen (Geräte

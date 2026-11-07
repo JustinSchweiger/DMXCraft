@@ -119,10 +119,9 @@ mod tests {
             for marker in ["t(\"", "tr!(\""] {
                 let mut rest = src.as_str();
                 while let Some(i) = rest.find(marker) {
-                    // `t(` nur als eigenes Wort (nicht `set(`, `hint(` …)
+                    // nur als eigenes Wort (nicht `set(`, `hint(`, `include_str!(` …)
                     let before = rest[..i].chars().last();
-                    let ok = marker != "t(\""
-                        || !before.is_some_and(|c| c.is_alphanumeric() || c == '_');
+                    let ok = !before.is_some_and(|c| c.is_alphanumeric() || c == '_');
                     let start = i + marker.len();
                     let end = start + rest[start..].find('"').unwrap();
                     if ok {

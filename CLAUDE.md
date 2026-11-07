@@ -22,6 +22,7 @@ crates/app     Oberfläche
   src/views/     Ansichten, je ein Typ mit `impl View` (control/, setup/, windows.rs)
   src/titlebar.rs  eigene Titelleiste + Hauptmenü; src/settings.rs Programmeinstellungen
   src/state.rs   gemeinsamer UI-Zustand (AppState)
+  src/viz/       3D-Visualisierer (wgpu): render.rs, shader.wgsl, rig.rs, camera.rs – docs/VISUALIZER.md
   src/app.rs     Rahmen: Kopfzeile, Modus, Layout, Runtime
 docs/UI-GUIDELINES.md  verbindliche UI-Regeln – vor UI-Arbeit lesen
 ```

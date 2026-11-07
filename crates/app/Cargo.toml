@@ -31,8 +31,10 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
 rfd = "0.17"
+glam = { version = "0.30", features = ["bytemuck"] }
+bytemuck = { version = "1", features = ["derive"] }
 axoupdater = { version = "0.10", features = ["blocking"] }
-eframe = { version = "0.37", default-features = false, features = ["clipboard", "default_fonts", "glow", "links", "persistence", "wayland", "x11"] }
+eframe = { version = "0.37", default-features = false, features = ["clipboard", "default_fonts", "wgpu", "links", "persistence", "wayland", "x11"] }
 rodio = { version = "0.21.1", default-features = false, features = ["playback", "symphonia-mp3", "symphonia-wav", "symphonia-pcm", "symphonia-flac", "symphonia-vorbis", "symphonia-ogg", "symphonia-aac", "symphonia-isomp4"] }
 
 [target.'cfg(windows)'.build-dependencies]

@@ -10,6 +10,8 @@ use dmxcraft_core::{FixtureId, FixtureType, SceneId};
 pub enum Mode {
     Setup,
     Control,
+    /// 3D-Visualisierer.
+    Visual,
 }
 
 /// Formular „Geräte hinzufügen“ (geteilt zwischen Patch und Gerätebibliothek).
@@ -52,6 +54,10 @@ pub struct AppState {
     pub scene_anchor: Option<SceneId>,
     /// Szenen am unteren Rand in weitere Spalten umbrechen (Einstellung).
     pub wrap_scenes: bool,
+    /// Qualität des 3D-Visualisierers (Einstellung).
+    pub viz_quality: crate::viz::Quality,
+    /// 3D-Visualisierer im eigenen Fenster.
+    pub viz_window: bool,
     pub timeline_cursor: f64,
     /// Audiowiedergabe und Wellenformen.
     pub audio: crate::audio::AudioPlayer,
@@ -126,6 +132,8 @@ impl AppState {
             timeline_sel: BTreeSet::new(),
             scene_anchor: None,
             wrap_scenes: false,
+            viz_quality: crate::viz::Quality::default(),
+            viz_window: false,
             timeline_cursor: 0.0,
             audio: Default::default(),
             patch: PatchForm {
