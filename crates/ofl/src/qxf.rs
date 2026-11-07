@@ -232,6 +232,42 @@ pub fn convert_qxf(xml: &str) -> Result<LibraryFixture, OflError> {
     })
 }
 
+/// `<Physical>` (Linse, Fokus, Maße) eines Geräts oder Modus.
+fn qlc_physical(node: roxmltree::Node) -> Option<dmxcraft_core::fixture::Physics> {
+    let p = node.children().find(|c| c.has_tag_name("Physical"))?;
+    let num = |tag: &str, attr: &str| {
+        p.children()
+            .find(|c| c.has_tag_name(tag))
+            .and_then(|c| c.attribute(attr))
+            .and_then(|v| v.parse::<f32>().ok())
+    };
+    let mut out = dmxcraft_core::fixture::Physics::default();
+    let mut any = false;
+    if let (Some(a), b) = (num("Lens", "DegreesMin"), num("Lens", "DegreesMax")) {
+        if a > 0.0 {
+            out.beam_angle = [a, b.unwrap_or(a).max(a)];
+            any = true;
+        }
+    }
+    if let Some(v) = num("Focus", "PanMax") {
+        out.pan_range = v;
+        any = true;
+    }
+    if let Some(v) = num("Focus", "TiltMax") {
+        out.tilt_range = v;
+        any = true;
+    }
+    if let (Some(w), Some(h), Some(d)) = (
+        num("Dimensions", "Width"),
+        num("Dimensions", "Height"),
+        num("Dimensions", "Depth"),
+    ) {
+        out.size_mm = [w, h, d];
+        any = true;
+    }
+    any.then_some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,40 +340,4 @@ mod tests {
         let xml = r#"<FixtureDefinition><Manufacturer>A</Manufacturer><Model>B</Model></FixtureDefinition>"#;
         assert!(convert_qxf(xml).is_err());
     }
-}
-
-/// `<Physical>` (Linse, Fokus, Maße) eines Geräts oder Modus.
-fn qlc_physical(node: roxmltree::Node) -> Option<dmxcraft_core::fixture::Physics> {
-    let p = node.children().find(|c| c.has_tag_name("Physical"))?;
-    let num = |tag: &str, attr: &str| {
-        p.children()
-            .find(|c| c.has_tag_name(tag))
-            .and_then(|c| c.attribute(attr))
-            .and_then(|v| v.parse::<f32>().ok())
-    };
-    let mut out = dmxcraft_core::fixture::Physics::default();
-    let mut any = false;
-    if let (Some(a), b) = (num("Lens", "DegreesMin"), num("Lens", "DegreesMax")) {
-        if a > 0.0 {
-            out.beam_angle = [a, b.unwrap_or(a).max(a)];
-            any = true;
-        }
-    }
-    if let Some(v) = num("Focus", "PanMax") {
-        out.pan_range = v;
-        any = true;
-    }
-    if let Some(v) = num("Focus", "TiltMax") {
-        out.tilt_range = v;
-        any = true;
-    }
-    if let (Some(w), Some(h), Some(d)) = (
-        num("Dimensions", "Width"),
-        num("Dimensions", "Height"),
-        num("Dimensions", "Depth"),
-    ) {
-        out.size_mm = [w, h, d];
-        any = true;
-    }
-    any.then_some(out)
 }
