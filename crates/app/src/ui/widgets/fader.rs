@@ -19,7 +19,6 @@ use crate::ui::theme;
 pub const FADER_W: f32 = 44.0;
 const DOT_H: f32 = 20.0;
 const NUM_H: f32 = 18.0;
-const NAME_H: f32 = 16.0;
 const SYMBOL_H: f32 = 30.0;
 const VALUE_H: f32 = 24.0;
 const HANDLE: Vec2 = Vec2::new(24.0, 34.0);
@@ -97,7 +96,7 @@ impl Fader {
     }
 
     pub fn show(self, ui: &mut Ui) -> FaderEvent {
-        let head = DOT_H + NUM_H + NAME_H + SYMBOL_H + VALUE_H;
+        let head = DOT_H + NUM_H + SYMBOL_H + VALUE_H;
         let h = self
             .height
             .unwrap_or_else(|| ui.available_height())
@@ -146,37 +145,6 @@ impl Fader {
             theme::text(),
         );
         y += NUM_H;
-        // Kanalname
-        if let Some(name) = &self.hint {
-            let max = self.width - 6.0;
-            let font = egui::FontId::proportional(10.0);
-            let mut text = name.clone();
-            let fits = |s: &str| {
-                p.layout_no_wrap(s.to_string(), font.clone(), Color32::WHITE)
-                    .size()
-                    .x
-                    <= max
-            };
-            if !fits(&text) {
-                let chars: Vec<char> = name.chars().collect();
-                let mut n = chars.len();
-                while n > 1 {
-                    n -= 1;
-                    text = chars[..n].iter().collect::<String>().trim_end().to_string() + "...";
-                    if fits(&text) {
-                        break;
-                    }
-                }
-            }
-            p.text(
-                pos2(outer.center().x, y + NAME_H * 0.5),
-                egui::Align2::CENTER_CENTER,
-                text,
-                font,
-                theme::text_dim(),
-            );
-        }
-        y += NAME_H;
         // Symbol
         let sym = Rect::from_center_size(
             pos2(outer.center().x, y + SYMBOL_H * 0.5),

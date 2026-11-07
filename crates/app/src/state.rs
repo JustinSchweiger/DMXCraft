@@ -111,10 +111,10 @@ impl AppState {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ProgrammerMode {
     /// Werte bearbeiten und sofort ausgeben.
-    #[default]
     Edit,
     /// Werte bearbeiten, ohne dass sie ausgegeben werden.
     Blind,
-    /// Live-Betrieb.
+    /// Live-Betrieb (Start-Modus).
+    #[default]
     Live,
 }

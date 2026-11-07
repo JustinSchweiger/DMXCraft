@@ -126,20 +126,14 @@ impl View for ProgrammerView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let groups = fader_groups(cx.engine, cx.state);
         let layer = Layer::of(cx.state.programmer_mode);
-        let set_count = layer.map(cx.engine).len();
-        let selected = cx.state.selected.len();
-        section_header(ui, t("Programmer"), |ui| {
-            ui.label(
-                egui::RichText::new(tr!(
-                    "{selected} Geräte · {set_count} Kanäle gesetzt",
-                    selected = selected,
-                    set_count = set_count
-                ))
-                .color(theme::text_dim()),
-            );
-        });
+        section_header(ui, t("Programmer"), |_| {});
         toolbar(ui, cx.engine, cx.state);
         let dot = mode_color(cx.state.programmer_mode);
+        // Trennlinie zwischen Werkzeugleiste und Fader-Bereich
+        ui.add_space(theme::SP_S);
+        let (line, _) =
+            ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), Sense::hover());
+        ui.painter().rect_filled(line, 0.0, theme::border());
         ui.add_space(theme::SP_S);
 
         egui::Panel::left("programmer_categories")
@@ -150,8 +144,18 @@ impl View for ProgrammerView {
                 category_list(ui, cx.engine, layer, &groups, &mut self.category, dot)
             });
 
+        // Fader-Bereich als eigene, abgesetzte Fläche (wie der Bühnenplan)
         egui::CentralPanel::default_margins()
-            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(8, 0)))
+            .frame(
+                egui::Frame::new()
+                    .fill(theme::bg())
+                    .corner_radius(theme::R_M)
+                    .outer_margin(egui::Margin {
+                        left: 8,
+                        ..Default::default()
+                    })
+                    .inner_margin(egui::Margin::same(6)),
+            )
             .show(ui, |ui| {
                 if cx.state.selected.is_empty() {
                     return;
@@ -273,7 +277,7 @@ fn fixture_block(
                 sw: 0,
                 se: 0,
             },
-            theme::bg(),
+            theme::raised_hover(),
         );
         // ein Gerät: sein Name; mehrere desselben Typs: die Typbezeichnung
         let title = if block.names.len() == 1 {
