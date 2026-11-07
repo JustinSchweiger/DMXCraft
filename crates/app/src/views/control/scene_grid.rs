@@ -227,6 +227,7 @@ impl SceneGridView {
                     let r = ui.add(text_field(text).desired_width(120.0));
                     if std::mem::take(&mut self.rename_focus) {
                         r.request_focus();
+                        select_all(ui.ctx(), r.id, text);
                     }
                     let (enter, esc) = ui.input(|i| {
                         (
@@ -285,6 +286,16 @@ impl SceneGridView {
     }
 }
 
+/// Ganzen Text eines Eingabefelds markieren, damit man sofort tippen kann.
+fn select_all(ctx: &egui::Context, id: egui::Id, text: &str) {
+    let mut st = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
+    st.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+        egui::text::CCursor::new(0),
+        egui::text::CCursor::new(text.chars().count()),
+    )));
+    st.store(ctx, id);
+}
+
 /// Untermenü „Ausgeblendete Bänke“ mit je einem Eintrag zum Einblenden.
 fn hidden_banks_menu(ui: &mut egui::Ui, show: &Show, actions: &mut Vec<Action>) {
     let hidden: Vec<_> = show.zones.iter().filter(|z| z.hidden).collect();
@@ -294,10 +305,20 @@ fn hidden_banks_menu(ui: &mut egui::Ui, show: &Show, actions: &mut Vec<Action>) 
             .icon(Icon::LightOn)
             .enabled(!hidden.is_empty()),
         |ui| {
-            for z in hidden {
-                if menu::item(ui, MenuItem::new(&z.name).tooltip(t("Einblenden"))) {
+            for z in &hidden {
+                let c = theme::zone_color(show, Some(z.id));
+                let item = MenuItem::new(&z.name)
+                    .icon_fn(move |p, r, _| {
+                        p.circle_filled(r.center(), r.width().min(r.height()) * 0.32, c);
+                    })
+                    .tooltip(t("Einblenden"));
+                if menu::item(ui, item) {
                     actions.push(Action::Bank(BankAction::Show(z.id)));
                 }
+            }
+            menu::separator(ui);
+            if menu::item(ui, MenuItem::new(t("Alle einblenden")).icon(Icon::LightOn)) {
+                actions.extend(hidden.iter().map(|z| Action::Bank(BankAction::Show(z.id))));
             }
         },
     );
@@ -617,7 +638,10 @@ fn drag_ghost(ctx: &egui::Context, show: &Show, selected: &BTreeSet<SceneId>) {
                 .corner_radius(theme::R_S)
                 .inner_margin(egui::Margin::symmetric(10, 6))
                 .show(ui, |ui| {
-                    ui.label(egui::RichText::new(label).color(color));
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(label).color(color))
+                            .wrap_mode(egui::TextWrapMode::Extend),
+                    );
                 });
         });
 }
@@ -732,15 +756,7 @@ fn scene_card(
         let r = ui.put(field, text_field(text).desired_width(field.width()));
         if std::mem::take(rename_focus) {
             r.request_focus();
-            // ganzen Namen markieren, damit man sofort tippen kann
-            if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), r.id) {
-                let n = text.chars().count();
-                st.cursor.set_char_range(Some(egui::text::CCursorRange::two(
-                    egui::text::CCursor::new(0),
-                    egui::text::CCursor::new(n),
-                )));
-                st.store(ui.ctx(), r.id);
-            }
+            select_all(ui.ctx(), r.id, text);
         }
         let (enter, esc) = ui.input(|i| {
             (
@@ -890,6 +906,19 @@ fn apply(
                 } else {
                     vec![dragged]
                 };
+                // bisherige (Bank-)Farbe behalten statt die neue Bankfarbe zu erben
+                for id in &ids {
+                    let Some(old) = e.show().scene(*id).map(|s| s.zone) else {
+                        continue;
+                    };
+                    if old == Some(zone) {
+                        continue;
+                    }
+                    let c = theme::zone_color(e.show(), old);
+                    if let Some(s) = e.show_mut().scene_mut(*id).filter(|s| s.color.is_none()) {
+                        s.color = Some([c.r(), c.g(), c.b()]);
+                    }
+                }
                 e.show_mut().move_scenes(&ids, zone, before);
                 e.sync();
             }
