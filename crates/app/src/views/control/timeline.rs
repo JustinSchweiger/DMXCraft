@@ -42,6 +42,17 @@ pub struct TimelineView {
     scroll_y: f32,
     /// Ziehen im Lineal (Zoom/Scroll): Startpunkt des Zeigers.
     ruler_grab: Option<egui::Pos2>,
+    /// Achse beim Ziehen im Lineal: `Some(true)` = waagerecht (scrollen),
+    /// `Some(false)` = senkrecht (zoomen), `None` = noch offen.
+    ruler_axis: Option<bool>,
+    /// Bewegung, bis die Achse feststeht.
+    ruler_acc: Vec2,
+    /// Zuletzt angeklickte Spur: Ziel für Einfügen (Strg+V).
+    paste_track: Option<usize>,
+    /// Wo das Kontextmenü der Spuren geöffnet wurde.
+    menu_pos: Option<egui::Pos2>,
+    /// Auswahlrahmen: Startpunkt und Auswahl davor (Strg/Umschalt ergänzt).
+    marquee: Option<(egui::Pos2, std::collections::BTreeSet<u32>)>,
     drag: Option<(u32, Drag)>,
     /// Zwischenablage (Ausschneiden/Kopieren).
     clipboard: Vec<(usize, Clip)>,
@@ -56,6 +67,11 @@ impl Default for TimelineView {
             scroll_ms: 0.0,
             scroll_y: 0.0,
             ruler_grab: None,
+            ruler_axis: None,
+            ruler_acc: Vec2::ZERO,
+            paste_track: None,
+            menu_pos: None,
+            marquee: None,
             drag: None,
             clipboard: Vec::new(),
             before_drag: None,
@@ -252,7 +268,10 @@ impl TimelineView {
         // Spurköpfe und Blöcke nicht über Lineal/Zoomleiste zeichnen
         let outer_clip = ui.clip_rect();
         ui.set_clip_rect(clip_area.intersect(outer_clip));
-        self.grid_lines(&tp, lanes, &tl);
+        // Blöcke nur rechts der Spurköpfe (auch beim waagerechten Scrollen)
+        let lanes_clip = Rect::from_min_max(lanes.min, area.max).intersect(outer_clip);
+        let lp = ui.painter_at(lanes_clip);
+        self.grid_lines(&lp, lanes, &tl);
         let mut y = lanes.top() - self.scroll_y;
         let mut rows: Vec<(usize, f32, f32)> = Vec::new();
         for (i, tr) in tl.tracks.iter().enumerate() {
@@ -268,11 +287,31 @@ impl TimelineView {
         };
 
         // Hintergrund der Spuren (Klick leert die Auswahl, Rechtsklick: Menü)
-        let bg = ui.interact(clip_area, ui.scope_id().with("tl_bg"), Sense::click());
+        let bg = ui.interact(
+            clip_area,
+            ui.scope_id().with("tl_bg"),
+            Sense::click_and_drag(),
+        );
         if bg.clicked() {
             st.timeline_sel.clear();
+            if let Some(q) = bg.interact_pointer_pos() {
+                self.paste_track = track_at(q.y);
+            }
+            // Klick in die Spuren setzt die Abspielposition
+            if let Some(q) = bg.interact_pointer_pos().filter(|q| q.x >= lanes.left()) {
+                let ms = self.snap(self.ms_at(q.x, lanes).max(0.0), &tl, &[], 0);
+                st.timeline_cursor = ms;
+                e.seek_timeline(scene, ms);
+            }
         }
-        let menu_pos = bg.interact_pointer_pos();
+        // Position des Rechtsklicks merken (beim Klick ins Menü ist der Zeiger woanders)
+        if bg.secondary_clicked() {
+            self.menu_pos = bg.interact_pointer_pos();
+            if let Some(q) = self.menu_pos {
+                self.paste_track = track_at(q.y);
+            }
+        }
+        let menu_pos = self.menu_pos;
         let mut paste_at: Option<(usize, u64)> = None;
         menu::context(&bg, |ui| {
             menu::begin(ui);
@@ -309,7 +348,7 @@ impl TimelineView {
             }
         });
         if let Some((track, at)) = paste_at {
-            self.paste(&mut tl, track, at);
+            self.paste(&mut tl, st, track, at);
         }
 
         let mut header_action: Option<(usize, HeaderAction)> = None;
@@ -343,7 +382,7 @@ impl TimelineView {
                 tl.add_track(None);
             }
         }
-        // Blöcke
+        // Blöcke: nur im Spurbereich rechts der Spurköpfe zeichnen und anklicken
         let names = |id: SceneId| {
             e.show().scene(id).map(|s| {
                 (
@@ -355,6 +394,7 @@ impl TimelineView {
             })
         };
         let mut clicked_clip: Option<(u32, bool)> = None;
+        let mut clip_rects: Vec<(u32, Rect)> = Vec::new();
         let mut clip_menu: Option<(u32, ClipAction)> = None;
         let mut pointer_track = None;
         let mut double: Option<SceneId> = None;
@@ -368,6 +408,7 @@ impl TimelineView {
         if let Some(q) = pointer {
             pointer_track = track_at(q.y);
         }
+        ui.set_clip_rect(lanes_clip);
         for &(ti, ty, _) in &rows {
             let tr_locked = tl.tracks[ti].locked || locked;
             let expanded = tl.tracks[ti].expanded;
@@ -384,6 +425,7 @@ impl TimelineView {
                 }
                 let r =
                     Rect::from_min_max(pos2(x0, ty + 2.0), pos2(x1.max(x0 + 3.0), ty + th - 2.0));
+                clip_rects.push((cid, r));
                 let sel = st.timeline_sel.contains(&cid);
                 let (name, color, scene_ms) = match &c.content {
                     ClipContent::Scene(id) => names(*id)
@@ -396,16 +438,16 @@ impl TimelineView {
                         0,
                     ),
                 };
-                paint_clip(ui, &tp, r, &c, &name, color, sel, scene_ms, st);
+                paint_clip(ui, &lp, r, &c, &name, color, sel, scene_ms, st);
                 // Unterspur: Dimmer bzw. Lautstärke als Linie
                 if expanded {
                     let lane = Rect::from_min_max(
                         pos2(r.left(), ty + th + 2.0),
                         pos2(r.right(), ty + th + LANE_H - 4.0),
                     );
-                    tp.rect_filled(lane, 2.0, color.gamma_multiply(0.18));
+                    lp.rect_filled(lane, 2.0, color.gamma_multiply(0.18));
                     let ly = lane.bottom() - lane.height() * c.level;
-                    tp.line_segment(
+                    lp.line_segment(
                         [pos2(lane.left(), ly), pos2(lane.right(), ly)],
                         Stroke::new(2.0, color),
                     );
@@ -474,7 +516,7 @@ impl TimelineView {
                 }
                 if fin.hovered() || fout.hovered() {
                     for x in [fin_x.max(r.left() + 5.0), fout_x.min(r.right() - 5.0)] {
-                        tp.circle_filled(pos2(x, r.top() + 5.0), 4.0, Color32::WHITE);
+                        lp.circle_filled(pos2(x, r.top() + 5.0), 4.0, Color32::WHITE);
                     }
                 }
                 let start_drag = |resp: &egui::Response, d: Drag| resp.drag_started().then_some(d);
@@ -537,6 +579,7 @@ impl TimelineView {
             }
         }
 
+        ui.set_clip_rect(clip_area.intersect(outer_clip));
         // Ziehen auswerten
         if let (Some((cid, d)), Some(q)) = (self.drag, pointer) {
             let down = ui.input(|i| i.pointer.primary_down());
@@ -632,7 +675,7 @@ impl TimelineView {
                     pos2(self.x_at(at, lanes), ty + 2.0),
                     Vec2::new(dur as f32 * self.zoom, th - 4.0),
                 );
-                tp.rect_stroke(
+                lp.rect_stroke(
                     ghost,
                     3.0,
                     Stroke::new(2.0, theme::accent()),
@@ -666,6 +709,45 @@ impl TimelineView {
         }
 
         // Auswahl und Menüaktionen
+        if let Some((cid, _)) = clicked_clip {
+            self.paste_track = tl.clip(cid).map(|(t, _)| t);
+        }
+        // Auswahlrahmen: Klicken und Ziehen im Spurbereich
+        if bg.drag_started() {
+            let add = ui.input(|i| i.modifiers.command || i.modifiers.shift);
+            let origin = ui.input(|i| i.pointer.press_origin());
+            if let Some(o) = origin {
+                let keep = if add {
+                    st.timeline_sel.clone()
+                } else {
+                    Default::default()
+                };
+                self.marquee = Some((o, keep));
+            }
+        }
+        if let Some((o, keep)) = &self.marquee {
+            if let (true, Some(q)) = (bg.dragged(), pointer) {
+                let rect = Rect::from_two_pos(*o, q);
+                let mut sel = keep.clone();
+                sel.extend(
+                    clip_rects
+                        .iter()
+                        .filter(|(_, r)| r.intersects(rect))
+                        .map(|(id, _)| *id),
+                );
+                st.timeline_sel = sel;
+                let shown = rect.intersect(clip_area);
+                lp.rect_filled(shown, 0.0, theme::accent().gamma_multiply(0.12));
+                tp.rect_stroke(
+                    shown,
+                    0.0,
+                    Stroke::new(1.0, theme::accent()),
+                    StrokeKind::Inside,
+                );
+            } else {
+                self.marquee = None;
+            }
+        }
         if let Some((cid, add)) = clicked_clip {
             if add {
                 if !st.timeline_sel.remove(&cid) {
@@ -726,8 +808,8 @@ impl TimelineView {
                 }
             }
             if paste {
-                let track = pointer_track.unwrap_or(0);
-                self.paste(&mut tl, track, st.timeline_cursor as u64);
+                let track = self.paste_track.or(pointer_track).unwrap_or(0);
+                self.paste(&mut tl, st, track, st.timeline_cursor as u64);
             }
         }
 
@@ -991,14 +1073,27 @@ impl TimelineView {
         }
         if resp.drag_started() {
             self.ruler_grab = resp.interact_pointer_pos();
+            self.ruler_axis = None;
+            self.ruler_acc = Vec2::ZERO;
         }
         if let Some(origin) = self.ruler_grab {
             if resp.dragged() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::None);
-                let d = ui.input(|i| i.pointer.delta());
-                self.scroll_ms = (self.scroll_ms + f64::from(d.x / self.zoom)).max(0.0);
-                if d.y != 0.0 {
-                    self.zoom_at((-d.y * 0.01).exp(), origin.x, lanes);
+                let mut d = ui.input(|i| i.pointer.delta());
+                // erst nach etwas Bewegung entscheiden, dann nur noch diese Achse
+                if self.ruler_axis.is_none() {
+                    self.ruler_acc += d;
+                    if self.ruler_acc.length() >= 8.0 {
+                        self.ruler_axis = Some(self.ruler_acc.x.abs() >= self.ruler_acc.y.abs());
+                        d = self.ruler_acc;
+                    }
+                }
+                match self.ruler_axis {
+                    Some(true) => {
+                        self.scroll_ms = (self.scroll_ms + f64::from(d.x / self.zoom)).max(0.0);
+                    }
+                    Some(false) => self.zoom_at((-d.y * 0.01).exp(), origin.x, lanes),
+                    None => {}
                 }
             } else {
                 // Zeiger zurück an die Stelle, an der gezogen wurde
@@ -1095,22 +1190,12 @@ impl TimelineView {
     }
 
     /// Zwischenablage an `at` (ms) einfügen; erste Spur = `track`.
-    fn paste(&mut self, tl: &mut Timeline, track: usize, at: u64) {
-        let Some(first) = self.clipboard.iter().map(|(_, c)| c.start_ms).min() else {
-            return;
-        };
-        let base_track = self.clipboard.iter().map(|(t, _)| *t).min().unwrap_or(0);
-        for (t, c) in self.clipboard.clone() {
-            let ti = track + (t - base_track);
-            let start = at + (c.start_ms - first);
-            let nid = tl.add_clip(ti, c.content.clone(), start, c.duration_ms);
-            if let Some(n) = tl.clip_mut(nid) {
-                *n = Clip {
-                    id: nid,
-                    start_ms: start,
-                    ..c
-                };
-            }
+    /// Einfügen an der ersten freien Stelle ab `at` auf Spur `track`
+    /// (Abstände und Spurversatz der kopierten Blöcke bleiben erhalten).
+    fn paste(&mut self, tl: &mut Timeline, st: &mut AppState, track: usize, at: u64) {
+        let ids = tl.paste_group(&self.clipboard, track, at);
+        if !ids.is_empty() {
+            st.timeline_sel = ids.into_iter().collect();
         }
     }
 }

@@ -292,6 +292,55 @@ impl Timeline {
         })
     }
 
+    /// Blöcke einfügen (Spur und Zeit relativ zueinander wie in `clips`):
+    /// die Gruppe beginnt auf Spur `track` an der ersten freien Stelle ab
+    /// `at`, ohne andere Blöcke zu überdecken. Liefert die neuen IDs.
+    pub fn paste_group(&mut self, clips: &[(usize, Clip)], track: usize, at: u64) -> Vec<u32> {
+        let (Some(first), Some(base)) = (
+            clips.iter().map(|(_, c)| c.start_ms).min(),
+            clips.iter().map(|(t, _)| *t).min(),
+        ) else {
+            return Vec::new();
+        };
+        let parts: Vec<(usize, u64, &Clip)> = clips
+            .iter()
+            .map(|(t, c)| (track + (t - base), c.start_ms - first, c))
+            .collect();
+        // so lange nach hinten schieben, bis nichts mehr kollidiert
+        let mut shift = at;
+        'search: for _ in 0..10_000 {
+            for &(ti, rel, c) in &parts {
+                let (s, e) = (shift + rel, shift + rel + c.duration_ms);
+                if let Some(hit) = self.tracks.get(ti).and_then(|t| {
+                    t.clips
+                        .iter()
+                        .filter(|o| o.start_ms < e && s < o.end_ms())
+                        .map(Clip::end_ms)
+                        .max()
+                }) {
+                    shift = hit.saturating_sub(rel).max(shift + 1);
+                    continue 'search;
+                }
+            }
+            break;
+        }
+        parts
+            .into_iter()
+            .map(|(ti, rel, c)| {
+                let start = shift + rel;
+                let id = self.add_clip(ti, c.content.clone(), start, c.duration_ms);
+                if let Some(n) = self.clip_mut(id) {
+                    *n = Clip {
+                        id,
+                        start_ms: start,
+                        ..c.clone()
+                    };
+                }
+                id
+            })
+            .collect()
+    }
+
     /// Länge eines Schlags in ms.
     pub fn beat_ms(&self) -> f64 {
         60_000.0 / f64::from(self.bpm.clamp(20.0, 400.0))
@@ -339,6 +388,36 @@ mod tests {
         assert_eq!((clips[0].fade_in_ms, clips[0].fade_out_ms), (400, 600));
         assert_eq!(clips[1].start_ms, clips[0].end_ms());
         assert_eq!(sc.duration_ms(), tl.length_ms());
+    }
+
+    #[test]
+    fn paste_finds_free_place_and_keeps_gaps() {
+        let mut t = Timeline::default();
+        let a = t.add_clip(1, ClipContent::Scene(SceneId(1)), 0, 1000);
+        let b = t.add_clip(2, ClipContent::Scene(SceneId(2)), 1500, 500);
+        let group: Vec<(usize, Clip)> = [a, b]
+            .iter()
+            .map(|id| {
+                let (tr, c) = t.clip(*id).unwrap();
+                (tr, c.clone())
+            })
+            .collect();
+        // dreimal an derselben Stelle auf Spur 3 einfügen: hintereinander
+        let mut starts = Vec::new();
+        for _ in 0..3 {
+            let ids = t.paste_group(&group[..1], 3, 200);
+            starts.push(t.clip(ids[0]).unwrap().1.start_ms);
+        }
+        assert_eq!(starts, vec![200, 1200, 2200]);
+        // Gruppe über zwei Spuren: Abstand und Spurversatz bleiben
+        let ids = t.paste_group(&group, 0, 0);
+        let (ta, ca) = t.clip(ids[0]).map(|(x, c)| (x, c.clone())).unwrap();
+        let (tb, cb) = t.clip(ids[1]).map(|(x, c)| (x, c.clone())).unwrap();
+        assert_eq!((ta, tb), (0, 1));
+        assert_eq!(cb.start_ms - ca.start_ms, 1500);
+        // Spur 1 war bei 0..1000 belegt -> Gruppe muss so weit nach hinten,
+        // dass der zweite Block (Spur 1, +1500) frei liegt: erster Start 0 geht
+        assert_eq!(ca.start_ms, 0);
     }
 
     #[test]

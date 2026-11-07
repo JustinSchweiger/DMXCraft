@@ -558,15 +558,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/timeline.rs": {
-    "mtime": 1794077875.4009879,
-    "seen": 1794077910.5210981,
-    "ast_hash": "5ed48544f9236023e8cfa47a77352eb3",
+    "mtime": 1794078770.9287305,
+    "seen": 1794078853.4959066,
+    "ast_hash": "442688cf27b1965d1bf8046a0ea5218a",
     "semantic_hash": ""
   },
   "crates/core/src/timeline.rs": {
-    "mtime": 1794077875.484988,
-    "seen": 1794077910.5211272,
-    "ast_hash": "81b710e80699da423daf24ec2257f8d7",
+    "mtime": 1794078468.3080869,
+    "seen": 1794078853.4960809,
+    "ast_hash": "5d64f0b94f142d5da3b72a1e9227b092",
     "semantic_hash": ""
   }
 }
