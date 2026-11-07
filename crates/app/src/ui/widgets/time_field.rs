@@ -49,23 +49,58 @@ pub fn time_field(
     hours: bool,
     accent: Color32,
 ) -> bool {
-    let digits = egui::FontId::proportional(theme::FS_BODY + 2.0);
+    time_field_ex(ui, id_salt, ms, enabled, hours, accent, false)
+}
+
+/// Kompakte Variante ohne Rahmen (für Tabellen), Breite [`COMPACT_W`].
+pub fn time_field_compact(
+    ui: &mut Ui,
+    id_salt: &str,
+    ms: &mut u32,
+    enabled: bool,
+    accent: Color32,
+) -> bool {
+    time_field_ex(ui, id_salt, ms, enabled, false, accent, true)
+}
+
+/// Breite der kompakten Variante (ohne Stunden).
+pub const COMPACT_W: f32 = 3.0 * 17.0 + 2.0 * 9.0;
+
+fn time_field_ex(
+    ui: &mut Ui,
+    id_salt: &str,
+    ms: &mut u32,
+    enabled: bool,
+    hours: bool,
+    accent: Color32,
+    compact: bool,
+) -> bool {
+    let digits = egui::FontId::proportional(if compact {
+        theme::FS_BODY
+    } else {
+        theme::FS_BODY + 2.0
+    });
     let units_font = egui::FontId::proportional(theme::FS_CAPTION);
-    let pair_w = 22.0;
-    let unit_w = 12.0;
-    let pad = 8.0;
+    let (pair_w, unit_w, pad, height) = if compact {
+        (17.0, 9.0, 0.0, 22.0)
+    } else {
+        (22.0, 12.0, 8.0, 28.0)
+    };
     let fields: &[usize] = if hours { &[0, 1, 2, 3] } else { &[1, 2, 3] };
     let w = pad * 2.0 + fields.len() as f32 * pair_w + (fields.len() - 1) as f32 * unit_w;
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 28.0), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, height), Sense::hover());
     let id = ui.make_persistent_id(("time_field", id_salt));
     let p = ui.painter().clone();
-    p.rect_filled(rect, theme::R_S, theme::bg());
-    p.rect_stroke(
-        rect,
-        theme::R_S,
-        Stroke::new(1.0, theme::border()),
-        StrokeKind::Inside,
-    );
+    if !compact {
+        p.rect_filled(rect, theme::R_S, theme::bg());
+        p.rect_stroke(
+            rect,
+            theme::R_S,
+            Stroke::new(1.0, theme::border()),
+            StrokeKind::Inside,
+        );
+    }
+    let inset = if compact { 1.0 } else { 3.0 };
 
     let mut changed = false;
     let mut parts = split(u64::from(*ms));
@@ -75,8 +110,8 @@ pub fn time_field(
     let mut x = rect.left() + pad;
     for (n, &i) in fields.iter().enumerate() {
         let cell = Rect::from_min_size(
-            pos2(x, rect.top() + 3.0),
-            Vec2::new(pair_w, rect.height() - 6.0),
+            pos2(x, rect.top() + inset),
+            Vec2::new(pair_w, rect.height() - inset * 2.0),
         );
         x += pair_w;
         let sense = if enabled {

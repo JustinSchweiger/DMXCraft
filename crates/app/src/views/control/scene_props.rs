@@ -451,7 +451,9 @@ impl ScenePropsView {
 
         // Liste der Effekte, darunter die Werkzeugleiste
         const BAR_H: f32 = 40.0;
-        let list_h = (ui.available_height() - BAR_H).max(60.0);
+        let area = ui.available_rect_before_wrap();
+        let bar_rect = Rect::from_min_max(pos2(area.left(), area.bottom() - BAR_H), area.max);
+        let list_h = (area.height() - BAR_H - theme::SP_XS).max(60.0);
         let selected = self.selected_fx.filter(|(s, _)| *s == id).map(|(_, f)| f);
         let has_steps = scene.has_steps();
         let mut steps = scene.steps.clone();
@@ -555,21 +557,33 @@ impl ScenePropsView {
             }
         }
 
-        // Werkzeugleiste
-        let (line, _) =
-            ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), Sense::hover());
-        ui.painter().rect_filled(line, 0.0, theme::border());
-        ui.horizontal(|ui| {
-            ui.set_min_height(BAR_H - 1.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        // Werkzeugleiste: feste Leiste am unteren Rand, Knöpfe mittig
+        ui.painter().line_segment(
+            [bar_rect.left_top(), bar_rect.right_top()],
+            Stroke::new(1.0, theme::border()),
+        );
+        ui.allocate_rect(bar_rect, Sense::hover());
+        let mut bar = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(bar_rect.with_min_y(bar_rect.top() + 1.0))
+                .layout(egui::Layout::right_to_left(egui::Align::Center)),
+        );
+        {
+            let ui = &mut bar;
+            {
                 let on = !locked;
                 if ui
                     .add(
-                        IconButton::new(Icon::Save)
+                        IconButton::new(Icon::Export)
+                            .size(30.0)
                             .flat()
                             .enabled(on && self.fx_dialog.is_none()),
                     )
-                    .on_hover_text(t("Effekte exportieren"))
+                    .on_hover_text(if has_steps {
+                        t("Schritte exportieren")
+                    } else {
+                        t("Effekte exportieren")
+                    })
                     .clicked()
                 {
                     self.start_dialog(ui.ctx(), id, true);
@@ -577,10 +591,15 @@ impl ScenePropsView {
                 if ui
                     .add(
                         IconButton::new(Icon::Import)
+                            .size(30.0)
                             .flat()
                             .enabled(on && self.fx_dialog.is_none()),
                     )
-                    .on_hover_text(t("Effekte importieren"))
+                    .on_hover_text(if has_steps {
+                        t("Schritte importieren")
+                    } else {
+                        t("Effekte importieren")
+                    })
                     .clicked()
                 {
                     self.start_dialog(ui.ctx(), id, false);
@@ -653,8 +672,8 @@ impl ScenePropsView {
                         self.adding = true;
                     }
                 }
-            });
-        });
+            }
+        }
     }
 
     fn start_dialog(&mut self, ctx: &egui::Context, scene: SceneId, export: bool) {
@@ -699,11 +718,17 @@ impl ScenePropsView {
                 .selected_fx
                 .filter(|(sc, _)| *sc == scene)
                 .map(|(_, f)| f);
-            let list: Vec<&Effect> = match sel {
-                Some(f) => s.effects.iter().filter(|e| e.id == f).collect(),
-                None => s.effects.iter().collect(),
+            let effects: Vec<Effect> = match sel {
+                Some(f) => s.effects.iter().filter(|e| e.id == f).cloned().collect(),
+                None => s.effects.clone(),
             };
-            let result = serde_json::to_string_pretty(&list)
+            // STEPS nimmt die Schritte (Werte und Zeiten) mit
+            let steps = if effects.iter().any(|e| e.kind == EffectKind::Steps) {
+                s.steps.clone()
+            } else {
+                Vec::new()
+            };
+            let result = serde_json::to_string_pretty(&FxFile { effects, steps })
                 .map_err(|e| e.to_string())
                 .and_then(|json| std::fs::write(&path, json).map_err(|e| e.to_string()));
             match result {
@@ -715,24 +740,83 @@ impl ScenePropsView {
         } else {
             let read = std::fs::read_to_string(&path)
                 .map_err(|e| e.to_string())
-                .and_then(|s| serde_json::from_str::<Vec<Effect>>(&s).map_err(|e| e.to_string()));
+                .and_then(|s| FxFile::parse(&s));
             match read {
-                Ok(list) => {
+                Ok(file) => {
                     if let Some(s) = cx.engine.show_mut().scene_mut(scene) {
-                        let n = list.len();
-                        for fx in list {
-                            let id = s.add_effect(fx.kind);
-                            if let Some(new) = s.effects.iter_mut().find(|e| e.id == id) {
-                                new.collapsed = fx.collapsed;
+                        match import_fx(s, file) {
+                            Ok(msg) => {
+                                cx.state.edit_reload = true;
+                                cx.state.info(msg);
                             }
+                            Err(e) => cx.state.error(e),
                         }
-                        cx.state.info(tr!("{n} Effekt(e) importiert", n = n));
                     }
                 }
                 Err(e) => cx.state.error(e),
             }
         }
     }
+}
+
+/// Inhalt einer `.dmxfx`-Datei. Ältere Dateien sind eine reine Effektliste.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct FxFile {
+    effects: Vec<Effect>,
+    /// Schritte eines STEPS-Effekts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    steps: Vec<dmxcraft_core::Step>,
+}
+
+impl FxFile {
+    fn parse(json: &str) -> Result<Self, String> {
+        serde_json::from_str::<FxFile>(json)
+            .or_else(|_| {
+                serde_json::from_str::<Vec<Effect>>(json).map(|effects| FxFile {
+                    effects,
+                    steps: Vec::new(),
+                })
+            })
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// Importierte Effekte in die Szene übernehmen. STEPS steht nur allein:
+/// in eine Schrittszene werden die Schritte angehängt, eine Szene ohne
+/// Effekte wird zur Schrittszene.
+fn import_fx(s: &mut dmxcraft_core::Scene, file: FxFile) -> Result<String, String> {
+    let with_steps = file.effects.iter().any(|e| e.kind == EffectKind::Steps);
+    if with_steps {
+        if s.has_steps() {
+            let n = file.steps.len();
+            s.steps.extend(file.steps);
+            return Ok(tr!("{n} Schritt(e) importiert", n = n));
+        }
+        if !s.effects.is_empty() {
+            return Err(t("STEPS kann nur als einziger Effekt in einer Szene stehen").into());
+        }
+        s.add_effect(EffectKind::Steps);
+        let n = file.steps.len();
+        if !file.steps.is_empty() {
+            s.steps = file.steps;
+        } else if s.steps.is_empty() {
+            s.steps.push(dmxcraft_core::Step::new(Vec::new()));
+        }
+        return Ok(tr!("{n} Schritt(e) importiert", n = n));
+    }
+    if s.has_steps() {
+        return Err(
+            t("Zu einer Schrittszene lassen sich keine weiteren Effekte hinzufügen").into(),
+        );
+    }
+    let n = file.effects.len();
+    for fx in file.effects {
+        let id = s.add_effect(fx.kind);
+        if let Some(new) = s.effects.iter_mut().find(|e| e.id == id) {
+            new.collapsed = fx.collapsed;
+        }
+    }
+    Ok(tr!("{n} Effekt(e) importiert", n = n))
 }
 
 /// Kacheln der Effektarten in zwei Spalten; gibt die angeklickte zurück.
@@ -796,9 +880,10 @@ fn effect_tiles(ui: &mut egui::Ui, enabled: bool, allow_steps: bool) -> Option<E
     pick
 }
 
-/// Tabelle der Schritte: Nummer, Haltezeit, Überblendzeit. Ein Klick auf
-/// eine Zeile wählt den Schritt zum Bearbeiten (die Fader zeigen dann seine
-/// Werte). Gibt `true` zurück, wenn eine Zeile angeklickt wurde.
+/// Tabelle der Schritte (kompakt, wie eine Tabelle): Nummer, Haltezeit,
+/// Überblendzeit. Ein Klick auf eine Zeile wählt den Schritt zum Bearbeiten
+/// (die Fader zeigen dann seine Werte). `true`, wenn eine Zeile angeklickt
+/// wurde.
 fn steps_table(
     ui: &mut egui::Ui,
     steps: &mut [dmxcraft_core::Step],
@@ -807,32 +892,43 @@ fn steps_table(
     color: Color32,
     enabled: bool,
 ) -> bool {
-    const NUM_W: f32 = 54.0;
-    const ROW_H: f32 = 34.0;
+    use crate::ui::widgets::time_field::{time_field_compact, COMPACT_W};
+    const ROW_H: f32 = 24.0;
+    const GAP: f32 = 1.0;
     let mut clicked = false;
     let full_w = ui.available_width();
-    let field_w = ((full_w - NUM_W) / 2.0).max(106.0);
+    // Spalten: Nummer schmal, die Zeiten teilen sich den Rest
+    let num_w = (full_w * 0.26).clamp(44.0, 80.0);
+    let field_w = ((full_w - num_w - 2.0 * GAP) / 2.0).max(COMPACT_W + 4.0);
+    let cols = [num_w, field_w, field_w];
+    let left = ui.cursor().min.x;
+    let cells = |top: f32| {
+        let mut x = left;
+        cols.map(|w| {
+            let r = Rect::from_min_size(pos2(x, top), Vec2::new(w, ROW_H));
+            x += w + GAP;
+            r
+        })
+    };
+    ui.spacing_mut().item_spacing.y = GAP;
     // Kopfzeile
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        for (text, w) in [
-            (t("Schritt"), NUM_W),
-            (t("Hold Zeit"), field_w),
-            (t("Fade Zeit"), field_w),
-        ] {
-            let (r, _) = ui.allocate_exact_size(Vec2::new(w, 20.0), Sense::hover());
-            ui.painter().text(
-                pos2(r.left() + 8.0, r.center().y),
-                egui::Align2::LEFT_CENTER,
-                text.to_uppercase(),
-                theme::caption(),
-                theme::text_dim(),
-            );
-        }
-    });
+    let (head, _) = ui.allocate_exact_size(Vec2::new(full_w, ROW_H), Sense::hover());
+    for (r, text) in
+        cells(head.top())
+            .into_iter()
+            .zip([t("Schritt"), t("Hold Zeit"), t("Fade Zeit")])
+    {
+        ui.painter().rect_filled(r, 0.0, theme::raised_hover());
+        ui.painter().text(
+            r.center(),
+            egui::Align2::CENTER_CENTER,
+            text,
+            theme::caption(),
+            theme::text(),
+        );
+    }
     for (i, step) in steps.iter_mut().enumerate() {
-        let row = Rect::from_min_size(ui.cursor().min, Vec2::new(full_w, ROW_H));
-        let resp = ui.interact(row, ui.make_persistent_id(("step_row", i)), Sense::click());
+        let (row, resp) = ui.allocate_exact_size(Vec2::new(full_w, ROW_H), Sense::click());
         let sel = *edit_step == i;
         let fill = if sel {
             theme::accent_dim()
@@ -841,50 +937,47 @@ fn steps_table(
         } else {
             theme::bg()
         };
-        ui.painter().rect_filled(row, theme::R_S, fill);
+        let [num, hold, fade] = cells(row.top());
+        let p = ui.painter().clone();
+        for r in [num, hold, fade] {
+            p.rect_filled(r, 0.0, fill);
+        }
         if playing == Some(i) {
             // laufender Schritt: Balken in der Szenenfarbe
-            ui.painter().rect_filled(
-                Rect::from_min_size(row.min, Vec2::new(3.0, row.height())),
-                1.0,
+            p.rect_filled(
+                Rect::from_min_size(num.min, Vec2::new(3.0, num.height())),
+                0.0,
                 color,
             );
         }
+        p.text(
+            num.center(),
+            egui::Align2::CENTER_CENTER,
+            (i + 1).to_string(),
+            theme::body(),
+            if sel {
+                theme::text()
+            } else {
+                theme::text_dim()
+            },
+        );
         ui.push_id(("step", i), |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 0.0;
-                ui.set_min_height(ROW_H);
-                let (r, _) = ui.allocate_exact_size(Vec2::new(NUM_W, ROW_H), Sense::hover());
-                ui.painter().text(
-                    pos2(r.left() + 10.0, r.center().y),
-                    egui::Align2::LEFT_CENTER,
-                    (i + 1).to_string(),
-                    theme::heading_font(),
-                    if sel {
-                        theme::text()
-                    } else {
-                        theme::text_dim()
-                    },
-                );
-                for (salt, ms) in [("hold", &mut step.hold_ms), ("fade", &mut step.fade_ms)] {
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(field_w, ROW_H),
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| {
-                            if time_field(ui, salt, ms, enabled, false, color) {
-                                *edit_step = i;
-                                clicked = true;
-                            }
-                        },
-                    );
+            for (salt, cell, ms) in [
+                ("hold", hold, &mut step.hold_ms),
+                ("fade", fade, &mut step.fade_ms),
+            ] {
+                let r = Rect::from_center_size(cell.center(), Vec2::new(COMPACT_W, ROW_H - 2.0));
+                let mut cui = ui.new_child(egui::UiBuilder::new().max_rect(r));
+                if time_field_compact(&mut cui, salt, ms, enabled, color) {
+                    *edit_step = i;
+                    clicked = true;
                 }
-            });
+            }
         });
         if resp.clicked() {
             *edit_step = i;
             clicked = true;
         }
-        ui.add_space(2.0);
     }
     clicked
 }
