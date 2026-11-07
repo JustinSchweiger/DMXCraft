@@ -396,3 +396,13 @@ impl Form<'_> {
         self.ui.end_row();
     }
 }
+
+/// Ganzen Text eines Eingabefelds markieren, damit man sofort tippen kann.
+pub fn select_all(ctx: &egui::Context, id: egui::Id, text: &str) {
+    let mut st = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
+    st.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+        egui::text::CCursor::new(0),
+        egui::text::CCursor::new(text.chars().count()),
+    )));
+    st.store(ctx, id);
+}

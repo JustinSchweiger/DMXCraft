@@ -297,7 +297,7 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
             let name = tr!("Gruppe {n}", n = e.show().groups.len() + 1);
             e.show_mut().add_group(name.clone(), ids);
             st.info(tr!(
-                "„{name}“ angelegt – umbenennen unter EINRICHTEN → Zonen & Gruppen",
+                "„{name}“ angelegt – Doppelklick auf die Gruppe zum Umbenennen",
                 name = name
             ));
         }

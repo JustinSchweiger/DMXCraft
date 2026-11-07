@@ -19,6 +19,7 @@ use eframe::egui::{self, Color32, Sense, Stroke, StrokeKind, Vec2};
 use crate::state::AppState;
 use crate::ui::theme;
 use crate::ui::widgets::color_picker::color_swatches;
+use crate::ui::widgets::dialog::select_all;
 use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::scene_card::CARD_H;
 use crate::ui::widgets::{text_field, Icon, IconButton, SceneCard};
@@ -352,16 +353,6 @@ impl SceneGridView {
             }
         });
     }
-}
-
-/// Ganzen Text eines Eingabefelds markieren, damit man sofort tippen kann.
-fn select_all(ctx: &egui::Context, id: egui::Id, text: &str) {
-    let mut st = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
-    st.cursor.set_char_range(Some(egui::text::CCursorRange::two(
-        egui::text::CCursor::new(0),
-        egui::text::CCursor::new(text.chars().count()),
-    )));
-    st.store(ctx, id);
 }
 
 /// Untermenü „Ausgeblendete Bänke“ mit je einem Eintrag zum Einblenden.

@@ -225,10 +225,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
     // ----- Steuern: Bühne -----
     ("Bühne", "Stage"),
     ("Oberfläche ist gesperrt", "Interface is locked"),
-    ("Jedes 2.", "Every 2nd"),
-    ("Jedes zweite Gerät der Auswahl", "Every second fixture of the selection"),
-    ("Umkehren", "Invert"),
-    ("Keine", "None"),
+    ("Ausgewählte Geräte hinzufügen", "Add selected fixtures"),
+    ("Erst Geräte auswählen", "Select fixtures first"),
+    ("Geräte auswählen und mit + eine Gruppe anlegen", "Select fixtures and press + to create a group"),
+    ("„{name}“ angelegt – Doppelklick auf die Gruppe zum Umbenennen", "Created “{name}” – double-click the group to rename it"),
     ("{n} ausgewählt", "{n} selected"),
     ("Gruppen legst du unter Bänke & Gruppen an", "Create groups under Banks & groups"),
     // ----- Gerätemenü -----
