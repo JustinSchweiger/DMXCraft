@@ -57,6 +57,11 @@ impl Fullscreen {
     /// Jeden Frame aufrufen: führt ausstehende Schritte aus.
     pub fn update(&mut self, ctx: &egui::Context) {
         let Some((step, frames)) = self.pending else {
+            // Zustand übernehmen, wenn das Fenster von außen (z. B. beim Start
+            // aus der gemerkten Fenstergröße) in den Vollbildmodus kam
+            if let Some(fs) = ctx.input(|i| i.viewport().fullscreen) {
+                self.on = fs;
+            }
             return;
         };
         if frames > 0 {

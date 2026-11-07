@@ -38,6 +38,9 @@ fn main() -> eframe::Result {
             // eigene Titelleiste statt der des Betriebssystems
             .with_decorations(false)
             .with_resizable(true),
+        // Fenstergröße/-position und Größen der Bereiche (Panels) beim
+        // nächsten Start wiederherstellen
+        persist_window: true,
         ..Default::default()
     };
     eframe::run_native(

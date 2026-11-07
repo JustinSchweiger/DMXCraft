@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "crates/app/Cargo.toml": {
-    "mtime": 1794002035.2031271,
-    "seen": 1794002077.2373095,
-    "ast_hash": "1c13546347e4d9b6d9782e0cfab88392",
+    "mtime": 1794040510.0591493,
+    "seen": 1794040858.328219,
+    "ast_hash": "9244778aab748257d3132cc42ebe641a",
     "semantic_hash": ""
   },
   "crates/app/build.rs": {
@@ -54,9 +54,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/main.rs": {
-    "mtime": 1794008695.1087766,
-    "seen": 1794008921.1694334,
-    "ast_hash": "3914d5b672771bbddd24a616dd75cf94",
+    "mtime": 1794040634.6704895,
+    "seen": 1794040858.3282442,
+    "ast_hash": "47877f3dcaca394a9cdc570c6a01aeee",
     "semantic_hash": ""
   },
   "crates/app/src/updater.rs": {
@@ -426,9 +426,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/fullscreen.rs": {
-    "mtime": 1794002029.2932677,
-    "seen": 1794002077.2373185,
-    "ast_hash": "6f160bc17b8ccd63d5c6dd502bee004f",
+    "mtime": 1794040510.1156085,
+    "seen": 1794040858.3282328,
+    "ast_hash": "71e3947eb122c76781cbdeeaa0ddc1b5",
     "semantic_hash": ""
   },
   "crates/output/src/open_dmx.rs": {
