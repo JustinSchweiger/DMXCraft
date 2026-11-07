@@ -151,19 +151,24 @@ fn header(ui: &mut egui::Ui, e: &mut Engine, id: SceneId) {
 }
 
 fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
-    let Some(mut st) = e.show().scene(id).map(|s| s.settings.clone()) else {
+    let Some(scene) = e.show().scene(id) else {
         return;
     };
-    let mut duration = e.show().scene(id).map_or(0, |s| s.duration_ms()) as u32;
+    let mut st = scene.settings.clone();
+    let color = scene
+        .color
+        .map_or_else(|| theme::zone_color(e.show(), scene.zone), theme::rgb);
+    let mut duration = scene.duration_ms() as u32;
     let duration_before = duration;
     let on = !locked;
 
-    // Regler
+    // Regler in der Szenenfarbe
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         let mut dim = f32::from(st.dimmer) / 255.0;
         let dim_text = format!("{:.0} %", dim * 100.0);
         if Knob::new(&mut dim, t("Dimmer"), dim_text)
+            .color(color)
             .enabled(on)
             .show(ui)
         {
@@ -172,6 +177,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         // Speed logarithmisch: 10 % … 100 % (Mitte) … 1000 %
         let mut sp = ((f32::from(st.speed_pct) / 10.0).log10() / 2.0).clamp(0.0, 1.0);
         if Knob::new(&mut sp, t("Speed"), format!("{} %", st.speed_pct))
+            .color(color)
             .default_value(0.5)
             .enabled(on)
             .show(ui)
@@ -180,6 +186,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         }
         let mut ph = f32::from(st.phase_deg) / 360.0;
         if Knob::new(&mut ph, t("Phase"), format!("{}°", st.phase_deg))
+            .color(color)
             .default_value(0.0)
             .enabled(on)
             .show(ui)
@@ -188,6 +195,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         }
         let mut sz = f32::from(st.size_pct) / 200.0;
         if Knob::new(&mut sz, t("Size"), format!("{} %", st.size_pct))
+            .color(color)
             .default_value(0.5)
             .enabled(on)
             .show(ui)
@@ -197,9 +205,10 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     });
     ui.add_space(theme::SP_S);
 
-    // Position in der Szene, zum Anfang / Ende springen
+    // Zeitleiste: Anfang/Ende, Richtung, Position mit verstrichener/Gesamtzeit
     let pos = e.scene_position(id);
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
         if ui
             .add(IconButton::new(Icon::Prev).enabled(pos.is_some()))
             .on_hover_text(t("Zum Anfang"))
@@ -214,38 +223,77 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         {
             e.seek(id, 1.0);
         }
+        ui.add_space(theme::SP_XS);
+        for (rev, icon, tip) in [
+            (true, Icon::PlayBack, t("Rückwärts abspielen")),
+            (false, Icon::Play, t("Vorwärts abspielen")),
+        ] {
+            if ui
+                .add(
+                    IconButton::new(icon)
+                        .active(st.reverse == rev)
+                        .tint(color)
+                        .enabled(on),
+                )
+                .on_hover_text(tip)
+                .clicked()
+            {
+                st.reverse = rev;
+            }
+        }
+        ui.add_space(theme::SP_XS);
         let mut v = pos.unwrap_or(0.0);
-        if bar_slider(ui, "scene_pos", &mut v, pos.is_some(), None) {
+        if bar_slider(ui, "scene_pos", &mut v, pos.is_some(), None, color) {
             e.seek(id, v);
         }
+    });
+    let total = u64::from(duration);
+    let elapsed = (f64::from(pos.unwrap_or(0.0)) * total as f64) as u64;
+    ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} / {}",
+                    time_text(elapsed, total >= 3_600_000),
+                    time_text(total, total >= 3_600_000)
+                ))
+                .font(theme::caption())
+                .color(theme::text_dim()),
+            );
+        });
     });
     if pos.is_some() {
         ui.ctx().request_repaint();
     }
     ui.add_space(theme::SP_S);
 
+    // Ein-/Ausblenden als Hüllkurve
+    envelope(ui, &st, duration, pos, color);
+    ui.add_space(theme::SP_S);
+
     form(ui, "scene_props_form", |f| {
         f.row(t("Dauer"), |ui| {
-            time_field(ui, "duration", &mut duration, on)
+            time_field(ui, "duration", &mut duration, on, true, color)
         });
         f.row(t("Fade in"), |ui| {
-            time_field(ui, "fade_in", &mut st.fade_in_ms, on)
+            time_field(ui, "fade_in", &mut st.fade_in_ms, on, false, color)
         });
         f.row(t("Fade out"), |ui| {
-            time_field(ui, "fade_out", &mut st.fade_out_ms, on)
+            time_field(ui, "fade_out", &mut st.fade_out_ms, on, false, color)
         });
         f.row(t("Fade Speed"), |ui| {
-            let mut v = f32::from(st.fade_speed_pct) / 100.0;
-            let text = format!("{} %", st.fade_speed_pct);
-            if bar_slider(ui, "fade_speed", &mut v, on, Some(&text)) {
-                st.fade_speed_pct = (v * 100.0).round() as u8;
+            // 0.1 … 4.0 in Zehnteln, Standard 1.0
+            let mut v = f32::from(st.fade_speed.clamp(1, 40) - 1) / 39.0;
+            let text = format!("{:.1}", f32::from(st.fade_speed) / 10.0);
+            if bar_slider(ui, "fade_speed", &mut v, on, Some(&text), color) {
+                st.fade_speed = (v * 39.0).round() as u8 + 1;
             }
         });
         f.row(t("Phase in"), |ui| {
-            time_field(ui, "phase_in", &mut st.phase_in_ms, on)
+            time_field(ui, "phase_in", &mut st.phase_in_ms, on, false, color)
         });
         f.row(t("Phase out"), |ui| {
-            time_field(ui, "phase_out", &mut st.phase_out_ms, on)
+            time_field(ui, "phase_out", &mut st.phase_out_ms, on, false, color)
         });
     });
 
@@ -263,8 +311,95 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     }
 }
 
+/// Zeit als Text wie im Zeitfeld.
+fn time_text(ms: u64, hours: bool) -> String {
+    crate::ui::widgets::time_field::format(ms, hours)
+}
+
+/// Hüllkurve der Szene: Einblenden, Dauer, Ausblenden – mit Positionsmarke.
+fn envelope(
+    ui: &mut egui::Ui,
+    st: &dmxcraft_core::SceneSettings,
+    duration: u32,
+    pos: Option<f32>,
+    color: Color32,
+) {
+    let w = ui.available_width().max(120.0);
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 64.0), Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(rect, theme::R_S, theme::bg());
+    let area = rect.shrink2(Vec2::new(8.0, 10.0));
+    // Breiten: Ein-/Ausblenden mindestens sichtbar, wenn gesetzt
+    let (fi, fo, d) = (
+        f64::from(st.fade_in_ms),
+        f64::from(st.fade_out_ms),
+        f64::from(duration.max(1)),
+    );
+    let sum = (fi + fo + d).max(1.0);
+    let min = if fi > 0.0 || fo > 0.0 { 0.08 } else { 0.0 };
+    let wi = if fi > 0.0 { (fi / sum).max(min) } else { 0.0 } as f32;
+    let wo = if fo > 0.0 { (fo / sum).max(min) } else { 0.0 } as f32;
+    let wd = (1.0 - wi - wo).max(0.2);
+    let k = area.width() / (wi + wd + wo);
+    let x0 = area.left();
+    let x1 = x0 + wi * k;
+    let x2 = x1 + wd * k;
+    let x3 = x2 + wo * k;
+    let (top, bottom) = (area.top(), area.bottom());
+    let pts = vec![
+        pos2(x0, bottom),
+        pos2(x1, top),
+        pos2(x2, top),
+        pos2(x3, bottom),
+    ];
+    // Fläche unter der Kurve (zwei konvexe Teile reichen nicht – als Streifen)
+    let mut mesh = egui::Mesh::default();
+    let fill = color.gamma_multiply(0.25);
+    for w2 in pts.windows(2) {
+        let (a, b) = (w2[0], w2[1]);
+        let i = mesh.vertices.len() as u32;
+        mesh.colored_vertex(a, fill);
+        mesh.colored_vertex(b, fill);
+        mesh.colored_vertex(pos2(b.x, bottom), fill);
+        mesh.colored_vertex(pos2(a.x, bottom), fill);
+        mesh.add_triangle(i, i + 1, i + 2);
+        mesh.add_triangle(i, i + 2, i + 3);
+    }
+    p.add(egui::Shape::mesh(mesh));
+    p.add(egui::Shape::line(pts, Stroke::new(2.0, color)));
+    let label = |x: f32, text: &str| {
+        p.text(
+            pos2(x, rect.bottom() - 2.0),
+            egui::Align2::CENTER_BOTTOM,
+            text,
+            egui::FontId::proportional(9.0),
+            theme::text_faint(),
+        );
+    };
+    if wi > 0.0 {
+        label((x0 + x1) * 0.5, t("Fade in"));
+    }
+    if wo > 0.0 {
+        label((x2 + x3) * 0.5, t("Fade out"));
+    }
+    if let Some(v) = pos {
+        let x = x1 + (x2 - x1) * v;
+        p.line_segment(
+            [pos2(x, rect.top() + 4.0), pos2(x, rect.bottom() - 4.0)],
+            Stroke::new(1.5, theme::text()),
+        );
+    }
+}
+
 /// Waagerechter Balkenregler 0..=1, optional mit Text in der Mitte.
-fn bar_slider(ui: &mut egui::Ui, id: &str, v: &mut f32, enabled: bool, text: Option<&str>) -> bool {
+fn bar_slider(
+    ui: &mut egui::Ui,
+    id: &str,
+    v: &mut f32,
+    enabled: bool,
+    text: Option<&str>,
+    accent: Color32,
+) -> bool {
     let w = ui.available_width().max(60.0);
     let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 22.0), Sense::hover());
     let sense = if enabled {
@@ -287,7 +422,7 @@ fn bar_slider(ui: &mut egui::Ui, id: &str, v: &mut f32, enabled: bool, text: Opt
     p.rect_filled(rect, theme::R_S, theme::bg());
     let fill = Rect::from_min_size(rect.min, Vec2::new(rect.width() * *v, rect.height()));
     let color: Color32 = if enabled {
-        theme::accent_dim()
+        accent.gamma_multiply(0.45)
     } else {
         theme::raised()
     };

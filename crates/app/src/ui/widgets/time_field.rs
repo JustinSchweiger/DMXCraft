@@ -1,19 +1,22 @@
-//! Zeitfeld im Format `00h00m00s00` (Stunden, Minuten, Sekunden,
-//! Hundertstel). Jede Zahl lässt sich per Klicken und Ziehen nach oben/unten
-//! ändern; Überträge (100 Hundertstel = 1 s, 60 s = 1 min, 60 min = 1 h)
-//! ergeben sich von selbst, weil intern in Millisekunden gerechnet wird.
+//! Zeitfeld im Format `00h00m00s00` bzw. ohne Stunden `00m00s00`
+//! (Minuten, Sekunden, Hundertstel). Jede Zahl lässt sich per Klicken und
+//! Ziehen nach oben/unten ändern; Überträge (100 Hundertstel = 1 s,
+//! 60 s = 1 min, 60 min = 1 h) ergeben sich von selbst, weil intern in
+//! Millisekunden gerechnet wird.
 
-use eframe::egui::{self, pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
+use eframe::egui::{self, pos2, Color32, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 use crate::ui::theme;
 
-/// Größter Wert: 99:59:59.99.
-pub const MAX_MS: u64 = 99 * 3_600_000 + 59 * 60_000 + 59_990;
+/// Größter Wert: 99:59:59.96.
+pub const MAX_MS: u64 = 99 * 3_600_000 + 59 * 60_000 + 59_960;
 /// Punkte Mausweg je Schritt.
 const PX_PER_STEP: f32 = 3.0;
+/// Hundertstel ändern sich in 4er-Schritten (40 ms).
+const FINE_STEP_MS: u64 = 40;
 
-/// Schrittweite je Feld: Stunden, Minuten, Sekunden, Hundertstel (4 ms).
-const STEPS_MS: [u64; 4] = [3_600_000, 60_000, 1_000, 4];
+/// Schrittweite je Feld: Stunden, Minuten, Sekunden, Hundertstel.
+const STEPS_MS: [u64; 4] = [3_600_000, 60_000, 1_000, FINE_STEP_MS];
 
 /// Zerlegt Millisekunden in Stunden, Minuten, Sekunden und Hundertstel.
 pub fn split(ms: u64) -> [u64; 4] {
@@ -25,25 +28,35 @@ pub fn split(ms: u64) -> [u64; 4] {
     ]
 }
 
-/// Text wie im Feld, z. B. `00h01m01s25` (für Hinweise und Tests).
-#[allow(dead_code)]
-pub fn format(ms: u64) -> String {
+/// Text wie im Feld, z. B. `01m01s24`; mit `hours` auch `00h…`.
+pub fn format(ms: u64, hours: bool) -> String {
     let [h, m, s, cs] = split(ms);
-    format!("{h:02}h{m:02}m{s:02}s{cs:02}")
+    if hours {
+        format!("{h:02}h{m:02}m{s:02}s{cs:02}")
+    } else {
+        // ohne Stundenfeld laufen die Minuten weiter
+        format!("{:02}m{s:02}s{cs:02}", h * 60 + m)
+    }
 }
 
 /// Zeichnet das Feld; `true`, wenn sich der Wert geändert hat.
-pub fn time_field(ui: &mut Ui, id_salt: &str, ms: &mut u32, enabled: bool) -> bool {
-    let font = egui::FontId::monospace(theme::FS_BODY);
-    let digit_w = ui
-        .painter()
-        .layout_no_wrap("0".into(), font.clone(), theme::text())
-        .size()
-        .x;
-    let unit_w = digit_w; // Buchstaben h/m/s gleich breit (Monospace)
+/// `hours` = Stundenfeld zeigen, `accent` = Farbe der Zahl unter der Maus.
+pub fn time_field(
+    ui: &mut Ui,
+    id_salt: &str,
+    ms: &mut u32,
+    enabled: bool,
+    hours: bool,
+    accent: Color32,
+) -> bool {
+    let digits = egui::FontId::proportional(theme::FS_BODY + 2.0);
+    let units_font = egui::FontId::proportional(theme::FS_CAPTION);
+    let pair_w = 22.0;
+    let unit_w = 12.0;
     let pad = 8.0;
-    let w = pad * 2.0 + digit_w * 8.0 + unit_w * 3.0;
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 26.0), Sense::hover());
+    let fields: &[usize] = if hours { &[0, 1, 2, 3] } else { &[1, 2, 3] };
+    let w = pad * 2.0 + fields.len() as f32 * pair_w + (fields.len() - 1) as f32 * unit_w;
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 28.0), Sense::hover());
     let id = ui.make_persistent_id(("time_field", id_salt));
     let p = ui.painter().clone();
     p.rect_filled(rect, theme::R_S, theme::bg());
@@ -55,29 +68,27 @@ pub fn time_field(ui: &mut Ui, id_salt: &str, ms: &mut u32, enabled: bool) -> bo
     );
 
     let mut changed = false;
-    let parts = split(u64::from(*ms));
+    let mut parts = split(u64::from(*ms));
+    if !hours {
+        parts[1] += parts[0] * 60;
+    }
     let mut x = rect.left() + pad;
-    let units = ["h", "m", "s", ""];
-    for (i, (val, unit)) in parts.iter().zip(units).enumerate() {
+    for (n, &i) in fields.iter().enumerate() {
         let cell = Rect::from_min_size(
-            pos2(x, rect.top() + 2.0),
-            Vec2::new(digit_w * 2.0, rect.height() - 4.0),
+            pos2(x, rect.top() + 3.0),
+            Vec2::new(pair_w, rect.height() - 6.0),
         );
-        x += digit_w * 2.0;
+        x += pair_w;
         let sense = if enabled {
             Sense::click_and_drag()
         } else {
             Sense::hover()
         };
-        let resp = ui.interact(cell.expand2(Vec2::new(1.0, 0.0)), id.with(i), sense);
+        let resp = ui.interact(cell, id.with(i), sense);
         let hot = enabled && (resp.hovered() || resp.dragged());
         if hot {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
-            p.rect_filled(
-                cell.expand2(Vec2::new(1.0, 0.0)),
-                2.0,
-                theme::raised_hover(),
-            );
+            p.rect_filled(cell, 3.0, theme::raised_hover());
         }
         if resp.dragged() {
             let acc_id = id.with(("acc", i));
@@ -88,9 +99,11 @@ pub fn time_field(ui: &mut Ui, id_salt: &str, ms: &mut u32, enabled: bool) -> bo
             ui.data_mut(|d| d.insert_temp(acc_id, acc));
             if steps != 0.0 {
                 let delta = steps as i64 * STEPS_MS[i] as i64;
-                let v = (i64::from(*ms) + delta).clamp(0, MAX_MS as i64) as u32;
-                if v != *ms {
-                    *ms = v;
+                let mut v = (i64::from(*ms) + delta).clamp(0, MAX_MS as i64) as u64;
+                // Hundertstel bleiben im 4er-Raster
+                v -= v % FINE_STEP_MS;
+                if v as u32 != *ms {
+                    *ms = v as u32;
                     changed = true;
                 }
             }
@@ -101,22 +114,23 @@ pub fn time_field(ui: &mut Ui, id_salt: &str, ms: &mut u32, enabled: bool) -> bo
         p.text(
             cell.center(),
             egui::Align2::CENTER_CENTER,
-            format!("{val:02}"),
-            font.clone(),
+            format!("{:02}", parts[i]),
+            digits.clone(),
             if !enabled {
                 theme::text_faint()
             } else if hot {
-                theme::accent()
+                accent
             } else {
                 theme::text()
             },
         );
-        if !unit.is_empty() {
+        if n + 1 < fields.len() {
+            let unit = ["h", "m", "s"][i];
             p.text(
-                pos2(x + unit_w * 0.5, rect.center().y),
+                pos2(x + unit_w * 0.5, rect.center().y + 1.0),
                 egui::Align2::CENTER_CENTER,
                 unit,
-                font.clone(),
+                units_font.clone(),
                 theme::text_faint(),
             );
             x += unit_w;
@@ -131,10 +145,11 @@ mod tests {
 
     #[test]
     fn split_and_format_carry_over() {
-        assert_eq!(format(0), "00h00m00s00");
-        assert_eq!(format(1_000), "00h00m01s00");
-        assert_eq!(format(61_250), "00h01m01s25");
-        assert_eq!(format(3_600_000 + 120_000), "01h02m00s00");
+        assert_eq!(format(0, true), "00h00m00s00");
+        assert_eq!(format(1_000, true), "00h00m01s00");
+        assert_eq!(format(61_240, false), "01m01s24");
+        assert_eq!(format(3_600_000 + 120_000, true), "01h02m00s00");
+        assert_eq!(format(3_600_000, false), "60m00s00");
         assert_eq!(split(999), [0, 0, 0, 99]);
     }
 }

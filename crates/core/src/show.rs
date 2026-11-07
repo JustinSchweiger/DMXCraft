@@ -295,8 +295,11 @@ pub struct SceneSettings {
     pub fade_in_ms: u32,
     /// Ausblendzeit beim Stoppen.
     pub fade_out_ms: u32,
-    /// Anteil der Schritt-Überblendungen in Prozent (100 = wie programmiert).
-    pub fade_speed_pct: u8,
+    /// Tempo der Schritt-Überblendungen in Zehnteln (10 = 1.0 wie
+    /// programmiert, 20 = doppelt so schnell; 1..=40).
+    pub fade_speed: u8,
+    /// Schritte rückwärts abspielen.
+    pub reverse: bool,
     /// Phasen-Versatz beim Start/Stoppen (für Effekte).
     pub phase_in_ms: u32,
     pub phase_out_ms: u32,
@@ -311,7 +314,8 @@ impl Default for SceneSettings {
             size_pct: 100,
             fade_in_ms: 0,
             fade_out_ms: 0,
-            fade_speed_pct: 100,
+            fade_speed: 10,
+            reverse: false,
             phase_in_ms: 0,
             phase_out_ms: 0,
         }

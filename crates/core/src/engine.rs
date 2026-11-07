@@ -160,6 +160,7 @@ impl Engine {
         if scene.steps.is_empty() {
             return;
         }
+        let (scene_reverse, scene_len) = (scene.settings.reverse, scene.steps.len());
         let zone = scene.zone;
         let show = &self.show;
         // dieselbe Szene startet neu; andere Szenen der Bank blenden aus
@@ -173,7 +174,7 @@ impl Engine {
         self.playing.push(PlayingScene {
             scene: id,
             seq: self.next_seq,
-            step: 0,
+            step: if scene_reverse { scene_len - 1 } else { 0 },
             elapsed_ms: 0.0,
             first_entry: true,
             finished: false,
@@ -421,13 +422,23 @@ impl Engine {
                     break;
                 }
                 guard += 1;
-                if p.step + 1 < len {
+                let reverse = scene.settings.reverse;
+                let has_next = if reverse {
+                    p.step > 0
+                } else {
+                    p.step + 1 < len
+                };
+                if has_next {
                     p.elapsed_ms -= dur;
-                    p.step += 1;
+                    if reverse {
+                        p.step -= 1;
+                    } else {
+                        p.step += 1;
+                    }
                     p.first_entry = false;
                 } else if scene.loop_mode == LoopMode::Loop {
                     p.elapsed_ms -= dur;
-                    p.step = 0;
+                    p.step = if reverse { len - 1 } else { 0 };
                     p.first_entry = false;
                 } else {
                     p.elapsed_ms = dur;
@@ -472,16 +483,23 @@ impl Engine {
         };
         let current = step.value_map();
         // Fade-Anteil der Szene skaliert die Schritt-Überblendung
-        let fade = f64::from(step.fade_ms) * f64::from(scene.settings.fade_speed_pct) / 100.0;
+        let speed = f64::from(scene.settings.fade_speed.clamp(1, 40)) / 10.0;
+        let fade = f64::from(step.fade_ms) / speed;
         let t = if fade < 1.0 {
             1.0
         } else {
             (p.elapsed_ms / fade).clamp(0.0, 1.0)
         };
-        let previous = if p.first_entry && p.step == 0 {
+        let previous = if p.first_entry {
             None
         } else {
-            Some(scene.steps[(p.step + len - 1) % len].value_map())
+            // Vorgänger in Abspielrichtung
+            let prev = if scene.settings.reverse {
+                (p.step + 1) % len
+            } else {
+                (p.step + len - 1) % len
+            };
+            Some(scene.steps[prev].value_map())
         };
 
         for (&ch, &to) in &current {
@@ -955,6 +973,28 @@ mod tests {
         e.seek(id, 0.75);
         assert_eq!(e.render_frame().get(0, 2), Some(2));
         assert!((e.scene_position(id).unwrap() - 0.75).abs() < 0.01);
+    }
+
+    #[test]
+    fn reverse_plays_steps_backwards() {
+        let (mut s, a, _) = setup();
+        let steps: Vec<Step> = (1..=3)
+            .map(|v| {
+                let mut st = Step::new(vec![cv(a, 1, v)]);
+                st.hold_ms = 100;
+                st
+            })
+            .collect();
+        let id = s.add_scene("R", None, steps);
+        s.scene_mut(id).unwrap().settings.reverse = true;
+        let mut e = Engine::new(s);
+        e.activate(id);
+        assert_eq!(e.render_frame().get(0, 2), Some(3));
+        e.tick(Duration::from_millis(110));
+        assert_eq!(e.render_frame().get(0, 2), Some(2));
+        e.tick(Duration::from_millis(100));
+        e.tick(Duration::from_millis(100));
+        assert_eq!(e.render_frame().get(0, 2), Some(3), "Schleife rückwärts");
     }
 
     #[test]

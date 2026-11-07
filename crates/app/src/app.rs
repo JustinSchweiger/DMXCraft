@@ -25,7 +25,7 @@ use crate::views::windows::Windows;
 use crate::views::{View, ViewCtx};
 
 /// DMX-Wiederholrate des Ausgabe-Threads.
-pub const OUTPUT_HZ: u32 = 40;
+pub const OUTPUT_HZ: u32 = 50;
 
 /// Ansichten unter STEUERN.
 #[derive(Default)]

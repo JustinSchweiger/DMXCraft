@@ -59,6 +59,8 @@ pub enum Icon {
     ChevronRight,
     /// Durchgestrichenes Auge (Blind-Modus).
     EyeOff,
+    /// Abspielen rückwärts (Dreieck nach links).
+    PlayBack,
 }
 
 impl Icon {
@@ -72,6 +74,14 @@ impl Icon {
                     pos2(c.x - s * 0.45, c.y - s * 0.6),
                     pos2(c.x + s * 0.6, c.y),
                     pos2(c.x - s * 0.45, c.y + s * 0.6),
+                ];
+                painter.add(Shape::convex_polygon(pts, color, Stroke::NONE));
+            }
+            Icon::PlayBack => {
+                let pts = vec![
+                    pos2(c.x + s * 0.45, c.y - s * 0.6),
+                    pos2(c.x + s * 0.45, c.y + s * 0.6),
+                    pos2(c.x - s * 0.6, c.y),
                 ];
                 painter.add(Shape::convex_polygon(pts, color, Stroke::NONE));
             }
@@ -701,6 +711,8 @@ pub struct IconButton {
     danger: bool,
     /// Kleine Beschriftung unter dem Symbol (z. B. „ALLE“).
     caption: Option<String>,
+    /// Farbe für den aktiven Zustand statt der Akzentfarbe.
+    tint: Option<egui::Color32>,
 }
 
 impl IconButton {
@@ -713,7 +725,13 @@ impl IconButton {
             flat: false,
             danger: false,
             caption: None,
+            tint: None,
         }
+    }
+    /// Farbe des aktiven Zustands (z. B. Szenenfarbe).
+    pub fn tint(mut self, c: egui::Color32) -> Self {
+        self.tint = Some(c);
+        self
     }
     /// Kleine Beschriftung unter dem Symbol.
     pub fn caption(mut self, text: impl Into<String>) -> Self {
@@ -754,7 +772,8 @@ impl Widget for IconButton {
         let (rect, resp) = ui.allocate_exact_size(Vec2::splat(self.size), sense);
         let hovered = resp.hovered() && self.enabled;
         let bg = if self.active {
-            theme::accent_dim()
+            self.tint
+                .map_or_else(theme::accent_dim, |c| c.gamma_multiply(0.3))
         } else if hovered && self.danger {
             theme::DANGER
         } else if hovered {
@@ -769,7 +788,7 @@ impl Widget for IconButton {
         let color = if !self.enabled {
             theme::text_faint()
         } else if self.active {
-            theme::accent()
+            self.tint.unwrap_or_else(theme::accent)
         } else {
             theme::text()
         };

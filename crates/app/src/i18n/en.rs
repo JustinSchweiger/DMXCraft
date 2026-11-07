@@ -416,6 +416,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{n} Szenen", "{n} scenes"),
     ("Alle einblenden", "Show all"),
     ("BLIND", "BLIND"),
+    ("Rückwärts abspielen", "Play backwards"),
+    ("Vorwärts abspielen", "Play forwards"),
     ("Eigenschaften", "Properties"),
     ("Folgt später", "Coming later"),
     ("Eine Szene auswählen, um ihre Einstellungen zu sehen.", "Select a scene to see its settings."),

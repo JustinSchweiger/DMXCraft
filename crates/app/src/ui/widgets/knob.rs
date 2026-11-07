@@ -38,6 +38,12 @@ impl<'a> Knob<'a> {
         self
     }
 
+    /// Akzentfarbe (z. B. Farbe der Szene).
+    pub fn color(mut self, c: Color32) -> Self {
+        self.color = c;
+        self
+    }
+
     pub fn enabled(mut self, on: bool) -> Self {
         self.enabled = on;
         self
