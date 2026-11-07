@@ -6,8 +6,9 @@
 //! eingebettete Daslight-Gerätebibliothek werden bewusst nicht übernommen –
 //! Traversen und Lautsprecher werden mit eigenen Formen nachgebildet.
 //!
-//! Easy View rechnet in Zentimetern mit y nach oben; Drehungen in Grad
-//! (X, dann Y, dann Z).
+//! Easy View rechnet in Zentimetern mit y nach oben, linkshändig (DirectX);
+//! Drehungen in Grad (X, dann Y, dann Z). DMXCraft ist rechtshändig, daher
+//! wird an der x-Achse gespiegelt.
 
 use super::{Material, Object, Placement, Shape, Transform, TrussProfile, Venue};
 
@@ -69,11 +70,14 @@ fn argb(n: &roxmltree::Node) -> ([u8; 3], f32) {
     )
 }
 
+/// Easy View rechnet linkshändig (DirectX): x wird gespiegelt. Eine
+/// Spiegelung an x lässt die Drehung um x gleich und kehrt die um y und z um.
 fn transform(n: &roxmltree::Node) -> Transform {
     let p = vec3(n, "POSITION", 0.0);
+    let r = vec3(n, "ROTATION", 0.0);
     Transform {
-        position: p.map(|v| v / 100.0),
-        rotation: vec3(n, "ROTATION", 0.0),
+        position: [-p[0] / 100.0, p[1] / 100.0, p[2] / 100.0],
+        rotation: [r[0], -r[1], -r[2]],
         scale: vec3(n, "SCALE", 1.0),
     }
 }
@@ -296,7 +300,9 @@ mod tests {
         let f = &r.fixtures[0];
         assert_eq!((f.universe, f.address), (1, 230));
         assert!((f.placement.position[1] - 5.0).abs() < 1e-4);
-        assert_eq!(f.placement.rotation, [10.0, 0.0, 0.0]);
+        // gespiegelt: x umgekehrt, Drehung um x bleibt
+        assert!((f.placement.position[0] + 0.5).abs() < 1e-4);
+        assert_eq!(f.placement.rotation, [10.0, -0.0, -0.0]);
         // Traverse mit Länge aus dem Dateinamen, Lautsprecher angenähert
         let truss = &r.venue.objects[1].children[0].children[0];
         assert!(matches!(truss.shape, Shape::Truss { length, .. } if (length - 3.0).abs() < 1e-6));

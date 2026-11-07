@@ -20,7 +20,7 @@ impl OrbitCamera {
         let [w, h, d] = size;
         Self {
             target: Vec3::new(0.0, h * 0.3, 0.0),
-            yaw: 140.0,
+            yaw: 215.0,
             pitch: 32.0,
             distance: (w * w + d * d).sqrt() * 1.05 + h,
             fov: 45.0,
