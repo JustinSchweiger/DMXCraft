@@ -9,7 +9,7 @@ use crate::ui::theme;
 use crate::ui::widgets::{
     section_header, Icon, IconButton, LimitPad, RangeSlider, ShapeButton, Toggle,
 };
-use crate::views::quick::{quick_action, Quick};
+use crate::views::quick::{quick_action, Layer, Quick};
 use crate::views::{View, ViewCtx};
 
 #[derive(Default)]
@@ -54,7 +54,7 @@ impl View for FixtureSettings {
             }
         });
         if let Some(q) = quick {
-            quick_action(cx.engine, &ids, q);
+            quick_action(cx.engine, Layer::Programmer, &ids, q);
         }
         let Some(first) = ids.first().copied() else {
             ui.label(

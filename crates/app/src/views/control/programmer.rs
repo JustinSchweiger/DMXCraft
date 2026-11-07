@@ -9,7 +9,7 @@ use crate::state::{AppState, ProgrammerMode};
 use crate::ui::theme;
 use crate::ui::widgets::fader::FADER_W;
 use crate::ui::widgets::{section_header, Fader, FaderEvent, Icon, IconButton, Swatch, XyPad};
-use crate::views::quick::{quick_action, Quick};
+use crate::views::quick::{quick_action, Layer, Quick};
 use crate::views::{View, ViewCtx};
 
 /// Kanal-Kategorien wie auf einem Lichtpult.
@@ -125,7 +125,8 @@ pub struct ProgrammerView {
 impl View for ProgrammerView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let groups = fader_groups(cx.engine, cx.state);
-        let set_count = cx.engine.programmer().len();
+        let layer = Layer::of(cx.state.programmer_mode);
+        let set_count = layer.map(cx.engine).len();
         let selected = cx.state.selected.len();
         section_header(ui, t("Programmer"), |ui| {
             ui.label(
@@ -146,7 +147,7 @@ impl View for ProgrammerView {
             .exact_size(132.0)
             .frame(egui::Frame::new())
             .show(ui, |ui| {
-                category_list(ui, cx.engine, &groups, &mut self.category, dot)
+                category_list(ui, cx.engine, layer, &groups, &mut self.category, dot)
             });
 
         egui::CentralPanel::default_margins()
@@ -161,7 +162,7 @@ impl View for ProgrammerView {
                     .collect();
                 let blocks = fixture_blocks(cx.engine, cx.state, &visible);
                 if self.category == Category::Color {
-                    color_bar(ui, cx.engine, &groups, cx.frame);
+                    color_bar(ui, cx.engine, layer, &groups, cx.frame);
                 }
                 if visible.is_empty() {
                     return;
@@ -173,7 +174,7 @@ impl View for ProgrammerView {
                     .show(ui, |ui| {
                         ui.horizontal_top(|ui| {
                             if self.category == Category::Position {
-                                xy_pad(ui, cx.engine, &groups, cx.frame, height);
+                                xy_pad(ui, cx.engine, layer, &groups, cx.frame, height);
                                 ui.add_space(theme::SP_S);
                             }
                             ui.spacing_mut().item_spacing.x = 2.0;
@@ -184,7 +185,7 @@ impl View for ProgrammerView {
                                 76.0
                             };
                             for block in &blocks {
-                                fixture_block(ui, cx.engine, block, height, dot, fader_w);
+                                fixture_block(ui, cx.engine, layer, block, height, dot, fader_w);
                             }
                         });
                     });
@@ -192,16 +193,15 @@ impl View for ProgrammerView {
     }
 }
 
-fn set_group(e: &mut Engine, grp: &FaderGroup, v: u8) {
+fn set_group(e: &mut Engine, layer: Layer, grp: &FaderGroup, v: u8) {
     for ch in &grp.channels {
-        e.set_programmer(*ch, v);
+        layer.set(e, *ch, v);
     }
 }
 
-fn current(e: &Engine, ch: ChannelRef, frame: &DmxFrame) -> u8 {
-    e.programmer()
-        .get(&ch)
-        .copied()
+fn current(e: &Engine, layer: Layer, ch: ChannelRef, frame: &DmxFrame) -> u8 {
+    layer
+        .get(e, ch)
         .or_else(|| e.output_value(frame, ch))
         .unwrap_or(0)
 }
@@ -253,6 +253,7 @@ fn fixture_blocks<'a>(
 fn fixture_block(
     ui: &mut egui::Ui,
     e: &mut Engine,
+    layer: Layer,
     block: &FixtureBlock<'_>,
     height: f32,
     dot: Color32,
@@ -293,7 +294,7 @@ fn fixture_block(
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing = Vec2::ZERO;
             for grp in &block.faders {
-                fader(ui, e, grp, height - HEAD_H, dot, fader_w);
+                fader(ui, e, layer, grp, height - HEAD_H, dot, fader_w);
             }
         });
     });
@@ -302,15 +303,16 @@ fn fixture_block(
 fn fader(
     ui: &mut egui::Ui,
     e: &mut Engine,
+    layer: Layer,
     grp: &FaderGroup,
     height: f32,
     dot: Color32,
     width: f32,
 ) {
     let first = grp.channels[0];
-    let active = e.programmer().contains_key(&first);
+    let active = layer.map(e).contains_key(&first);
     // nicht gespeicherte Kanäle stehen auf 0
-    let value = e.programmer().get(&first).copied().unwrap_or(0);
+    let value = layer.get(e, first).unwrap_or(0);
     let ev = Fader::new(value, grp.number, grp.kind)
         .active(active)
         .dot(dot)
@@ -320,17 +322,23 @@ fn fader(
         .hint(grp.name.clone())
         .show(ui);
     match ev {
-        FaderEvent::Changed(v) => set_group(e, grp, v),
+        FaderEvent::Changed(v) => set_group(e, layer, grp, v),
         FaderEvent::Release => {
             for ch in &grp.channels {
-                e.clear_programmer_channel(*ch);
+                layer.clear(e, *ch);
             }
         }
         FaderEvent::None => {}
     }
 }
 
-fn color_bar(ui: &mut egui::Ui, e: &mut Engine, groups: &[FaderGroup], frame: &DmxFrame) {
+fn color_bar(
+    ui: &mut egui::Ui,
+    e: &mut Engine,
+    layer: Layer,
+    groups: &[FaderGroup],
+    frame: &DmxFrame,
+) {
     let find = |k: ChannelKind| groups.iter().find(|g| g.kind == k);
     let (Some(r), Some(g), Some(b)) = (
         find(ChannelKind::Red),
@@ -340,9 +348,9 @@ fn color_bar(ui: &mut egui::Ui, e: &mut Engine, groups: &[FaderGroup], frame: &D
         return;
     };
     let mut rgb = [
-        current(e, r.channels[0], frame),
-        current(e, g.channels[0], frame),
-        current(e, b.channels[0], frame),
+        current(e, layer, r.channels[0], frame),
+        current(e, layer, g.channels[0], frame),
+        current(e, layer, b.channels[0], frame),
     ];
     let mut changed = false;
     ui.horizontal(|ui| {
@@ -374,28 +382,35 @@ fn color_bar(ui: &mut egui::Ui, e: &mut Engine, groups: &[FaderGroup], frame: &D
     ui.add_space(theme::SP_XS);
     if changed {
         for (grp, v) in [(r, rgb[0]), (g, rgb[1]), (b, rgb[2])] {
-            set_group(e, grp, v);
+            set_group(e, layer, grp, v);
         }
     }
 }
 
-fn xy_pad(ui: &mut egui::Ui, e: &mut Engine, groups: &[FaderGroup], frame: &DmxFrame, height: f32) {
+fn xy_pad(
+    ui: &mut egui::Ui,
+    e: &mut Engine,
+    layer: Layer,
+    groups: &[FaderGroup],
+    frame: &DmxFrame,
+    height: f32,
+) {
     let pan = groups.iter().find(|g| g.kind == ChannelKind::Pan);
     let tilt = groups.iter().find(|g| g.kind == ChannelKind::Tilt);
     if pan.is_none() && tilt.is_none() {
         return;
     }
     let pad = XyPad {
-        x: pan.map_or(128, |g| current(e, g.channels[0], frame)),
-        y: tilt.map_or(128, |g| current(e, g.channels[0], frame)),
+        x: pan.map_or(128, |g| current(e, layer, g.channels[0], frame)),
+        y: tilt.map_or(128, |g| current(e, layer, g.channels[0], frame)),
         size: (height - 8.0).clamp(120.0, 260.0),
     };
     if let Some((x, y)) = pad.show(ui) {
         if let Some(g) = pan {
-            set_group(e, g, x);
+            set_group(e, layer, g, x);
         }
         if let Some(g) = tilt {
-            set_group(e, g, y);
+            set_group(e, layer, g, y);
         }
     }
 }
@@ -423,6 +438,7 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = theme::SP_XS;
         mode_switch(ui, &mut st.programmer_mode, locked);
+        let layer = Layer::of(st.programmer_mode);
         tool_separator(ui);
         let mut quick = None;
         for (q, icon, tip) in [
@@ -448,10 +464,10 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
             }
         }
         if let Some(q) = quick {
-            quick_action(e, &ids, q);
+            quick_action(e, layer, &ids, q);
         }
         tool_separator(ui);
-        let any = !e.programmer().is_empty();
+        let any = !layer.map(e).is_empty();
         if ui
             .add(
                 IconButton::new(Icon::Undo)
@@ -463,7 +479,7 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
             .on_hover_text(t("Alle Beams zurücksetzen"))
             .clicked()
         {
-            e.clear_programmer();
+            layer.clear_all(e);
         }
         let sel: Vec<ChannelRef> = e
             .programmer()
@@ -483,7 +499,7 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
             .clicked()
         {
             for c in sel {
-                e.clear_programmer_channel(c);
+                layer.clear(e, c);
             }
         }
     });
@@ -623,6 +639,7 @@ fn items_mode(i: usize) -> ProgrammerMode {
 fn category_list(
     ui: &mut egui::Ui,
     e: &Engine,
+    layer: Layer,
     groups: &[FaderGroup],
     current: &mut Category,
     dot: Color32,
@@ -687,7 +704,7 @@ fn category_list(
         let set = groups
             .iter()
             .filter(|g| c.contains(g.kind))
-            .any(|g| g.channels.iter().any(|ch| e.programmer().contains_key(ch)));
+            .any(|g| g.channels.iter().any(|ch| layer.map(e).contains_key(ch)));
         if set {
             p.circle_filled(egui::pos2(row.right() - 26.0, row.center().y), 3.5, dot);
         }

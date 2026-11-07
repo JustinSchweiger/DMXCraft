@@ -4,7 +4,9 @@
 //! * Alle Kanäle: LTP – die zuletzt gestartete Szene gewinnt, aber nur für
 //!   Kanäle, die sie gespeichert hat (auch gespeicherte 0-Werte). Nicht
 //!   gespeicherte Kanäle bleiben frei für andere Szenen.
-//! * Der Programmer (Live-Fader) überschreibt alles.
+//! * Der Programmer (Edit-Werte) überschreibt die Szenen.
+//! * Live-Werte überschreiben alles; sie gehören nicht zur Show und werden
+//!   nicht gespeichert.
 //! * Master/Blackout skalieren Dimmer-Kanäle; Geräte ohne Dimmer-Kanal werden
 //!   über ihre Farbkanäle gedimmt.
 
@@ -51,6 +53,8 @@ pub struct Engine {
     /// Vorschau-Szenen (Edit-Modus): werden ausgegeben, auch wenn sie nicht
     /// laufen – ihr erster Schritt liegt über den laufenden Szenen.
     preview: Vec<SceneId>,
+    /// Live-Werte (Live-Modus): überschreiben alles, werden nicht gespeichert.
+    live: HashMap<ChannelRef, u8>,
     master: f32,
     blackout: bool,
     speed: f32,
@@ -64,6 +68,7 @@ impl Engine {
             next_seq: 1,
             programmer: HashMap::new(),
             preview: Vec::new(),
+            live: HashMap::new(),
             master: 1.0,
             blackout: false,
             speed: 1.0,
@@ -86,6 +91,7 @@ impl Engine {
         self.show = show;
         self.playing.clear();
         self.programmer.clear();
+        self.live.clear();
     }
 
     /// Entfernt Wiedergabe-/Programmer-Zustand, der nach Show-Änderungen
@@ -103,6 +109,7 @@ impl Engine {
         }
         self.programmer
             .retain(|ch, _| show.channel_def(*ch).is_some());
+        self.live.retain(|ch, _| show.channel_def(*ch).is_some());
     }
 
     // ---------- Szenen ----------
@@ -215,6 +222,29 @@ impl Engine {
 
     pub fn clear_programmer_channel(&mut self, ch: ChannelRef) {
         self.programmer.remove(&ch);
+    }
+
+    // ---------- Live-Werte ----------
+
+    pub fn set_live(&mut self, ch: ChannelRef, value: u8) {
+        self.live.insert(ch, value);
+    }
+
+    pub fn clear_live_channel(&mut self, ch: ChannelRef) {
+        self.live.remove(&ch);
+    }
+
+    pub fn clear_live(&mut self) {
+        self.live.clear();
+    }
+
+    pub fn live(&self) -> &HashMap<ChannelRef, u8> {
+        &self.live
+    }
+
+    /// Alle Live-Werte ersetzen (z. B. Rückgängig).
+    pub fn replace_live(&mut self, live: HashMap<ChannelRef, u8>) {
+        self.live = live;
     }
 
     /// Vorschau-Szenen setzen (leer = keine Vorschau).
@@ -405,7 +435,14 @@ impl Engine {
             }
         }
 
-        // 5) Master / Blackout
+        // 5) Live-Werte
+        for (ch, v) in &self.live {
+            if let Some(slot) = values.get_mut(ch) {
+                *slot = *v;
+            }
+        }
+
+        // 6) Master / Blackout
         let master = if self.blackout { 0.0 } else { self.master };
         if master < 1.0 {
             for f in &self.show.fixtures {
@@ -712,6 +749,27 @@ mod tests {
         e.activate(id);
         e.tick(Duration::from_secs(3600)); // darf nicht hängen
         assert!(e.is_active(id));
+    }
+
+    #[test]
+    fn live_overrides_scenes_and_resets() {
+        let (mut s, a, _) = setup();
+        let red = s.add_scene(
+            "Rot",
+            None,
+            vec![Step::new(vec![cv(a, 1, 255), cv(a, 2, 0), cv(a, 3, 0)])],
+        );
+        let mut e = Engine::new(s);
+        e.activate(red);
+        let blue = ChannelRef {
+            fixture: a,
+            channel: 3,
+        };
+        e.set_live(blue, 255);
+        let f = e.render_frame();
+        assert_eq!((f.get(0, 2), f.get(0, 4)), (Some(255), Some(255)));
+        e.clear_live();
+        assert_eq!(e.render_frame().get(0, 4), Some(0));
     }
 
     #[test]

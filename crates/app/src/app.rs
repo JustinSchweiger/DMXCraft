@@ -11,7 +11,7 @@ use eframe::egui;
 use crate::demo;
 use crate::file_dialog::{self, Purpose};
 use crate::fullscreen::Fullscreen;
-use crate::history::History;
+use crate::history::{History, Snapshot};
 use crate::settings::Settings;
 use crate::settings_window::{SettingsCx, SettingsWindow};
 use crate::state::{AppState, Mode, ProgrammerMode};
@@ -154,7 +154,7 @@ impl DmxCraftApp {
                 demo::ensure_builtin_types(&mut s);
                 let name = s.name.clone();
                 Self::lock(&self.engine).replace_show(s);
-                self.history.reset(Self::lock(&self.engine).show());
+                self.history.reset(&Snapshot::of(&Self::lock(&self.engine)));
                 self.state.reset_for_new_show();
                 self.state.show_path = path.to_string();
                 self.state.info(tr!("Show „{name}“ geladen", name = name));
@@ -193,7 +193,7 @@ impl DmxCraftApp {
         match action {
             MenuAction::NewShow => {
                 Self::lock(&self.engine).replace_show(demo::empty_show());
-                self.history.reset(Self::lock(&self.engine).show());
+                self.history.reset(&Snapshot::of(&Self::lock(&self.engine)));
                 self.state.reset_for_new_show();
                 self.state.info(t("Neue, leere Show"));
             }
@@ -218,16 +218,17 @@ impl DmxCraftApp {
             }
             MenuAction::Undo | MenuAction::Redo => {
                 let mut e = Self::lock(&self.engine);
-                let current = e.show().clone();
+                let current = Snapshot::of(&e);
                 let restored = if action == MenuAction::Undo {
                     self.history.undo(&current)
                 } else {
                     self.history.redo(&current)
                 };
                 match restored {
-                    Some(show) => {
-                        *e.show_mut() = show;
-                        e.sync();
+                    Some(snap) => {
+                        snap.restore(&mut e);
+                        // Edit-Werte aus der wiederhergestellten Szene neu laden
+                        self.state.edit_reload = true;
                         self.state
                             .selected
                             .retain(|id| e.show().fixture(*id).is_some());
@@ -647,7 +648,7 @@ impl eframe::App for DmxCraftApp {
 
         // Rückgängig: Änderungen erst übernehmen, wenn Ziehen/Tippen beendet ist.
         let busy = ctx.input(|i| i.pointer.any_down()) || ctx.memory(|m| m.focused().is_some());
-        self.history.track(Self::lock(&self.engine).show(), busy);
+        self.history.track(&Self::lock(&self.engine), busy);
     }
 }
 
@@ -674,11 +675,34 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
     };
     // Wechsel in den Edit-Modus lädt die markierte Szene wie ein neues Markieren
     if st.programmer_mode != st.programmer_mode_seen {
+        let was_edit = st.programmer_mode_seen == ProgrammerMode::Edit;
         st.programmer_mode_seen = st.programmer_mode;
         if edit {
             st.scene_selection_seen.clear();
             st.scene_selection_seen.insert(SceneId(u32::MAX));
+        } else if was_edit {
+            // Edit-Werte liegen in der Szene; der Programmer gibt sie nicht weiter aus
+            e.clear_programmer();
         }
+    }
+    if std::mem::take(&mut st.edit_reload) && edit {
+        if let Some(id) = st.selected_scenes.iter().next().copied() {
+            e.clear_programmer();
+            if st.selected_scenes.len() == 1 {
+                if let Some(step) = e.show().scene(id).and_then(|s| s.steps.first()).cloned() {
+                    for v in step.values {
+                        e.set_programmer(
+                            dmxcraft_core::ChannelRef {
+                                fixture: v.fixture,
+                                channel: v.channel,
+                            },
+                            v.value,
+                        );
+                    }
+                }
+            }
+        }
+        return;
     }
     if st.selected_scenes != st.scene_selection_seen {
         st.scene_selection_seen = st.selected_scenes.clone();

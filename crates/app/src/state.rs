@@ -36,6 +36,8 @@ pub struct AppState {
     pub scene_selection_seen: BTreeSet<SceneId>,
     /// Zuletzt verarbeiteter Programmer-Modus.
     pub programmer_mode_seen: ProgrammerMode,
+    /// Edit-Werte neu aus der Szene laden (nach Rückgängig/Wiederholen).
+    pub edit_reload: bool,
     /// Betriebsmodus des Programmers.
     pub programmer_mode: ProgrammerMode,
     pub patch: PatchForm,
@@ -66,6 +68,7 @@ impl AppState {
             programmer_mode: ProgrammerMode::default(),
             scene_selection_seen: BTreeSet::new(),
             programmer_mode_seen: ProgrammerMode::default(),
+            edit_reload: false,
             patch: PatchForm {
                 name: String::new(),
                 count: 1,

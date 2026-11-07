@@ -1,7 +1,61 @@
 //! Schnellaktionen auf ausgewählte Geräte (Beams aus/an, zentrieren) –
 //! genutzt unter EINRICHTEN (Geräte) und im Programmer.
 
+use std::collections::HashMap;
+
 use dmxcraft_core::{ChannelKind, ChannelRef, Engine, FixtureId};
+
+use crate::state::ProgrammerMode;
+
+/// Wertebene, auf die Fader und Schnellaktionen wirken: Edit/Blind schreiben
+/// in den Programmer (der im Edit die markierte Szene spiegelt), Live in die
+/// Live-Werte, die alles überschreiben und nicht gespeichert werden.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Layer {
+    Programmer,
+    Live,
+}
+
+impl Layer {
+    pub fn of(mode: ProgrammerMode) -> Self {
+        match mode {
+            ProgrammerMode::Live => Layer::Live,
+            _ => Layer::Programmer,
+        }
+    }
+
+    pub fn map(self, e: &Engine) -> &HashMap<ChannelRef, u8> {
+        match self {
+            Layer::Programmer => e.programmer(),
+            Layer::Live => e.live(),
+        }
+    }
+
+    pub fn get(self, e: &Engine, ch: ChannelRef) -> Option<u8> {
+        self.map(e).get(&ch).copied()
+    }
+
+    pub fn set(self, e: &mut Engine, ch: ChannelRef, v: u8) {
+        match self {
+            Layer::Programmer => e.set_programmer(ch, v),
+            Layer::Live => e.set_live(ch, v),
+        }
+    }
+
+    pub fn clear(self, e: &mut Engine, ch: ChannelRef) {
+        match self {
+            Layer::Programmer => e.clear_programmer_channel(ch),
+            Layer::Live => e.clear_live_channel(ch),
+        }
+    }
+
+    pub fn clear_all(self, e: &mut Engine) {
+        match self {
+            Layer::Programmer => e.clear_programmer(),
+            Layer::Live => e.clear_live(),
+        }
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Quick {
@@ -11,7 +65,7 @@ pub enum Quick {
 }
 
 /// Setzt Programmer-Werte für einen schnellen Test der Auswahl.
-pub fn quick_action(e: &mut Engine, ids: &[FixtureId], q: Quick) {
+pub fn quick_action(e: &mut Engine, layer: Layer, ids: &[FixtureId], q: Quick) {
     for id in ids {
         let Some(ty) = e
             .show()
@@ -42,7 +96,7 @@ pub fn quick_action(e: &mut Engine, ids: &[FixtureId], q: Quick) {
                 _ => None,
             };
             if let Some(v) = value {
-                e.set_programmer(ch, v);
+                layer.set(e, ch, v);
             }
         }
     }
