@@ -281,6 +281,9 @@ pub struct Scene {
     /// Effekte; eine Szene mit Effekten ist eine FX-Szene.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<Effect>,
+    /// In der Szenenübersicht ausgeblendet (Bank-Menü blendet wieder ein).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
 }
 
 /// Art eines Effekts.
@@ -1224,6 +1227,7 @@ impl Show {
             color: None,
             settings: SceneSettings::default(),
             effects: Vec::new(),
+            hidden: false,
         });
         id
     }

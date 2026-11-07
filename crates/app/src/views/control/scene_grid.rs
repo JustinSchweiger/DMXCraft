@@ -56,6 +56,8 @@ enum Action {
     /// Umbenennung einer Szene abgeschlossen.
     SetSceneName(SceneId, String),
     DuplicateScene(SceneId),
+    /// Szenen in der Übersicht ausblenden.
+    HideScenes(Vec<SceneId>),
     /// SUPER SCENE aus den Szenen erstellen (nacheinander auf Spur 1).
     CreateSuper(Vec<SceneId>),
     /// Gezogene Szene (samt Auswahl) in Bank `.1` vor Szene `.2` ablegen.
@@ -75,6 +77,10 @@ enum BankAction {
     Duplicate(ZoneId),
     Hide(ZoneId),
     Show(ZoneId),
+    /// Eine ausgeblendete Szene wieder einblenden.
+    ShowScene(SceneId),
+    /// Alle ausgeblendeten Szenen der Bank einblenden.
+    ShowAllScenes(ZoneId),
     SetColor(ZoneId, Option<[u8; 3]>),
     ColorToScenes(ZoneId),
     SelectScenes(ZoneId),
@@ -433,6 +439,31 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
         MenuItem::new(t("Ausblenden")).icon(Icon::LightOff),
         BankAction::Hide(zone),
     );
+    // ausgeblendete Szenen einzeln oder alle wieder einblenden
+    let hidden: Vec<(SceneId, String)> = show
+        .scenes
+        .iter()
+        .filter(|s| s.zone == Some(zone) && s.hidden)
+        .map(|s| (s.id, s.name.clone()))
+        .collect();
+    menu::sub(
+        ui,
+        MenuItem::new(&tr!("Ausgeblendete Szenen ({n})", n = hidden.len()))
+            .icon(Icon::EyeOff)
+            .enabled(!hidden.is_empty()),
+        |ui| {
+            menu::begin(ui);
+            for (id, name) in &hidden {
+                if menu::item(ui, MenuItem::new(name).icon(Icon::Eye)) {
+                    other = Some(BankAction::ShowScene(*id));
+                }
+            }
+            menu::separator(ui);
+            if menu::item(ui, MenuItem::new(t("Alle einblenden")).icon(Icon::Eye)) {
+                other = Some(BankAction::ShowAllScenes(zone));
+            }
+        },
+    );
     menu::separator(ui);
 
     // Bankfarbe: Vorgaben als Quadrate, „Auto“ und eigene Farbe (+)
@@ -575,7 +606,7 @@ fn column(
         .show()
         .scenes
         .iter()
-        .filter(|s| s.zone == Some(zone))
+        .filter(|s| s.zone == Some(zone) && !s.hidden)
         .map(|s| s.id)
         .collect();
     // Ziel der Transport-Tasten: aktive Szene der Bank
@@ -905,6 +936,9 @@ fn scene_card(
         if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
             actions.extend(targets.iter().map(|s| Action::DuplicateScene(*s)));
         }
+        if menu::item(ui, MenuItem::new(t("Ausblenden")).icon(Icon::EyeOff)) {
+            actions.push(Action::HideScenes(targets.clone()));
+        }
         if menu::item(
             ui,
             MenuItem::new(t("SuperSzene erstellen"))
@@ -991,6 +1025,18 @@ fn apply(
                 };
                 e.show_mut()
                     .duplicate_scene(id, tr!("{name} (Kopie)", name = name));
+            }
+            Action::HideScenes(ids) => {
+                for id in &ids {
+                    if let Some(s) = e.show_mut().scene_mut(*id) {
+                        s.hidden = true;
+                    }
+                    st.selected_scenes.remove(id);
+                }
+                st.info(tr!(
+                    "{n} Szene(n) ausgeblendet – Rechtsklick auf die Bank blendet sie wieder ein",
+                    n = ids.len()
+                ));
             }
             Action::CreateSuper(ids) => {
                 // in Anzeigereihenfolge
@@ -1113,6 +1159,16 @@ fn apply_bank(
         BankAction::Show(id) => {
             if let Some(z) = e.show_mut().zone_mut(id) {
                 z.hidden = false;
+            }
+        }
+        BankAction::ShowScene(id) => {
+            if let Some(s) = e.show_mut().scene_mut(id) {
+                s.hidden = false;
+            }
+        }
+        BankAction::ShowAllScenes(z) => {
+            for s in e.show_mut().scenes.iter_mut().filter(|s| s.zone == Some(z)) {
+                s.hidden = false;
             }
         }
         BankAction::SetColor(id, c) => {
