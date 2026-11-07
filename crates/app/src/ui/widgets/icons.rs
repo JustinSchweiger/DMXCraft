@@ -57,10 +57,13 @@ pub enum Icon {
     Music,
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
     /// Durchgestrichenes Auge (Blind-Modus).
     EyeOff,
     /// Abspielen rückwärts (Dreieck nach links).
     PlayBack,
+    /// Schriftzug „FX“ (Effekte).
+    Fx,
 }
 
 impl Icon {
@@ -76,6 +79,18 @@ impl Icon {
                     pos2(c.x - s * 0.45, c.y + s * 0.6),
                 ];
                 painter.add(Shape::convex_polygon(pts, color, Stroke::NONE));
+            }
+            Icon::Fx => {
+                painter.text(
+                    c,
+                    egui::Align2::CENTER_CENTER,
+                    "FX",
+                    egui::FontId::new(
+                        s * 1.25,
+                        egui::FontFamily::Name(theme::HEADING_FAMILY.into()),
+                    ),
+                    color,
+                );
             }
             Icon::PlayBack => {
                 let pts = vec![
@@ -502,6 +517,16 @@ impl Icon {
                     pos2(c.x + s * 0.45, c.y + s * 0.65),
                 );
                 painter.rect_stroke(body, 1.5, stroke, egui::StrokeKind::Middle);
+            }
+            Icon::ChevronDown => {
+                painter.add(Shape::line(
+                    vec![
+                        pos2(c.x - s * 0.55, c.y - s * 0.25),
+                        pos2(c.x, c.y + s * 0.3),
+                        pos2(c.x + s * 0.55, c.y - s * 0.25),
+                    ],
+                    Stroke::new(2.0, color),
+                ));
             }
             Icon::ChevronLeft | Icon::ChevronRight => {
                 let dir = if self == Icon::ChevronRight {

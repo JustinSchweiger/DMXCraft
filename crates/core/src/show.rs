@@ -277,6 +277,66 @@ pub struct Scene {
     /// Wiedergabe-Einstellungen (Dimmer, Speed, Ein-/Ausblenden …).
     #[serde(default, skip_serializing_if = "SceneSettings::is_default")]
     pub settings: SceneSettings,
+    /// Effekte; eine Szene mit Effekten ist eine FX-Szene.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<Effect>,
+}
+
+/// Art eines Effekts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EffectKind {
+    Steps,
+    ColorFx,
+    ChaserFx,
+    MoveFx,
+    ValueFx,
+    CurveFx,
+    Mappings,
+    ColorMappings,
+}
+
+impl EffectKind {
+    pub const ALL: [EffectKind; 8] = [
+        EffectKind::Steps,
+        EffectKind::ColorFx,
+        EffectKind::ChaserFx,
+        EffectKind::MoveFx,
+        EffectKind::ValueFx,
+        EffectKind::CurveFx,
+        EffectKind::Mappings,
+        EffectKind::ColorMappings,
+    ];
+
+    /// Anzeigename (Fachbegriff, nicht übersetzt).
+    pub fn label(self) -> &'static str {
+        match self {
+            EffectKind::Steps => "STEPS",
+            EffectKind::ColorFx => "COLOR FX",
+            EffectKind::ChaserFx => "CHASER FX",
+            EffectKind::MoveFx => "MOVE FX",
+            EffectKind::ValueFx => "VALUE FX",
+            EffectKind::CurveFx => "CURVE FX",
+            EffectKind::Mappings => "MAPPINGS",
+            EffectKind::ColorMappings => "COLOR MAPPINGS",
+        }
+    }
+}
+
+/// Ein Effekt einer FX-Szene. Die Einstellungen je Art folgen.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Effect {
+    pub id: u32,
+    pub kind: EffectKind,
+    /// In der Seitenleiste zugeklappt.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub collapsed: bool,
+}
+
+/// Art einer Szene (für Anzeige und Seitenleiste).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SceneKind {
+    Static,
+    Fx,
 }
 
 /// Einstellungen einer Szene in der Seitenleiste „Eigenschaften“.
@@ -329,6 +389,25 @@ impl SceneSettings {
 }
 
 impl Scene {
+    pub fn kind(&self) -> SceneKind {
+        if self.effects.is_empty() {
+            SceneKind::Static
+        } else {
+            SceneKind::Fx
+        }
+    }
+
+    /// Effekt anhängen; gibt seine ID zurück.
+    pub fn add_effect(&mut self, kind: EffectKind) -> u32 {
+        let id = self.effects.iter().map(|e| e.id).max().unwrap_or(0) + 1;
+        self.effects.push(Effect {
+            id,
+            kind,
+            collapsed: false,
+        });
+        id
+    }
+
     /// Gesamtdauer eines Durchlaufs aller Schritte.
     pub fn duration_ms(&self) -> u64 {
         self.steps.iter().map(Step::duration_ms).sum()
@@ -792,6 +871,7 @@ impl Show {
             loop_mode: LoopMode::Loop,
             color: None,
             settings: SceneSettings::default(),
+            effects: Vec::new(),
         });
         id
     }

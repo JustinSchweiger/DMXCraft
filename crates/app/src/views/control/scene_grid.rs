@@ -762,6 +762,7 @@ fn scene_card(
     };
     let progress = e.progress(id);
     let kind = match (scene.steps.len(), progress) {
+        _ if !scene.effects.is_empty() => t("FX").to_string(),
         (_, Some(p)) if p.step_count > 1 => tr!(
             "ABLAUF · {step_nr}/{step_count}",
             step_nr = p.step + 1,

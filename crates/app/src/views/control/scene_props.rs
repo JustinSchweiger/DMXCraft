@@ -6,8 +6,10 @@
 //! Play/Pause-Knopf.
 
 use crate::i18n::t;
+use std::path::PathBuf;
+use std::sync::mpsc::{channel, Receiver};
 
-use dmxcraft_core::{Engine, SceneId};
+use dmxcraft_core::{Effect, EffectKind, Engine, SceneId};
 use eframe::egui::{self, pos2, Color32, Rect, Sense, Stroke, Vec2};
 
 use crate::ui::theme;
@@ -23,14 +25,30 @@ const TABS_W: f32 = 40.0;
 enum Tab {
     #[default]
     Properties,
-    Second,
+    Effects,
     Third,
 }
 
 #[derive(Default)]
 pub struct ScenePropsView {
     tab: Tab,
+    /// Ausgewählter Effekt (Szene, Effekt-ID).
+    selected_fx: Option<(SceneId, u32)>,
+    /// Kachelauswahl zum Hinzufügen eines Effekts offen.
+    adding: bool,
+    /// Laufender Import/Export-Dialog.
+    fx_dialog: Option<FxDialog>,
 }
+
+/// Import/Export von Effekten über den Systemdialog (eigener Thread).
+struct FxDialog {
+    export: bool,
+    scene: SceneId,
+    rx: Receiver<Option<PathBuf>>,
+}
+
+/// Dateiendung exportierter Effekte (Inhalt JSON).
+const FX_EXT: &str = "dmxfx";
 
 impl View for ScenePropsView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
@@ -52,7 +70,7 @@ impl View for ScenePropsView {
         );
         for (tab, icon, tip) in [
             (Tab::Properties, Icon::Settings, t("Eigenschaften")),
-            (Tab::Second, Icon::Levels, t("Folgt später")),
+            (Tab::Effects, Icon::Fx, t("Effekte")),
             (Tab::Third, Icon::Builder, t("Folgt später")),
         ] {
             if tab_ui
@@ -85,12 +103,17 @@ impl View for ScenePropsView {
         header(ui, cx.engine, id);
         ui.add_space(theme::SP_S);
         let locked = cx.state.locked;
+        self.poll_dialog(cx);
+        if self.tab == Tab::Effects {
+            self.effects_tab(ui, cx, id, locked);
+            return;
+        }
         egui::ScrollArea::vertical()
             .id_salt("scene_props")
             .auto_shrink([false, false])
             .show(ui, |ui| match self.tab {
                 Tab::Properties => properties(ui, cx.engine, id, locked),
-                Tab::Second | Tab::Third => {
+                Tab::Effects | Tab::Third => {
                     ui.label(egui::RichText::new(t("Folgt später")).color(theme::text_faint()));
                 }
             });
@@ -374,4 +397,337 @@ fn bar_slider(
         );
     }
     changed
+}
+
+impl ScenePropsView {
+    /// Reiter „Effekte“: bei STATIC-Szenen die Kacheln zur Auswahl, bei
+    /// FX-Szenen die Liste der Effekte und unten die Werkzeugleiste.
+    fn effects_tab(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, id: SceneId, locked: bool) {
+        let Some(scene) = cx.engine.show().scene(id) else {
+            return;
+        };
+        let effects = scene.effects.clone();
+        if effects.is_empty() || self.adding {
+            let mut pick = None;
+            egui::ScrollArea::vertical()
+                .id_salt("fx_tiles")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    if self.adding && !effects.is_empty() {
+                        ui.horizontal(|ui| {
+                            ui.label(theme::heading_text(t("Effekt hinzufügen")));
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui
+                                        .add(IconButton::new(Icon::Close).flat())
+                                        .on_hover_text(t("Abbrechen"))
+                                        .clicked()
+                                    {
+                                        self.adding = false;
+                                    }
+                                },
+                            );
+                        });
+                        ui.add_space(theme::SP_S);
+                    }
+                    pick = effect_tiles(ui, !locked);
+                });
+            if let Some(kind) = pick {
+                if let Some(scene) = cx.engine.show_mut().scene_mut(id) {
+                    let fx = scene.add_effect(kind);
+                    self.selected_fx = Some((id, fx));
+                }
+                self.adding = false;
+            }
+            return;
+        }
+
+        // Liste der Effekte, darunter die Werkzeugleiste
+        const BAR_H: f32 = 40.0;
+        let list_h = (ui.available_height() - BAR_H).max(60.0);
+        let selected = self.selected_fx.filter(|(s, _)| *s == id).map(|(_, f)| f);
+        let mut toggle = None;
+        let mut select = None;
+        ui.allocate_ui(Vec2::new(ui.available_width(), list_h), |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("fx_list")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for fx in &effects {
+                        let (head, chevron) = effect_header(ui, fx, selected == Some(fx.id));
+                        if chevron.clicked() {
+                            toggle = Some(fx.id);
+                        }
+                        if head.clicked() {
+                            select = Some(fx.id);
+                        }
+                        if !fx.collapsed {
+                            egui::Frame::new()
+                                .fill(theme::raised())
+                                .inner_margin(egui::Margin::same(8))
+                                .show(ui, |ui| {
+                                    ui.set_min_width(ui.available_width());
+                                    ui.label(
+                                        egui::RichText::new(t("Einstellungen folgen"))
+                                            .color(theme::text_faint()),
+                                    );
+                                });
+                        }
+                        ui.add_space(2.0);
+                    }
+                });
+        });
+        if let Some(f) = select {
+            self.selected_fx = Some((id, f));
+        }
+        if let (Some(f), false) = (toggle, locked) {
+            if let Some(fx) = cx
+                .engine
+                .show_mut()
+                .scene_mut(id)
+                .and_then(|s| s.effects.iter_mut().find(|e| e.id == f))
+            {
+                fx.collapsed = !fx.collapsed;
+            }
+        }
+
+        // Werkzeugleiste
+        let (line, _) =
+            ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), Sense::hover());
+        ui.painter().rect_filled(line, 0.0, theme::border());
+        ui.horizontal(|ui| {
+            ui.set_min_height(BAR_H - 1.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let on = !locked;
+                if ui
+                    .add(
+                        IconButton::new(Icon::Save)
+                            .flat()
+                            .enabled(on && self.fx_dialog.is_none()),
+                    )
+                    .on_hover_text(t("Effekte exportieren"))
+                    .clicked()
+                {
+                    self.start_dialog(ui.ctx(), id, true);
+                }
+                if ui
+                    .add(
+                        IconButton::new(Icon::Import)
+                            .flat()
+                            .enabled(on && self.fx_dialog.is_none()),
+                    )
+                    .on_hover_text(t("Effekte importieren"))
+                    .clicked()
+                {
+                    self.start_dialog(ui.ctx(), id, false);
+                }
+                if ui
+                    .add(
+                        IconButton::new(Icon::Trash)
+                            .flat()
+                            .enabled(on && selected.is_some()),
+                    )
+                    .on_hover_text(t("Ausgewählten Effekt löschen"))
+                    .clicked()
+                {
+                    if let (Some(f), Some(scene)) = (selected, cx.engine.show_mut().scene_mut(id)) {
+                        // keine Effekte mehr -> wieder STATIC
+                        scene.effects.retain(|e| e.id != f);
+                        self.selected_fx = scene.effects.last().map(|e| (id, e.id));
+                    }
+                }
+                if ui
+                    .add(IconButton::new(Icon::Plus).size(30.0).flat().enabled(on))
+                    .on_hover_text(t("Effekt hinzufügen"))
+                    .clicked()
+                {
+                    self.adding = true;
+                }
+            });
+        });
+    }
+
+    fn start_dialog(&mut self, ctx: &egui::Context, scene: SceneId, export: bool) {
+        let (tx, rx) = channel();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let dialog = rfd::FileDialog::new().add_filter(t("DMXCraft-Effekte"), &[FX_EXT]);
+            let result = if export {
+                dialog
+                    .set_title(t("Effekte exportieren"))
+                    .set_file_name(format!("Effekte.{FX_EXT}"))
+                    .save_file()
+                    .map(|p| p.with_extension(FX_EXT))
+            } else {
+                dialog.set_title(t("Effekte importieren")).pick_file()
+            };
+            let _ = tx.send(result);
+            ctx.request_repaint();
+        });
+        self.fx_dialog = Some(FxDialog { export, scene, rx });
+    }
+
+    /// Ergebnis eines Import/Export-Dialogs verarbeiten.
+    fn poll_dialog(&mut self, cx: &mut ViewCtx<'_>) {
+        let Some(d) = &self.fx_dialog else {
+            return;
+        };
+        let Ok(result) = d.rx.try_recv() else {
+            return;
+        };
+        let (export, scene) = (d.export, d.scene);
+        self.fx_dialog = None;
+        let Some(path) = result else {
+            return;
+        };
+        if export {
+            // ausgewählter Effekt, sonst alle Effekte der Szene
+            let Some(s) = cx.engine.show().scene(scene) else {
+                return;
+            };
+            let sel = self
+                .selected_fx
+                .filter(|(sc, _)| *sc == scene)
+                .map(|(_, f)| f);
+            let list: Vec<&Effect> = match sel {
+                Some(f) => s.effects.iter().filter(|e| e.id == f).collect(),
+                None => s.effects.iter().collect(),
+            };
+            let result = serde_json::to_string_pretty(&list)
+                .map_err(|e| e.to_string())
+                .and_then(|json| std::fs::write(&path, json).map_err(|e| e.to_string()));
+            match result {
+                Ok(()) => cx
+                    .state
+                    .info(tr!("Effekte exportiert: {path}", path = path.display())),
+                Err(e) => cx.state.error(e),
+            }
+        } else {
+            let read = std::fs::read_to_string(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|s| serde_json::from_str::<Vec<Effect>>(&s).map_err(|e| e.to_string()));
+            match read {
+                Ok(list) => {
+                    if let Some(s) = cx.engine.show_mut().scene_mut(scene) {
+                        let n = list.len();
+                        for fx in list {
+                            let id = s.add_effect(fx.kind);
+                            if let Some(new) = s.effects.iter_mut().find(|e| e.id == id) {
+                                new.collapsed = fx.collapsed;
+                            }
+                        }
+                        cx.state.info(tr!("{n} Effekt(e) importiert", n = n));
+                    }
+                }
+                Err(e) => cx.state.error(e),
+            }
+        }
+    }
+}
+
+/// Kacheln der Effektarten in zwei Spalten; gibt die angeklickte zurück.
+fn effect_tiles(ui: &mut egui::Ui, enabled: bool) -> Option<EffectKind> {
+    let gap = theme::SP_S;
+    let w = ((ui.available_width() - gap) / 2.0).min(120.0);
+    let h = w * 0.72;
+    let mut pick = None;
+    for row in EffectKind::ALL.chunks(2) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            let total = w * row.len() as f32 + gap * (row.len() as f32 - 1.0);
+            ui.add_space(((ui.available_width() - total) / 2.0).max(0.0));
+            for kind in row {
+                let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
+                let hot = enabled && resp.hovered();
+                let p = ui.painter();
+                p.rect_filled(
+                    rect,
+                    theme::R_S,
+                    if hot {
+                        theme::raised_hover()
+                    } else {
+                        theme::bg()
+                    },
+                );
+                p.rect_stroke(
+                    rect,
+                    theme::R_S,
+                    Stroke::new(
+                        if hot { 2.0 } else { 1.5 },
+                        if hot {
+                            theme::accent()
+                        } else {
+                            theme::border()
+                        },
+                    ),
+                    egui::StrokeKind::Inside,
+                );
+                let galley = p.layout(
+                    kind.label().to_string(),
+                    theme::heading_font(),
+                    if enabled {
+                        theme::text()
+                    } else {
+                        theme::text_faint()
+                    },
+                    w - 12.0,
+                );
+                let pos = rect.center() - galley.size() * 0.5;
+                p.galley(pos, galley, theme::text());
+                if enabled && resp.clicked() {
+                    pick = Some(*kind);
+                }
+            }
+        });
+        ui.add_space(gap);
+    }
+    pick
+}
+
+/// Kopfzeile eines Effekts: Zuklapp-Pfeil, Name; Antwort für Auswahl und Pfeil.
+fn effect_header(
+    ui: &mut egui::Ui,
+    fx: &Effect,
+    selected: bool,
+) -> (egui::Response, egui::Response) {
+    let (rect, head) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), 30.0), Sense::click());
+    let arrow_rect = Rect::from_min_size(rect.min, Vec2::new(28.0, rect.height()));
+    let chevron = ui.interact(
+        arrow_rect,
+        ui.make_persistent_id(("fx_chevron", fx.id)),
+        Sense::click(),
+    );
+    let p = ui.painter();
+    let fill = if selected {
+        theme::accent_dim()
+    } else if head.hovered() {
+        theme::raised_hover()
+    } else {
+        theme::raised()
+    };
+    p.rect_filled(rect, theme::R_S, fill);
+    let icon = if fx.collapsed {
+        Icon::ChevronRight
+    } else {
+        Icon::ChevronDown
+    };
+    icon.paint(
+        p,
+        Rect::from_center_size(arrow_rect.center(), Vec2::splat(12.0)),
+        theme::text_dim(),
+    );
+    p.text(
+        pos2(arrow_rect.right(), rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        fx.kind.label(),
+        theme::heading_font(),
+        if selected {
+            theme::text()
+        } else {
+            theme::text_dim()
+        },
+    );
+    (head, chevron)
 }
