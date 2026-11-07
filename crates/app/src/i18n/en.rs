@@ -416,6 +416,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{n} Szenen", "{n} scenes"),
     ("Alle einblenden", "Show all"),
     ("BLIND", "BLIND"),
+    ("Dort ist nicht genug Platz frei", "Not enough free channels there"),
+    ("„{name}“ gepatcht ab Adresse {addr}", "Patched “{name}” at address {addr}"),
     ("Blind Edit: wie Edit, aber der DMX-Ausgang bleibt unverändert", "Blind edit: like edit, but the DMX output stays unchanged"),
     ("Eigene Farbe wählen", "Choose a custom color"),
     ("Ungespeicherte Änderungen", "Unsaved changes"),

@@ -186,9 +186,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/state.rs": {
-    "mtime": 1794048810.8156536,
-    "seen": 1794049003.3742738,
-    "ast_hash": "5e72435bb0c5e5f824af8a46382852b3",
+    "mtime": 1794049295.6047926,
+    "seen": 1794049352.8507564,
+    "ast_hash": "eaa076c2512ee63806eaf97132712b7e",
     "semantic_hash": ""
   },
   "crates/app/src/ui/mod.rs": {
@@ -354,15 +354,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/library_panel.rs": {
-    "mtime": 1794010468.360894,
-    "seen": 1794010507.4185877,
-    "ast_hash": "d71444b27538ff5fd0e097338ebf10db",
+    "mtime": 1794049310.1148107,
+    "seen": 1794049352.8508027,
+    "ast_hash": "1c6b470c1dd94cd1da9de97ae71dc14f",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/patch_grid.rs": {
-    "mtime": 1794044580.3200407,
-    "seen": 1794044738.795078,
-    "ast_hash": "41587bcd6d575eb3457bf9c91b75911d",
+    "mtime": 1794049310.1228108,
+    "seen": 1794049352.850806,
+    "ast_hash": "2f30f0a7a238f39b6c96b717f7fdc4ec",
     "semantic_hash": ""
   },
   "crates/app/src/views/windows.rs": {
@@ -444,9 +444,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/i18n/en.rs": {
-    "mtime": 1794049136.2373807,
-    "seen": 1794049159.576235,
-    "ast_hash": "aba362802720a08aab139934bc442a7d",
+    "mtime": 1794049317.5802956,
+    "seen": 1794049352.850743,
+    "ast_hash": "24b6343128c6f1e677f228e078ed9b37",
     "semantic_hash": ""
   },
   "crates/app/src/i18n/mod.rs": {

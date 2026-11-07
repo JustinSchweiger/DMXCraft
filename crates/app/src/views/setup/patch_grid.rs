@@ -8,6 +8,7 @@ use crate::i18n::t;
 use dmxcraft_core::{FixtureId, UNIVERSE_SIZE};
 use eframe::egui::{self, pos2, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 
+use crate::state::LibraryDrag;
 use crate::ui::theme;
 use crate::ui::widgets::{DipSwitch, Icon, IconButton, Segmented};
 use crate::views::fixture_menu::{self, MenuPlace};
@@ -491,6 +492,54 @@ impl PatchGrid {
                 None => tr!("Adresse {c_nr} · frei", c_nr = c + 1),
             };
             resp.on_hover_text_at_pointer(text);
+        }
+
+        // Gerät aus der Bibliothek ablegen
+        let mut lib_drop = None;
+        if let Some(d) = egui::DragAndDrop::payload::<LibraryDrag>(ui.ctx()) {
+            if let Some(cell) = pointer.and_then(cell_at) {
+                let n = usize::from(d.0.channel_count()).max(1);
+                let fits = cell + n <= map.len() && map[cell..cell + n].iter().all(|s| s.is_none());
+                let color = if fits { theme::OK } else { theme::DANGER };
+                for i in cell..(cell + n).min(map.len()) {
+                    ui.painter()
+                        .rect_filled(cell_rect(i), theme::R_S, color.gamma_multiply(0.35));
+                }
+                if ui.input(|i| i.pointer.any_released()) {
+                    lib_drop = Some((d.0.clone(), cell, fits));
+                    egui::DragAndDrop::clear_payload(ui.ctx());
+                }
+            }
+        }
+        if let Some((ty, cell, fits)) = lib_drop {
+            if fits {
+                let e = &mut *cx.engine;
+                e.show_mut().upsert_fixture_type(ty.clone());
+                let n = e
+                    .show()
+                    .fixtures
+                    .iter()
+                    .filter(|f| f.type_key == ty.key)
+                    .count()
+                    + 1;
+                let name = format!("{} {n}", ty.model);
+                match e
+                    .show_mut()
+                    .add_fixture(name.clone(), &ty.key, universe, cell as u16 + 1)
+                {
+                    Ok(id) => {
+                        cx.state.selected = std::iter::once(id).collect();
+                        cx.state.info(tr!(
+                            "„{name}“ gepatcht ab Adresse {addr}",
+                            name = name,
+                            addr = cell + 1
+                        ));
+                    }
+                    Err(err) => cx.state.error(err.to_string()),
+                }
+            } else {
+                cx.state.error(t("Dort ist nicht genug Platz frei"));
+            }
         }
 
         if let Some((id, name)) = rename_commit {

@@ -9,7 +9,7 @@ use dmxcraft_core::{Engine, FixtureType};
 use dmxcraft_ofl::{convert_fixture, convert_qxf, Library, LibraryFixture, Source};
 use eframe::egui;
 
-use crate::state::AppState;
+use crate::state::{AppState, LibraryDrag};
 use crate::ui::theme;
 use crate::ui::widgets::{section_header, text_field};
 use crate::views::{View, ViewCtx};
@@ -28,6 +28,7 @@ pub struct LibraryPanel {
 
 impl View for LibraryPanel {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        drag_ghost(ui.ctx());
         section_header(ui, t("Bibliothek"), |ui| {
             if ui
                 .small_button(t("Gerätedatei"))
@@ -153,7 +154,11 @@ impl LibraryPanel {
                             false,
                         )
                         .show_header(ui, |ui| {
-                            ui.label(&f.name);
+                            // Kopfzeile ziehen = erster Modus
+                            let r = ui.add(egui::Label::new(&f.name).sense(egui::Sense::drag()));
+                            if let Some(m) = f.modes.first() {
+                                r.dnd_set_drag_payload(LibraryDrag(m.clone()));
+                            }
                             if let Some(tag) = tag {
                                 source_tag(ui, tag);
                             }
@@ -221,6 +226,9 @@ impl LibraryPanel {
         if r.clicked() {
             self.chosen = Some(ty.clone());
         }
+        // direkt ins Patch ziehen
+        let r = r.interact(egui::Sense::click_and_drag());
+        r.dnd_set_drag_payload(LibraryDrag(ty.clone()));
     }
 
     fn patch_form(&mut self, ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
@@ -356,4 +364,36 @@ fn patch(e: &mut Engine, st: &mut AppState, ty: &FixtureType) {
             st.info(tr!("{n} Gerät(e) gepatcht", n = added.len()));
         }
     }
+}
+
+/// Beschriftung am Mauszeiger, solange ein Gerät aus der Bibliothek gezogen wird.
+fn drag_ghost(ctx: &egui::Context) {
+    let Some(d) = egui::DragAndDrop::payload::<LibraryDrag>(ctx) else {
+        return;
+    };
+    let Some(pos) = ctx.pointer_interact_pos() else {
+        return;
+    };
+    ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+    egui::Area::new(egui::Id::unique("library_drag_ghost"))
+        .order(egui::Order::Tooltip)
+        .fixed_pos(pos + egui::vec2(14.0, 6.0))
+        .interactable(false)
+        .show(ctx, |ui| {
+            egui::Frame::new()
+                .fill(theme::raised())
+                .stroke(egui::Stroke::new(1.0, theme::accent()))
+                .corner_radius(theme::R_S)
+                .inner_margin(egui::Margin::symmetric(10, 6))
+                .show(ui, |ui| {
+                    ui.add(
+                        egui::Label::new(tr!(
+                            "{v} ({n} Kan.)",
+                            v = d.0.model,
+                            n = d.0.channel_count()
+                        ))
+                        .wrap_mode(egui::TextWrapMode::Extend),
+                    );
+                });
+        });
 }

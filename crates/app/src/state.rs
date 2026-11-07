@@ -126,3 +126,7 @@ impl ProgrammerMode {
         matches!(self, ProgrammerMode::Edit | ProgrammerMode::Blind)
     }
 }
+
+/// Drag-&-Drop-Inhalt: Gerätetyp aus der Bibliothek, der ins Patch gezogen wird.
+#[derive(Clone)]
+pub struct LibraryDrag(pub FixtureType);
