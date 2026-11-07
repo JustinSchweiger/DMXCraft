@@ -1,6 +1,7 @@
 //! Wiederverwendbare Bedienelemente. Sie kennen weder Engine noch App-Zustand,
 //! nur ihre Eingabewerte (siehe docs/UI-GUIDELINES.md, Abschnitt 4).
 
+pub mod color_picker;
 pub mod dialog;
 pub mod dip_switch;
 pub mod fader;

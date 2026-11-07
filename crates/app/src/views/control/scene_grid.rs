@@ -3,7 +3,10 @@
 //! Oben die Bankleiste: „Alle“, eine Chip je Bank, „Frei“ und **+** für eine
 //! neue Bank. Rechtsklick auf eine Bank (Chip oder Spaltenkopf) öffnet das
 //! Bank-Menü (Umbenennen, Farbe, Duplizieren, Ausblenden, Löschen …).
-//! Szenen markiert man mit Strg/Umschalt+Klick; Entf löscht markierte Szenen.
+//! Szenenkarten: Klick auf den Hauptbereich startet/stoppt, Klick auf den
+//! farbigen Streifen rechts markiert (auch Strg/Umschalt+Klick). Entf löscht
+//! markierte Szenen. **+** im Spaltenkopf legt eine Szene an und startet
+//! gleich das Umbenennen.
 
 use std::collections::BTreeSet;
 
@@ -13,28 +16,13 @@ use eframe::egui::{self, Color32, Sense, Stroke, StrokeKind, Vec2};
 
 use crate::state::AppState;
 use crate::ui::theme;
+use crate::ui::widgets::color_picker::color_swatches;
 use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::{text_field, Icon, IconButton, SceneCard};
 use crate::views::control::programmer::programmer_values;
 use crate::views::{View, ViewCtx};
 
 const COLUMN_W: f32 = 176.0;
-
-/// Farbvorgaben für Bänke (Quadrate im Bank-Menü).
-const BANK_COLORS: [[u8; 3]; 12] = [
-    [0x19, 0xe3, 0xf0],
-    [0x55, 0xa8, 0xff],
-    [0xa0, 0x84, 0xff],
-    [0xf4, 0x5d, 0xb8],
-    [0xff, 0x3b, 0x4e],
-    [0xff, 0x80, 0x4d],
-    [0xf8, 0xb3, 0x3a],
-    [0xff, 0xe1, 0x4d],
-    [0x8d, 0xe0, 0x4c],
-    [0x2e, 0xcc, 0x71],
-    [0xd8, 0xde, 0xe6],
-    [0x8a, 0x93, 0x9e],
-];
 
 /// Welche Bank-Spalten angezeigt werden.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -52,8 +40,15 @@ enum Action {
     NewScene(Option<ZoneId>),
     Edit(SceneId),
     Delete(SceneId),
-    /// Szene markieren/entmarkieren (Strg/Umschalt+Klick).
+    /// Szene markieren/entmarkieren (Streifen oder Strg/Umschalt+Klick).
     Mark(SceneId),
+    /// Umbenennen einer Szene starten.
+    RenameScene(SceneId),
+    /// Umbenennung einer Szene abgeschlossen.
+    SetSceneName(SceneId, String),
+    DuplicateScene(SceneId),
+    /// Farbe für Szenen setzen (`None` = Bankfarbe).
+    SceneColor(Vec<SceneId>, Option<[u8; 3]>),
     Bank(BankAction),
     /// Umbenennung im Chip abgeschlossen.
     RenameBank(ZoneId, String),
@@ -85,6 +80,9 @@ pub struct SceneGridView {
     /// Feld beim nächsten Frame fokussieren (nur einmal, sonst lässt es
     /// sich nicht per Klick verlassen).
     rename_focus: bool,
+    /// Laufende Umbenennung einer Szene (direkt in der Karte).
+    scene_rename: Option<(SceneId, String)>,
+    scene_rename_focus: bool,
 }
 
 impl View for SceneGridView {
@@ -139,6 +137,8 @@ impl View for SceneGridView {
                             name,
                             locked,
                             &cx.state.selected_scenes,
+                            &mut self.scene_rename,
+                            &mut self.scene_rename_focus,
                             &mut actions,
                         );
                         ui.add_space(theme::SP_S);
@@ -168,9 +168,20 @@ impl View for SceneGridView {
             }
         }
         let renaming = self.rename.is_some();
-        apply(cx.engine, cx.state, &mut self.rename, actions);
+        let scene_renaming = self.scene_rename.as_ref().map(|(id, _)| *id);
+        apply(
+            cx.engine,
+            cx.state,
+            &mut self.rename,
+            &mut self.scene_rename,
+            actions,
+        );
         if !renaming && self.rename.is_some() {
             self.rename_focus = true;
+        }
+        let now = self.scene_rename.as_ref().map(|(id, _)| *id);
+        if now.is_some() && now != scene_renaming {
+            self.scene_rename_focus = true;
         }
     }
 }
@@ -329,7 +340,12 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
                 .color(theme::text_dim()),
         );
     });
-    if let Some(c) = color_row(ui, z.color, zone) {
+    if let Some(c) = color_swatches(
+        ui,
+        ui.make_persistent_id(("bank_color", zone.0)),
+        z.color,
+        t("Automatisch (nach Position)"),
+    ) {
         other = Some(BankAction::SetColor(zone, c));
     }
     act(
@@ -363,125 +379,6 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
         }
     });
     out.or(other)
-}
-
-/// Ein Feld der Farbauswahl.
-#[derive(Clone, Copy, PartialEq)]
-enum Swatch {
-    /// Farbe nach Position (keine eigene Farbe).
-    Auto,
-    Color([u8; 3]),
-    /// Eigene Farbe über den Farbwähler.
-    Custom,
-}
-
-/// Farbfelder in zwei Reihen; `Some(neu)` bei Auswahl. „+“ klappt einen
-/// Farbwähler auf.
-fn color_row(ui: &mut egui::Ui, current: Option<[u8; 3]>, zone: ZoneId) -> Option<Option<[u8; 3]>> {
-    const SQ: f32 = 22.0;
-    const PER_ROW: usize = 7;
-    let mut picked = None;
-    let picker_id = ui.make_persistent_id(("bank_color_picker", zone.0));
-    let mut picker_open = ui.data(|d| d.get_temp::<bool>(picker_id)).unwrap_or(false);
-    let custom = current.filter(|c| !BANK_COLORS.contains(c));
-    let fields: Vec<Swatch> = std::iter::once(Swatch::Auto)
-        .chain(BANK_COLORS.iter().copied().map(Swatch::Color))
-        .chain(std::iter::once(Swatch::Custom))
-        .collect();
-    for row in fields.chunks(PER_ROW) {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            ui.add_space(theme::SP_S);
-            for field in row {
-                let (rect, resp) = ui.allocate_exact_size(Vec2::splat(SQ), Sense::click());
-                let p = ui.painter();
-                let active = match field {
-                    Swatch::Auto => current.is_none(),
-                    Swatch::Color(c) => current == Some(*c),
-                    Swatch::Custom => custom.is_some(),
-                };
-                match field {
-                    Swatch::Color(c) => {
-                        p.rect_filled(rect.shrink(2.0), 3.0, theme::rgb(*c));
-                    }
-                    Swatch::Auto => {
-                        // durchgestrichenes Feld
-                        p.rect_stroke(
-                            rect.shrink(2.5),
-                            3.0,
-                            Stroke::new(1.0, theme::text_dim()),
-                            StrokeKind::Inside,
-                        );
-                        p.line_segment(
-                            [rect.shrink(5.0).left_bottom(), rect.shrink(5.0).right_top()],
-                            Stroke::new(1.2, theme::text_dim()),
-                        );
-                    }
-                    Swatch::Custom => {
-                        if let Some(c) = custom {
-                            p.rect_filled(rect.shrink(2.0), 3.0, theme::rgb(c));
-                        } else {
-                            p.rect_stroke(
-                                rect.shrink(2.5),
-                                3.0,
-                                Stroke::new(1.0, theme::text_dim()),
-                                StrokeKind::Inside,
-                            );
-                        }
-                        let fg = if custom.is_some() {
-                            theme::bg()
-                        } else {
-                            theme::text()
-                        };
-                        Icon::Plus.paint(p, rect.shrink(6.0), fg);
-                    }
-                }
-                if active {
-                    p.rect_stroke(
-                        rect,
-                        4.0,
-                        Stroke::new(2.0, theme::text()),
-                        StrokeKind::Inside,
-                    );
-                } else if resp.hovered() {
-                    p.rect_stroke(
-                        rect,
-                        4.0,
-                        Stroke::new(1.0, theme::text_dim()),
-                        StrokeKind::Inside,
-                    );
-                }
-                let resp = match field {
-                    Swatch::Auto => resp.on_hover_text(t("Automatisch (nach Position)")),
-                    Swatch::Custom => resp.on_hover_text(t("Eigene Farbe")),
-                    Swatch::Color(_) => resp,
-                };
-                if resp.clicked() {
-                    match field {
-                        Swatch::Auto => picked = Some(None),
-                        Swatch::Color(c) => picked = Some(Some(*c)),
-                        Swatch::Custom => picker_open = !picker_open,
-                    }
-                }
-            }
-        });
-    }
-    if picker_open {
-        let rgb = current.unwrap_or([0x19, 0xe3, 0xf0]);
-        let mut c = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
-        ui.horizontal(|ui| {
-            ui.add_space(theme::SP_S);
-            if egui::color_picker::color_picker_color32(
-                ui,
-                &mut c,
-                egui::color_picker::Alpha::Opaque,
-            ) {
-                picked = Some(Some([c.r(), c.g(), c.b()]));
-            }
-        });
-    }
-    ui.data_mut(|d| d.insert_temp(picker_id, picker_open));
-    picked
 }
 
 /// Master, Speed, Blackout und Alle aus (rechts neben den Zonen-Chips).
@@ -585,6 +482,7 @@ fn chip(
     resp
 }
 
+#[allow(clippy::too_many_arguments)]
 fn column(
     ui: &mut egui::Ui,
     e: &Engine,
@@ -592,6 +490,8 @@ fn column(
     name: &str,
     locked: bool,
     marked: &BTreeSet<SceneId>,
+    rename: &mut Option<(SceneId, String)>,
+    rename_focus: &mut bool,
     actions: &mut Vec<Action>,
 ) {
     let color = theme::zone_color(e.show(), zone);
@@ -615,60 +515,64 @@ fn column(
 
     ui.vertical(|ui| {
         ui.set_width(COLUMN_W);
-        let header = egui::Frame::new()
-            .fill(theme::raised())
-            .stroke(Stroke::new(1.0, theme::border()))
-            .corner_radius(theme::R_M)
-            .inner_margin(theme::SP_S)
-            .show(ui, |ui| {
-                ui.set_width(COLUMN_W - 2.0 * theme::SP_S - 2.0);
-                let (bar, _) =
-                    ui.allocate_exact_size(Vec2::new(ui.available_width(), 3.0), Sense::hover());
-                ui.painter().rect_filled(bar, 1.5, color);
-                ui.label(egui::RichText::new(name).strong().color(color));
-                ui.horizontal(|ui| {
-                    let on = target.is_some();
-                    let sid = target.unwrap_or(SceneId(0));
-                    if ui
-                        .add(
-                            IconButton::new(if paused { Icon::Play } else { Icon::Pause })
-                                .enabled(on)
-                                .active(paused),
-                        )
-                        .on_hover_text(t("Pause / Weiter"))
-                        .clicked()
-                    {
-                        actions.push(Action::Pause(sid));
-                    }
-                    if ui
-                        .add(IconButton::new(Icon::Prev).enabled(on))
-                        .on_hover_text(t("Vorheriger Schritt"))
-                        .clicked()
-                    {
-                        actions.push(Action::Jump(sid, -1));
-                    }
-                    if ui
-                        .add(IconButton::new(Icon::Next).enabled(on))
-                        .on_hover_text(t("Nächster Schritt"))
-                        .clicked()
-                    {
-                        actions.push(Action::Jump(sid, 1));
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        // Klick-Fläche liegt unter den Knöpfen (UiBuilder::sense), damit „+“ & Co.
+        // ihre Klicks behalten und nur der Rest des Kopfs das Bank-Menü öffnet.
+        let header = ui.scope_builder(egui::UiBuilder::new().sense(Sense::click()), |ui| {
+            egui::Frame::new()
+                .fill(theme::raised())
+                .stroke(Stroke::new(1.0, theme::border()))
+                .corner_radius(theme::R_M)
+                .inner_margin(theme::SP_S)
+                .show(ui, |ui| {
+                    ui.set_width(COLUMN_W - 2.0 * theme::SP_S - 2.0);
+                    let (bar, _) = ui
+                        .allocate_exact_size(Vec2::new(ui.available_width(), 3.0), Sense::hover());
+                    ui.painter().rect_filled(bar, 1.5, color);
+                    ui.label(egui::RichText::new(name).strong().color(color));
+                    ui.horizontal(|ui| {
+                        let on = target.is_some();
+                        let sid = target.unwrap_or(SceneId(0));
                         if ui
-                            .add(IconButton::new(Icon::Plus))
-                            .on_hover_text(t("Neue Szene aus dem Programmer"))
+                            .add(
+                                IconButton::new(if paused { Icon::Play } else { Icon::Pause })
+                                    .enabled(on)
+                                    .active(paused),
+                            )
+                            .on_hover_text(t("Pause / Weiter"))
                             .clicked()
-                            && !locked
                         {
-                            actions.push(Action::NewScene(zone));
+                            actions.push(Action::Pause(sid));
                         }
+                        if ui
+                            .add(IconButton::new(Icon::Prev).enabled(on))
+                            .on_hover_text(t("Vorheriger Schritt"))
+                            .clicked()
+                        {
+                            actions.push(Action::Jump(sid, -1));
+                        }
+                        if ui
+                            .add(IconButton::new(Icon::Next).enabled(on))
+                            .on_hover_text(t("Nächster Schritt"))
+                            .clicked()
+                        {
+                            actions.push(Action::Jump(sid, 1));
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui
+                                .add(IconButton::new(Icon::Plus))
+                                .on_hover_text(t("Neue Szene"))
+                                .clicked()
+                                && !locked
+                            {
+                                actions.push(Action::NewScene(zone));
+                            }
+                        });
                     });
                 });
-            });
+        });
         // Rechtsklick auf den Spaltenkopf: Bank-Menü
         if let (Some(z), false) = (zone, locked) {
-            let resp = header.response.interact(Sense::click());
+            let resp = header.response;
             menu::context(&resp, |ui| {
                 if let Some(a) = bank_menu(ui, e.show(), z) {
                     actions.push(Action::Bank(a));
@@ -677,19 +581,32 @@ fn column(
         }
         ui.add_space(theme::SP_XS);
         for id in scenes {
-            scene_card(ui, e, id, color, locked, marked.contains(&id), actions);
+            scene_card(
+                ui,
+                e,
+                id,
+                color,
+                locked,
+                marked,
+                rename,
+                rename_focus,
+                actions,
+            );
             ui.add_space(theme::SP_XS);
         }
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn scene_card(
     ui: &mut egui::Ui,
     e: &Engine,
     id: SceneId,
     bank_color: Color32,
     locked: bool,
-    marked: bool,
+    marked: &BTreeSet<SceneId>,
+    rename: &mut Option<(SceneId, String)>,
+    rename_focus: &mut bool,
     actions: &mut Vec<Action>,
 ) {
     let Some(scene) = e.show().scene(id) else {
@@ -705,7 +622,8 @@ fn scene_card(
         (n, _) if n > 1 => tr!("ABLAUF · {n} SCHRITTE", n = n),
         _ => t("STATISCH").to_string(),
     };
-    let card = SceneCard {
+    let is_marked = marked.contains(&id);
+    let resp = SceneCard {
         name: &scene.name,
         kind,
         color: scene.color.map_or(bank_color, theme::rgb),
@@ -715,10 +633,52 @@ fn scene_card(
             (p.step as f32 + p.step_fraction) / p.step_count.max(1) as f32
         }),
         width: COLUMN_W,
-        selected: marked,
-    };
-    let resp = ui.add(card);
-    if resp.clicked() {
+        selected: is_marked,
+        sequence: scene.steps.len() > 1,
+    }
+    .show(ui);
+
+    // Umbenennen direkt in der Karte (über dem Namen)
+    if let Some((_, text)) = rename.as_mut().filter(|(r, _)| *r == id) {
+        let field = egui::Rect::from_min_size(
+            resp.main_rect.min + Vec2::new(4.0, 4.0),
+            Vec2::new(resp.main_rect.width() - 8.0, 22.0),
+        );
+        let r = ui.put(field, text_field(text).desired_width(field.width()));
+        if std::mem::take(rename_focus) {
+            r.request_focus();
+            // ganzen Namen markieren, damit man sofort tippen kann
+            if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), r.id) {
+                let n = text.chars().count();
+                st.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                    egui::text::CCursor::new(0),
+                    egui::text::CCursor::new(n),
+                )));
+                st.store(ui.ctx(), r.id);
+            }
+        }
+        let (enter, esc) = ui.input(|i| {
+            (
+                i.key_pressed(egui::Key::Enter),
+                i.key_pressed(egui::Key::Escape),
+            )
+        });
+        if esc {
+            *rename = None;
+        } else if enter || r.lost_focus() {
+            let name = text.trim().to_string();
+            *rename = None;
+            if !name.is_empty() {
+                actions.push(Action::SetSceneName(id, name));
+            }
+        }
+        return;
+    }
+
+    if resp.select.clicked() && !locked {
+        actions.push(Action::Mark(id));
+    }
+    if resp.play.clicked() {
         let mods = ui.input(|i| i.modifiers);
         if !locked && (mods.command || mods.shift) {
             actions.push(Action::Mark(id));
@@ -726,13 +686,84 @@ fn scene_card(
             actions.push(Action::Toggle(id));
         }
     }
+    resp.select.clone().on_hover_text(if is_marked {
+        t("Markierung aufheben")
+    } else {
+        t("Markieren")
+    });
     if locked {
         return;
     }
-    crate::ui::widgets::menu::context(&resp, |ui| {
+    // Menü wirkt auf alle markierten Szenen, wenn diese dazugehört
+    let targets: Vec<SceneId> = if is_marked {
+        marked.iter().copied().collect()
+    } else {
+        vec![id]
+    };
+    let current = scene.color;
+    menu::context(&resp.whole(), |ui| {
         menu::begin(ui);
-        if menu::item(ui, MenuItem::new(t("Bearbeiten …")).icon(Icon::Edit)) {
+        let title = if targets.len() > 1 {
+            tr!("{n} Szenen", n = targets.len())
+        } else {
+            scene.name.clone()
+        };
+        menu::title(ui, &title);
+        let single = targets.len() == 1;
+        if menu::item(
+            ui,
+            MenuItem::new(t("Umbenennen"))
+                .icon(Icon::Edit)
+                .enabled(single),
+        ) {
+            actions.push(Action::RenameScene(id));
+        }
+        if menu::item(
+            ui,
+            MenuItem::new(t("Bearbeiten …"))
+                .icon(Icon::Builder)
+                .enabled(single),
+        ) {
             actions.push(Action::Edit(id));
+        }
+        if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
+            actions.extend(targets.iter().map(|s| Action::DuplicateScene(*s)));
+        }
+        menu::item(
+            ui,
+            MenuItem::new(t("SuperSzene erstellen"))
+                .icon(Icon::Group)
+                .enabled(false)
+                .tooltip(t("Kommt in einer späteren Version")),
+        );
+        menu::separator(ui);
+        ui.horizontal(|ui| {
+            ui.add_space(theme::SP_S);
+            ui.label(
+                egui::RichText::new(t("Szenenfarbe"))
+                    .small()
+                    .color(theme::text_dim()),
+            );
+        });
+        if let Some(c) = color_swatches(
+            ui,
+            ui.make_persistent_id(("scene_color", id.0)),
+            current,
+            t("Bankfarbe übernehmen"),
+        ) {
+            actions.push(Action::SceneColor(targets.clone(), c));
+        }
+        menu::separator(ui);
+        if menu::item(
+            ui,
+            MenuItem::new(if is_marked {
+                t("Markierung aufheben")
+            } else {
+                t("Markieren")
+            })
+            .icon(Icon::ArrangeGrid),
+        ) {
+            actions.push(Action::Mark(id));
         }
         menu::separator(ui);
         if menu::item(
@@ -742,7 +773,7 @@ fn scene_card(
                 .shortcut(crate::titlebar::keys::delete())
                 .danger(),
         ) {
-            actions.push(Action::Delete(id));
+            actions.extend(targets.iter().map(|s| Action::Delete(*s)));
         }
     });
 }
@@ -751,6 +782,7 @@ fn apply(
     e: &mut Engine,
     st: &mut AppState,
     rename: &mut Option<(ZoneId, String)>,
+    scene_rename: &mut Option<(SceneId, String)>,
     actions: Vec<Action>,
 ) {
     for a in actions {
@@ -759,22 +791,38 @@ fn apply(
             Action::Pause(id) => e.toggle_pause(id),
             Action::Jump(id, d) => e.jump_step(id, d),
             Action::NewScene(zone) => {
+                // Werte aus dem Programmer übernehmen, sonst leere Szene
                 let values = programmer_values(e);
-                if values.is_empty() {
-                    st.error(t(
-                        "Programmer ist leer – erst Geräte auswählen und Werte setzen",
-                    ));
-                    continue;
-                }
                 let name = tr!("Szene {n}", n = e.show().scenes.len() + 1);
                 let id = e
                     .show_mut()
                     .add_scene(name.clone(), zone, vec![Step::new(values)]);
                 st.append_target = Some(id);
-                st.info(tr!(
-                    "„{name}“ angelegt (Rechtsklick → Bearbeiten zum Umbenennen)",
-                    name = name
-                ));
+                *scene_rename = Some((id, name));
+            }
+            Action::RenameScene(id) => {
+                if let Some(s) = e.show().scene(id) {
+                    *scene_rename = Some((id, s.name.clone()));
+                }
+            }
+            Action::SetSceneName(id, name) => {
+                if let Some(s) = e.show_mut().scene_mut(id) {
+                    s.name = name;
+                }
+            }
+            Action::DuplicateScene(id) => {
+                let Some(name) = e.show().scene(id).map(|s| s.name.clone()) else {
+                    continue;
+                };
+                e.show_mut()
+                    .duplicate_scene(id, tr!("{name} (Kopie)", name = name));
+            }
+            Action::SceneColor(ids, c) => {
+                for id in ids {
+                    if let Some(s) = e.show_mut().scene_mut(id) {
+                        s.color = c;
+                    }
+                }
             }
             Action::Edit(id) => st.open_scene_editor(id),
             Action::Delete(id) => {

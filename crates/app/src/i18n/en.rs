@@ -395,6 +395,13 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Szenen bearbeiten", "Edit scenes"),
     ("Bänke & Gruppen", "Banks & groups"),
     // ----- Bänke -----
+    ("Markierung aufheben", "Unmark"),
+    ("Markieren", "Mark"),
+    ("SuperSzene erstellen", "Create super scene"),
+    ("Kommt in einer späteren Version", "Coming in a later version"),
+    ("Szenenfarbe", "Scene color"),
+    ("Bankfarbe übernehmen", "Use bank color"),
+    ("{n} Szenen", "{n} scenes"),
     ("Ausgeblendete Bänke", "Hidden banks"),
     ("Einblenden", "Show"),
     ("Duplizieren", "Duplicate"),

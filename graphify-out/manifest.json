@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "crates/core/src/show.rs": {
-    "mtime": 1794011671.0266285,
-    "seen": 1794011964.7210023,
-    "ast_hash": "76ada24b7d73acb269d7c22e0fb01de1",
+    "mtime": 1794012557.6805716,
+    "seen": 1794012885.0061035,
+    "ast_hash": "3c3a55ce9c37deebe30bd483b4374ff0",
     "semantic_hash": ""
   },
   "crates/ofl/Cargo.toml": {
@@ -216,15 +216,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/mod.rs": {
-    "mtime": 1793999685.8162637,
-    "seen": 1793999900.792026,
-    "ast_hash": "abea1365460264c229cabc8b54186cb6",
+    "mtime": 1794012530.7327332,
+    "seen": 1794012885.006076,
+    "ast_hash": "c87b2d6e595805c88dd1b89dc4e13804",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/scene_card.rs": {
-    "mtime": 1794011576.494617,
-    "seen": 1794011964.7209687,
-    "ast_hash": "6f0704dd74c9806d397b9b0a96a00690",
+    "mtime": 1794012809.2203856,
+    "seen": 1794012885.0060782,
+    "ast_hash": "c6e369d26eba3f371efd55381dd6e581",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/section.rs": {
@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/scene_grid.rs": {
-    "mtime": 1794011904.439213,
-    "seen": 1794011964.72098,
-    "ast_hash": "646665ba55d27b2656f35235f3b13c9d",
+    "mtime": 1794012851.0973692,
+    "seen": 1794012885.0060868,
+    "ast_hash": "04d450e8a1e6187034eedf02c77fb1ae",
     "semantic_hash": ""
   },
   "crates/app/src/views/control/stage.rs": {
@@ -450,9 +450,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/i18n/en.rs": {
-    "mtime": 1794011723.876294,
-    "seen": 1794011964.7209423,
-    "ast_hash": "a1df29bb5f1dd5bb919c92eb164d7a92",
+    "mtime": 1794012764.069364,
+    "seen": 1794012885.006055,
+    "ast_hash": "43c62eb0317da6f7114971da9af6b9ca",
     "semantic_hash": ""
   },
   "crates/app/src/i18n/mod.rs": {
@@ -471,6 +471,12 @@
     "mtime": 1794010388.5522366,
     "seen": 1794010507.418605,
     "ast_hash": "dc97f7976b052c800a82da255a5ee579",
+    "semantic_hash": ""
+  },
+  "crates/app/src/ui/widgets/color_picker.rs": {
+    "mtime": 1794012540.3053508,
+    "seen": 1794012885.0060687,
+    "ast_hash": "2e6be391aace5b59e8bd994509ff321d",
     "semantic_hash": ""
   }
 }

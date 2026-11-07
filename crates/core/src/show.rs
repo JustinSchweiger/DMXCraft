@@ -665,6 +665,17 @@ impl Show {
         id
     }
 
+    /// Kopiert eine Szene; die Kopie steht direkt hinter dem Original.
+    pub fn duplicate_scene(&mut self, id: SceneId, name: impl Into<String>) -> Option<SceneId> {
+        let pos = self.scenes.iter().position(|s| s.id == id)?;
+        let mut copy = self.scenes[pos].clone();
+        copy.id = SceneId(self.scenes.iter().map(|s| s.id.0).max().unwrap_or(0) + 1);
+        copy.name = name.into();
+        let new_id = copy.id;
+        self.scenes.insert(pos + 1, copy);
+        Some(new_id)
+    }
+
     pub fn remove_scene(&mut self, id: SceneId) {
         self.scenes.retain(|s| s.id != id);
     }
@@ -690,6 +701,11 @@ mod zone_tests {
         let mut ids: Vec<_> = s.scenes.iter().map(|x| x.id).collect();
         ids.dedup();
         assert_eq!(ids.len(), 5);
+        let x = s.scenes[0].id;
+        let dup = s.duplicate_scene(x, "x2").unwrap();
+        assert_eq!(s.scenes[1].id, dup);
+        assert_eq!(s.scenes[1].zone, Some(a));
+        s.remove_scene(dup);
         s.remove_zone_with_scenes(a);
         assert_eq!(s.scenes.len(), 3);
         // Show-Format: ausgeblendet/Farbe nur gespeichert, wenn gesetzt
