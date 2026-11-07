@@ -159,7 +159,7 @@ Die Oberfläche hat zwei Bereiche:
 
 DMXCraft lässt sich von einem KI-Assistenten wie Claude bedienen (Geräte
 patchen, Szenen, Effekte und SUPER SCENES anlegen, Szenen starten …).
-Einschalten unter *Einstellungen → KI-Assistent*; Details und Einrichtung
+Einschalten unter *Einstellungen → MCP*; Details und Einrichtung
 für Claude Code und Claude Desktop in [docs/MCP.md](docs/MCP.md).
 
 ## Aufbau

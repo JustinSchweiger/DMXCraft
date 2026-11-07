@@ -58,7 +58,7 @@ fn forward(port: u16, body: &str) -> Result<Option<String>, String> {
     let not_running = || {
         format!(
             "DMXCraft ist nicht erreichbar (127.0.0.1:{port}). Bitte DMXCraft starten und unter \
-             Einstellungen → KI-Assistent (MCP) den Server einschalten."
+             Einstellungen → MCP den Server einschalten."
         )
     };
     let mut s = TcpStream::connect(("127.0.0.1", port)).map_err(|_| not_running())?;

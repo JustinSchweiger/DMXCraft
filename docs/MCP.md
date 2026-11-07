@@ -5,7 +5,7 @@ kann ein KI-Assistent wie Claude die laufende Show lesen und bedienen.
 
 ## Einschalten
 
-*Bearbeiten → Einstellungen → KI-Assistent*: „MCP-Server einschalten“.
+*Bearbeiten → Einstellungen → MCP*: „MCP-Server einschalten“.
 Der Server lauscht nur lokal auf `http://127.0.0.1:7373/mcp` (Port
 einstellbar). Anfragen aus Webseiten (fremder `Origin`) werden abgewiesen.
 

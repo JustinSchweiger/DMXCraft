@@ -669,7 +669,7 @@ impl eframe::App for DmxCraftApp {
         for ev in events {
             match ev {
                 dmxcraft_mcp::AppEvent::ToolCalled(name) => {
-                    self.state.info(tr!("KI-Assistent: {name}", name = name));
+                    self.state.info(tr!("MCP: {name}", name = name));
                 }
                 dmxcraft_mcp::AppEvent::Saved(path) => {
                     self.mark_saved();

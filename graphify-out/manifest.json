@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/app.rs": {
-    "mtime": 1794084508.070801,
-    "seen": 1794084584.1054752,
-    "ast_hash": "79ee0d5d67b27be7789ecaefe4974418",
+    "mtime": 1794084735.305372,
+    "seen": 1794084789.7193787,
+    "ast_hash": "e39e262d6543986f16ce9e84e9f2aba3",
     "semantic_hash": ""
   },
   "crates/app/src/demo.rs": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1794084565.5280445,
-    "seen": 1794084584.105602,
-    "ast_hash": "6ee8b19f450dc2717d61de97cf97913c",
+    "mtime": 1794084735.309345,
+    "seen": 1794084789.7194982,
+    "ast_hash": "4f06dd4d46f19502e78c4bbe8aeac997",
     "semantic_hash": ""
   },
   "crates/app/assets/icon-256.png": {
@@ -438,15 +438,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/settings_window.rs": {
-    "mtime": 1794084391.6276498,
-    "seen": 1794084584.1054997,
-    "ast_hash": "5be3678bcf921e1e67968e07f386c76e",
+    "mtime": 1794084735.303161,
+    "seen": 1794084789.7194004,
+    "ast_hash": "2448fe726393c7ab14858ad091b229c4",
     "semantic_hash": ""
   },
   "crates/app/src/i18n/en.rs": {
-    "mtime": 1794084391.4402645,
-    "seen": 1794084584.1054869,
-    "ast_hash": "5bb7068068d24dc80190637847f77cd3",
+    "mtime": 1794084735.3214684,
+    "seen": 1794084789.7193892,
+    "ast_hash": "4761d85fead26c81552b6621fd91a24a",
     "semantic_hash": ""
   },
   "crates/app/src/i18n/mod.rs": {
@@ -582,9 +582,9 @@
     "semantic_hash": ""
   },
   "crates/mcp/src/bridge.rs": {
-    "mtime": 1794084391.8636498,
-    "seen": 1794084584.1055787,
-    "ast_hash": "9c60ebef2ba5e524e929c9ab1d4c41ff",
+    "mtime": 1794084735.3056886,
+    "seen": 1794084789.719476,
+    "ast_hash": "b02f27eb42e368a96117a77d33978eba",
     "semantic_hash": ""
   },
   "crates/mcp/src/lib.rs": {
@@ -612,9 +612,9 @@
     "semantic_hash": ""
   },
   "docs/MCP.md": {
-    "mtime": 1794084565.5146215,
-    "seen": 1794084584.105606,
-    "ast_hash": "c90fb417e0201d935d9c69855229fb34",
+    "mtime": 1794084735.305985,
+    "seen": 1794084789.7195017,
+    "ast_hash": "36324479e8a5afbab194f110eabd82d1",
     "semantic_hash": ""
   }
 }

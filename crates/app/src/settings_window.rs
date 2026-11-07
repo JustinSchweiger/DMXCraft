@@ -41,7 +41,7 @@ impl Tab {
             Tab::General => t("Allgemein"),
             Tab::Outputs => t("Ausgänge"),
             Tab::Midi => t("MIDI"),
-            Tab::Ai => t("KI-Assistent"),
+            Tab::Ai => t("MCP"),
             Tab::Project => t("Projekt"),
         }
     }
@@ -193,12 +193,7 @@ fn section(ui: &mut Ui, title: &str) {
 /// KI-Assistent: MCP-Server ein/aus, Port und Anleitungen zum Verbinden.
 fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut SettingsChanges) {
     use crate::mcp::McpStatus;
-    section(ui, t("KI-Assistent (MCP)"));
-    hint(
-        ui,
-        t("Über das Model Context Protocol kann ein KI-Assistent wie Claude DMXCraft bedienen: Geräte patchen, Szenen, Effekte und SUPER SCENES anlegen, Szenen starten … Der Server ist nur auf diesem Rechner erreichbar."),
-    );
-    ui.add_space(theme::SP_S);
+    section(ui, t("MCP"));
     ch.save |= ui
         .add(Toggle::new(&mut s.mcp_enabled, t("MCP-Server einschalten")))
         .changed();
