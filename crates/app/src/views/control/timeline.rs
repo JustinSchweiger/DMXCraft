@@ -48,6 +48,11 @@ pub struct TimelineView {
     ruler_axis: Option<bool>,
     /// Bewegung, bis die Achse feststeht.
     ruler_acc: Vec2,
+    /// Letzte Zeigerposition beim Ziehen im Lineal.
+    ruler_last: Option<egui::Pos2>,
+    /// Frames, die nach dem Zurücksetzen des Zeigers noch gewartet werden.
+    ruler_warp: u8,
+    ruler_no_warp: bool,
     /// Zuletzt angeklickte Spur: Ziel für Einfügen (Strg+V).
     paste_track: Option<usize>,
     /// Spur, die gerade umbenannt wird (ID, Text).
@@ -72,6 +77,9 @@ impl Default for TimelineView {
             ruler_grab: None,
             ruler_axis: None,
             ruler_acc: Vec2::ZERO,
+            ruler_last: None,
+            ruler_warp: 0,
+            ruler_no_warp: false,
             paste_track: None,
             rename: None,
             menu_pos: None,
@@ -361,6 +369,14 @@ impl TimelineView {
             if row.bottom() < lanes.top() || row.top() > area.bottom() {
                 continue;
             }
+            // eingefärbte Spur: ganz leichte Tönung des Gitters dahinter
+            if let Some(c) = tl.tracks[i].color {
+                lp.rect_filled(
+                    Rect::from_min_max(pos2(lanes.left(), row.top()), row.max),
+                    0.0,
+                    theme::rgb(c).gamma_multiply(0.06),
+                );
+            }
             // Zeilenlinie
             tp.line_segment(
                 [
@@ -511,8 +527,8 @@ impl TimelineView {
                     Sense::drag(),
                 );
                 for (resp, cursor) in [
-                    (&left, egui::CursorIcon::ResizeWest),
-                    (&right, egui::CursorIcon::ResizeEast),
+                    (&left, egui::CursorIcon::ResizeColumn),
+                    (&right, egui::CursorIcon::ResizeColumn),
                     (&fin, egui::CursorIcon::ResizeHorizontal),
                     (&fout, egui::CursorIcon::ResizeHorizontal),
                 ] {
@@ -1104,8 +1120,7 @@ impl TimelineView {
                     ui.scope_id().with("ruler_cursor"),
                 ));
                 let ir = Rect::from_center_size(q, Vec2::splat(22.0));
-                fg.circle_filled(q, 12.0, theme::bg().gamma_multiply(0.7));
-                Icon::ZoomIn.paint(&fg, ir, theme::text());
+                Icon::Magnifier.paint(&fg, ir, theme::text());
             }
         }
         if let Some(q) = head.interact_pointer_pos().filter(|_| head.dragged()) {
@@ -1122,13 +1137,45 @@ impl TimelineView {
         }
         if resp.drag_started() {
             self.ruler_grab = resp.interact_pointer_pos();
+            self.ruler_last = self.ruler_grab;
+            self.ruler_warp = 0;
+            self.ruler_no_warp = false;
             self.ruler_axis = None;
             self.ruler_acc = Vec2::ZERO;
+            // Zeiger im Fenster halten (Wayland/X11) …
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::CursorGrab(
+                    egui::CursorGrab::Confined,
+                ));
         }
         if let Some(origin) = self.ruler_grab {
             if resp.dragged() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::None);
-                let mut d = ui.input(|i| i.pointer.delta());
+                // … und regelmäßig an den Startpunkt zurücksetzen, damit er nie
+                // an den Bildschirmrand (oder auf einen anderen Bildschirm) wandert
+                let q = ui.input(|i| i.pointer.latest_pos());
+                let mut d = Vec2::ZERO;
+                if let Some(q) = q {
+                    if self.ruler_warp > 0 {
+                        // warten, bis der Zeiger tatsächlich zurück ist
+                        self.ruler_warp -= 1;
+                        let back = (q - origin).length() < 4.0;
+                        if back || self.ruler_warp == 0 {
+                            // kam nie an (z. B. Wayland): für dieses Ziehen nicht mehr versetzen
+                            self.ruler_no_warp |= !back;
+                            self.ruler_warp = 0;
+                            self.ruler_last = Some(q);
+                        }
+                    } else {
+                        d = q - self.ruler_last.unwrap_or(q);
+                        self.ruler_last = Some(q);
+                        if !self.ruler_no_warp && (q - origin).length() > 60.0 {
+                            ui.ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::CursorPosition(origin));
+                            self.ruler_warp = 10;
+                        }
+                    }
+                }
                 // immer nur eine Achse: die zuletzt deutlich überwiegende Richtung
                 // (abklingende Summe der letzten Bewegung); Wechsel jederzeit möglich
                 self.ruler_acc = self.ruler_acc * 0.85 + d;
@@ -1153,6 +1200,8 @@ impl TimelineView {
                 // Zeiger zurück an die Stelle, an der gezogen wurde
                 ui.ctx()
                     .send_viewport_cmd(egui::ViewportCommand::CursorPosition(origin));
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::CursorGrab(egui::CursorGrab::None));
                 self.ruler_grab = None;
             }
         }
@@ -1610,27 +1659,30 @@ fn paint_clip(
     // Ein-/Ausblenden als Schräge
     let per_ms = r.width() / c.duration_ms.max(1) as f32;
     let shade = Color32::from_black_alpha(110);
+    // nur die Schräge als Linie (ein Polygon-Rand bildet bei spitzen Winkeln
+    // Zacken über den Block hinaus) – und alles auf den Block begrenzt
+    let clip = p.with_clip_rect(r.intersect(p.clip_rect()));
+    let line = Stroke::new(1.0, Color32::WHITE);
     if c.fade_in_ms > 0 {
-        let w = c.fade_in_ms as f32 * per_ms;
-        p.add(Shape::convex_polygon(
-            vec![r.left_top(), pos2(r.left() + w, r.top()), r.left_bottom()],
+        let w = (c.fade_in_ms as f32 * per_ms).min(r.width());
+        let top = pos2(r.left() + w, r.top());
+        clip.add(Shape::convex_polygon(
+            vec![r.left_top(), top, r.left_bottom()],
             shade,
-            Stroke::new(1.0, Color32::WHITE),
+            Stroke::NONE,
         ));
+        clip.line_segment([r.left_bottom(), top], line);
     }
     if c.fade_out_ms > 0 {
-        let w = c.fade_out_ms as f32 * per_ms;
-        p.add(Shape::convex_polygon(
-            vec![
-                pos2(r.right() - w, r.top()),
-                r.right_top(),
-                r.right_bottom(),
-            ],
+        let w = (c.fade_out_ms as f32 * per_ms).min(r.width());
+        let top = pos2(r.right() - w, r.top());
+        clip.add(Shape::convex_polygon(
+            vec![top, r.right_top(), r.right_bottom()],
             shade,
-            Stroke::new(1.0, Color32::WHITE),
+            Stroke::NONE,
         ));
+        clip.line_segment([top, r.right_bottom()], line);
     }
-    let clip = p.with_clip_rect(r.intersect(p.clip_rect()));
     clip.text(
         pos2(r.left() + 4.0, head.center().y),
         egui::Align2::LEFT_CENTER,

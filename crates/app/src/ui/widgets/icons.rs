@@ -48,6 +48,8 @@ pub enum Icon {
     ZoomIn,
     ZoomOut,
     ZoomReset,
+    /// Lupe ohne Zeichen (Mauszeiger im Zeitlineal).
+    Magnifier,
     Cube,
     Levels,
     Builder,
@@ -128,7 +130,7 @@ impl Icon {
             Icon::Fullscreen => Some(("\u{E1D0}", false)),
             Icon::ZoomIn => Some(("\u{E310}", false)),
             Icon::ZoomOut => Some(("\u{E30E}", false)),
-            Icon::ZoomReset => Some(("\u{E30C}", false)),
+            Icon::ZoomReset | Icon::Magnifier => Some(("\u{E30C}", false)),
             Icon::Cube => Some(("\u{E1DA}", false)),
             Icon::Levels => Some(("\u{E150}", false)),
             Icon::Builder => Some(("\u{E5D4}", false)),
