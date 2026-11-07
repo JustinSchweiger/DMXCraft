@@ -196,6 +196,24 @@ impl Timeline {
     }
 
     /// Block anlegen; gibt seine ID zurück.
+    /// Szenenblock einfügen: Länge = ein Durchlauf der Szene, Ein-/Ausblendzeit
+    /// aus den Szeneneinstellungen.
+    pub fn add_scene_clip(
+        &mut self,
+        track: usize,
+        scene: &crate::show::Scene,
+        start_ms: u64,
+    ) -> u32 {
+        let dur = scene.duration_ms().max(100);
+        let id = self.add_clip(track, ClipContent::Scene(scene.id), start_ms, dur);
+        if let Some(c) = self.clip_mut(id) {
+            let max = u32::try_from(c.duration_ms).unwrap_or(u32::MAX);
+            c.fade_in_ms = scene.settings.fade_in_ms.min(max);
+            c.fade_out_ms = scene.settings.fade_out_ms.min(max);
+        }
+        id
+    }
+
     pub fn add_clip(
         &mut self,
         track: usize,
@@ -304,6 +322,24 @@ impl Timeline {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn super_scene_from_scenes_keeps_fades() {
+        let mut show = crate::show::Show::default();
+        let a = show.add_scene("A", None, vec![crate::show::Step::new(Vec::new())]);
+        let b = show.add_scene("B", None, vec![crate::show::Step::new(Vec::new())]);
+        show.scene_mut(a).unwrap().settings.fade_in_ms = 400;
+        show.scene_mut(a).unwrap().settings.fade_out_ms = 600;
+        let s = show.create_super_scene(&[a, b], "S").unwrap();
+        assert_eq!(show.scenes[1].id, s);
+        let sc = show.scene(s).unwrap();
+        let tl = sc.timeline().unwrap();
+        let clips = &tl.tracks[0].clips;
+        assert_eq!(clips.len(), 2);
+        assert_eq!((clips[0].fade_in_ms, clips[0].fade_out_ms), (400, 600));
+        assert_eq!(clips[1].start_ms, clips[0].end_ms());
+        assert_eq!(sc.duration_ms(), tl.length_ms());
+    }
 
     #[test]
     fn split_and_length() {

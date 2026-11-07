@@ -190,4 +190,6 @@ pub enum Focus {
     Bank(dmxcraft_core::ZoneId),
     /// Ein Effekt einer Szene (Seitenleiste).
     Effect(SceneId, u32),
+    /// Zeitleiste einer SUPER SCENE (Blöcke).
+    Timeline,
 }

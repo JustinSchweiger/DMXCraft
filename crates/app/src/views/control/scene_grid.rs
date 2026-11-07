@@ -56,6 +56,8 @@ enum Action {
     /// Umbenennung einer Szene abgeschlossen.
     SetSceneName(SceneId, String),
     DuplicateScene(SceneId),
+    /// SUPER SCENE aus den Szenen erstellen (nacheinander auf Spur 1).
+    CreateSuper(Vec<SceneId>),
     /// Gezogene Szene (samt Auswahl) in Bank `.1` vor Szene `.2` ablegen.
     MoveScenes(SceneId, ZoneId, Option<SceneId>),
     /// Farbe für Szenen setzen (`None` = Bankfarbe).
@@ -908,13 +910,14 @@ fn scene_card(
         if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
             actions.extend(targets.iter().map(|s| Action::DuplicateScene(*s)));
         }
-        menu::item(
+        if menu::item(
             ui,
             MenuItem::new(t("SuperSzene erstellen"))
                 .icon(Icon::Music)
-                .enabled(false)
-                .tooltip(t("Kommt in einer späteren Version")),
-        );
+                .tooltip(t("Neue SUPER SCENE mit diesen Szenen nacheinander")),
+        ) {
+            actions.push(Action::CreateSuper(targets.clone()));
+        }
         menu::separator(ui);
         ui.horizontal(|ui| {
             ui.add_space(theme::SP_S);
@@ -993,6 +996,29 @@ fn apply(
                 };
                 e.show_mut()
                     .duplicate_scene(id, tr!("{name} (Kopie)", name = name));
+            }
+            Action::CreateSuper(ids) => {
+                // in Anzeigereihenfolge
+                let ordered: Vec<SceneId> = e
+                    .show()
+                    .scenes
+                    .iter()
+                    .map(|s| s.id)
+                    .filter(|i| ids.contains(i))
+                    .collect();
+                let name = if ordered.len() == 1 {
+                    let n = e
+                        .show()
+                        .scene(ordered[0])
+                        .map_or(String::new(), |s| s.name.clone());
+                    tr!("{name} (Super)", name = n)
+                } else {
+                    t("Super Szene").to_string()
+                };
+                if let Some(id) = e.show_mut().create_super_scene(&ordered, name) {
+                    st.selected_scenes.clear();
+                    st.selected_scenes.insert(id);
+                }
             }
             Action::MoveScenes(dragged, zone, before) => {
                 // ausgewählte Szenen wandern mit, wenn die gezogene dazugehört

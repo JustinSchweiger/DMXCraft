@@ -17,6 +17,8 @@ const HEADER_W: f32 = 84.0;
 const RULER_H: f32 = 22.0;
 const ZOOMBAR_H: f32 = 12.0;
 const TRACK_H: f32 = 44.0;
+/// Spuren mit Audio sind höher (Wellenform).
+const AUDIO_TRACK_H: f32 = 84.0;
 const LANE_H: f32 = 36.0;
 const EDGE: f32 = 6.0;
 /// Länge neuer Szenenblöcke ohne eigene Dauer.
@@ -38,6 +40,8 @@ pub struct TimelineView {
     /// Zeit am linken Rand (ms).
     scroll_ms: f64,
     scroll_y: f32,
+    /// Ziehen im Lineal (Zoom/Scroll): Startpunkt des Zeigers.
+    ruler_grab: Option<egui::Pos2>,
     drag: Option<(u32, Drag)>,
     /// Zwischenablage (Ausschneiden/Kopieren).
     clipboard: Vec<(usize, Clip)>,
@@ -51,6 +55,7 @@ impl Default for TimelineView {
             zoom: 0.05,
             scroll_ms: 0.0,
             scroll_y: 0.0,
+            ruler_grab: None,
             drag: None,
             clipboard: Vec::new(),
             before_drag: None,
@@ -59,6 +64,23 @@ impl Default for TimelineView {
 }
 
 /// Zeit als „00m40s86“ (Hundertstel).
+/// Höhe des Blockbereichs einer Spur (ohne Unterspur).
+fn track_h(tr: &dmxcraft_core::timeline::Track) -> f32 {
+    if tr
+        .clips
+        .iter()
+        .any(|c| matches!(c.content, ClipContent::Audio { .. }))
+    {
+        AUDIO_TRACK_H
+    } else {
+        TRACK_H
+    }
+}
+
+fn row_h(tr: &dmxcraft_core::timeline::Track) -> f32 {
+    track_h(tr) + if tr.expanded { LANE_H } else { 0.0 }
+}
+
 pub fn fmt_ms(ms: f64) -> String {
     let ms = ms.max(0.0) as u64;
     format!(
@@ -84,7 +106,9 @@ impl TimelineView {
             return;
         };
         let before = tl.clone();
-        let locked = st.locked;
+        // Live: Zeitleiste nur ansehen (abspielen, navigieren), nicht bearbeiten
+        let live = st.programmer_mode == crate::state::ProgrammerMode::Live;
+        let locked = st.locked || live;
         // laufende Wiedergabe: Abspielposition folgt der Engine
         let running = e.timeline_running(scene);
         if let Some(t) = e.timeline_time(scene) {
@@ -97,7 +121,7 @@ impl TimelineView {
         // Werkzeugleiste
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = theme::SP_XS;
-            super::programmer::mode_switch(ui, &mut st.programmer_mode, locked);
+            super::programmer::mode_switch(ui, &mut st.programmer_mode, st.locked);
             super::programmer::tool_separator(ui);
             let play = ui
                 .add(
@@ -177,29 +201,29 @@ impl TimelineView {
         let area = ui.available_rect_before_wrap();
         ui.allocate_rect(area, Sense::hover());
         let p = ui.painter_at(area);
-        p.rect_filled(area, 0.0, theme::bg());
+        p.rect_filled(area, 0.0, if live { theme::raised() } else { theme::bg() });
         let lanes = Rect::from_min_max(
             pos2(area.left() + HEADER_W, area.top() + ZOOMBAR_H + RULER_H),
             area.max,
         );
         let total = (tl.length_ms() as f64 + 30_000.0).max(60_000.0);
-        // Mausrad: Strg = Zoom, Umschalt = waagerecht, sonst senkrecht
+        // Mausrad: Strg = Zoom, Alt/Umschalt = waagerecht, sonst senkrecht
         if ui.rect_contains_pointer(area) {
-            let (scroll, ctrl, shift, pointer) = ui.input(|i| {
+            let (scroll, zoom, alt, shift, pointer) = ui.input(|i| {
                 (
                     i.smooth_scroll_delta,
-                    i.modifiers.command,
+                    i.zoom_delta(),
+                    i.modifiers.alt,
                     i.modifiers.shift,
                     i.pointer.hover_pos(),
                 )
             });
-            if ctrl && scroll.y != 0.0 {
-                let at = pointer.map_or(self.scroll_ms, |q| self.ms_at(q.x, lanes));
-                self.zoom = (self.zoom * (1.0 + scroll.y * 0.004)).clamp(0.002, 2.0);
-                self.scroll_ms =
-                    at - f64::from(pointer.map_or(0.0, |q| q.x - lanes.left()) / self.zoom);
-            } else if shift || scroll.x != 0.0 {
-                let d = if shift { scroll.y } else { scroll.x };
+            if (zoom - 1.0).abs() > 1e-4 {
+                // egui wandelt Strg+Mausrad in einen Zoomfaktor um
+                let x = pointer.map_or(lanes.left(), |q| q.x.max(lanes.left()));
+                self.zoom_at(zoom, x, lanes);
+            } else if alt || shift || scroll.x != 0.0 {
+                let d = scroll.x + if alt || shift { scroll.y } else { 0.0 };
                 self.scroll_ms -= f64::from(d / self.zoom);
             } else {
                 self.scroll_y -= scroll.y;
@@ -219,22 +243,20 @@ impl TimelineView {
         self.ruler(ui, &p, area, lanes, &tl, e, scene, st);
 
         // Spuren
-        let content_h: f32 = tl
-            .tracks
-            .iter()
-            .map(|t| TRACK_H + if t.expanded { LANE_H } else { 0.0 })
-            .sum::<f32>()
-            + 30.0;
+        let content_h: f32 = tl.tracks.iter().map(row_h).sum::<f32>() + 30.0;
         self.scroll_y = self
             .scroll_y
             .clamp(0.0, (content_h - lanes.height()).max(0.0));
         let clip_area = Rect::from_min_max(pos2(area.left(), lanes.top()), area.max);
         let tp = ui.painter_at(clip_area);
+        // Spurköpfe und Blöcke nicht über Lineal/Zoomleiste zeichnen
+        let outer_clip = ui.clip_rect();
+        ui.set_clip_rect(clip_area.intersect(outer_clip));
         self.grid_lines(&tp, lanes, &tl);
         let mut y = lanes.top() - self.scroll_y;
         let mut rows: Vec<(usize, f32, f32)> = Vec::new();
         for (i, tr) in tl.tracks.iter().enumerate() {
-            let h = TRACK_H + if tr.expanded { LANE_H } else { 0.0 };
+            let h = row_h(tr);
             rows.push((i, y, h));
             y += h;
         }
@@ -321,34 +343,6 @@ impl TimelineView {
                 tl.add_track(None);
             }
         }
-        if let Some((i, a)) = header_action {
-            match a {
-                HeaderAction::Toggle => tl.tracks[i].expanded = !tl.tracks[i].expanded,
-                HeaderAction::ExpandAll => {
-                    let all = tl.tracks.iter().all(|t| t.expanded);
-                    for t in &mut tl.tracks {
-                        t.expanded = !all;
-                    }
-                }
-                HeaderAction::Insert => {
-                    tl.add_track(Some(i));
-                }
-                HeaderAction::Delete => {
-                    tl.tracks.remove(i);
-                }
-                HeaderAction::Duplicate => {
-                    let mut copy = tl.tracks[i].clone();
-                    copy.id = tl.next_id;
-                    tl.next_id += 1;
-                    for c in &mut copy.clips {
-                        c.id = tl.next_id;
-                        tl.next_id += 1;
-                    }
-                    tl.tracks.insert(i + 1, copy);
-                }
-            }
-        }
-
         // Blöcke
         let names = |id: SceneId| {
             e.show().scene(id).map(|s| {
@@ -377,6 +371,7 @@ impl TimelineView {
         for &(ti, ty, _) in &rows {
             let tr_locked = tl.tracks[ti].locked || locked;
             let expanded = tl.tracks[ti].expanded;
+            let th = track_h(&tl.tracks[ti]);
             let ids: Vec<u32> = tl.tracks[ti].clips.iter().map(|c| c.id).collect();
             for cid in ids {
                 let Some(c) = tl.tracks[ti].clips.iter().find(|c| c.id == cid).cloned() else {
@@ -387,10 +382,8 @@ impl TimelineView {
                 if x1 < lanes.left() || x0 > lanes.right() {
                     continue;
                 }
-                let r = Rect::from_min_max(
-                    pos2(x0, ty + 2.0),
-                    pos2(x1.max(x0 + 3.0), ty + TRACK_H - 2.0),
-                );
+                let r =
+                    Rect::from_min_max(pos2(x0, ty + 2.0), pos2(x1.max(x0 + 3.0), ty + th - 2.0));
                 let sel = st.timeline_sel.contains(&cid);
                 let (name, color, scene_ms) = match &c.content {
                     ClipContent::Scene(id) => names(*id)
@@ -407,8 +400,8 @@ impl TimelineView {
                 // Unterspur: Dimmer bzw. Lautstärke als Linie
                 if expanded {
                     let lane = Rect::from_min_max(
-                        pos2(r.left(), ty + TRACK_H + 2.0),
-                        pos2(r.right(), ty + TRACK_H + LANE_H - 4.0),
+                        pos2(r.left(), ty + th + 2.0),
+                        pos2(r.right(), ty + th + LANE_H - 4.0),
                     );
                     tp.rect_filled(lane, 2.0, color.gamma_multiply(0.18));
                     let ly = lane.bottom() - lane.height() * c.level;
@@ -634,9 +627,10 @@ impl TimelineView {
                     .scene(*dragged)
                     .map_or(DEFAULT_CLIP_MS, |s| s.duration_ms().max(100));
                 let ty = rows.iter().find(|r| r.0 == ti).map_or(add_y, |r| r.1);
+                let th = tl.tracks.get(ti).map_or(TRACK_H, track_h);
                 let ghost = Rect::from_min_size(
                     pos2(self.x_at(at, lanes), ty + 2.0),
-                    Vec2::new(dur as f32 * self.zoom, TRACK_H - 4.0),
+                    Vec2::new(dur as f32 * self.zoom, th - 4.0),
                 );
                 tp.rect_stroke(
                     ghost,
@@ -645,8 +639,10 @@ impl TimelineView {
                     StrokeKind::Inside,
                 );
                 if ui.input(|i| i.pointer.any_released()) && *dragged != scene && !locked {
-                    let id = tl.add_clip(ti, ClipContent::Scene(*dragged), at as u64, dur);
-                    st.timeline_sel = [id].into();
+                    if let Some(sc) = e.show().scene(*dragged) {
+                        let id = tl.add_scene_clip(ti, sc, at as u64);
+                        st.timeline_sel = [id].into();
+                    }
                     egui::DragAndDrop::clear_payload(ui.ctx());
                 }
             }
@@ -684,21 +680,35 @@ impl TimelineView {
                 st.timeline_sel = [cid].into();
             }
             self.clip_action(&mut tl, st, a, cid);
+            if matches!(a, ClipAction::Cut | ClipAction::Copy) {
+                mark_clipboard(ui.ctx());
+            }
         }
         if let Some(id) = double {
             st.selected_scenes = [id].into();
         }
         // Tastatur
+        // (Strg+X/C/V kommen von egui als Cut/Copy/Paste-Ereignisse, nicht als Tasten)
+        // Klick in die Zeitleiste macht sie zum Ziel der Tastatur
+        if ui.input(|i| i.pointer.any_pressed())
+            && ui
+                .input(|i| i.pointer.interact_pos())
+                .is_some_and(|q| area.contains(q))
+        {
+            st.focus = crate::state::Focus::Timeline;
+        }
         let focus_free =
-            ui.ctx().memory(|m| m.focused().is_none()) && ui.rect_contains_pointer(area);
+            !ui.ctx().egui_wants_keyboard_input() && st.focus == crate::state::Focus::Timeline;
         if focus_free && !locked {
             let (del, cut, copy, paste, dup) = ui.input(|i| {
+                let ev = |f: fn(&egui::Event) -> bool| i.events.iter().any(f);
+                let key = |k| i.modifiers.command && i.key_pressed(k);
                 (
-                    i.key_pressed(egui::Key::Delete),
-                    i.modifiers.command && i.key_pressed(egui::Key::X),
-                    i.modifiers.command && i.key_pressed(egui::Key::C),
-                    i.modifiers.command && i.key_pressed(egui::Key::V),
-                    i.modifiers.command && i.key_pressed(egui::Key::D),
+                    i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
+                    ev(|e| matches!(e, egui::Event::Cut)) || key(egui::Key::X),
+                    ev(|e| matches!(e, egui::Event::Copy)) || key(egui::Key::C),
+                    ev(|e| matches!(e, egui::Event::Paste(_))) || key(egui::Key::V),
+                    key(egui::Key::D),
                 )
             });
             let first = st.timeline_sel.iter().next().copied();
@@ -707,8 +717,10 @@ impl TimelineView {
                     self.clip_action(&mut tl, st, ClipAction::Delete, cid);
                 } else if cut {
                     self.clip_action(&mut tl, st, ClipAction::Cut, cid);
+                    mark_clipboard(ui.ctx());
                 } else if copy {
                     self.clip_action(&mut tl, st, ClipAction::Copy, cid);
+                    mark_clipboard(ui.ctx());
                 } else if dup {
                     self.clip_action(&mut tl, st, ClipAction::Duplicate, cid);
                 }
@@ -719,6 +731,7 @@ impl TimelineView {
             }
         }
 
+        ui.set_clip_rect(outer_clip);
         // Abspielposition
         let cx = self.x_at(st.timeline_cursor, lanes);
         if cx >= lanes.left() && cx <= lanes.right() {
@@ -734,6 +747,35 @@ impl TimelineView {
             p.add(Shape::convex_polygon(head, theme::OK, Stroke::NONE));
         }
 
+        // Spur-Aktionen erst am Ende: die Zeilen oben zeigen noch auf die alten Spuren
+        if let Some((i, a)) = header_action.filter(|(i, _)| *i < tl.tracks.len()) {
+            match a {
+                HeaderAction::Toggle => tl.tracks[i].expanded = !tl.tracks[i].expanded,
+                HeaderAction::ExpandAll => {
+                    let all = tl.tracks.iter().all(|t| t.expanded);
+                    for t in &mut tl.tracks {
+                        t.expanded = !all;
+                    }
+                }
+                HeaderAction::Insert => {
+                    tl.add_track(Some(i));
+                }
+                HeaderAction::Delete => {
+                    tl.tracks.remove(i);
+                }
+                HeaderAction::Duplicate => {
+                    let mut copy = tl.tracks[i].clone();
+                    copy.id = tl.next_id;
+                    tl.next_id += 1;
+                    for c in &mut copy.clips {
+                        c.id = tl.next_id;
+                        tl.next_id += 1;
+                    }
+                    tl.tracks.insert(i + 1, copy);
+                }
+            }
+        }
+
         // Änderungen übernehmen
         if tl != before && !locked {
             if let Some(sc) = e.show_mut().scene_mut(scene) {
@@ -743,6 +785,13 @@ impl TimelineView {
                 sc.sync_timeline_length();
             }
         }
+    }
+
+    /// Zoomen um den Faktor `f`, die Zeit unter `x` bleibt stehen.
+    fn zoom_at(&mut self, f: f32, x: f32, lanes: Rect) {
+        let at = self.ms_at(x, lanes);
+        self.zoom = (self.zoom * f).clamp(0.002, 2.0);
+        self.scroll_ms = (at - f64::from((x - lanes.left()) / self.zoom)).max(0.0);
     }
 
     fn x_at(&self, ms: f64, lanes: Rect) -> f32 {
@@ -926,15 +975,37 @@ impl TimelineView {
             }
             v += label_step;
         }
-        // Klicken/Ziehen setzt die Abspielposition
-        let resp = ui.interact(r, ui.scope_id().with("ruler"), Sense::click_and_drag());
-        if let Some(q) = resp
-            .interact_pointer_pos()
-            .filter(|_| resp.dragged() || resp.clicked())
-        {
-            let ms = self.snap(self.ms_at(q.x, lanes).max(0.0), tl, &[], 0);
-            st.timeline_cursor = ms;
-            e.seek_timeline(scene, ms);
+        // Klick setzt die Abspielposition; Ziehen (Mauszeiger verschwindet):
+        // hoch/runter zoomt, links/rechts scrollt
+        let resp = ui
+            .interact(r, ui.scope_id().with("ruler"), Sense::click_and_drag())
+            .on_hover_text(t(
+                "Klick: Position setzen · Ziehen: hoch/runter zoomen, links/rechts scrollen",
+            ));
+        if resp.clicked() {
+            if let Some(q) = resp.interact_pointer_pos() {
+                let ms = self.snap(self.ms_at(q.x, lanes).max(0.0), tl, &[], 0);
+                st.timeline_cursor = ms;
+                e.seek_timeline(scene, ms);
+            }
+        }
+        if resp.drag_started() {
+            self.ruler_grab = resp.interact_pointer_pos();
+        }
+        if let Some(origin) = self.ruler_grab {
+            if resp.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+                let d = ui.input(|i| i.pointer.delta());
+                self.scroll_ms = (self.scroll_ms + f64::from(d.x / self.zoom)).max(0.0);
+                if d.y != 0.0 {
+                    self.zoom_at((-d.y * 0.01).exp(), origin.x, lanes);
+                }
+            } else {
+                // Zeiger zurück an die Stelle, an der gezogen wurde
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::CursorPosition(origin));
+                self.ruler_grab = None;
+            }
         }
     }
 
@@ -1064,6 +1135,12 @@ enum HeaderAction {
 }
 
 /// Abspielen/Pausieren; nicht laufend: an der Abspielposition starten.
+/// Text in die System-Zwischenablage legen: egui meldet Strg+V nur, wenn
+/// dort Text liegt (die Blöcke selbst bleiben in der Zeitleiste).
+fn mark_clipboard(ctx: &egui::Context) {
+    ctx.copy_text("DMXCraft".into());
+}
+
 fn toggle_play(e: &mut Engine, scene: SceneId, cursor: f64) {
     if e.timeline_time(scene).is_some() {
         e.toggle_pause(scene);
@@ -1147,7 +1224,8 @@ fn track_header(
         Stroke::new(1.0, theme::border()),
     );
     let mut action = None;
-    let top = Rect::from_min_size(head.min, Vec2::new(HEADER_W, TRACK_H));
+    let th = track_h(tr);
+    let top = Rect::from_min_size(head.min, Vec2::new(HEADER_W, th));
     let resp = ui.interact(
         top,
         ui.scope_id().with(("track_head", tr.id)),
@@ -1155,7 +1233,7 @@ fn track_header(
     );
     // Pfeil
     let arrow = Rect::from_min_size(
-        pos2(top.left() + 2.0, top.top() + 10.0),
+        pos2(top.left() + 2.0, top.center().y - 12.0),
         Vec2::new(24.0, 24.0),
     );
     if ui
@@ -1180,7 +1258,10 @@ fn track_header(
         theme::body(),
         theme::text_dim(),
     );
-    let eye = Rect::from_min_size(pos2(top.right() - 28.0, top.top() + 1.0), Vec2::splat(21.0));
+    let eye = Rect::from_min_size(
+        pos2(top.right() - 28.0, top.center().y - 21.0),
+        Vec2::splat(21.0),
+    );
     if ui
         .put(
             eye,
@@ -1194,10 +1275,7 @@ fn track_header(
     {
         tr.muted = !tr.muted;
     }
-    let lock = Rect::from_min_size(
-        pos2(top.right() - 28.0, top.top() + 22.0),
-        Vec2::splat(22.0),
-    );
+    let lock = Rect::from_min_size(pos2(top.right() - 28.0, top.center().y), Vec2::splat(22.0));
     if ui
         .put(
             lock,
@@ -1217,7 +1295,7 @@ fn track_header(
     }
     if tr.expanded {
         p.text(
-            pos2(head.left() + 10.0, head.top() + TRACK_H + LANE_H / 2.0),
+            pos2(head.left() + 10.0, head.top() + th + LANE_H / 2.0),
             egui::Align2::LEFT_CENTER,
             t("Dimmer/Volume"),
             egui::FontId::proportional(theme::FS_CAPTION - 1.0),

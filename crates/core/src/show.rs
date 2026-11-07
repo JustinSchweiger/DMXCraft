@@ -1106,6 +1106,34 @@ impl Show {
         id
     }
 
+    /// Neue SUPER SCENE hinter der ersten Szene aus `ids`: die Szenen liegen
+    /// nacheinander auf Spur 1.
+    pub fn create_super_scene(
+        &mut self,
+        ids: &[SceneId],
+        name: impl Into<String>,
+    ) -> Option<SceneId> {
+        let first = *ids.first()?;
+        let pos = self.scenes.iter().position(|s| s.id == first)?;
+        let zone = self.scenes[pos].zone;
+        let id = self.add_scene(name, zone, vec![Step::new(Vec::new())]);
+        let parts: Vec<Scene> = ids.iter().filter_map(|i| self.scene(*i).cloned()).collect();
+        let sc = self.scene_mut(id)?;
+        sc.add_effect(EffectKind::SuperScene);
+        if let Some(tl) = sc.timeline_mut() {
+            let mut at = 0;
+            for p in &parts {
+                tl.add_scene_clip(0, p, at);
+                at += p.duration_ms().max(100);
+            }
+        }
+        sc.sync_timeline_length();
+        // direkt hinter die erste Szene
+        let new = self.scenes.pop()?;
+        self.scenes.insert(pos + 1, new);
+        Some(id)
+    }
+
     /// Kopiert eine Szene; die Kopie steht direkt hinter dem Original.
     pub fn duplicate_scene(&mut self, id: SceneId, name: impl Into<String>) -> Option<SceneId> {
         let pos = self.scenes.iter().position(|s| s.id == id)?;
