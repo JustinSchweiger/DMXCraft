@@ -2,13 +2,11 @@
 //! Moving Head zentrieren), Darstellung und Ausgangsgrenzen.
 
 use crate::i18n::t;
-use dmxcraft_core::{ChannelKind, FixtureId, FixtureLimits, PlanShape, PLAN_SIZE_RANGE};
+use dmxcraft_core::{ChannelKind, FixtureId, FixtureLimits};
 use eframe::egui;
 
 use crate::ui::theme;
-use crate::ui::widgets::{
-    section_header, Icon, IconButton, LimitPad, RangeSlider, ShapeButton, Toggle,
-};
+use crate::ui::widgets::{Icon, IconButton, LimitPad, RangeSlider, Toggle};
 use crate::views::quick::{quick_action, Layer, Quick};
 use crate::views::{View, ViewCtx};
 
@@ -21,32 +19,38 @@ impl View for FixtureSettings {
         let ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
         let mut quick = None;
         let some = !ids.is_empty();
-        section_header(ui, "", |ui| {
-            if ui
-                .add(IconButton::new(Icon::Center).enabled(some))
-                .on_hover_text(t("Moving Head zentrieren (Pan/Tilt 50 %)"))
-                .clicked()
-            {
-                quick = Some(Quick::Center);
-            }
-            if ui
-                .add(IconButton::new(Icon::LightOn).enabled(some))
-                .on_hover_text(t("Licht an (Dimmer und Weiß voll)"))
-                .clicked()
-            {
-                quick = Some(Quick::On);
-            }
-            if ui
-                .add(IconButton::new(Icon::LightOff).enabled(some))
-                .on_hover_text(t("Licht aus"))
-                .clicked()
-            {
-                quick = Some(Quick::Off);
-            }
-        });
+        // Schnelltest unten fest: Licht an/aus, zentrieren
+        egui::Panel::bottom("fixture_quick")
+            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4)))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(IconButton::new(Icon::Center).enabled(some))
+                        .on_hover_text(t("Moving Head zentrieren (Pan/Tilt 50 %)"))
+                        .clicked()
+                    {
+                        quick = Some(Quick::Center);
+                    }
+                    if ui
+                        .add(IconButton::new(Icon::LightOn).enabled(some))
+                        .on_hover_text(t("Licht an (Dimmer und Weiß voll)"))
+                        .clicked()
+                    {
+                        quick = Some(Quick::On);
+                    }
+                    if ui
+                        .add(IconButton::new(Icon::LightOff).enabled(some))
+                        .on_hover_text(t("Licht aus"))
+                        .clicked()
+                    {
+                        quick = Some(Quick::Off);
+                    }
+                })
+            });
         if let Some(q) = quick {
             quick_action(cx.engine, Layer::Programmer, &ids, q);
         }
+
         let Some(first) = ids.first().copied() else {
             return;
         };
@@ -64,49 +68,7 @@ impl View for FixtureSettings {
         let has_pan = has(ChannelKind::Pan);
         let has_tilt = has(ChannelKind::Tilt);
         let mut lim = show.fixture(first).map(|f| f.limits).unwrap_or_default();
-        let shape = show.fixture(first).and_then(|f| f.plan_shape);
-        let mut size = show.plan_size(first);
         let before = lim;
-        let mut new_shape: Option<Option<PlanShape>> = None;
-        let mut size_changed = false;
-
-        // Darstellung
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 3.0;
-            if ui
-                .add(ShapeButton {
-                    shape: None,
-                    selected: shape.is_none(),
-                })
-                .clicked()
-            {
-                new_shape = Some(None);
-            }
-            for s in PlanShape::ALL {
-                if ui
-                    .add(ShapeButton {
-                        shape: Some(s),
-                        selected: shape == Some(s),
-                    })
-                    .clicked()
-                {
-                    new_shape = Some(Some(s));
-                }
-            }
-            ui.spacing_mut().item_spacing.x = theme::SP_S;
-            ui.add_space(theme::SP_S);
-            ui.spacing_mut().slider_width = (ui.available_width() - 60.0).max(60.0);
-            size_changed = ui
-                .add(
-                    egui::Slider::new(&mut size, PLAN_SIZE_RANGE)
-                        .fixed_decimals(1)
-                        .suffix("x"),
-                )
-                .on_hover_text(t("Größe im Bühnenplan"))
-                .changed();
-        });
-        ui.add_space(theme::SP_XS);
-        ui.separator();
 
         // Grenzen: Dimmer | Bewegung (XY) | Werte & Schalter
         let h = ui.available_height().clamp(150.0, 320.0);
@@ -168,24 +130,11 @@ impl View for FixtureSettings {
                 }
             });
         });
-        if ids.len() > 1 {
-            ui.label(
-                egui::RichText::new(t("Änderungen gelten für alle ausgewählten Geräte."))
-                    .color(theme::text_faint()),
-            );
-        }
-
         let limits_changed = lim != before;
         for id in ids {
             if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
                 if limits_changed {
                     f.limits = lim;
-                }
-                if let Some(s) = new_shape {
-                    f.plan_shape = s;
-                }
-                if size_changed {
-                    f.plan_size = Some(size);
                 }
             }
         }

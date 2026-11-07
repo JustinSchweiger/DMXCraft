@@ -14,7 +14,6 @@
 //! das Layout.
 //! Mittlere Maustaste zieht die Ansicht, das Mausrad zoomt zur Mausposition.
 
-use crate::i18n::t;
 use std::collections::BTreeSet;
 
 use dmxcraft_core::{plan, ChannelKind, DmxFrame, FixtureId, PlanShape, Show};
@@ -212,13 +211,6 @@ impl StageCanvas<'_> {
         self.paint_stage(&painter, rect, cam);
 
         if self.show.fixtures.is_empty() {
-            painter.text(
-                rect.center(),
-                egui::Align2::CENTER_CENTER,
-                t("Noch keine Geräte – unter EINRICHTEN → Patch hinzufügen"),
-                theme::body(),
-                theme::text_dim(),
-            );
             return moves;
         }
 
@@ -772,44 +764,5 @@ pub fn paint_shape_icon(p: &egui::Painter, shape: Option<PlanShape>, r: Rect, co
             ];
             p.add(egui::Shape::convex_polygon(pts, color, stroke));
         }
-    }
-}
-
-/// Knopf mit Formsymbol.
-pub struct ShapeButton {
-    pub shape: Option<PlanShape>,
-    pub selected: bool,
-}
-
-impl egui::Widget for ShapeButton {
-    fn ui(self, ui: &mut Ui) -> egui::Response {
-        let (rect, resp) = ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
-        let p = ui.painter();
-        let bg = if self.selected {
-            theme::accent_dim()
-        } else if resp.hovered() {
-            theme::raised_hover()
-        } else {
-            theme::raised()
-        };
-        p.rect_filled(rect, theme::R_S as f32, bg);
-        if self.selected {
-            p.rect_stroke(
-                rect,
-                theme::R_S as f32,
-                Stroke::new(1.0, theme::accent()),
-                StrokeKind::Inside,
-            );
-        }
-        let color = if self.selected {
-            theme::accent()
-        } else {
-            theme::text()
-        };
-        paint_shape_icon(p, self.shape, rect.shrink(7.0), color);
-        let tip = self
-            .shape
-            .map_or(t("Automatisch (nach Gerätetyp)"), |s| t(s.label()));
-        resp.on_hover_text(tip)
     }
 }

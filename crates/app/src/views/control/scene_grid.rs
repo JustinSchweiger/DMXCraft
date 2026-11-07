@@ -967,6 +967,10 @@ fn apply(
                 let id = e
                     .show_mut()
                     .add_scene(name.clone(), Some(zone), vec![Step::new(values)]);
+                // neue Szene gleich markieren
+                st.selected_scenes.clear();
+                st.selected_scenes.insert(id);
+                st.focus = crate::state::Focus::Scenes;
                 *scene_rename = Some((id, name));
             }
             Action::RenameScene(id) => {

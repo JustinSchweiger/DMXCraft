@@ -73,6 +73,9 @@ pub enum Icon {
     Lightning,
     Gear,
     ListChecks,
+    Magnet,
+    GridFour,
+    TextAa,
     /// Abspielen rückwärts (Dreieck nach links).
     PlayBack,
     /// Schriftzug „FX“ (Effekte).
@@ -142,6 +145,9 @@ impl Icon {
             Icon::Lightning => Some(("\u{E2DE}", true)),
             Icon::Gear => Some(("\u{E87C}", false)),
             Icon::ListChecks => Some(("\u{EADC}", false)),
+            Icon::Magnet => Some(("\u{E680}", false)),
+            Icon::GridFour => Some(("\u{E296}", false)),
+            Icon::TextAa => Some(("\u{E6EE}", false)),
             Icon::PlayBack | Icon::Fx => None,
         }
     }

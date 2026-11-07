@@ -5,10 +5,8 @@ use dmxcraft_core::{plan, FixtureId};
 use eframe::egui;
 
 use crate::ui::theme;
-use crate::ui::widgets::stage_canvas::{fixture_pos, ZOOM_MAX, ZOOM_MIN};
-use crate::ui::widgets::{
-    section_header, CanvasMode, Icon, IconButton, StageCanvas, StageInteraction, Toggle,
-};
+use crate::ui::widgets::stage_canvas::fixture_pos;
+use crate::ui::widgets::{CanvasMode, Icon, IconButton, StageCanvas, StageInteraction};
 use crate::views::fixture_menu::{self, MenuPlace};
 use crate::views::{View, ViewCtx};
 
@@ -32,60 +30,6 @@ impl Default for StageEditorView {
     }
 }
 
-/// Zoom-Leiste unten rechts im Bühnenplan: Einpassen, −, Regler, +.
-fn zoom_bar(ui: &mut egui::Ui, area: egui::Rect, st: &mut StageInteraction) {
-    let size = egui::vec2(210.0, 32.0);
-    let bar = egui::Rect::from_min_size(area.right_bottom() - size - egui::vec2(8.0, 8.0), size);
-    let mut child = ui.new_child(
-        egui::UiBuilder::new()
-            .max_rect(bar)
-            .layout(egui::Layout::left_to_right(egui::Align::Center)),
-    );
-    egui::Frame::new()
-        .fill(theme::raised())
-        .stroke(egui::Stroke::new(1.0, theme::border()))
-        .corner_radius(theme::R_M)
-        .inner_margin(egui::Margin::symmetric(4, 2))
-        .show(&mut child, |ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            if ui
-                .add(IconButton::new(Icon::ZoomFit).flat())
-                .on_hover_text(t("Alle Geräte einpassen"))
-                .clicked()
-            {
-                st.fit_request = true;
-            }
-            if ui
-                .add(IconButton::new(Icon::ZoomOut).flat())
-                .on_hover_text(t("Verkleinern"))
-                .clicked()
-            {
-                st.zoom_by(0.8);
-            }
-            // Logarithmisch: gleiche Wege für Vergrößern und Verkleinern
-            let mut z = st.zoom;
-            ui.spacing_mut().slider_width = 100.0;
-            if ui
-                .add(
-                    egui::Slider::new(&mut z, ZOOM_MIN..=ZOOM_MAX)
-                        .logarithmic(true)
-                        .show_value(false),
-                )
-                .on_hover_text(tr!("Zoom {pct} %", pct = (st.zoom * 100.0).round()))
-                .changed()
-            {
-                st.zoom = z;
-            }
-            if ui
-                .add(IconButton::new(Icon::ZoomIn).flat())
-                .on_hover_text(t("Vergrößern"))
-                .clicked()
-            {
-                st.zoom_by(1.25);
-            }
-        });
-}
-
 enum Arrange {
     Row,
     Grid,
@@ -97,23 +41,8 @@ enum Arrange {
 impl View for StageEditorView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut arrange: Option<Arrange> = None;
-        section_header(ui, "", |ui| {
-            ui.add(IconButton::new(Icon::Info).flat()).on_hover_text(
-                t("Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nMittlere Maustaste = Ansicht ziehen\nMausrad = zoomen\nRechtsklick = Menü (Form, Größe, Gruppen …)"),
-            );
-            ui.separator();
-            ui.add(Toggle::new(&mut self.labels, t("Namen")));
-            ui.add(Toggle::new(&mut self.grid, t("Raster")));
-            ui.add_enabled(
-                self.snap,
-                egui::DragValue::new(&mut self.cells)
-                    .range(4..=64)
-                    .suffix(t(" Felder")),
-            );
-            ui.add(Toggle::new(&mut self.snap, t("Einrasten")));
-        });
-
-        // Anordnen: Symbol-Knöpfe senkrecht links
+        // Werkzeuge senkrecht links: Anordnen, Ansicht (Einrasten, Raster,
+        // Namen), Zoom, Hilfe
         egui::Panel::left("stage_tools")
             .resizable(false)
             .exact_size(34.0)
@@ -122,6 +51,7 @@ impl View for StageEditorView {
                 ..Default::default()
             }))
             .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
                 let some = !cx.state.selected.is_empty();
                 for (icon, hint, a) in [
                     (Icon::ArrangeRow, t("In Reihe verteilen"), Arrange::Row),
@@ -143,13 +73,59 @@ impl View for StageEditorView {
                     ),
                 ] {
                     if ui
-                        .add(IconButton::new(icon).size(28.0).enabled(some))
+                        .add(IconButton::new(icon).size(26.0).enabled(some))
                         .on_hover_text(hint)
                         .clicked()
                     {
                         arrange = Some(a);
                     }
                 }
+                tool_sep(ui);
+                for (on, icon, hint) in [
+                    (&mut self.snap, Icon::Magnet, t("Einrasten")),
+                    (&mut self.grid, Icon::GridFour, t("Raster")),
+                    (&mut self.labels, Icon::TextAa, t("Namen")),
+                ] {
+                    if ui
+                        .add(IconButton::new(icon).size(26.0).active(*on))
+                        .on_hover_text(hint)
+                        .clicked()
+                    {
+                        *on = !*on;
+                    }
+                }
+                ui.add_enabled(
+                    self.snap,
+                    egui::DragValue::new(&mut self.cells).range(4..=64),
+                )
+                .on_hover_text(t("Felder zum Einrasten"));
+                tool_sep(ui);
+                let st = &mut self.interaction;
+                if ui
+                    .add(IconButton::new(Icon::ZoomFit).size(26.0))
+                    .on_hover_text(t("Alle Geräte einpassen"))
+                    .clicked()
+                {
+                    st.fit_request = true;
+                }
+                if ui
+                    .add(IconButton::new(Icon::ZoomIn).size(26.0))
+                    .on_hover_text(tr!("Vergrößern ({pct} %)", pct = (st.zoom * 100.0).round()))
+                    .clicked()
+                {
+                    st.zoom_by(1.25);
+                }
+                if ui
+                    .add(IconButton::new(Icon::ZoomOut).size(26.0))
+                    .on_hover_text(tr!("Verkleinern ({pct} %)", pct = (st.zoom * 100.0).round()))
+                    .clicked()
+                {
+                    st.zoom_by(0.8);
+                }
+                tool_sep(ui);
+                ui.add(IconButton::new(Icon::Info).size(26.0).flat()).on_hover_text(
+                    t("Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nMittlere Maustaste = Ansicht ziehen\nMausrad = zoomen\nRechtsklick = Menü (Form, Größe, Gruppen …)"),
+                );
             });
 
         egui::CentralPanel::default_margins()
@@ -179,8 +155,6 @@ impl View for StageEditorView {
                         }
                     },
                 );
-                let area = ui.min_rect();
-                zoom_bar(ui, area, &mut self.interaction);
                 for (id, p) in moves {
                     set_pos(cx, id, p);
                 }
@@ -223,4 +197,16 @@ fn set_pos(cx: &mut ViewCtx<'_>, id: FixtureId, p: [f32; 2]) {
     if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
         f.plan_pos = Some(p);
     }
+}
+
+/// Kurze waagerechte Trennlinie in der Werkzeugleiste.
+fn tool_sep(ui: &mut egui::Ui) {
+    let (r, _) = ui.allocate_exact_size(egui::vec2(26.0, 7.0), egui::Sense::hover());
+    ui.painter().line_segment(
+        [
+            egui::pos2(r.left() + 4.0, r.center().y),
+            egui::pos2(r.right() - 4.0, r.center().y),
+        ],
+        egui::Stroke::new(1.0, theme::border()),
+    );
 }
