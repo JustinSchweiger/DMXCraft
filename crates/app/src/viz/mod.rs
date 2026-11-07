@@ -58,15 +58,35 @@ impl Quality {
         Self::ALL.get(usize::from(k)).copied().unwrap_or_default()
     }
 
-    /// Auflösung (Anteil der Pixel), Mehrfachabtastung, Anzahl Lichtquellen.
-    fn params(self) -> (f32, u32, usize) {
+    /// Einstellungen der Stufe.
+    fn params(self) -> QualityParams {
+        let p = |scale, msaa, lights, shadows, shadow_size, bloom| QualityParams {
+            scale,
+            msaa,
+            lights,
+            shadows,
+            shadow_size,
+            bloom,
+        };
         match self {
-            Quality::Low => (0.6, 1, 32),
-            Quality::Medium => (1.0, 4, 96),
-            Quality::High => (1.0, 4, 256),
-            Quality::Ultra => (1.5, 4, 256),
+            Quality::Low => p(0.6, 1, 32, 0, 0, 0.0),
+            Quality::Medium => p(1.0, 4, 96, 8, 512, 0.6),
+            Quality::High => p(1.0, 4, 256, 16, 1024, 0.8),
+            Quality::Ultra => p(1.5, 4, 256, 32, 1024, 0.8),
         }
     }
+}
+
+/// Auflösung (Anteil der Pixel), Mehrfachabtastung, Lichtquellen,
+/// Scheinwerfer mit Schatten, Größe der Schattenkarten, Bloom-Stärke.
+#[derive(Clone, Copy, Debug)]
+struct QualityParams {
+    scale: f32,
+    msaa: u32,
+    lights: usize,
+    shadows: usize,
+    shadow_size: u32,
+    bloom: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -391,14 +411,15 @@ impl VizView {
         }
 
         // ----- Bild -----
-        let (scale, msaa, max_lights) = cx.state.viz_quality.params();
+        let q = cx.state.viz_quality.params();
+        let (scale, msaa) = (q.scale, q.msaa);
         let ppp = ui.ctx().pixels_per_point();
         let px = [
             (rect.width() * ppp * scale).round() as u32,
             (rect.height() * ppp * scale).round() as u32,
         ];
         let time = self.start.elapsed().as_secs_f32();
-        let frame = self.frame3d(cx, &cam, aspect, time, max_lights, building);
+        let frame = self.frame3d(cx, &cam, aspect, time, q, building);
         let gpu = self.gpu.get_or_insert_with(|| Gpu::new(rs));
         gpu.render(rs, px, msaa, &frame);
         if let Some(tex) = gpu.texture {
@@ -496,7 +517,7 @@ impl VizView {
         cam: &OrbitCamera,
         aspect: f32,
         time: f32,
-        max_lights: usize,
+        q: QualityParams,
         building: bool,
     ) -> Frame3d {
         let show = cx.engine.show();
@@ -525,6 +546,7 @@ impl VizView {
                 f.transparent.push((key, inst));
             } else {
                 f.opaque.push((key, inst));
+                f.casters.push((key, inst));
             }
         }
         let (rig, fog_boost) = rig::build(cx.engine, cx.frame, &cx.state.selected, time);
@@ -583,13 +605,29 @@ impl VizView {
                         color: (b.color * 2.5)
                             .extend((b.half_angle * 0.6).to_radians().cos())
                             .into(),
+                        extra: [-1.0, b.half_angle * 1.25, 0.0, 0.0],
                     },
                 ));
             }
         }
         // hellste zuerst, so viele wie die Qualität erlaubt
         lights.sort_by(|a, b| b.0.total_cmp(&a.0));
-        f.lights = lights.into_iter().take(max_lights).map(|l| l.1).collect();
+        f.lights = lights.into_iter().take(q.lights).map(|l| l.1).collect();
+        // Schattenkarten für die hellsten Scheinwerfer
+        if q.shadows > 0 {
+            for (i, l) in f.lights.iter_mut().take(q.shadows).enumerate() {
+                let pos = Vec3::new(l.pos[0], l.pos[1], l.pos[2]);
+                let dir = Vec3::new(l.dir[0], l.dir[1], l.dir[2]).normalize_or(Vec3::NEG_Y);
+                let up = if dir.y.abs() > 0.95 { Vec3::X } else { Vec3::Y };
+                let fov = (l.extra[1].to_radians() * 2.0 * 1.1).clamp(0.05, 3.0);
+                let proj = Mat4::perspective_rh(fov, 1.0, 0.05, l.pos[3].max(0.2));
+                f.shadow_mats
+                    .push(proj * Mat4::look_at_rh(pos, pos + dir, up));
+                l.extra[0] = i as f32;
+            }
+            f.shadow_size = q.shadow_size;
+        }
+        f.bloom = q.bloom;
         let env = venue.environment;
         f.env = Vec3::new(env.ambient, env.beams, env.fog.max(fog_boost * 0.9));
         f.clear = Vec3::splat(0.002 + env.ambient * 0.01);

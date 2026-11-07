@@ -16,10 +16,42 @@ struct Light {
     dir: vec4<f32>,
     // rgb Farbe · Helligkeit, w cos(innerer Winkel)
     color: vec4<f32>,
+    // x Schattenebene (< 0 = ohne Schatten)
+    extra: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
+@group(0) @binding(2) var shadow_maps: texture_depth_2d_array;
+@group(0) @binding(3) var shadow_sampler: sampler_comparison;
+@group(0) @binding(4) var<storage, read> shadow_mats: array<mat4x4<f32>>;
+
+// Anteil Licht (0 = im Schatten), weich über 3×3 Abtastungen
+fn shadow(layer: i32, p: vec3<f32>, n: vec3<f32>, ld: vec3<f32>) -> f32 {
+    if (layer < 0) {
+        return 1.0;
+    }
+    // etwas entlang der Normalen versetzen gegen Schattenakne
+    let q = shadow_mats[layer] * vec4<f32>(p + n * 0.03, 1.0);
+    if (q.w <= 0.0) {
+        return 1.0;
+    }
+    let ndc = q.xyz / q.w;
+    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || ndc.z > 1.0) {
+        return 1.0;
+    }
+    let dims = vec2<f32>(textureDimensions(shadow_maps));
+    let texel = 1.0 / dims;
+    var sum = 0.0;
+    for (var y = -1; y <= 1; y = y + 1) {
+        for (var x = -1; x <= 1; x = x + 1) {
+            sum = sum + textureSampleCompareLevel(
+                shadow_maps, shadow_sampler, uv + vec2<f32>(f32(x), f32(y)) * texel * 1.5, layer, ndc.z - 0.0008);
+        }
+    }
+    return sum / 9.0;
+}
 
 struct VIn {
     @location(0) pos: vec3<f32>,
@@ -92,7 +124,8 @@ fn spot(l: Light, p: vec3<f32>, n: vec3<f32>, view: vec3<f32>, gloss: f32) -> ve
     let diff = max(dot(n, ld), 0.0);
     let h = normalize(ld + view);
     let spec = pow(max(dot(n, h), 0.0), mix(8.0, 96.0, gloss)) * gloss;
-    return l.color.rgb * cone * fall * edge * (diff + spec);
+    let sh = shadow(i32(l.extra.x), p, n, ld);
+    return l.color.rgb * cone * fall * edge * (diff + spec) * sh;
 }
 
 @fragment
@@ -134,3 +167,16 @@ fn fs_beam(i: VOut) -> @location(0) vec4<f32> {
     return vec4<f32>(i.color.rgb * a, 0.0);
 }
 
+
+// ---------- Schattenkarten (nur Tiefe) ----------
+
+struct ShadowPass {
+    view_proj: mat4x4<f32>,
+};
+@group(1) @binding(0) var<uniform> sp: ShadowPass;
+
+@vertex
+fn vs_shadow(v: VIn) -> @builtin(position) vec4<f32> {
+    let m = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
+    return sp.view_proj * (m * vec4<f32>(v.pos, 1.0));
+}

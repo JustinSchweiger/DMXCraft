@@ -1,9 +1,12 @@
 //! GPU-Darstellung mit wgpu (Vulkan, Metal oder DirectX 12 – je nach System).
 //!
-//! Ablauf je Bild: Szene in ein HDR-Ziel (mit Mehrfachabtastung) zeichnen –
-//! erst undurchsichtige Objekte mit allen Scheinwerfern, dann durchsichtige,
-//! dann die Lichtstrahlen additiv – und per Tonemapping in eine Textur
-//! übertragen, die egui als Bild anzeigt.
+//! Ablauf je Bild:
+//! 1. Schattenkarten für die hellsten Scheinwerfer (nur Tiefe, je eine Ebene
+//!    eines Textur-Arrays),
+//! 2. Szene in ein HDR-Ziel (mit Mehrfachabtastung): undurchsichtige Objekte
+//!    mit allen Scheinwerfern, durchsichtige, dann die Lichtstrahlen additiv,
+//! 3. Bloom (helle Stellen verkleinern und weich wieder vergrößern),
+//! 4. Tonemapping in eine Textur, die egui als Bild anzeigt.
 
 use std::collections::HashMap;
 
@@ -18,6 +21,8 @@ const HDR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const OUT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 pub const MAX_LIGHTS: usize = 256;
+pub const MAX_SHADOWS: usize = 32;
+const BLOOM_LEVELS: usize = 5;
 
 /// Netz-Schlüssel (Traversen je Länge/Profil eigenes Netz).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -54,6 +59,8 @@ pub struct Light {
     pub pos: [f32; 4],
     pub dir: [f32; 4],
     pub color: [f32; 4],
+    /// x = Schattenebene (−1 = ohne)
+    pub extra: [f32; 4],
 }
 
 #[repr(C)]
@@ -70,8 +77,16 @@ struct Globals {
 pub struct Frame3d {
     pub opaque: Vec<(MeshKey, Instance)>,
     pub transparent: Vec<(MeshKey, Instance)>,
+    /// Werfen Schatten (Bauten des Veranstaltungsorts).
+    pub casters: Vec<(MeshKey, Instance)>,
     pub beams: Vec<Instance>,
     pub lights: Vec<Light>,
+    /// Blickmatrix je Schattenebene (Index = `Light::extra.x`).
+    pub shadow_mats: Vec<Mat4>,
+    /// Kantenlänge der Schattenkarten (0 = keine Schatten).
+    pub shadow_size: u32,
+    /// Bloom-Stärke (0 = aus).
+    pub bloom: f32,
     pub view_proj: Mat4,
     pub eye: Vec3,
     /// Umgebungslicht, Strahlen, Nebel
@@ -86,6 +101,15 @@ struct GpuMesh {
     count: u32,
 }
 
+struct Bloom {
+    /// Ebenen 1/2 … 1/32
+    views: Vec<wgpu::TextureView>,
+    /// Abwärts: Quelle → Ebene k; aufwärts: Ebene k+1 → k
+    down: Vec<wgpu::BindGroup>,
+    up: Vec<wgpu::BindGroup>,
+    _params: Vec<wgpu::Buffer>,
+}
+
 struct Targets {
     size: [u32; 2],
     msaa: u32,
@@ -94,17 +118,35 @@ struct Targets {
     resolve: wgpu::TextureView,
     out: wgpu::TextureView,
     tone_bind: wgpu::BindGroup,
+    bloom: Bloom,
+}
+
+struct Shadows {
+    size: u32,
+    layers: u32,
+    views: Vec<wgpu::TextureView>,
+    passes: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
 }
 
 pub struct Gpu {
     opaque: [wgpu::RenderPipeline; 2],
     transparent: [wgpu::RenderPipeline; 2],
     beam: [wgpu::RenderPipeline; 2],
+    shadow_pipe: wgpu::RenderPipeline,
     tonemap: wgpu::RenderPipeline,
+    bloom_down: wgpu::RenderPipeline,
+    bloom_up: wgpu::RenderPipeline,
     globals: wgpu::Buffer,
     lights: wgpu::Buffer,
+    shadow_mats: wgpu::Buffer,
+    post: wgpu::Buffer,
+    scene_layout: wgpu::BindGroupLayout,
     scene_bind: wgpu::BindGroup,
+    shadow_layout: wgpu::BindGroupLayout,
+    shadow_sampler: wgpu::Sampler,
+    shadows: Shadows,
     tone_layout: wgpu::BindGroupLayout,
+    bloom_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     meshes: HashMap<MeshKey, GpuMesh>,
     instances: wgpu::Buffer,
@@ -120,6 +162,113 @@ fn msaa_index(msaa: u32) -> usize {
     usize::from(msaa > 1)
 }
 
+fn uniform_entry(binding: u32, vis: wgpu::ShaderStages) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: vis,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+fn storage_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: true },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+fn texture_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    }
+}
+
+fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+        count: None,
+    }
+}
+
+fn buffer(
+    device: &wgpu::Device,
+    label: &str,
+    size: u64,
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size,
+        usage: usage | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
+}
+
+fn fullscreen_pipeline(
+    device: &wgpu::Device,
+    label: &str,
+    module: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    fs: &str,
+    format: wgpu::TextureFormat,
+    blend: Option<wgpu::BlendState>,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module,
+            entry_point: Some("vs_full"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        primitive: Default::default(),
+        depth_stencil: None,
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module,
+            entry_point: Some(fs),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+const ADDITIVE: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Add,
+    },
+    alpha: wgpu::BlendComponent::OVER,
+};
+
 impl Gpu {
     pub fn new(rs: &egui_wgpu::RenderState) -> Self {
         let device = &rs.device;
@@ -133,86 +282,107 @@ impl Gpu {
             label: Some("viz tonemap"),
             source: wgpu::ShaderSource::Wgsl(include_str!("tonemap.wgsl").into()),
         });
+        let vf = wgpu::ShaderStages::VERTEX_FRAGMENT;
         let scene_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("viz scene layout"),
             entries: &[
+                uniform_entry(0, vf),
+                storage_entry(1),
                 wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-        });
-        let tone_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("viz tone layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
+                    binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
                         multisampled: false,
                     },
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
-                    binding: 1,
+                    binding: 3,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
                     count: None,
                 },
+                storage_entry(4),
             ],
         });
-        let globals = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("viz globals"),
-            size: std::mem::size_of::<Globals>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+        let shadow_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("viz shadow layout"),
+            entries: &[uniform_entry(0, wgpu::ShaderStages::VERTEX)],
         });
-        let lights = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("viz lights"),
-            size: (MAX_LIGHTS * std::mem::size_of::<Light>()) as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let scene_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("viz scene bind"),
-            layout: &scene_layout,
+        let tone_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("viz tone layout"),
             entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: globals.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: lights.as_entire_binding(),
-                },
+                texture_entry(0),
+                sampler_entry(1),
+                texture_entry(2),
+                uniform_entry(3, wgpu::ShaderStages::FRAGMENT),
             ],
         });
+        let bloom_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("viz bloom layout"),
+            entries: &[
+                texture_entry(0),
+                sampler_entry(1),
+                uniform_entry(2, wgpu::ShaderStages::FRAGMENT),
+            ],
+        });
+        let globals = buffer(
+            device,
+            "viz globals",
+            std::mem::size_of::<Globals>() as u64,
+            wgpu::BufferUsages::UNIFORM,
+        );
+        let lights = buffer(
+            device,
+            "viz lights",
+            (MAX_LIGHTS * std::mem::size_of::<Light>()) as u64,
+            wgpu::BufferUsages::STORAGE,
+        );
+        let shadow_mats = buffer(
+            device,
+            "viz shadow mats",
+            (MAX_SHADOWS * 64) as u64,
+            wgpu::BufferUsages::STORAGE,
+        );
+        let post = buffer(device, "viz post", 16, wgpu::BufferUsages::UNIFORM);
+        let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("viz shadow sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
+        });
+        let shadows = Self::make_shadows(device, &shadow_layout, 1, 1);
+        let scene_bind = Self::scene_bind(
+            device,
+            &scene_layout,
+            &globals,
+            &lights,
+            &shadows,
+            &shadow_sampler,
+            &shadow_mats,
+        );
+
         let scene_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("viz scene pl"),
             bind_group_layouts: &[Some(&scene_layout)],
             ..Default::default()
         });
+        let shadow_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("viz shadow pl"),
+            bind_group_layouts: &[None, Some(&shadow_layout)],
+            ..Default::default()
+        });
         let tone_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("viz tone pl"),
             bind_group_layouts: &[Some(&tone_layout)],
+            ..Default::default()
+        });
+        let bloom_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("viz bloom pl"),
+            bind_group_layouts: &[None, Some(&bloom_layout)],
             ..Default::default()
         });
         let vertex_layouts = [
@@ -276,14 +446,6 @@ impl Gpu {
                 cache: None,
             })
         };
-        let additive = wgpu::BlendState {
-            color: wgpu::BlendComponent {
-                src_factor: wgpu::BlendFactor::One,
-                dst_factor: wgpu::BlendFactor::One,
-                operation: wgpu::BlendOperation::Add,
-            },
-            alpha: wgpu::BlendComponent::OVER,
-        };
         let both = |f: &dyn Fn(u32) -> wgpu::RenderPipeline| [f(1), f(4)];
         let opaque = both(&|m| {
             pipe(
@@ -305,32 +467,64 @@ impl Gpu {
                 m,
             )
         });
-        let beam = both(&|m| pipe("viz beam", "fs_beam", None, false, Some(additive), m));
-        let tonemap = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("viz tonemap"),
-            layout: Some(&tone_pl),
+        let beam = both(&|m| pipe("viz beam", "fs_beam", None, false, Some(ADDITIVE), m));
+        let shadow_pipe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("viz shadow"),
+            layout: Some(&shadow_pl),
             vertex: wgpu::VertexState {
-                module: &tone,
-                entry_point: Some("vs_full"),
+                module: &shader,
+                entry_point: Some("vs_shadow"),
                 compilation_options: Default::default(),
-                buffers: &[],
+                buffers: &vertex_layouts,
             },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &tone,
-                entry_point: Some("fs_tonemap"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: OUT,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                stencil: Default::default(),
+                bias: wgpu::DepthBiasState {
+                    constant: 2,
+                    slope_scale: 2.0,
+                    clamp: 0.0,
+                },
             }),
+            multisample: Default::default(),
+            fragment: None,
             multiview_mask: None,
             cache: None,
         });
+        let tonemap = fullscreen_pipeline(
+            device,
+            "viz tonemap",
+            &tone,
+            &tone_pl,
+            "fs_tonemap",
+            OUT,
+            None,
+        );
+        let bloom_down = fullscreen_pipeline(
+            device,
+            "viz bloom down",
+            &tone,
+            &bloom_pl,
+            "fs_down",
+            HDR,
+            None,
+        );
+        let bloom_up = fullscreen_pipeline(
+            device,
+            "viz bloom up",
+            &tone,
+            &bloom_pl,
+            "fs_up",
+            HDR,
+            Some(ADDITIVE),
+        );
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("viz sampler"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -338,21 +532,31 @@ impl Gpu {
             ..Default::default()
         });
         let instance_cap = 4096;
-        let instances = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("viz instances"),
-            size: instance_cap * std::mem::size_of::<Instance>() as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let instances = buffer(
+            device,
+            "viz instances",
+            instance_cap * std::mem::size_of::<Instance>() as u64,
+            wgpu::BufferUsages::VERTEX,
+        );
         Self {
             opaque,
             transparent,
             beam,
+            shadow_pipe,
             tonemap,
+            bloom_down,
+            bloom_up,
             globals,
             lights,
+            shadow_mats,
+            post,
+            scene_layout,
             scene_bind,
+            shadow_layout,
+            shadow_sampler,
+            shadows,
             tone_layout,
+            bloom_layout,
             sampler,
             meshes: HashMap::new(),
             instances,
@@ -361,6 +565,111 @@ impl Gpu {
             texture: None,
             adapter,
         }
+    }
+
+    fn make_shadows(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        size: u32,
+        layers: u32,
+    ) -> Shadows {
+        let tex = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("viz shadow maps"),
+            size: wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: layers,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let mut views = vec![tex.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        })];
+        let mut passes = Vec::new();
+        for l in 0..layers {
+            views.push(tex.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                base_array_layer: l,
+                array_layer_count: Some(1),
+                ..Default::default()
+            }));
+            let b = buffer(device, "viz shadow pass", 64, wgpu::BufferUsages::UNIFORM);
+            let g = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("viz shadow pass"),
+                layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: b.as_entire_binding(),
+                }],
+            });
+            passes.push((b, g));
+        }
+        Shadows {
+            size,
+            layers,
+            views,
+            passes,
+        }
+    }
+
+    fn scene_bind(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        globals: &wgpu::Buffer,
+        lights: &wgpu::Buffer,
+        shadows: &Shadows,
+        sampler: &wgpu::Sampler,
+        mats: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("viz scene bind"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: globals.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: lights.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&shadows.views[0]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: mats.as_entire_binding(),
+                },
+            ],
+        })
+    }
+
+    fn ensure_shadows(&mut self, device: &wgpu::Device, size: u32, layers: u32) {
+        let (size, layers) = (size.max(1), layers.clamp(1, MAX_SHADOWS as u32));
+        if self.shadows.size == size && self.shadows.layers == layers {
+            return;
+        }
+        self.shadows = Self::make_shadows(device, &self.shadow_layout, size, layers);
+        self.scene_bind = Self::scene_bind(
+            device,
+            &self.scene_layout,
+            &self.globals,
+            &self.lights,
+            &self.shadows,
+            &self.shadow_sampler,
+            &self.shadow_mats,
+        );
     }
 
     fn mesh(&mut self, device: &wgpu::Device, key: MeshKey) {
@@ -403,13 +712,13 @@ impl Gpu {
             return;
         }
         let device = &rs.device;
-        let tex = |label, format, samples, usage| {
+        let tex = |label, format, samples, usage, w: u32, h: u32| {
             device
                 .create_texture(&wgpu::TextureDescriptor {
                     label: Some(label),
                     size: wgpu::Extent3d {
-                        width: size[0],
-                        height: size[1],
+                        width: w.max(1),
+                        height: h.max(1),
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
@@ -422,20 +731,63 @@ impl Gpu {
                 .create_view(&Default::default())
         };
         let att = wgpu::TextureUsages::RENDER_ATTACHMENT;
-        let color = tex("viz color", HDR, msaa, att);
-        let depth = tex("viz depth", DEPTH, msaa, att);
-        let resolve = tex(
-            "viz resolve",
-            HDR,
-            1,
-            att | wgpu::TextureUsages::TEXTURE_BINDING,
-        );
-        let out = tex(
-            "viz out",
-            OUT,
-            1,
-            att | wgpu::TextureUsages::TEXTURE_BINDING,
-        );
+        let bind = wgpu::TextureUsages::TEXTURE_BINDING;
+        let [w, h] = size;
+        let color = tex("viz color", HDR, msaa, att, w, h);
+        let depth = tex("viz depth", DEPTH, msaa, att, w, h);
+        let resolve = tex("viz resolve", HDR, 1, att | bind, w, h);
+        let out = tex("viz out", OUT, 1, att | bind, w, h);
+        // Bloom-Ebenen und ihre Bindungen
+        let views: Vec<wgpu::TextureView> = (0..BLOOM_LEVELS)
+            .map(|k| tex("viz bloom", HDR, 1, att | bind, w >> (k + 1), h >> (k + 1)))
+            .collect();
+        let dims = |k: usize| [((w >> k).max(1)) as f32, ((h >> k).max(1)) as f32];
+        let mut params = Vec::new();
+        let mut group = |src: &wgpu::TextureView, src_dims: [f32; 2], threshold: f32| {
+            let b = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("viz bloom pass"),
+                contents: bytemuck::cast_slice(&[
+                    0.5 / src_dims[0],
+                    0.5 / src_dims[1],
+                    threshold,
+                    0.0f32,
+                ]),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+            let g = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("viz bloom pass"),
+                layout: &self.bloom_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(src),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: b.as_entire_binding(),
+                    },
+                ],
+            });
+            params.push(b);
+            g
+        };
+        let mut down = vec![group(&resolve, dims(0), 1.0)];
+        for k in 1..BLOOM_LEVELS {
+            down.push(group(&views[k - 1], dims(k), 0.0));
+        }
+        let up: Vec<wgpu::BindGroup> = (1..BLOOM_LEVELS)
+            .map(|k| group(&views[k], dims(k + 1), 0.0))
+            .collect();
+        let bloom = Bloom {
+            views,
+            down,
+            up,
+            _params: params,
+        };
         let tone_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("viz tone bind"),
             layout: &self.tone_layout,
@@ -447,6 +799,14 @@ impl Gpu {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&bloom.views[0]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.post.as_entire_binding(),
                 },
             ],
         });
@@ -470,6 +830,7 @@ impl Gpu {
             resolve,
             out,
             tone_bind,
+            bloom,
         });
     }
 
@@ -479,7 +840,11 @@ impl Gpu {
         self.ensure_targets(rs, size, msaa);
         let device = &rs.device;
         let queue = &rs.queue;
-        // Netze vorbereiten, Instanzen nach Netz gruppieren
+        let n_shadows = f.shadow_mats.len().min(MAX_SHADOWS);
+        if f.shadow_size > 0 && n_shadows > 0 {
+            self.ensure_shadows(device, f.shadow_size, n_shadows as u32);
+        }
+        // Instanzen nach Netz und Durchgang gruppieren (3 = Schattenwerfer)
         let mut groups: Vec<(MeshKey, u8, Vec<Instance>)> = Vec::new();
         let mut push = |key: MeshKey, pass: u8, inst: Instance| {
             if let Some(g) = groups.iter_mut().find(|g| g.0 == key && g.1 == pass) {
@@ -497,25 +862,46 @@ impl Gpu {
         for i in &f.beams {
             push(MeshKey::Cone, 2, *i);
         }
+        if n_shadows > 0 {
+            for (k, i) in &f.casters {
+                push(*k, 3, *i);
+            }
+        }
         for g in &groups {
             self.mesh(device, g.0);
         }
         let all: Vec<Instance> = groups.iter().flat_map(|g| g.2.iter().copied()).collect();
         if all.len() as u64 > self.instance_cap {
             self.instance_cap = (all.len() as u64).next_power_of_two();
-            self.instances = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("viz instances"),
-                size: self.instance_cap * std::mem::size_of::<Instance>() as u64,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+            self.instances = buffer(
+                device,
+                "viz instances",
+                self.instance_cap * std::mem::size_of::<Instance>() as u64,
+                wgpu::BufferUsages::VERTEX,
+            );
         }
         if !all.is_empty() {
             queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(&all));
         }
         let n = f.lights.len().min(MAX_LIGHTS);
         if n > 0 {
-            queue.write_buffer(&self.lights, 0, bytemuck::cast_slice(&f.lights[..n]));
+            let mut lights = f.lights[..n].to_vec();
+            if n_shadows == 0 {
+                for l in &mut lights {
+                    l.extra[0] = -1.0;
+                }
+            }
+            queue.write_buffer(&self.lights, 0, bytemuck::cast_slice(&lights));
+        }
+        if n_shadows > 0 {
+            let mats: Vec<[[f32; 4]; 4]> = f.shadow_mats[..n_shadows]
+                .iter()
+                .map(|m| m.to_cols_array_2d())
+                .collect();
+            queue.write_buffer(&self.shadow_mats, 0, bytemuck::cast_slice(&mats));
+            for (i, m) in mats.iter().enumerate() {
+                queue.write_buffer(&self.shadows.passes[i].0, 0, bytemuck::cast_slice(m));
+            }
         }
         let globals = Globals {
             view_proj: f.view_proj.to_cols_array_2d(),
@@ -524,11 +910,53 @@ impl Gpu {
             misc: [f.time, 1.0, 0.0, 0.0],
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
+        queue.write_buffer(
+            &self.post,
+            0,
+            bytemuck::cast_slice(&[f.bloom, 1.0f32, 0.0, 0.0]),
+        );
 
         let t = self.targets.as_ref().expect("Ziele angelegt");
         let mi = msaa_index(msaa);
+        let stride = std::mem::size_of::<Instance>() as u64;
         let mut enc =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("viz") });
+        // 1. Schatten
+        for layer in 0..n_shadows {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("viz shadow"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.shadows.views[layer + 1],
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.shadow_pipe);
+            pass.set_bind_group(1, &self.shadows.passes[layer].1, &[]);
+            let mut off = 0u64;
+            for g in &groups {
+                let count = g.2.len() as u64;
+                if g.1 == 3 {
+                    let m = &self.meshes[&g.0];
+                    pass.set_vertex_buffer(0, m.vb.slice(..));
+                    pass.set_vertex_buffer(
+                        1,
+                        self.instances.slice(off * stride..(off + count) * stride),
+                    );
+                    pass.set_index_buffer(m.ib.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..m.count, 0, 0..count as u32);
+                }
+                off += count;
+            }
+        }
+        // 2. Szene
         {
             let (view, resolve) = if msaa > 1 {
                 (&t.color, Some(&t.resolve))
@@ -564,8 +992,6 @@ impl Gpu {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &self.scene_bind, &[]);
-            let stride = std::mem::size_of::<Instance>() as u64;
-            let mut offset = 0u64;
             for pass_kind in 0..3u8 {
                 pass.set_pipeline(match pass_kind {
                     0 => &self.opaque[mi],
@@ -587,10 +1013,56 @@ impl Gpu {
                     }
                     off += count;
                 }
-                offset = off;
             }
-            let _ = offset;
         }
+        // 3. Bloom
+        let fullscreen = |enc: &mut wgpu::CommandEncoder,
+                          pipe: &wgpu::RenderPipeline,
+                          target: &wgpu::TextureView,
+                          group: &wgpu::BindGroup,
+                          load: wgpu::LoadOp<wgpu::Color>| {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("viz post"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(pipe);
+            pass.set_bind_group(1, group, &[]);
+            pass.draw(0..3, 0..1);
+        };
+        if f.bloom > 0.0 {
+            let clear = wgpu::LoadOp::Clear(wgpu::Color::BLACK);
+            for k in 0..BLOOM_LEVELS {
+                fullscreen(
+                    &mut enc,
+                    &self.bloom_down,
+                    &t.bloom.views[k],
+                    &t.bloom.down[k],
+                    clear,
+                );
+            }
+            for k in (1..BLOOM_LEVELS).rev() {
+                fullscreen(
+                    &mut enc,
+                    &self.bloom_up,
+                    &t.bloom.views[k - 1],
+                    &t.bloom.up[k - 1],
+                    wgpu::LoadOp::Load,
+                );
+            }
+        }
+        // 4. Tonemapping
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("viz tonemap"),
