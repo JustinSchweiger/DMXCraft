@@ -22,6 +22,7 @@ pub const LABEL_W: f32 = 120.0;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Cancel,
+    Secondary,
     Primary,
 }
 
@@ -100,6 +101,11 @@ impl<'a> Dialog<'a> {
     /// Schließt den Dialog ohne weitere Aktion (z. B. „Abbrechen“).
     pub fn cancel(self, label: &str) -> Self {
         self.push(label, Kind::Cancel, true)
+    }
+
+    /// Weitere Aktion ohne Hervorhebung (z. B. „Nicht speichern“).
+    pub fn secondary(self, label: &str) -> Self {
+        self.push(label, Kind::Secondary, true)
     }
 
     /// Hauptaktion, ganz rechts, auch per Enter.

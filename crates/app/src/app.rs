@@ -69,6 +69,16 @@ pub struct DmxCraftApp {
     toggle_fullscreen: bool,
     /// Zuletzt erkannte USB-DMX-Kabel (für die Einstellungen).
     usb_ports: Vec<dmxcraft_output::UsbDmxPort>,
+    /// Stand der Show beim letzten Laden/Speichern (für „ungespeichert“).
+    saved_show: Show,
+    /// Frage „Vor dem Schließen speichern?“ offen.
+    close_dialog: bool,
+    /// Nach erfolgreichem Speichern schließen.
+    close_after_save: bool,
+    /// Schließen ohne weitere Nachfrage zulassen.
+    allow_close: bool,
+    /// Im nächsten Frame schließen.
+    request_close: bool,
 }
 
 impl DmxCraftApp {
@@ -88,6 +98,7 @@ impl DmxCraftApp {
             },
             None => demo::demo_show(),
         };
+        let saved_show = show.clone();
         let engine = Arc::new(Mutex::new(Engine::new(show)));
         let output_kind = settings.output_kind();
         let runtime = Runtime::start(
@@ -119,7 +130,22 @@ impl DmxCraftApp {
             usb_ports: Vec::new(),
             fullscreen: Fullscreen::default(),
             toggle_fullscreen: false,
+            saved_show,
+            close_dialog: false,
+            close_after_save: false,
+            allow_close: false,
+            request_close: false,
         }
+    }
+
+    /// Ungespeicherte Änderungen an der Show?
+    fn dirty(&self) -> bool {
+        *Self::lock(&self.engine).show() != self.saved_show
+    }
+
+    /// Aktuellen Stand als gespeichert merken.
+    fn mark_saved(&mut self) {
+        self.saved_show = Self::lock(&self.engine).show().clone();
     }
 
     fn lock(engine: &Arc<Mutex<Engine>>) -> MutexGuard<'_, Engine> {
@@ -155,6 +181,7 @@ impl DmxCraftApp {
                 let name = s.name.clone();
                 Self::lock(&self.engine).replace_show(s);
                 self.history.reset(&Snapshot::of(&Self::lock(&self.engine)));
+                self.mark_saved();
                 self.state.reset_for_new_show();
                 self.state.show_path = path.to_string();
                 self.state.info(tr!("Show „{name}“ geladen", name = name));
@@ -169,12 +196,20 @@ impl DmxCraftApp {
         let result = Self::lock(&self.engine).show().save(path);
         match result {
             Ok(()) => {
+                self.mark_saved();
                 self.state.show_path = path.to_string();
                 self.state.info(tr!("Gespeichert: {path}", path = path));
                 self.settings.remember(path);
                 self.save_settings();
+                if std::mem::take(&mut self.close_after_save) {
+                    self.allow_close = true;
+                    self.request_close = true;
+                }
             }
-            Err(err) => self.state.error(err.to_string()),
+            Err(err) => {
+                self.close_after_save = false;
+                self.state.error(err.to_string());
+            }
         }
     }
 
@@ -194,6 +229,7 @@ impl DmxCraftApp {
             MenuAction::NewShow => {
                 Self::lock(&self.engine).replace_show(demo::empty_show());
                 self.history.reset(&Snapshot::of(&Self::lock(&self.engine)));
+                self.mark_saved();
                 self.state.reset_for_new_show();
                 self.state.info(t("Neue, leere Show"));
             }
@@ -449,13 +485,50 @@ impl DmxCraftApp {
         // Ergebnis eines Systemdialogs
         if let Some((purpose, result)) = self.file_dialog.as_ref().and_then(|d| d.poll()) {
             self.file_dialog = None;
-            if let Some(path) = result {
-                let path = path.to_string_lossy().into_owned();
-                match purpose {
-                    Purpose::OpenShow => self.open_show(&path),
-                    Purpose::SaveShowAs => self.save_show(&path),
+            match result {
+                Some(path) => {
+                    let path = path.to_string_lossy().into_owned();
+                    match purpose {
+                        Purpose::OpenShow => self.open_show(&path),
+                        Purpose::SaveShowAs => self.save_show(&path),
+                    }
+                }
+                // Speichern abgebrochen: nicht schließen
+                None => self.close_after_save = false,
+            }
+        }
+
+        // Vor dem Schließen: ungespeicherte Änderungen?
+        if self.close_dialog {
+            let mut open = true;
+            let name = Self::lock(&self.engine).show().name.clone();
+            let res = Dialog::new(t("Ungespeicherte Änderungen"))
+                .id("close_unsaved")
+                .width(380.0)
+                .cancel(t("Abbrechen"))
+                .secondary(t("Nicht speichern"))
+                .primary(t("Speichern"))
+                .show(ctx, &mut open, |ui, _| {
+                    ui.label(tr!(
+                        "Möchtest du die Änderungen an „{name}“ vor dem Schließen speichern?",
+                        name = name
+                    ));
+                });
+            if res.clicked(1) {
+                open = false;
+                self.allow_close = true;
+                self.request_close = true;
+            } else if res.clicked(2) {
+                open = false;
+                self.close_after_save = true;
+                let p = self.state.show_path.clone();
+                if p.trim().is_empty() {
+                    self.start_file_dialog(ctx, Purpose::SaveShowAs);
+                } else {
+                    self.save_show(&p);
                 }
             }
+            self.close_dialog = open;
         }
 
         // Einstellungen
@@ -554,8 +627,20 @@ impl eframe::App for DmxCraftApp {
             }
         }
 
+        // ----- Schließen: bei ungespeicherten Änderungen erst nachfragen -----
+        if std::mem::take(&mut self.request_close) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close && self.dirty() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.close_dialog = true;
+        }
+
         // ----- Titelleiste -----
-        let (show_name, fps, status, blackout) = self.title_info();
+        let (mut show_name, fps, status, blackout) = self.title_info();
+        if self.dirty() {
+            show_name.push_str(" *");
+        }
         let update = match self.updater.state() {
             UpdateState::Available => UpdateBadge::Available,
             UpdateState::Installing => UpdateBadge::Busy(t("installiere Update")),
