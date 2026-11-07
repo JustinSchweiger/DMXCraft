@@ -60,6 +60,7 @@ pub enum MenuAction {
     DmxLevels,
     /// 3D-Visualisierer im eigenen Fenster öffnen/schließen.
     Visualizer,
+    ProfileBuilder,
     Settings,
     CheckUpdates,
     InstallUpdate,
@@ -426,11 +427,12 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
                     .enabled(free),
                 MenuAction::DmxLevels,
             );
-            ui.add(
-                MenuItem::new(t("Profile Builder"))
+            act(
+                ui,
+                MenuItem::new(t("Profile Builder …"))
                     .icon(Icon::Builder)
-                    .enabled(false)
-                    .tooltip(soon),
+                    .enabled(free),
+                MenuAction::ProfileBuilder,
             );
         });
         menu::sub(ui, MenuItem::new(t("Mappings")).plain(), |ui| {

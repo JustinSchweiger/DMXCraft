@@ -11,6 +11,7 @@
 //! (`data/QLC-LICENSE`, `data/QLC-NOTICE`).
 
 pub mod convert;
+pub mod profile;
 pub mod qxf;
 
 use std::io::Read;
@@ -20,6 +21,7 @@ use dmxcraft_core::FixtureType;
 use serde::{Deserialize, Serialize};
 
 pub use convert::{convert_fixture, OflError};
+pub use profile::{Capability, CapabilityKind, Problem, Profile, ProfileChannel, ProfileMode};
 pub use qxf::convert_qxf;
 
 /// Herkunft eines Bibliotheksgeräts.

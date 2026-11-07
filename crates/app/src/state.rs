@@ -70,6 +70,10 @@ pub struct AppState {
     pub imported_types: Vec<FixtureType>,
     /// Fenster „Zonen & Gruppen“ geöffnet.
     pub zones_open: bool,
+    /// Eigene Geräteprofile (Profile Builder) mit ihren Gerätetypen.
+    pub user_profiles: Vec<crate::profiles::UserProfile>,
+    /// Profile Builder öffnen (Menü, Bibliothek).
+    pub builder: Option<crate::views::profile_builder::BuilderRequest>,
     /// Gerät, das im Patch-Raster umbenannt werden soll.
     pub rename_request: Option<FixtureId>,
     /// Kopiertes Bühnenplan-Layout (Positionen relativ zum ersten Gerät).
@@ -144,6 +148,8 @@ impl AppState {
             },
             imported_types: Vec::new(),
             zones_open: false,
+            user_profiles: crate::profiles::load_user(),
+            builder: None,
             rename_request: None,
             layout_clipboard: None,
             fixture_clipboard: Vec::new(),

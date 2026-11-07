@@ -302,6 +302,9 @@ impl DmxCraftApp {
                 self.state.mode = Mode::Visual;
                 self.state.viz_window = !self.state.viz_window;
             }
+            MenuAction::ProfileBuilder => {
+                self.state.builder = Some(crate::views::profile_builder::BuilderRequest::Open);
+            }
             MenuAction::DmxLevels => {
                 self.state.mode = Mode::Setup;
                 self.state.show_dmx_levels = true;

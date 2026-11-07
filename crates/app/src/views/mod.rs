@@ -3,6 +3,7 @@
 
 pub mod control;
 pub mod fixture_menu;
+pub mod profile_builder;
 pub mod quick;
 pub mod setup;
 pub mod windows;

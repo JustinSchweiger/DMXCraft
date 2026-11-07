@@ -13,6 +13,7 @@ mod icon;
 mod lock;
 mod mcp;
 mod palettes;
+mod profiles;
 mod settings;
 mod settings_window;
 mod state;

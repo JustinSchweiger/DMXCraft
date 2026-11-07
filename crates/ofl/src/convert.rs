@@ -388,7 +388,7 @@ fn default_value(r: &Resolved<'_>) -> u8 {
     }
 }
 
-fn slug(s: &str) -> String {
+pub(crate) fn slug(s: &str) -> String {
     let mut out = String::new();
     for c in s.chars() {
         if c.is_ascii_alphanumeric() {

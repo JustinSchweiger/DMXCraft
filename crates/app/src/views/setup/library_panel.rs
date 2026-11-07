@@ -9,9 +9,11 @@ use dmxcraft_core::{Engine, FixtureType};
 use dmxcraft_ofl::{convert_fixture, convert_qxf, Library, LibraryFixture, Source};
 use eframe::egui;
 
+use crate::profiles::{self, UserProfile};
 use crate::state::{AppState, LibraryDrag};
 use crate::ui::theme;
 use crate::ui::widgets::text_field;
+use crate::views::profile_builder::{template, BuilderRequest};
 use crate::views::{View, ViewCtx};
 
 /// Höchstens so viele Hersteller werden bei leerer Suche aufgeklappt angeboten.
@@ -24,6 +26,13 @@ pub struct LibraryPanel {
     chosen: Option<FixtureType>,
     /// Laufender Systemdialog zum Importieren einer Gerätedatei.
     import_dialog: Option<std::sync::mpsc::Receiver<Option<std::path::PathBuf>>>,
+    /// Aktion aus einem Kontextmenü (wird nach dem Zeichnen ausgeführt).
+    action: Option<LibAction>,
+}
+
+enum LibAction {
+    Builder(BuilderRequest),
+    Delete(String),
 }
 
 impl View for LibraryPanel {
@@ -41,6 +50,13 @@ impl View for LibraryPanel {
         ui.horizontal(|ui| {
             let busy = self.import_dialog.is_some();
             let r = ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .add(crate::ui::widgets::IconButton::new(crate::ui::widgets::Icon::Builder))
+                    .on_hover_text(t("Neues Gerät im Profile Builder anlegen"))
+                    .clicked()
+                {
+                    self.action = Some(LibAction::Builder(BuilderRequest::New));
+                }
                 let r = ui
                     .add(crate::ui::widgets::IconButton::new(crate::ui::widgets::Icon::Import).enabled(!busy))
                     .on_hover_text(t(
@@ -84,14 +100,52 @@ impl View for LibraryPanel {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        self.tree(ui, cx.engine, &cx.state.imported_types);
+                        self.tree(
+                            ui,
+                            cx.engine,
+                            &cx.state.imported_types,
+                            &cx.state.user_profiles,
+                        );
                     });
             });
+        match self.action.take() {
+            Some(LibAction::Builder(req)) => cx.state.builder = Some(req),
+            Some(LibAction::Delete(key)) => {
+                if let Err(e) = profiles::delete(&key) {
+                    cx.state.error(e);
+                } else if let Some(i) = cx
+                    .state
+                    .user_profiles
+                    .iter()
+                    .position(|u| u.profile.key == key)
+                {
+                    let u = cx.state.user_profiles.remove(i);
+                    if self
+                        .chosen
+                        .as_ref()
+                        .is_some_and(|c| u.types.iter().any(|t| t.key == c.key))
+                    {
+                        self.chosen = None;
+                    }
+                    cx.state.info(tr!(
+                        "„{v}“ aus der Bibliothek entfernt",
+                        v = u.profile.display_name()
+                    ));
+                }
+            }
+            None => {}
+        }
     }
 }
 
 impl LibraryPanel {
-    fn tree(&mut self, ui: &mut egui::Ui, e: &Engine, imported: &[FixtureType]) {
+    fn tree(
+        &mut self,
+        ui: &mut egui::Ui,
+        e: &Engine,
+        imported: &[FixtureType],
+        user: &[UserProfile],
+    ) {
         let searching = !self.query.trim().is_empty();
         let words: Vec<String> = self
             .query
@@ -99,6 +153,19 @@ impl LibraryPanel {
             .map(|w| w.to_lowercase())
             .collect();
         let matches = |hay: &str| words.iter().all(|w| hay.to_lowercase().contains(w));
+
+        // Eigene Geräte (Profile Builder)
+        let own: Vec<&UserProfile> = user
+            .iter()
+            .filter(|u| !searching || matches(&u.profile.display_name()))
+            .collect();
+        if !own.is_empty() {
+            self.group(ui, t("_Eigene Geräte"), searching, |me, ui| {
+                for u in own {
+                    me.user_row(ui, u);
+                }
+            });
+        }
 
         // Eingebaute und bereits in der Show vorhandene Typen
         let builtin = builtin_fixture_types();
@@ -122,8 +189,9 @@ impl LibraryPanel {
                 continue;
             }
             self.group(ui, title, searching, |me, ui| {
-                for t in list {
-                    me.type_row(ui, &t.display_name(), &t, None);
+                for ty in list {
+                    let r = me.type_row(ui, &ty.display_name(), &ty, None);
+                    me.template_menu(&r, &ty.manufacturer, &ty.model, std::slice::from_ref(&ty));
                 }
             });
         }
@@ -154,7 +222,8 @@ impl LibraryPanel {
                     if f.modes.len() == 1 {
                         let label =
                             tr!("{v} ({n} Kan.)", v = f.name, n = f.modes[0].channels.len());
-                        me.type_row(ui, &label, &f.modes[0], tag);
+                        let r = me.type_row(ui, &label, &f.modes[0], tag);
+                        me.template_menu(&r, &f.manufacturer, &f.name, &f.modes);
                     } else {
                         let id =
                             ui.make_persistent_id((f.source.label(), &f.manufacturer_key, &f.key));
@@ -169,6 +238,7 @@ impl LibraryPanel {
                             if let Some(m) = f.modes.first() {
                                 r.dnd_set_drag_payload(LibraryDrag(m.clone()));
                             }
+                            me.template_menu(&r, &f.manufacturer, &f.name, &f.modes);
                             if let Some(tag) = tag {
                                 source_tag(ui, tag);
                             }
@@ -177,7 +247,8 @@ impl LibraryPanel {
                             for m in &f.modes {
                                 let label =
                                     tr!("{mode} ({n} Kan.)", mode = m.mode, n = m.channels.len());
-                                me.type_row(ui, &label, m, None);
+                                let r = me.type_row(ui, &label, m, None);
+                                me.template_menu(&r, &f.manufacturer, &f.name, &f.modes);
                             }
                         });
                     }
@@ -213,8 +284,102 @@ impl LibraryPanel {
         header.show(ui, |ui| body(self, ui));
     }
 
+    /// Kontextmenü „Als Vorlage …“ für Geräte, die nicht selbst gebaut sind.
+    fn template_menu(
+        &mut self,
+        r: &egui::Response,
+        manufacturer: &str,
+        name: &str,
+        modes: &[FixtureType],
+    ) {
+        use crate::ui::widgets::menu::{self, MenuItem};
+        menu::context(r, |ui| {
+            menu::begin(ui);
+            if menu::item(
+                ui,
+                MenuItem::new(t("Als Vorlage im Profile Builder …"))
+                    .icon(crate::ui::widgets::Icon::Builder),
+            ) {
+                let p = template(manufacturer, name, modes);
+                self.action = Some(LibAction::Builder(BuilderRequest::Template(Box::new(p))));
+            }
+        });
+    }
+
+    /// Eigenes Gerät: wie ein Bibliotheksgerät, Kontextmenü zum Bearbeiten.
+    fn user_row(&mut self, ui: &mut egui::Ui, u: &UserProfile) {
+        let name = u.profile.display_name();
+        let menu = |me: &mut Self, r: &egui::Response| {
+            use crate::ui::widgets::menu::{self, MenuItem};
+            use crate::ui::widgets::Icon;
+            menu::context(r, |ui| {
+                menu::begin(ui);
+                menu::title(ui, &name);
+                if menu::item(ui, MenuItem::new(t("Bearbeiten …")).icon(Icon::Edit)) {
+                    me.action = Some(LibAction::Builder(BuilderRequest::Edit(Box::new(
+                        u.profile.clone(),
+                    ))));
+                }
+                if menu::item(ui, MenuItem::new(t("Duplizieren …")).icon(Icon::Copy)) {
+                    let mut p = u.profile.clone();
+                    p.key.clear();
+                    p.created.clear();
+                    p.name = tr!("{v} (Kopie)", v = p.name);
+                    me.action = Some(LibAction::Builder(BuilderRequest::Template(Box::new(p))));
+                }
+                menu::separator(ui);
+                if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash).danger()) {
+                    me.action = Some(LibAction::Delete(u.profile.key.clone()));
+                }
+            });
+        };
+        match u.types.as_slice() {
+            [] => {
+                let r = ui.add(
+                    egui::Label::new(egui::RichText::new(&name).color(theme::DANGER))
+                        .sense(egui::Sense::click()),
+                );
+                let r = r.on_hover_text(t(
+                    "Profil fehlerhaft – im Profile Builder öffnen und prüfen",
+                ));
+                menu(self, &r);
+            }
+            [ty] => {
+                let label = tr!("{v} ({n} Kan.)", v = name, n = ty.channels.len());
+                let r = self.type_row(ui, &label, ty, None);
+                menu(self, &r);
+            }
+            types => {
+                let id = ui.make_persistent_id(("user_fixture", &u.profile.key));
+                egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ui.ctx(),
+                    id,
+                    false,
+                )
+                .show_header(ui, |ui| {
+                    let r = ui.add(egui::Label::new(&name).sense(egui::Sense::click_and_drag()));
+                    r.dnd_set_drag_payload(LibraryDrag(types[0].clone()));
+                    menu(self, &r);
+                })
+                .body(|ui| {
+                    for ty in types {
+                        let label = tr!("{mode} ({n} Kan.)", mode = ty.mode, n = ty.channels.len());
+                        let r = self.type_row(ui, &label, ty, None);
+                        menu(self, &r);
+                    }
+                });
+            }
+        }
+    }
+
     /// Eine Zeile pro Gerätetyp; `tag` = Herkunft (z. B. „QLC+“), klein dahinter.
-    fn type_row(&mut self, ui: &mut egui::Ui, label: &str, ty: &FixtureType, tag: Option<&str>) {
+    fn type_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        label: &str,
+        ty: &FixtureType,
+        tag: Option<&str>,
+    ) -> egui::Response {
         let selected = self.chosen.as_ref().is_some_and(|c| c.key == ty.key);
         let r = ui
             .horizontal(|ui| {
@@ -239,6 +404,7 @@ impl LibraryPanel {
         // direkt ins Patch ziehen
         let r = r.interact(egui::Sense::click_and_drag());
         r.dnd_set_drag_payload(LibraryDrag(ty.clone()));
+        r
     }
 
     fn patch_form(&mut self, ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
