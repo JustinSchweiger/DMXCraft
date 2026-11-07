@@ -81,13 +81,13 @@ struct Camera {
 }
 
 impl Camera {
-    fn scale(&self) -> f32 {
+    fn scale(self) -> f32 {
         WORLD * self.zoom
     }
-    fn to_screen(&self, p: [f32; 2]) -> Pos2 {
+    fn to_screen(self, p: [f32; 2]) -> Pos2 {
         self.screen_center + Vec2::new(p[0] - self.center[0], p[1] - self.center[1]) * self.scale()
     }
-    fn to_world(&self, s: Pos2) -> [f32; 2] {
+    fn to_world(self, s: Pos2) -> [f32; 2] {
         let d = (s - self.screen_center) / self.scale();
         [self.center[0] + d.x, self.center[1] + d.y]
     }
