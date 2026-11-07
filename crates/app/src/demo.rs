@@ -142,6 +142,7 @@ pub fn demo_show() -> Show {
         .collect();
     s.add_scene("Schwenk", Some(bewegung), sweep);
 
+    s.normalize();
     s
 }
 

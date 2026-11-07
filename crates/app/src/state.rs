@@ -38,6 +38,9 @@ pub struct AppState {
     pub programmer_mode_seen: ProgrammerMode,
     /// Edit-Werte neu aus der Szene laden (nach Rückgängig/Wiederholen).
     pub edit_reload: bool,
+    /// Bearbeiteter Schritt der markierten Szene (Edit-Modus).
+    pub edit_step: usize,
+    pub edit_step_seen: usize,
     /// Worauf die Entf-Taste unter STEUERN wirkt (zuletzt angeklickt).
     pub focus: Focus,
     /// Betriebsmodus des Programmers.
@@ -72,6 +75,8 @@ impl AppState {
             scene_selection_seen: BTreeSet::new(),
             programmer_mode_seen: ProgrammerMode::default(),
             edit_reload: false,
+            edit_step: 0,
+            edit_step_seen: 0,
             patch: PatchForm {
                 name: String::new(),
                 count: 1,

@@ -36,6 +36,9 @@ pub struct ScenePropsView {
     selected_fx: Option<(SceneId, u32)>,
     /// Kachelauswahl zum Hinzufügen eines Effekts offen.
     adding: bool,
+    /// Zuletzt wurde ein Schritt (nicht der Effekt) angeklickt: Löschen
+    /// entfernt dann den Schritt.
+    step_focus: bool,
     /// Laufender Import/Export-Dialog.
     fx_dialog: Option<FxDialog>,
     /// Auswahlfenster für Szenen/Bänke.
@@ -430,12 +433,16 @@ impl ScenePropsView {
                         });
                         ui.add_space(theme::SP_S);
                     }
-                    pick = effect_tiles(ui, !locked);
+                    pick = effect_tiles(ui, !locked, effects.is_empty());
                 });
             if let Some(kind) = pick {
                 if let Some(scene) = cx.engine.show_mut().scene_mut(id) {
+                    if kind == EffectKind::Steps && scene.steps.is_empty() {
+                        scene.steps.push(dmxcraft_core::Step::new(Vec::new()));
+                    }
                     let fx = scene.add_effect(kind);
                     self.selected_fx = Some((id, fx));
+                    self.step_focus = kind == EffectKind::Steps;
                 }
                 self.adding = false;
             }
@@ -446,6 +453,20 @@ impl ScenePropsView {
         const BAR_H: f32 = 40.0;
         let list_h = (ui.available_height() - BAR_H).max(60.0);
         let selected = self.selected_fx.filter(|(s, _)| *s == id).map(|(_, f)| f);
+        let has_steps = scene.has_steps();
+        let mut steps = scene.steps.clone();
+        let steps_before = steps.clone();
+        let color = scene.color.map_or_else(
+            || theme::zone_color(cx.engine.show(), scene.zone),
+            theme::rgb,
+        );
+        let playing_step = cx
+            .engine
+            .progress(id)
+            .filter(|p| !p.finished)
+            .map(|p| p.step);
+        let mut edit_step = cx.state.edit_step;
+        let mut step_clicked = false;
         let mut toggle = None;
         let mut select = None;
         ui.allocate_ui(Vec2::new(ui.available_width(), list_h), |ui| {
@@ -462,23 +483,53 @@ impl ScenePropsView {
                             select = Some(fx.id);
                         }
                         if !fx.collapsed {
+                            let is_steps = fx.kind == EffectKind::Steps;
                             egui::Frame::new()
                                 .fill(theme::raised())
-                                .inner_margin(egui::Margin::same(8))
+                                .inner_margin(egui::Margin::same(if is_steps { 4 } else { 8 }))
                                 .show(ui, |ui| {
                                     ui.set_min_width(ui.available_width());
-                                    ui.label(
-                                        egui::RichText::new(t("Einstellungen folgen"))
-                                            .color(theme::text_faint()),
-                                    );
+                                    if is_steps {
+                                        if steps_table(
+                                            ui,
+                                            &mut steps,
+                                            &mut edit_step,
+                                            playing_step,
+                                            color,
+                                            !locked,
+                                        ) {
+                                            step_clicked = true;
+                                        }
+                                    } else {
+                                        ui.label(
+                                            egui::RichText::new(t("Einstellungen folgen"))
+                                                .color(theme::text_faint()),
+                                        );
+                                    }
                                 });
                         }
                         ui.add_space(2.0);
                     }
                 });
         });
+        if steps != steps_before && !locked {
+            if let Some(sc) = cx.engine.show_mut().scene_mut(id) {
+                for (dst, src) in sc.steps.iter_mut().zip(&steps) {
+                    dst.hold_ms = src.hold_ms;
+                    dst.fade_ms = src.fade_ms;
+                }
+            }
+        }
+        cx.state.edit_step = edit_step;
+        if step_clicked {
+            // ein Schritt gehört zum STEPS-Effekt: diesen mit auswählen
+            if let Some(fx) = effects.iter().find(|e| e.kind == EffectKind::Steps) {
+                select = Some(fx.id);
+            }
+        }
         if let Some(f) = select {
             self.selected_fx = Some((id, f));
+            self.step_focus = step_clicked;
             cx.state.focus = crate::state::Focus::Effect(id, f);
         }
         // Entf löscht den angeklickten Effekt (nicht die Szene)
@@ -534,29 +585,73 @@ impl ScenePropsView {
                 {
                     self.start_dialog(ui.ctx(), id, false);
                 }
+                // Schrittszene: Löschen betrifft den gewählten Schritt, solange
+                // mehr als einer da ist und zuletzt ein Schritt angeklickt wurde
+                let delete_step = has_steps && self.step_focus && steps.len() > 1;
                 let clicked_delete = ui
                     .add(
                         IconButton::new(Icon::Trash)
                             .size(30.0)
                             .flat()
-                            .enabled(on && selected.is_some()),
+                            .enabled(on && (selected.is_some() || delete_step)),
                     )
-                    .on_hover_text(t("Ausgewählten Effekt löschen"))
+                    .on_hover_text(if delete_step {
+                        t("Ausgewählten Schritt löschen")
+                    } else {
+                        t("Ausgewählten Effekt löschen")
+                    })
                     .clicked();
                 if clicked_delete || delete {
-                    if let (Some(f), Some(scene)) = (selected, cx.engine.show_mut().scene_mut(id)) {
+                    if delete_step {
+                        if let Some(scene) = cx.engine.show_mut().scene_mut(id) {
+                            if scene.remove_step(cx.state.edit_step) {
+                                cx.state.edit_step =
+                                    cx.state.edit_step.min(scene.steps.len().saturating_sub(1));
+                                cx.state.edit_reload = true;
+                            }
+                        }
+                    } else if let (Some(f), Some(scene)) =
+                        (selected, cx.engine.show_mut().scene_mut(id))
+                    {
+                        let was_steps = scene
+                            .effects
+                            .iter()
+                            .any(|e| e.id == f && e.kind == EffectKind::Steps);
                         // keine Effekte mehr -> wieder STATIC
                         scene.effects.retain(|e| e.id != f);
+                        if was_steps {
+                            // ohne STEPS bleibt nur der bearbeitete Schritt
+                            let keep = cx.state.edit_step.min(scene.steps.len().saturating_sub(1));
+                            if let Some(st) = scene.steps.get(keep).cloned() {
+                                scene.steps = vec![st];
+                            }
+                            cx.state.edit_step = 0;
+                            cx.state.edit_reload = true;
+                        }
                         self.selected_fx = scene.effects.last().map(|e| (id, e.id));
                         cx.state.focus = crate::state::Focus::Scenes;
                     }
                 }
+                let (tip, icon) = if has_steps {
+                    (t("Schritt hinzufügen"), Icon::Plus)
+                } else {
+                    (t("Effekt hinzufügen"), Icon::Plus)
+                };
                 if ui
-                    .add(IconButton::new(Icon::Plus).size(30.0).flat().enabled(on))
-                    .on_hover_text(t("Effekt hinzufügen"))
+                    .add(IconButton::new(icon).size(30.0).flat().enabled(on))
+                    .on_hover_text(tip)
                     .clicked()
                 {
-                    self.adding = true;
+                    if has_steps {
+                        // neuer Schritt nach dem bearbeiteten (Kopie seiner Werte)
+                        if let Some(scene) = cx.engine.show_mut().scene_mut(id) {
+                            cx.state.edit_step = scene.insert_step(cx.state.edit_step);
+                            cx.state.edit_reload = true;
+                        }
+                        self.step_focus = true;
+                    } else {
+                        self.adding = true;
+                    }
                 }
             });
         });
@@ -641,7 +736,7 @@ impl ScenePropsView {
 }
 
 /// Kacheln der Effektarten in zwei Spalten; gibt die angeklickte zurück.
-fn effect_tiles(ui: &mut egui::Ui, enabled: bool) -> Option<EffectKind> {
+fn effect_tiles(ui: &mut egui::Ui, enabled: bool, allow_steps: bool) -> Option<EffectKind> {
     let gap = theme::SP_S;
     let w = ((ui.available_width() - gap) / 2.0).min(120.0);
     let h = w * 0.72;
@@ -652,6 +747,8 @@ fn effect_tiles(ui: &mut egui::Ui, enabled: bool) -> Option<EffectKind> {
             let total = w * row.len() as f32 + gap * (row.len() as f32 - 1.0);
             ui.add_space(((ui.available_width() - total) / 2.0).max(0.0));
             for kind in row {
+                // STEPS nur als einziger Effekt einer Szene
+                let enabled = enabled && (allow_steps || *kind != EffectKind::Steps);
                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
                 let hot = enabled && resp.hovered();
                 let p = ui.painter();
@@ -697,6 +794,99 @@ fn effect_tiles(ui: &mut egui::Ui, enabled: bool) -> Option<EffectKind> {
         ui.add_space(gap);
     }
     pick
+}
+
+/// Tabelle der Schritte: Nummer, Haltezeit, Überblendzeit. Ein Klick auf
+/// eine Zeile wählt den Schritt zum Bearbeiten (die Fader zeigen dann seine
+/// Werte). Gibt `true` zurück, wenn eine Zeile angeklickt wurde.
+fn steps_table(
+    ui: &mut egui::Ui,
+    steps: &mut [dmxcraft_core::Step],
+    edit_step: &mut usize,
+    playing: Option<usize>,
+    color: Color32,
+    enabled: bool,
+) -> bool {
+    const NUM_W: f32 = 54.0;
+    const ROW_H: f32 = 34.0;
+    let mut clicked = false;
+    let full_w = ui.available_width();
+    let field_w = ((full_w - NUM_W) / 2.0).max(106.0);
+    // Kopfzeile
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        for (text, w) in [
+            (t("Schritt"), NUM_W),
+            (t("Hold Zeit"), field_w),
+            (t("Fade Zeit"), field_w),
+        ] {
+            let (r, _) = ui.allocate_exact_size(Vec2::new(w, 20.0), Sense::hover());
+            ui.painter().text(
+                pos2(r.left() + 8.0, r.center().y),
+                egui::Align2::LEFT_CENTER,
+                text.to_uppercase(),
+                theme::caption(),
+                theme::text_dim(),
+            );
+        }
+    });
+    for (i, step) in steps.iter_mut().enumerate() {
+        let row = Rect::from_min_size(ui.cursor().min, Vec2::new(full_w, ROW_H));
+        let resp = ui.interact(row, ui.make_persistent_id(("step_row", i)), Sense::click());
+        let sel = *edit_step == i;
+        let fill = if sel {
+            theme::accent_dim()
+        } else if resp.hovered() {
+            theme::raised_hover()
+        } else {
+            theme::bg()
+        };
+        ui.painter().rect_filled(row, theme::R_S, fill);
+        if playing == Some(i) {
+            // laufender Schritt: Balken in der Szenenfarbe
+            ui.painter().rect_filled(
+                Rect::from_min_size(row.min, Vec2::new(3.0, row.height())),
+                1.0,
+                color,
+            );
+        }
+        ui.push_id(("step", i), |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.set_min_height(ROW_H);
+                let (r, _) = ui.allocate_exact_size(Vec2::new(NUM_W, ROW_H), Sense::hover());
+                ui.painter().text(
+                    pos2(r.left() + 10.0, r.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    (i + 1).to_string(),
+                    theme::heading_font(),
+                    if sel {
+                        theme::text()
+                    } else {
+                        theme::text_dim()
+                    },
+                );
+                for (salt, ms) in [("hold", &mut step.hold_ms), ("fade", &mut step.fade_ms)] {
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(field_w, ROW_H),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            if time_field(ui, salt, ms, enabled, false, color) {
+                                *edit_step = i;
+                                clicked = true;
+                            }
+                        },
+                    );
+                }
+            });
+        });
+        if resp.clicked() {
+            *edit_step = i;
+            clicked = true;
+        }
+        ui.add_space(2.0);
+    }
+    clicked
 }
 
 /// Kopfzeile eines Effekts: Zuklapp-Pfeil, Name; Antwort für Auswahl und Pfeil.

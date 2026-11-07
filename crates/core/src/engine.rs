@@ -66,6 +66,8 @@ pub struct Engine {
     /// Vorschau-Szenen (Edit-Modus): werden ausgegeben, auch wenn sie nicht
     /// laufen – ihr erster Schritt liegt über den laufenden Szenen.
     preview: Vec<SceneId>,
+    /// Angezeigter Schritt der Vorschau (Schrittszenen im Edit-Modus).
+    preview_step: usize,
     /// Live-Werte (Live-Modus): überschreiben alles, werden nicht gespeichert.
     live: HashMap<ChannelRef, u8>,
     /// Blind-Modus: Ausgang nutzt diesen eingefrorenen Stand ohne Edit-Werte.
@@ -83,6 +85,7 @@ impl Engine {
             next_seq: 1,
             programmer: HashMap::new(),
             preview: Vec::new(),
+            preview_step: 0,
             live: HashMap::new(),
             blind_show: None,
             master: 1.0,
@@ -382,6 +385,11 @@ impl Engine {
         self.preview = scenes;
     }
 
+    /// Welcher Schritt der Vorschau-Szenen gezeigt wird (sonst der erste).
+    pub fn set_preview_step(&mut self, step: usize) {
+        self.preview_step = step;
+    }
+
     pub fn preview(&self) -> &[SceneId] {
         &self.preview
     }
@@ -648,7 +656,10 @@ impl Engine {
             if self.is_active(*id) {
                 continue;
             }
-            let Some(step) = show.scene(*id).and_then(|s| s.steps.first()) else {
+            let Some(step) = show
+                .scene(*id)
+                .and_then(|s| s.steps.get(self.preview_step).or(s.steps.first()))
+            else {
                 continue;
             };
             for cv in &step.values {

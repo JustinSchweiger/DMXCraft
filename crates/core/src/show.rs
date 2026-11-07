@@ -449,6 +449,35 @@ impl Scene {
         }
     }
 
+    /// Szene mit STEPS-Effekt (Schrittfolge; kein weiterer Effekt möglich).
+    pub fn has_steps(&self) -> bool {
+        self.effects.iter().any(|e| e.kind == EffectKind::Steps)
+    }
+
+    /// Neuen Schritt nach `after` einfügen (Kopie dieses Schritts, Haltezeit
+    /// 1 s); gibt seinen Index zurück.
+    pub fn insert_step(&mut self, after: usize) -> usize {
+        let mut st = self
+            .steps
+            .get(after)
+            .cloned()
+            .unwrap_or_else(|| Step::new(Vec::new()));
+        st.hold_ms = 1000;
+        st.fade_ms = 0;
+        let at = (after + 1).min(self.steps.len());
+        self.steps.insert(at, st);
+        at
+    }
+
+    /// Schritt löschen (der letzte bleibt immer erhalten).
+    pub fn remove_step(&mut self, i: usize) -> bool {
+        if self.steps.len() <= 1 || i >= self.steps.len() {
+            return false;
+        }
+        self.steps.remove(i);
+        true
+    }
+
     /// Effekt anhängen; gibt seine ID zurück.
     pub fn add_effect(&mut self, kind: EffectKind) -> u32 {
         let id = self.effects.iter().map(|e| e.id).max().unwrap_or(0) + 1;
@@ -565,6 +594,23 @@ impl Show {
         }
     }
 
+    /// Ältere Shows: Szenen mit mehreren Schritten bekommen den
+    /// STEPS-Effekt, damit ihre Schritte bearbeitbar sind.
+    pub fn normalize(&mut self) {
+        for sc in &mut self.scenes {
+            if sc.steps.len() > 1 && !sc.has_steps() {
+                sc.effects.insert(
+                    0,
+                    Effect {
+                        id: sc.effects.iter().map(|e| e.id).max().unwrap_or(0) + 1,
+                        kind: EffectKind::Steps,
+                        collapsed: false,
+                    },
+                );
+            }
+        }
+    }
+
     // ---------- Laden / Speichern ----------
 
     pub fn to_json(&self) -> Result<String, ShowError> {
@@ -577,6 +623,7 @@ impl Show {
             return Err(ShowError::Version(show.format_version));
         }
         show.universes = UNIVERSES;
+        show.normalize();
         Ok(show)
     }
 
@@ -1031,6 +1078,28 @@ mod zone_tests {
 mod tests {
     use super::*;
     use crate::library::builtin_fixture_types;
+
+    #[test]
+    fn steps_insert_remove_and_normalize() {
+        let mut s = Show::new("T", 1);
+        let id = s.add_scene(
+            "A",
+            None,
+            vec![Step::new(Vec::new()), Step::new(Vec::new())],
+        );
+        s.normalize();
+        let sc = s.scene_mut(id).unwrap();
+        assert!(sc.has_steps());
+        sc.steps[0].hold_ms = 300;
+        sc.steps[0].fade_ms = 200;
+        let at = sc.insert_step(0);
+        assert_eq!(at, 1);
+        assert_eq!(sc.steps.len(), 3);
+        assert_eq!((sc.steps[1].hold_ms, sc.steps[1].fade_ms), (1000, 0));
+        assert!(sc.remove_step(1));
+        assert!(sc.remove_step(0));
+        assert!(!sc.remove_step(0), "der letzte Schritt bleibt");
+    }
 
     fn show() -> Show {
         let mut s = Show::new("Test", 2);

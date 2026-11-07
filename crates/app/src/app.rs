@@ -795,6 +795,12 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
         (true, 1) => st.selected_scenes.iter().next().copied(),
         _ => None,
     };
+    // bearbeiteter Schritt innerhalb der Szene halten
+    let steps = target
+        .and_then(|id| e.show().scene(id))
+        .map_or(1, |s| s.steps.len().max(1));
+    st.edit_step = st.edit_step.min(steps - 1);
+    e.set_preview_step(st.edit_step);
     // Wechsel in den Edit-Modus lädt die markierte Szene wie ein neues Markieren
     if st.programmer_mode != st.programmer_mode_seen {
         let was_edit = st.programmer_mode_seen.is_edit();
@@ -807,27 +813,26 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
             e.clear_programmer();
         }
     }
+    // anderer Schritt gewählt: dessen Werte laden
+    if st.edit_step != st.edit_step_seen {
+        st.edit_step_seen = st.edit_step;
+        st.edit_reload = true;
+    }
     if std::mem::take(&mut st.edit_reload) && edit {
-        if let Some(id) = st.selected_scenes.iter().next().copied() {
+        if !st.selected_scenes.is_empty() {
             e.clear_programmer();
-            if st.selected_scenes.len() == 1 {
-                if let Some(step) = e.show().scene(id).and_then(|s| s.steps.first()).cloned() {
-                    for v in step.values {
-                        e.set_programmer(
-                            dmxcraft_core::ChannelRef {
-                                fixture: v.fixture,
-                                channel: v.channel,
-                            },
-                            v.value,
-                        );
-                    }
-                }
+            if let Some(id) = target {
+                load_step(e, id, st.edit_step);
             }
         }
         return;
     }
     if st.selected_scenes != st.scene_selection_seen {
         st.scene_selection_seen = st.selected_scenes.clone();
+        // neue Szene: beim ersten Schritt beginnen
+        st.edit_step = 0;
+        st.edit_step_seen = 0;
+        e.set_preview_step(0);
         if edit {
             if !st.selected_scenes.is_empty() {
                 let show = e.show();
@@ -842,25 +847,13 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
             }
             // Werte der neuen Bearbeitungsszene in den Programmer laden
             e.clear_programmer();
-            if let Some(step) = target
-                .and_then(|id| e.show().scene(id))
-                .and_then(|s| s.steps.first())
-                .cloned()
-            {
-                for v in step.values {
-                    e.set_programmer(
-                        dmxcraft_core::ChannelRef {
-                            fixture: v.fixture,
-                            channel: v.channel,
-                        },
-                        v.value,
-                    );
-                }
+            if let Some(id) = target {
+                load_step(e, id, 0);
             }
             return;
         }
     }
-    // Programmer-Änderungen in der Bearbeitungsszene speichern
+    // Programmer-Änderungen im bearbeiteten Schritt speichern
     let Some(id) = target else {
         return;
     };
@@ -871,10 +864,32 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
     if scene.steps.is_empty() {
         scene.steps.push(dmxcraft_core::Step::new(Vec::new()));
     }
-    let step = &mut scene.steps[0];
+    let i = st.edit_step.min(scene.steps.len() - 1);
+    let step = &mut scene.steps[i];
     let mut current = step.values.clone();
     current.sort_by_key(|c| (c.fixture, c.channel));
     if current != values {
         step.values = values;
+    }
+}
+
+/// Werte eines Schritts der Szene in den Programmer laden.
+fn load_step(e: &mut Engine, id: SceneId, i: usize) {
+    let Some(step) = e
+        .show()
+        .scene(id)
+        .and_then(|s| s.steps.get(i).or(s.steps.first()))
+        .cloned()
+    else {
+        return;
+    };
+    for v in step.values {
+        e.set_programmer(
+            dmxcraft_core::ChannelRef {
+                fixture: v.fixture,
+                channel: v.channel,
+            },
+            v.value,
+        );
     }
 }
