@@ -1096,7 +1096,17 @@ impl TimelineView {
         if head.hovered() || head.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
         } else if resp.hovered() && self.ruler_grab.is_none() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::ZoomIn);
+            // eigene Lupe: der System-Zeiger „zoom-in“ fehlt in vielen Themes
+            if let Some(q) = ui.input(|i| i.pointer.hover_pos()) {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+                let fg = ui.ctx().layer_painter(egui::LayerId::new(
+                    egui::Order::Tooltip,
+                    ui.scope_id().with("ruler_cursor"),
+                ));
+                let ir = Rect::from_center_size(q, Vec2::splat(22.0));
+                fg.circle_filled(q, 12.0, theme::bg().gamma_multiply(0.7));
+                Icon::ZoomIn.paint(&fg, ir, theme::text());
+            }
         }
         if let Some(q) = head.interact_pointer_pos().filter(|_| head.dragged()) {
             let ms = self.snap(self.ms_at(q.x, lanes).max(0.0), tl, &[], 0);
@@ -1119,13 +1129,18 @@ impl TimelineView {
             if resp.dragged() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::None);
                 let mut d = ui.input(|i| i.pointer.delta());
-                // erst nach etwas Bewegung entscheiden, dann nur noch diese Achse
-                if self.ruler_axis.is_none() {
-                    self.ruler_acc += d;
-                    if self.ruler_acc.length() >= 8.0 {
-                        self.ruler_axis = Some(self.ruler_acc.x.abs() >= self.ruler_acc.y.abs());
+                // immer nur eine Achse: die zuletzt deutlich überwiegende Richtung
+                // (abklingende Summe der letzten Bewegung); Wechsel jederzeit möglich
+                self.ruler_acc = self.ruler_acc * 0.85 + d;
+                let (ax, ay) = (self.ruler_acc.x.abs(), self.ruler_acc.y.abs());
+                match self.ruler_axis {
+                    None if self.ruler_acc.length() >= 8.0 => {
+                        self.ruler_axis = Some(ax >= ay);
                         d = self.ruler_acc;
                     }
+                    Some(true) if ay >= 10.0 && ay > ax * 2.0 => self.ruler_axis = Some(false),
+                    Some(false) if ax >= 10.0 && ax > ay * 2.0 => self.ruler_axis = Some(true),
+                    _ => {}
                 }
                 match self.ruler_axis {
                     Some(true) => {

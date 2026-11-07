@@ -558,9 +558,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/timeline.rs": {
-    "mtime": 1794080791.1063204,
-    "seen": 1794080809.4441245,
-    "ast_hash": "a688562e31afbcfe61bdddeed5eeb1bc",
+    "mtime": 1794080982.8023317,
+    "seen": 1794081024.1974378,
+    "ast_hash": "a73987504e29043e44b8d5e49889f7bf",
     "semantic_hash": ""
   },
   "crates/core/src/timeline.rs": {
