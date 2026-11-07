@@ -1,13 +1,14 @@
 //! Lichtengine: spielt Szenen ab und berechnet daraus DMX-Frames.
 //!
 //! Merge-Regeln:
-//! * Dimmer-Kanäle: HTP – der höchste Wert aller aktiven Szenen gewinnt.
-//! * Alle anderen: LTP – die zuletzt gestartete Szene gewinnt.
+//! * Alle Kanäle: LTP – die zuletzt gestartete Szene gewinnt, aber nur für
+//!   Kanäle, die sie gespeichert hat (auch gespeicherte 0-Werte). Nicht
+//!   gespeicherte Kanäle bleiben frei für andere Szenen.
 //! * Der Programmer (Live-Fader) überschreibt alles.
 //! * Master/Blackout skalieren Dimmer-Kanäle; Geräte ohne Dimmer-Kanal werden
 //!   über ihre Farbkanäle gedimmt.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::dmx::DmxFrame;
@@ -368,20 +369,12 @@ impl Engine {
         // 2) Szenen in Startreihenfolge (LTP: spätere überschreiben)
         let mut order: Vec<&PlayingScene> = self.playing.iter().collect();
         order.sort_by_key(|p| p.seq);
-        let mut htp_touched: HashSet<ChannelRef> = HashSet::new();
+        // Nur gespeicherte Kanäle einer Szene wirken; nicht gespeicherte
+        // bleiben frei für andere Szenen.
         for p in order {
             for (ch, v) in self.scene_values(p) {
-                let Some(slot) = values.get_mut(&ch) else {
-                    continue; // Gerät existiert nicht mehr
-                };
-                if self.is_htp(ch) {
-                    if htp_touched.insert(ch) {
-                        *slot = v;
-                    } else {
-                        *slot = (*slot).max(v);
-                    }
-                } else {
-                    *slot = v;
+                if let Some(slot) = values.get_mut(&ch) {
+                    *slot = v; // Gerät existiert noch
                 }
             }
         }
@@ -594,7 +587,7 @@ mod tests {
     }
 
     #[test]
-    fn htp_highest_wins_ltp_latest_wins() {
+    fn latest_scene_wins_for_stored_channels() {
         let (mut s, a, _) = setup();
         let s1 = s.add_scene(
             "1",
@@ -610,10 +603,29 @@ mod tests {
         e.activate(s1);
         e.activate(s2);
         let f = e.render_frame();
-        assert_eq!(f.get(0, 1), Some(200), "Dimmer HTP");
+        assert_eq!(f.get(0, 1), Some(100), "Dimmer LTP");
         assert_eq!(f.get(0, 2), Some(99), "Rot LTP");
         e.activate(s1); // neu gestartet -> jetzt die neueste
         assert_eq!(e.render_frame().get(0, 2), Some(10));
+    }
+
+    #[test]
+    fn unstored_channels_stay_free() {
+        // Rot-Szene speichert nur Rot, Blau-Szene nur Blau -> beide sichtbar.
+        let (mut s, a, _) = setup();
+        let red = s.add_scene("R", None, vec![Step::new(vec![cv(a, 1, 255)])]);
+        let blue = s.add_scene("B", None, vec![Step::new(vec![cv(a, 3, 255)])]);
+        let mut e = Engine::new(s);
+        e.activate(red);
+        e.activate(blue);
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 2), Some(255));
+        assert_eq!(f.get(0, 4), Some(255));
+        // speichert die Blau-Szene Rot = 0, gewinnt sie (zuletzt gestartet)
+        e.show_mut().scene_mut(blue).unwrap().steps[0]
+            .values
+            .push(cv(a, 1, 0));
+        assert_eq!(e.render_frame().get(0, 2), Some(0));
     }
 
     #[test]

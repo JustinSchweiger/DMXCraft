@@ -5,7 +5,8 @@
 //! Symbol der Kanalart, Wert (Klick = eintippen, „OFF“ = nicht gesetzt) und
 //! die Schiene mit Griff.
 //!
-//! Bedienung: Ziehen/Klicken = setzen, Mausrad = ±2 (Umschalt ±10),
+//! Bedienung: Punkt anklicken = Kanal speichern/freigeben (auch mit Wert 0),
+//! Ziehen/Klicken = setzen, Mausrad = ±2 (Umschalt ±10),
 //! Doppelklick = 0 ↔ voll, Rechtsklick = Menü (Freigeben, 0, Voll).
 
 use crate::i18n::t;
@@ -113,8 +114,26 @@ impl Fader {
             Stroke::new(1.0, theme::bg()),
         );
 
-        // Statuspunkt
+        // Statuspunkt – Klick: Kanal speichern (mit aktuellem Wert) bzw. freigeben
         let dot_c = pos2(outer.center().x, outer.top() + DOT_H * 0.55);
+        let dot_rect = Rect::from_center_size(dot_c, Vec2::new(self.width.min(28.0), DOT_H));
+        let dot_resp = ui
+            .interact(dot_rect, id.with("dot"), Sense::click())
+            .on_hover_text(if self.active {
+                t("Gespeichert – klicken, um den Kanal freizugeben")
+            } else {
+                t("Nicht gespeichert – klicken, um den Wert zu speichern")
+            });
+        if dot_resp.clicked() {
+            event = if self.active {
+                FaderEvent::Release
+            } else {
+                FaderEvent::Changed(value)
+            };
+        }
+        if dot_resp.hovered() {
+            p.circle_filled(dot_c, 9.0, theme::raised_hover());
+        }
         if self.active {
             p.circle_filled(dot_c, 5.0, self.dot);
             p.circle_filled(dot_c, 8.0, self.dot.gamma_multiply(0.18));
