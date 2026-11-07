@@ -141,6 +141,67 @@ impl Library {
 
     /// Volltextsuche über Hersteller, Name und Kategorien. Alle Wörter der
     /// Suche müssen vorkommen (ohne Groß-/Kleinschreibung).
+    /// Bester Gerätetyp zu einem Namen aus einer fremden Bibliothek, z. B.
+    /// „Stairville/LED PAR 64 CX_3 RGBW.ssl2“ (Hersteller/Modell). Enthält der
+    /// Name eine Kanalzahl („7CH“), wird der passende Modus bevorzugt.
+    /// `None`, wenn Hersteller oder Modell nicht ausreichend übereinstimmen.
+    pub fn best_match(&self, library_name: &str) -> Option<(&LibraryFixture, &FixtureType)> {
+        let name = library_name
+            .rsplit_once('.')
+            .filter(|(_, ext)| ext.len() <= 4 && !ext.contains(' '))
+            .map_or(library_name, |(n, _)| n);
+        let (maker, model) = name.rsplit_once('/').unwrap_or(("", name));
+        let tokens = |s: &str| -> Vec<String> {
+            s.to_lowercase()
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|w| !w.is_empty())
+                .map(str::to_string)
+                .collect()
+        };
+        // „_Generic“, „_imported“: kein echter Hersteller, er steckt dann im Modellnamen
+        let maker = match maker.to_lowercase().as_str() {
+            "_generic" => vec!["generic".to_string()],
+            m if m.starts_with('_') => Vec::new(),
+            _ => tokens(maker),
+        };
+        let model_t = tokens(model);
+        if model_t.is_empty() {
+            return None;
+        }
+        let channels: Option<usize> = model_t.iter().find_map(|w| {
+            w.strip_suffix("ch")
+                .and_then(|n| n.parse().ok())
+                .filter(|n: &usize| (1..=512).contains(n))
+        });
+        let mut best: Option<(f32, &LibraryFixture)> = None;
+        for f in &self.fixtures {
+            let fm = tokens(&format!("{} {}", f.manufacturer, f.manufacturer_key));
+            let maker_ok = maker.is_empty() || maker.iter().any(|w| fm.contains(w));
+            if !maker_ok {
+                continue;
+            }
+            let fn_t = if maker.is_empty() {
+                tokens(&format!("{} {}", f.manufacturer, f.name))
+            } else {
+                tokens(&f.name)
+            };
+            let hits = model_t.iter().filter(|w| fn_t.contains(w)).count() as f32;
+            // Anteil getroffener Wörter beider Seiten
+            let score = hits / model_t.len() as f32 * 0.6 + hits / fn_t.len().max(1) as f32 * 0.4;
+            if best.is_none_or(|b| score > b.0) {
+                best = Some((score, f));
+            }
+        }
+        let (score, f) = best?;
+        if score < 0.55 {
+            return None;
+        }
+        let mode = channels
+            .and_then(|n| f.modes.iter().find(|m| m.channels.len() == n))
+            .or_else(|| f.modes.iter().max_by_key(|m| m.channels.len()))?;
+        Some((f, mode))
+    }
+
     pub fn search(&self, query: &str, limit: usize) -> Vec<&LibraryFixture> {
         let words: Vec<String> = query.split_whitespace().map(|w| w.to_lowercase()).collect();
         self.fixtures
@@ -166,6 +227,21 @@ impl Library {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn best_match_finds_easy_view_names() {
+        let lib = Library::embedded();
+        let (f, m) = lib
+            .best_match("Stairville/PAR 56 7CH.ssl2")
+            .or_else(|| lib.best_match("Stairville/LED PAR 56.ssl2"))
+            .expect("Stairville");
+        assert!(f.manufacturer.contains("Stairville"), "{}", f.manufacturer);
+        assert!(!m.channels.is_empty());
+        assert!(lib
+            .best_match("Unbekannt/Gibt es nicht 9000.ssl2")
+            .is_none());
+    }
+
     use super::*;
 
     #[test]

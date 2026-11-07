@@ -999,6 +999,24 @@ impl Show {
     }
 
     /// Position im Bühnenplan (eigene oder automatische).
+    /// Lage eines Geräts im 3D-Raum: gespeichert oder aus dem Bühnenplan
+    /// abgeleitet (unter der Decke, nach unten strahlend).
+    pub fn placement3d(&self, id: FixtureId) -> crate::venue::Placement {
+        if let Some(p) = self.fixture(id).and_then(|f| f.place3d) {
+            return p;
+        }
+        let [w, h, d] = self.venue.size;
+        let [px, py] = self.plan_position(id);
+        crate::venue::Placement {
+            position: [
+                (px - 0.5) * w * 0.8,
+                (h - 0.35).max(1.5),
+                (0.5 - py) * d * 0.8,
+            ],
+            rotation: [0.0; 3],
+        }
+    }
+
     pub fn plan_position(&self, id: FixtureId) -> [f32; 2] {
         let idx = self.fixtures.iter().position(|f| f.id == id).unwrap_or(0);
         self.fixture(id)

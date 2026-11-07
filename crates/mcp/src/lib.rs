@@ -16,6 +16,7 @@ pub mod bridge;
 pub mod protocol;
 pub mod server;
 pub mod tools;
+mod venue;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};

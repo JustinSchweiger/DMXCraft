@@ -82,6 +82,28 @@ fn step_schema() -> Value {
     })
 }
 
+fn venue_object_schema() -> Value {
+    let v3 = |d: &str| json!({ "type": "array", "items": { "type": "number" }, "description": d });
+    obj(
+        props! {
+            "id": int("Objekt-ID (nur beim Ändern)"),
+            "name": string("Name"),
+            "shape": any_obj("Form, siehe Beschreibung"),
+            "parent": int("Gruppe, in die das neue Objekt kommt (optional)"),
+            "position": v3("[x, y, z] in m"),
+            "rotation": v3("Grad, X dann Y dann Z"),
+            "scale": v3("Skalierung"),
+            "color": string("#rrggbb"),
+            "opacity": num("Deckkraft 0–1"),
+            "gloss": num("Glanz 0–1"),
+            "emissive": num("Selbstleuchten 0–1"),
+            "locked": boolean("gegen Verschieben sperren"),
+            "hidden": boolean("ausblenden"),
+        },
+        &[],
+    )
+}
+
 fn clip_schema() -> Value {
     json!({
         "type": "object",
@@ -361,6 +383,59 @@ const TOOLS: &[Tool] = &[
         read_only: true,
     },
     Tool {
+        name: "get_venue",
+        title: "Veranstaltungsort lesen",
+        description: "3D-Veranstaltungsort: Raumgröße, Umgebung (Raumlicht, Strahlen, Nebel), alle Objekte (Quader, Flächen, Zylinder, Traversen, Gruppen) mit Lage und Weltposition sowie die 3D-Lage jedes Geräts. Einheiten: Meter, y nach oben.",
+        schema: || obj(json!({}), &[]),
+        read_only: true,
+    },
+    Tool {
+        name: "set_venue",
+        title: "Veranstaltungsort einstellen",
+        description: "Ändert Name, Raumgröße [Breite, Höhe, Tiefe] und Umgebung (ambient, beams, fog je 0–1).",
+        schema: || obj(props! {
+            "name": string("Name"), "size": json!({ "type": "array", "items": { "type": "number" }, "description": "[Breite x, Höhe y, Tiefe z] in m" }),
+            "ambient": num("Raumlicht 0–1"), "beams": num("Sichtbarkeit der Strahlen 0–1"), "fog": num("Nebel 0–1"),
+        }, &[]),
+        read_only: false,
+    },
+    Tool {
+        name: "add_venue_object",
+        title: "Objekt in den Ort setzen",
+        description: "Fügt ein Objekt hinzu. `shape` z. B. {\"type\":\"box\",\"size\":[2,0.4,1]}, {\"type\":\"plane\",\"size\":[4,3]}, {\"type\":\"cylinder\",\"radius\":0.05,\"height\":3}, {\"type\":\"truss\",\"length\":3,\"profile\":\"square\"} (entlang x) oder {\"type\":\"group\"}. Mittelpunkt des Objekts liegt bei `position`.",
+        schema: venue_object_schema,
+        read_only: false,
+    },
+    Tool {
+        name: "update_venue_object",
+        title: "Objekt ändern",
+        description: "Ändert Form, Lage, Farbe, Deckkraft … eines Objekts (nur angegebene Felder).",
+        schema: venue_object_schema,
+        read_only: false,
+    },
+    Tool {
+        name: "delete_venue_objects",
+        title: "Objekte entfernen",
+        description: "Entfernt Objekte (Gruppen samt Inhalt).",
+        schema: || obj(props! { "ids": ids("Objekt-IDs") }, &["ids"]),
+        read_only: false,
+    },
+    Tool {
+        name: "place_fixtures",
+        title: "Geräte im Raum platzieren",
+        description: "Setzt die 3D-Lage von Geräten: `position` (bei mehreren mit `spacing` je Gerät versetzt), optional an die nächste Traverse hängen, `rotation` oder auf einen Punkt `aim_at` ausrichten. `automatic`: wieder aus dem Bühnenplan ableiten.",
+        schema: || obj(props! {
+            "fixtures": ids("Geräte-IDs"),
+            "position": json!({ "type": "array", "items": { "type": "number" }, "description": "[x, y, z] in m für das erste Gerät" }),
+            "spacing": json!({ "type": "array", "items": { "type": "number" }, "description": "Versatz je weiterem Gerät [x, y, z]" }),
+            "hang_on_truss": boolean("unter die nächste Traverse hängen"),
+            "rotation": json!({ "type": "array", "items": { "type": "number" }, "description": "Euler-Winkel in Grad; [0,0,0] strahlt senkrecht nach unten" }),
+            "aim_at": json!({ "type": "array", "items": { "type": "number" }, "description": "Zielpunkt [x, y, z], auf den das Gerät strahlt" }),
+            "automatic": boolean("Lage wieder automatisch"),
+        }, &["fixtures"]),
+        read_only: false,
+    },
+    Tool {
         name: "save_show",
         title: "Show speichern",
         description: "Speichert die Show (ohne `path` unter dem aktuellen Pfad).",
@@ -601,6 +676,12 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
             (host.notify)(AppEvent::Saved(path.clone()));
             Ok(json!({ "saved": path }))
         }
+        "get_venue" => crate::venue::get_venue(e),
+        "set_venue" => crate::venue::set_venue(e, a),
+        "add_venue_object" => crate::venue::add_object(e, a),
+        "update_venue_object" => crate::venue::update_object(e, a),
+        "delete_venue_objects" => crate::venue::delete_objects(e, &id_list(a, "ids")?),
+        "place_fixtures" => crate::venue::place_fixtures(e, a),
         _ => Err(format!("Unbekanntes Werkzeug: {name}")),
     };
     drop(guard);
@@ -648,7 +729,7 @@ fn existing_fixtures(show: &Show, list: &[u32]) -> Result<Vec<FixtureId>, String
 }
 
 /// „#rrggbb“ → RGB.
-fn parse_hex(s: &str) -> Result<[u8; 3], String> {
+pub(crate) fn parse_hex(s: &str) -> Result<[u8; 3], String> {
     let h = s.trim().trim_start_matches('#');
     if h.len() != 6 {
         return Err(format!("Farbe „{s}“: erwartet #rrggbb"));

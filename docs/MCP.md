@@ -47,6 +47,7 @@ Sitzungen).
 | SUPER SCENE | `create_super_scene`, `add_timeline_clips`, `remove_timeline_clips` |
 | Wiedergabe | `play_scene`, `stop_scene`, `pause_scene`, `set_output` (Master, Blackout, Tempo) |
 | Live | `set_live_values`, `clear_live_values` |
+| 3D-Ort | `get_venue`, `set_venue`, `add_venue_object`, `update_venue_object`, `delete_venue_objects`, `place_fixtures` (Position, an Traverse hängen, auf Punkt ausrichten) |
 | Datei | `save_show` |
 
 Kanalwerte gibt man entweder einzeln an (`{fixture, channel, value}`, Kanal

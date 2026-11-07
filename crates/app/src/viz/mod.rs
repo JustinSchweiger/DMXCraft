@@ -16,7 +16,7 @@ use std::time::Instant;
 use dmxcraft_core::venue::{
     self, Material, Object, Placement, Shape, Transform, TrussProfile, Venue,
 };
-use dmxcraft_core::{FixtureId, Show};
+use dmxcraft_core::{FixtureId, FixtureType, Show};
 use eframe::egui::{self, pos2, vec2, Color32, Rect, Sense, Stroke};
 use eframe::egui_wgpu;
 use glam::{Mat4, Vec2, Vec3};
@@ -121,7 +121,7 @@ pub struct VizView {
     dialog: Option<(DialogKind, Receiver<Option<PathBuf>>)>,
     fps: (Instant, u32, f32),
     /// Geräte aus dem letzten Import ohne Gegenstück im Patch.
-    missing: Vec<String>,
+    missing: Vec<Missing>,
     /// Griff, an dem gerade gezogen wird (Achse 0–2, 3 = Drehung um y),
     /// Ausgangslage und Startpunkt des Zeigers.
     gizmo: Option<(usize, Placement, egui::Pos2)>,
@@ -129,6 +129,43 @@ pub struct VizView {
     aim: [f32; 3],
     /// Nächster Klick ins Bild setzt den Zielpunkt.
     aim_pick: bool,
+}
+
+/// Gerät aus einem Import ohne Gegenstück im Patch, mit vorgeschlagenem Typ.
+struct Missing {
+    fixture: venue::ev2::Ev2Fixture,
+    /// Typ aus der Bibliothek (bzw. generisch) und ob er sicher passt.
+    proposal: FixtureType,
+    exact: bool,
+    create: bool,
+}
+
+/// Gerätetyp zu einem Easy-View-Bibliotheksnamen: Bibliothek, sonst generisch.
+fn propose_type(library_name: &str) -> (FixtureType, bool) {
+    if let Some((_, m)) = dmxcraft_ofl::Library::embedded().best_match(library_name) {
+        return (m.clone(), true);
+    }
+    let n = library_name.to_lowercase();
+    let key = if ["moving", "wash", "spot", "beam", "head"]
+        .iter()
+        .any(|k| n.contains(k))
+    {
+        "generic/moving-head-spot-11ch"
+    } else if n.contains("rgbw") {
+        "generic/rgbw-par-6ch"
+    } else if n.contains("rgb") || n.contains("bar") || n.contains("par") || n.contains("led") {
+        "generic/drgb-4ch"
+    } else {
+        "generic/dimmer-1ch"
+    };
+    let types = dmxcraft_core::library::builtin_fixture_types();
+    let t = types
+        .iter()
+        .find(|t| t.key == key)
+        .or(types.first())
+        .cloned()
+        .expect("eingebaute Gerätetypen");
+    (t, false)
 }
 
 /// Achsenfarben der Griffe (x rot, y grün, z blau).
@@ -897,13 +934,58 @@ impl VizView {
             if !self.missing.is_empty() {
                 ui.add_space(theme::SP_M);
                 ui.label(theme::heading_text(t("Ohne Gegenstück im Patch")));
-                ui.label(egui::RichText::new(t("Diese Geräte aus dem Import haben im Patch kein Gerät mit gleichem Universum und gleicher Adresse.")).small().color(theme::text_faint()));
-                for m in &self.missing {
-                    ui.label(egui::RichText::new(m).small());
+                ui.label(egui::RichText::new(t("Diese Geräte aus dem Import haben im Patch kein Gerät mit gleichem Universum und gleicher Adresse. Vorgeschlagen ist ein passender Typ aus der Bibliothek (kursiv: nur ähnlich, bitte prüfen).")).small().color(theme::text_faint()));
+                for m in &mut self.missing {
+                    let f = &m.fixture;
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut m.create, "");
+                        ui.vertical(|ui| {
+                            ui.label(egui::RichText::new(format!("{} · U{}/{}", f.name, f.universe + 1, f.address)).small());
+                            let ty = format!("{} {} ({} · {} Kanäle)", m.proposal.manufacturer, m.proposal.model, m.proposal.mode, m.proposal.channels.len());
+                            let mut txt = egui::RichText::new(ty).small().color(theme::text_dim());
+                            if !m.exact {
+                                txt = txt.italics();
+                            }
+                            ui.label(txt).on_hover_text(&f.library_name);
+                        });
+                    });
                 }
-                if ui.button(t("Liste ausblenden")).clicked() {
-                    self.missing.clear();
-                }
+                let n = self.missing.iter().filter(|m| m.create).count();
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(n > 0, egui::Button::new(tr!("{n} Geräte anlegen", n = n)))
+                        .clicked()
+                    {
+                        let show = cx.engine.show_mut();
+                        let mut failed = Vec::new();
+                        let mut made = 0;
+                        for m in self.missing.drain(..) {
+                            if !m.create {
+                                continue;
+                            }
+                            show.upsert_fixture_type(m.proposal.clone());
+                            let f = &m.fixture;
+                            match show.add_fixture(f.name.clone(), &m.proposal.key, f.universe, f.address) {
+                                Ok(id) => {
+                                    if let Some(x) = show.fixture_mut(id) {
+                                        x.place3d = Some(f.placement);
+                                    }
+                                    made += 1;
+                                }
+                                Err(e) => failed.push(format!("{}: {e}", f.name)),
+                            }
+                        }
+                        dmxcraft_ofl::fill_physical(show);
+                        if failed.is_empty() {
+                            cx.state.info(tr!("{n} Geräte angelegt", n = made));
+                        } else {
+                            cx.state.error(tr!("{n} Geräte angelegt, nicht möglich: {f}", n = made, f = failed.join(", ")));
+                        }
+                    }
+                    if ui.button(t("Liste ausblenden")).clicked() {
+                        self.missing.clear();
+                    }
+                });
             }
             ui.add_space(theme::SP_M);
             match self.selected {
@@ -1123,12 +1205,15 @@ impl VizView {
                                     x.place3d = Some(f.placement);
                                     matched += 1;
                                 }
-                                None => missing.push(format!(
-                                    "{} (U{}/{})",
-                                    f.name,
-                                    f.universe + 1,
-                                    f.address
-                                )),
+                                None => {
+                                    let (proposal, exact) = propose_type(&f.library_name);
+                                    missing.push(Missing {
+                                        fixture: f.clone(),
+                                        proposal,
+                                        exact,
+                                        create: true,
+                                    });
+                                }
                             }
                         }
                         self.selected = None;
@@ -1137,6 +1222,9 @@ impl VizView {
                             m = matched,
                             n = missing.len()
                         ));
+                        if !missing.is_empty() {
+                            self.mode = Mode::Build;
+                        }
                         self.missing = missing;
                     }
                     Err(e) => cx.state.error(tr!("Import fehlgeschlagen: {e}", e = e)),
@@ -1404,6 +1492,15 @@ fn ray_aabb_exit(o: Vec3, d: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn proposals_for_easy_view_names() {
+        let (t, exact) = propose_type("Stairville/LED PAR 56.ssl2");
+        assert!(exact && t.manufacturer.contains("Stairville"));
+        let (t, exact) = propose_type("_imported/Unbekannt Sky Wash 25ch.ssl2");
+        assert!(!exact);
+        assert_eq!(t.key, "generic/moving-head-spot-11ch");
+    }
 
     #[test]
     fn ray_tests() {

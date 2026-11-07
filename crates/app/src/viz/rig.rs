@@ -54,19 +54,7 @@ pub enum Kind {
 
 /// Lage im Raum: gespeicherte oder automatisch aus dem Bühnenplan.
 pub fn placement(show: &Show, id: FixtureId) -> Placement {
-    if let Some(p) = show.fixture(id).and_then(|f| f.place3d) {
-        return p;
-    }
-    let [w, h, d] = show.venue.size;
-    let [px, py] = show.plan_position(id);
-    Placement {
-        position: [
-            (px - 0.5) * w * 0.8,
-            (h - 0.35).max(1.5),
-            (0.5 - py) * d * 0.8,
-        ],
-        rotation: [0.0; 3],
-    }
+    show.placement3d(id)
 }
 
 pub fn kind(show: &Show, id: FixtureId) -> Kind {
