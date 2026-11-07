@@ -746,13 +746,8 @@ fn drop_target(
             .map_or(col.bottom(), |(_, y)| y - CARD_H * 0.5 - gap),
         None => col.bottom() + gap,
     };
+    // nur die Einfügelinie zeigt die Zielposition (kein Rahmen um die Bank)
     let p = ui.painter();
-    p.rect_stroke(
-        area,
-        theme::R_M,
-        Stroke::new(1.0, color.gamma_multiply(0.5)),
-        StrokeKind::Outside,
-    );
     p.line_segment(
         [
             egui::pos2(col.left(), y),
