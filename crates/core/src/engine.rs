@@ -32,6 +32,10 @@ struct PlayingScene {
     first_entry: bool,
     finished: bool,
     paused: bool,
+    /// Zeit seit dem Start (für das Einblenden).
+    age_ms: f64,
+    /// Zeit seit dem Stoppen, solange die Szene ausblendet.
+    releasing: Option<f64>,
 }
 
 /// Fortschritt einer laufenden Szene für die Oberfläche.
@@ -118,12 +122,34 @@ impl Engine {
 
     // ---------- Szenen ----------
 
+    /// Läuft die Szene (ausblendende Szenen zählen nicht mehr)?
     pub fn is_active(&self, id: SceneId) -> bool {
-        self.playing.iter().any(|p| p.scene == id)
+        self.playing
+            .iter()
+            .any(|p| p.scene == id && p.releasing.is_none())
     }
 
     pub fn active_scenes(&self) -> Vec<SceneId> {
-        self.playing.iter().map(|p| p.scene).collect()
+        self.playing
+            .iter()
+            .filter(|p| p.releasing.is_none())
+            .map(|p| p.scene)
+            .collect()
+    }
+
+    fn fade_out_ms(show: &Show, id: SceneId) -> u32 {
+        show.scene(id).map_or(0, |s| s.settings.fade_out_ms)
+    }
+
+    /// Szene stoppen – mit ihrer Ausblendzeit, sonst sofort.
+    fn stop(show: &Show, p: &mut PlayingScene) -> bool {
+        if Self::fade_out_ms(show, p.scene) == 0 {
+            return false; // entfernen
+        }
+        if p.releasing.is_none() {
+            p.releasing = Some(0.0);
+        }
+        true
     }
 
     /// Startet eine Szene (von vorn). Andere Szenen derselben Zone stoppen.
@@ -134,14 +160,16 @@ impl Engine {
         if scene.steps.is_empty() {
             return;
         }
-        if let Some(zone) = scene.zone {
-            let show = &self.show;
-            self.playing.retain(|p| {
-                p.scene != id && show.scene(p.scene).is_none_or(|s| s.zone != Some(zone))
-            });
-        } else {
-            self.playing.retain(|p| p.scene != id);
-        }
+        let zone = scene.zone;
+        let show = &self.show;
+        // dieselbe Szene startet neu; andere Szenen der Bank blenden aus
+        self.playing.retain_mut(|p| {
+            if p.scene == id {
+                return false;
+            }
+            let same_zone = zone.is_some() && show.scene(p.scene).is_some_and(|s| s.zone == zone);
+            !same_zone || Self::stop(show, p)
+        });
         self.playing.push(PlayingScene {
             scene: id,
             seq: self.next_seq,
@@ -150,12 +178,58 @@ impl Engine {
             first_entry: true,
             finished: false,
             paused: false,
+            age_ms: 0.0,
+            releasing: None,
         });
         self.next_seq += 1;
     }
 
+    /// Stoppt eine Szene (mit ihrer Ausblendzeit).
     pub fn release(&mut self, id: SceneId) {
-        self.playing.retain(|p| p.scene != id);
+        let show = &self.show;
+        self.playing
+            .retain_mut(|p| p.scene != id || Self::stop(show, p));
+    }
+
+    /// Springt in einer laufenden Szene an eine Stelle (0 = Anfang, 1 = Ende).
+    pub fn seek(&mut self, id: SceneId, fraction: f32) {
+        let Some(scene) = self.show.scene(id) else {
+            return;
+        };
+        let total = scene.duration_ms();
+        let Some(p) = self
+            .playing
+            .iter_mut()
+            .find(|p| p.scene == id && p.releasing.is_none())
+        else {
+            return;
+        };
+        let mut target = (f64::from(fraction.clamp(0.0, 1.0)) * total as f64)
+            .min(total as f64 - 1.0)
+            .max(0.0);
+        p.finished = false;
+        p.first_entry = target == 0.0;
+        for (i, st) in scene.steps.iter().enumerate() {
+            let d = st.duration_ms() as f64;
+            if target < d || i + 1 == scene.steps.len() {
+                p.step = i;
+                p.elapsed_ms = target.min(d);
+                return;
+            }
+            target -= d;
+        }
+    }
+
+    /// Fortschritt über die ganze Szene (0..=1), falls sie läuft.
+    pub fn scene_position(&self, id: SceneId) -> Option<f32> {
+        let p = self
+            .playing
+            .iter()
+            .find(|p| p.scene == id && p.releasing.is_none())?;
+        let scene = self.show.scene(id)?;
+        let total = scene.duration_ms().max(1) as f64;
+        let before: u64 = scene.steps[..p.step].iter().map(|s| s.duration_ms()).sum();
+        Some(((before as f64 + p.elapsed_ms) / total).clamp(0.0, 1.0) as f32)
     }
 
     pub fn toggle(&mut self, id: SceneId) {
@@ -171,7 +245,10 @@ impl Engine {
     }
 
     pub fn progress(&self, id: SceneId) -> Option<SceneProgress> {
-        let p = self.playing.iter().find(|p| p.scene == id)?;
+        let p = self
+            .playing
+            .iter()
+            .find(|p| p.scene == id && p.releasing.is_none())?;
         let scene = self.show.scene(id)?;
         let step = scene.steps.get(p.step)?;
         let dur = step.duration_ms().max(1) as f64;
@@ -317,15 +394,26 @@ impl Engine {
     /// Zeit voranschreiten lassen.
     pub fn tick(&mut self, dt: Duration) {
         let dt_ms = dt.as_secs_f64() * 1000.0 * f64::from(self.speed);
+        let real_ms = dt.as_secs_f64() * 1000.0;
+        // ausgeblendete Szenen entfernen
+        let show = &self.show;
+        self.playing.retain_mut(|p| match &mut p.releasing {
+            Some(r) => {
+                *r += real_ms;
+                *r < f64::from(Self::fade_out_ms(show, p.scene))
+            }
+            None => true,
+        });
         for p in &mut self.playing {
             let Some(scene) = self.show.scene(p.scene) else {
                 continue;
             };
+            p.age_ms += real_ms;
             let len = scene.steps.len();
             if len == 0 || p.finished || p.paused {
                 continue;
             }
-            p.elapsed_ms += dt_ms;
+            p.elapsed_ms += dt_ms * f64::from(scene.settings.speed_pct) / 100.0;
             let mut guard = 0;
             loop {
                 let dur = scene.steps[p.step].duration_ms().max(1) as f64;
@@ -352,6 +440,22 @@ impl Engine {
 
     // ---------- Rendering ----------
 
+    /// Intensitätskanal für den Szenen-Dimmer: Dimmer, bei Geräten ohne
+    /// Dimmer-Kanal die Farbkanäle.
+    fn is_intensity(show: &Show, ch: ChannelRef) -> bool {
+        let Some(def) = show.channel_def(ch) else {
+            return false;
+        };
+        if def.kind.is_htp() {
+            return true;
+        }
+        let has_dimmer = show
+            .fixture(ch.fixture)
+            .and_then(|f| show.type_of(f))
+            .is_some_and(|t| t.channels.iter().any(|c| c.kind.is_htp()));
+        !has_dimmer && def.kind.is_color_intensity()
+    }
+
     fn is_htp(show: &Show, ch: ChannelRef) -> bool {
         show.channel_def(ch).is_some_and(|d| d.kind.is_htp())
     }
@@ -367,10 +471,12 @@ impl Engine {
             return out;
         };
         let current = step.value_map();
-        let t = if step.fade_ms == 0 {
+        // Fade-Anteil der Szene skaliert die Schritt-Überblendung
+        let fade = f64::from(step.fade_ms) * f64::from(scene.settings.fade_speed_pct) / 100.0;
+        let t = if fade < 1.0 {
             1.0
         } else {
-            (p.elapsed_ms / f64::from(step.fade_ms)).clamp(0.0, 1.0)
+            (p.elapsed_ms / fade).clamp(0.0, 1.0)
         };
         let previous = if p.first_entry && p.step == 0 {
             None
@@ -439,9 +545,27 @@ impl Engine {
         // Nur gespeicherte Kanäle einer Szene wirken; nicht gespeicherte
         // bleiben frei für andere Szenen.
         for p in order {
+            let Some(settings) = show.scene(p.scene).map(|s| &s.settings) else {
+                continue;
+            };
+            // Ein-/Ausblenden der ganzen Szene (Überblendung zum Darunterliegenden)
+            let mut k = 1.0f64;
+            if settings.fade_in_ms > 0 {
+                k *= (p.age_ms / f64::from(settings.fade_in_ms)).clamp(0.0, 1.0);
+            }
+            if let Some(r) = p.releasing {
+                let out = f64::from(settings.fade_out_ms).max(1.0);
+                k *= 1.0 - (r / out).clamp(0.0, 1.0);
+            }
+            let dim = f64::from(settings.dimmer) / 255.0;
             for (ch, v) in self.scene_values(show, p) {
+                let v = if dim < 1.0 && Self::is_intensity(show, ch) {
+                    (f64::from(v) * dim).round() as u8
+                } else {
+                    v
+                };
                 if let Some(slot) = values.get_mut(&ch) {
-                    *slot = v; // Gerät existiert noch
+                    *slot = if k >= 1.0 { v } else { lerp(*slot, v, k) };
                 }
             }
         }
@@ -787,6 +911,50 @@ mod tests {
         e.activate(id);
         e.tick(Duration::from_secs(3600)); // darf nicht hängen
         assert!(e.is_active(id));
+    }
+
+    #[test]
+    fn scene_dimmer_fades_and_seek() {
+        let (mut s, a, _) = setup();
+        let id = s.add_scene("S", None, vec![Step::new(vec![cv(a, 0, 200)])]);
+        s.scene_mut(id).unwrap().settings.dimmer = 128;
+        s.scene_mut(id).unwrap().settings.fade_in_ms = 1000;
+        s.scene_mut(id).unwrap().settings.fade_out_ms = 1000;
+        let mut e = Engine::new(s);
+        e.activate(id);
+        assert_eq!(
+            e.render_frame().get(0, 1),
+            Some(0),
+            "Einblenden beginnt bei 0"
+        );
+        e.tick(Duration::from_millis(500));
+        assert_eq!(
+            e.render_frame().get(0, 1),
+            Some(50),
+            "halb eingeblendet, Dimmer 50 %"
+        );
+        e.tick(Duration::from_millis(600));
+        assert_eq!(e.render_frame().get(0, 1), Some(100));
+        e.release(id);
+        assert!(!e.is_active(id));
+        e.tick(Duration::from_millis(500));
+        assert_eq!(e.render_frame().get(0, 1), Some(50), "blendet aus");
+        e.tick(Duration::from_millis(600));
+        assert_eq!(e.render_frame().get(0, 1), Some(0));
+        assert!(e.playing.is_empty());
+
+        // Seek in einem Ablauf
+        let (mut s, a, _) = setup();
+        let mut st = Step::new(vec![cv(a, 1, 1)]);
+        st.hold_ms = 1000;
+        let mut st2 = st.clone();
+        st2.values[0].value = 2;
+        let id = s.add_scene("Z", None, vec![st, st2]);
+        let mut e = Engine::new(s);
+        e.activate(id);
+        e.seek(id, 0.75);
+        assert_eq!(e.render_frame().get(0, 2), Some(2));
+        assert!((e.scene_position(id).unwrap() - 0.75).abs() < 0.01);
     }
 
     #[test]

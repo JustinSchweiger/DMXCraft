@@ -19,7 +19,7 @@ use crate::titlebar::{self, MenuAction, TitleInfo, UpdateBadge};
 use crate::ui::theme;
 use crate::ui::widgets::{form, text_field, Dialog};
 use crate::updater::{UpdateState, Updater};
-use crate::views::control::{ProgrammerView, SceneGridView, StageView};
+use crate::views::control::{ProgrammerView, SceneGridView, ScenePropsView, StageView};
 use crate::views::setup::SetupView;
 use crate::views::windows::Windows;
 use crate::views::{View, ViewCtx};
@@ -33,6 +33,7 @@ struct ControlViews {
     grid: SceneGridView,
     stage: StageView,
     programmer: ProgrammerView,
+    props: ScenePropsView,
 }
 
 /// Dialog zum Sperren (Passwort festlegen) oder Entsperren.
@@ -729,6 +730,13 @@ impl eframe::App for DmxCraftApp {
                                 .frame(area)
                                 .show(ui, |ui| control.stage.ui(ui, &mut cx));
                         });
+                    // Seitenleiste mit den Einstellungen der ausgewählten Szene
+                    egui::Panel::right("scene_props")
+                        .resizable(true)
+                        .default_size(330.0)
+                        .min_size(280.0)
+                        .frame(area)
+                        .show(ui, |ui| control.props.ui(ui, &mut cx));
                     egui::CentralPanel::default_margins()
                         .frame(area)
                         .show(ui, |ui| control.grid.ui(ui, &mut cx));

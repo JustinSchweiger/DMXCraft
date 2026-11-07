@@ -6,6 +6,7 @@ pub mod dialog;
 pub mod dip_switch;
 pub mod fader;
 pub mod icons;
+pub mod knob;
 pub mod limit_pad;
 pub mod menu;
 pub mod range_slider;
@@ -14,6 +15,7 @@ pub mod section;
 pub mod segmented;
 pub mod stage_canvas;
 pub mod swatch;
+pub mod time_field;
 pub mod toggle;
 pub mod xy_pad;
 

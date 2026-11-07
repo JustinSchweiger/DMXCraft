@@ -274,6 +274,83 @@ pub struct Scene {
     /// Eigene Farbe der Szene; `None` = Farbe der Bank.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<[u8; 3]>,
+    /// Wiedergabe-Einstellungen (Dimmer, Speed, Ein-/Ausblenden …).
+    #[serde(default, skip_serializing_if = "SceneSettings::is_default")]
+    pub settings: SceneSettings,
+}
+
+/// Einstellungen einer Szene in der Seitenleiste „Eigenschaften“.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SceneSettings {
+    /// Szenen-Dimmer für die Intensität (0–255, Standard voll).
+    pub dimmer: u8,
+    /// Ablaufgeschwindigkeit in Prozent (100 = normal).
+    pub speed_pct: u16,
+    /// Phase in Grad (für Effekte).
+    pub phase_deg: u16,
+    /// Größe in Prozent (für Effekte).
+    pub size_pct: u8,
+    /// Einblendzeit beim Start.
+    pub fade_in_ms: u32,
+    /// Ausblendzeit beim Stoppen.
+    pub fade_out_ms: u32,
+    /// Anteil der Schritt-Überblendungen in Prozent (100 = wie programmiert).
+    pub fade_speed_pct: u8,
+    /// Phasen-Versatz beim Start/Stoppen (für Effekte).
+    pub phase_in_ms: u32,
+    pub phase_out_ms: u32,
+}
+
+impl Default for SceneSettings {
+    fn default() -> Self {
+        Self {
+            dimmer: 255,
+            speed_pct: 100,
+            phase_deg: 0,
+            size_pct: 100,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            fade_speed_pct: 100,
+            phase_in_ms: 0,
+            phase_out_ms: 0,
+        }
+    }
+}
+
+impl SceneSettings {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+impl Scene {
+    /// Gesamtdauer eines Durchlaufs aller Schritte.
+    pub fn duration_ms(&self) -> u64 {
+        self.steps.iter().map(Step::duration_ms).sum()
+    }
+
+    /// Gesamtdauer setzen: Schritte werden anteilig gestreckt bzw. gestaucht
+    /// (eine Szene mit einem Schritt bekommt diese Haltezeit).
+    pub fn set_duration_ms(&mut self, ms: u64) {
+        let old = self.duration_ms();
+        if self.steps.is_empty() {
+            return;
+        }
+        if old == 0 {
+            let each = (ms / self.steps.len() as u64) as u32;
+            for s in &mut self.steps {
+                s.fade_ms = 0;
+                s.hold_ms = each;
+            }
+            return;
+        }
+        let k = ms as f64 / old as f64;
+        for s in &mut self.steps {
+            s.fade_ms = (f64::from(s.fade_ms) * k).round() as u32;
+            s.hold_ms = (f64::from(s.hold_ms) * k).round() as u32;
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -710,6 +787,7 @@ impl Show {
             steps,
             loop_mode: LoopMode::Loop,
             color: None,
+            settings: SceneSettings::default(),
         });
         id
     }

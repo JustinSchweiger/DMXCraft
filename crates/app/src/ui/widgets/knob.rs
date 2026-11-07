@@ -1,0 +1,138 @@
+//! Drehregler: Ziehen nach oben/unten ändert den Wert, Doppelklick setzt
+//! ihn auf den Standard zurück. Darunter stehen Bezeichnung und Wert.
+
+use eframe::egui::{self, pos2, Color32, Sense, Shape, Stroke, Ui, Vec2};
+
+use crate::ui::theme;
+
+/// Durchmesser des Reglers.
+const SIZE: f32 = 44.0;
+/// Drehbereich (ab „7 Uhr“ bis „5 Uhr“).
+const SWEEP: f32 = std::f32::consts::PI * 1.5;
+
+pub struct Knob<'a> {
+    /// Wert 0..=1.
+    value: &'a mut f32,
+    label: &'a str,
+    text: String,
+    default: f32,
+    color: Color32,
+    enabled: bool,
+}
+
+impl<'a> Knob<'a> {
+    pub fn new(value: &'a mut f32, label: &'a str, text: impl Into<String>) -> Self {
+        Self {
+            value,
+            label,
+            text: text.into(),
+            default: 1.0,
+            color: theme::accent(),
+            enabled: true,
+        }
+    }
+
+    /// Wert für den Doppelklick.
+    pub fn default_value(mut self, v: f32) -> Self {
+        self.default = v;
+        self
+    }
+
+    pub fn enabled(mut self, on: bool) -> Self {
+        self.enabled = on;
+        self
+    }
+
+    /// Zeichnet den Regler; `true`, wenn sich der Wert geändert hat.
+    pub fn show(self, ui: &mut Ui) -> bool {
+        let w = 64.0;
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(w, SIZE + 34.0), Sense::hover());
+        let knob = egui::Rect::from_center_size(
+            pos2(rect.center().x, rect.top() + SIZE * 0.5 + 2.0),
+            Vec2::splat(SIZE),
+        );
+        let sense = if self.enabled {
+            Sense::click_and_drag()
+        } else {
+            Sense::hover()
+        };
+        let resp = ui.interact(knob, ui.make_persistent_id(("knob", self.label)), sense);
+        let mut changed = false;
+        if resp.dragged() {
+            let d = -resp.drag_delta().y / 150.0;
+            let fine = ui.input(|i| i.modifiers.shift);
+            let v = (*self.value + if fine { d * 0.2 } else { d }).clamp(0.0, 1.0);
+            if v != *self.value {
+                *self.value = v;
+                changed = true;
+            }
+        }
+        if resp.double_clicked() && *self.value != self.default {
+            *self.value = self.default;
+            changed = true;
+        }
+        if resp.hovered() || resp.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+        }
+
+        let p = ui.painter();
+        let c = knob.center();
+        let r = SIZE * 0.5;
+        let start = std::f32::consts::PI * 0.75; // 7 Uhr
+        let arc = |from: f32, to: f32, radius: f32| -> Vec<egui::Pos2> {
+            let n = 32;
+            (0..=n)
+                .map(|i| {
+                    let a = from + (to - from) * i as f32 / n as f32;
+                    c + Vec2::angled(a) * radius
+                })
+                .collect()
+        };
+        let (track, fill) = if self.enabled {
+            (theme::bg(), self.color)
+        } else {
+            (theme::bg(), theme::text_faint())
+        };
+        p.add(Shape::line(
+            arc(start, start + SWEEP, r - 3.0),
+            Stroke::new(4.0, track),
+        ));
+        let v = *self.value;
+        if v > 0.001 {
+            p.add(Shape::line(
+                arc(start, start + SWEEP * v, r - 3.0),
+                Stroke::new(4.0, fill),
+            ));
+        }
+        let body = if resp.hovered() || resp.dragged() {
+            theme::raised_hover()
+        } else {
+            theme::raised()
+        };
+        p.circle_filled(c, r - 8.0, body);
+        p.circle_stroke(c, r - 8.0, Stroke::new(1.0, theme::border()));
+        let a = start + SWEEP * v;
+        p.line_segment(
+            [
+                c + Vec2::angled(a) * (r - 18.0),
+                c + Vec2::angled(a) * (r - 10.0),
+            ],
+            Stroke::new(2.0, theme::text()),
+        );
+        p.text(
+            pos2(rect.center().x, knob.bottom() + 8.0),
+            egui::Align2::CENTER_CENTER,
+            self.label,
+            theme::caption(),
+            theme::text_dim(),
+        );
+        p.text(
+            pos2(rect.center().x, knob.bottom() + 23.0),
+            egui::Align2::CENTER_CENTER,
+            &self.text,
+            theme::caption(),
+            theme::text(),
+        );
+        changed
+    }
+}

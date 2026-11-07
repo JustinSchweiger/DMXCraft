@@ -18,6 +18,6 @@ pub use engine::{Engine, SceneProgress};
 pub use fixture::{ChannelDef, ChannelKind, FixtureType};
 pub use show::{
     ChannelRef, ChannelValue, Fixture, FixtureId, FixtureLimits, Group, GroupId, LoopMode,
-    PatchError, PlanShape, Scene, SceneId, Show, ShowError, Step, Zone, ZoneId, PLAN_SIZE_RANGE,
-    UNIVERSES,
+    PatchError, PlanShape, Scene, SceneId, SceneSettings, Show, ShowError, Step, Zone, ZoneId,
+    PLAN_SIZE_RANGE, UNIVERSES,
 };
