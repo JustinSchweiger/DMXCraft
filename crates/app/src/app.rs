@@ -716,6 +716,7 @@ impl eframe::App for DmxCraftApp {
         let engine = self.engine.clone();
         {
             let mut e = Self::lock(&engine);
+            self.state.wrap_scenes = self.settings.wrap_scenes;
             let mut cx = ViewCtx {
                 engine: &mut e,
                 state: &mut self.state,

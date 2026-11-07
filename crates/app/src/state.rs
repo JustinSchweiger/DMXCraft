@@ -48,6 +48,10 @@ pub struct AppState {
     pub fx_target: Option<(SceneId, u32)>,
     /// Zeitleiste (SUPER SCENE): ausgewählte Blöcke und Abspielposition (ms).
     pub timeline_sel: BTreeSet<u32>,
+    /// Zuletzt angeklickte Szene: Anfang einer Umschalt-Auswahl.
+    pub scene_anchor: Option<SceneId>,
+    /// Szenen am unteren Rand in weitere Spalten umbrechen (Einstellung).
+    pub wrap_scenes: bool,
     pub timeline_cursor: f64,
     /// Audiowiedergabe und Wellenformen.
     pub audio: crate::audio::AudioPlayer,
@@ -120,6 +124,8 @@ impl AppState {
             edit_step_seen: 0,
             fx_target: None,
             timeline_sel: BTreeSet::new(),
+            scene_anchor: None,
+            wrap_scenes: false,
             timeline_cursor: 0.0,
             audio: Default::default(),
             patch: PatchForm {

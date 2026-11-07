@@ -31,6 +31,8 @@ pub struct Settings {
     pub output: String,
     /// USB-DMX: je Universum (Index) die Seriennummer des Kabels, leer = keins.
     pub open_dmx: Vec<String>,
+    /// Szenen am unteren Rand in weitere Spalten umbrechen (statt Scrollen).
+    pub wrap_scenes: bool,
 }
 
 impl Default for Settings {
@@ -47,6 +49,7 @@ impl Default for Settings {
             open_last_show: true,
             output: "simulation".into(),
             open_dmx: Vec::new(),
+            wrap_scenes: false,
         }
     }
 }

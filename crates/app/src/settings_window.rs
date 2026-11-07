@@ -256,6 +256,16 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
             }
         });
     });
+    ui.add_space(theme::SP_S);
+    ch.save |= ui
+        .add(Toggle::new(
+            &mut s.wrap_scenes,
+            t("Szenen am unteren Rand in weitere Spalten umbrechen"),
+        ))
+        .on_hover_text(t(
+            "Aus: alle Szenen einer Bank untereinander (mit Bildlaufleiste)",
+        ))
+        .changed();
     ui.add_space(theme::SP_M);
     section(ui, t("Startup"));
     ch.save |= ui

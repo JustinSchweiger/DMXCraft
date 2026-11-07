@@ -417,6 +417,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Spur {n}", "Track {n}"),
     ("Spurfarbe", "Track colour"),
     ("Gitter", "Grid"),
+    ("Szenen am unteren Rand in weitere Spalten umbrechen", "Wrap scenes into further columns at the bottom"),
+    ("Aus: alle Szenen einer Bank untereinander (mit Bildlaufleiste)", "Off: all scenes of a bank stacked (with scroll bar)"),
     ("Alle einblenden", "Show all"),
     ("Ausgeblendete Szenen ({n})", "Hidden scenes ({n})"),
     ("{n} Szene(n) ausgeblendet – Rechtsklick auf die Bank blendet sie wieder ein", "{n} scene(s) hidden – right-click the bank to show them again"),

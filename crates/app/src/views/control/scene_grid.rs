@@ -49,8 +49,10 @@ enum Action {
     Delete(SceneId),
     /// Nur diese Szene auswählen (Klick auf den Streifen).
     Select(SceneId),
-    /// Szene zur Auswahl hinzufügen/entfernen (Strg/Umschalt+Streifen).
+    /// Szene zur Auswahl hinzufügen/entfernen (Strg+Streifen).
     Mark(SceneId),
+    /// Alle Szenen von der zuletzt angeklickten bis hierher (Umschalt+Streifen).
+    Range(SceneId),
     /// Umbenennen einer Szene starten.
     RenameScene(SceneId),
     /// Umbenennung einer Szene abgeschlossen.
@@ -153,6 +155,7 @@ impl View for SceneGridView {
                             &cx.state.selected_scenes,
                             &mut self.scene_rename,
                             &mut self.scene_rename_focus,
+                            cx.state.wrap_scenes,
                             &mut actions,
                         );
                         ui.add_space(theme::SP_S);
@@ -599,6 +602,7 @@ fn column(
     marked: &BTreeSet<SceneId>,
     rename: &mut Option<(SceneId, String)>,
     rename_focus: &mut bool,
+    wrap: bool,
     actions: &mut Vec<Action>,
 ) {
     let color = theme::zone_color(e.show(), Some(zone));
@@ -614,7 +618,11 @@ fn column(
     let paused = target.and_then(|t| e.progress(t)).is_some_and(|p| p.paused);
 
     ui.vertical(|ui| {
-        ui.set_width(COLUMN_W);
+        if wrap {
+            ui.set_min_width(COLUMN_W);
+        } else {
+            ui.set_width(COLUMN_W);
+        }
         // Klick-Fläche liegt unter den Knöpfen (UiBuilder::sense), damit „+“ & Co.
         // ihre Klicks behalten und nur der Rest des Kopfs das Bank-Menü öffnet.
         let header = ui.scope_builder(egui::UiBuilder::new().sense(Sense::click()), |ui| {
@@ -681,23 +689,39 @@ fn column(
             });
         }
         ui.add_space(theme::SP_XS);
-        let mut cards = Vec::new();
-        for id in scenes {
-            let top = ui.cursor().top();
-            cards.push((id, top + CARD_H * 0.5));
-            scene_card(
-                ui,
-                e,
-                id,
-                color,
-                locked,
-                marked,
-                rename,
-                rename_focus,
-                actions,
-            );
-            ui.add_space(theme::SP_XS);
-        }
+        // Umbrechen: so viele Karten untereinander, wie bis zum unteren Rand
+        // passen, dann in der nächsten Spalte weiter
+        let row_h = CARD_H + theme::SP_XS;
+        let per_col = if wrap {
+            (((ui.clip_rect().bottom() - ui.cursor().top()) / row_h).floor() as usize).max(1)
+        } else {
+            usize::MAX
+        };
+        let mut cards: Vec<(SceneId, egui::Pos2)> = Vec::new();
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing.x = theme::SP_XS;
+            for chunk in scenes.chunks(per_col.min(scenes.len().max(1))) {
+                ui.vertical(|ui| {
+                    ui.set_width(COLUMN_W);
+                    for &id in chunk {
+                        let top = ui.cursor().top();
+                        cards.push((id, egui::pos2(ui.cursor().left(), top + CARD_H * 0.5)));
+                        scene_card(
+                            ui,
+                            e,
+                            id,
+                            color,
+                            locked,
+                            marked,
+                            rename,
+                            rename_focus,
+                            actions,
+                        );
+                        ui.add_space(theme::SP_XS);
+                    }
+                });
+            }
+        });
         if !locked {
             drop_target(ui, zone, color, &cards, actions);
         }
@@ -746,18 +770,18 @@ fn drop_target(
     ui: &mut egui::Ui,
     zone: ZoneId,
     color: Color32,
-    cards: &[(SceneId, f32)],
+    cards: &[(SceneId, egui::Pos2)],
     actions: &mut Vec<Action>,
 ) {
     let Some(dragged) = egui::DragAndDrop::payload::<SceneId>(ui.ctx()) else {
         return;
     };
     let col = ui.min_rect();
-    // Spalte bis zum unteren Rand des sichtbaren Bereichs als Ablagefläche
+    // Bank (alle ihre Spalten) bis zum unteren Rand des sichtbaren Bereichs
     let area = egui::Rect::from_min_max(
         col.min,
         egui::pos2(
-            col.left() + COLUMN_W,
+            col.right().max(col.left() + COLUMN_W),
             ui.clip_rect().bottom().max(col.bottom() + CARD_H),
         ),
     );
@@ -768,22 +792,40 @@ fn drop_target(
     else {
         return;
     };
-    let before = cards.iter().find(|(_, y)| pos.y < *y).map(|(id, _)| *id);
     let gap = theme::SP_XS * 0.5;
-    let y = match before {
-        Some(b) => cards
-            .iter()
-            .find(|(id, _)| *id == b)
-            .map_or(col.bottom(), |(_, y)| y - CARD_H * 0.5 - gap),
-        None => col.bottom() + gap,
+    // Spalte unter dem Zeiger (beim Umbrechen gibt es mehrere)
+    let mut xs: Vec<f32> = cards.iter().map(|(_, c)| c.x).collect();
+    xs.dedup_by(|a, b| (*a - *b).abs() < 1.0);
+    let col_x = xs
+        .iter()
+        .copied()
+        .rfind(|x| pos.x >= *x - theme::SP_XS)
+        .unwrap_or(col.left());
+    let in_col: Vec<&(SceneId, egui::Pos2)> = cards
+        .iter()
+        .filter(|(_, c)| (c.x - col_x).abs() < 1.0)
+        .collect();
+    let hit = in_col.iter().find(|(_, c)| pos.y < c.y);
+    // vor der getroffenen Karte; unter der letzten Karte einer Spalte: vor der
+    // ersten Karte der nächsten Spalte
+    let (before, y) = match hit {
+        Some((id, c)) => (Some(*id), c.y - CARD_H * 0.5 - gap),
+        None => {
+            let last = in_col.last().map(|(id, _)| *id);
+            let next = last
+                .and_then(|l| cards.iter().position(|(id, _)| *id == l))
+                .and_then(|i| cards.get(i + 1))
+                .map(|(id, _)| *id);
+            let y = in_col
+                .last()
+                .map_or(col.bottom() + gap, |(_, c)| c.y + CARD_H * 0.5 + gap);
+            (next, y)
+        }
     };
     // nur die Einfügelinie zeigt die Zielposition (kein Rahmen um die Bank)
     let p = ui.painter();
     p.line_segment(
-        [
-            egui::pos2(col.left(), y),
-            egui::pos2(col.left() + COLUMN_W, y),
-        ],
+        [egui::pos2(col_x, y), egui::pos2(col_x + COLUMN_W, y)],
         Stroke::new(2.5, color),
     );
     if ui.input(|i| i.pointer.any_released()) {
@@ -877,7 +919,9 @@ fn scene_card(
     // Streifen: auswählen (Strg/Umschalt: mehrere), Hauptbereich: starten/stoppen
     if resp.select.clicked() && !locked {
         let mods = ui.input(|i| i.modifiers);
-        actions.push(if mods.command || mods.shift {
+        actions.push(if mods.shift {
+            Action::Range(id)
+        } else if mods.command {
             Action::Mark(id)
         } else {
             Action::Select(id)
@@ -1105,11 +1149,38 @@ fn apply(
                 st.focus = crate::state::Focus::Scenes;
                 st.selected_scenes.clear();
                 st.selected_scenes.insert(id);
+                st.scene_anchor = Some(id);
             }
             Action::Mark(id) => {
                 st.focus = crate::state::Focus::Scenes;
                 if !st.selected_scenes.remove(&id) {
                     st.selected_scenes.insert(id);
+                }
+                st.scene_anchor = Some(id);
+            }
+            Action::Range(id) => {
+                st.focus = crate::state::Focus::Scenes;
+                // Reihenfolge wie angezeigt: Bänke von links nach rechts, darin
+                // die Szenen von oben nach unten (ausgeblendete zählen nicht)
+                let show = e.show();
+                let order: Vec<SceneId> = show
+                    .zones
+                    .iter()
+                    .filter(|z| !z.hidden)
+                    .flat_map(|z| {
+                        show.scenes
+                            .iter()
+                            .filter(move |s| s.zone == Some(z.id) && !s.hidden)
+                            .map(|s| s.id)
+                    })
+                    .collect();
+                let anchor = st.scene_anchor.filter(|a| order.contains(a)).unwrap_or(id);
+                if let (Some(a), Some(b)) = (
+                    order.iter().position(|s| *s == anchor),
+                    order.iter().position(|s| *s == id),
+                ) {
+                    let (lo, hi) = (a.min(b), a.max(b));
+                    st.selected_scenes = order[lo..=hi].iter().copied().collect();
                 }
             }
             Action::RenameBank(id, name) => {
