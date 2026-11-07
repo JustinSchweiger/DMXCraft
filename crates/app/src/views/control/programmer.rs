@@ -2,12 +2,17 @@
 //! speichern.
 
 use crate::i18n::t;
-use dmxcraft_core::{ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, Step, ZoneId};
-use eframe::egui::{self, Color32};
+use dmxcraft_core::{
+    ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, FixtureId, Step, ZoneId,
+};
+use eframe::egui::{self, Color32, Sense, Stroke, Vec2};
 
-use crate::state::AppState;
+use crate::state::{AppState, ProgrammerMode};
 use crate::ui::theme;
-use crate::ui::widgets::{section_header, text_field, Fader, FaderEvent, Segmented, Swatch, XyPad};
+use crate::ui::widgets::{
+    section_header, text_field, Fader, FaderEvent, Icon, IconButton, Segmented, Swatch, XyPad,
+};
+use crate::views::quick::{quick_action, Quick};
 use crate::views::{View, ViewCtx};
 
 /// Kanal-Kategorien wie auf einem Lichtpult.
@@ -111,15 +116,7 @@ impl View for ProgrammerView {
         let groups = fader_groups(cx.engine, cx.state);
         let set_count = cx.engine.programmer().len();
         let selected = cx.state.selected.len();
-        let mut clear = false;
         section_header(ui, t("Programmer"), |ui| {
-            if ui
-                .add_enabled(set_count > 0, egui::Button::new(t("Leeren")))
-                .on_hover_text(t("Alle Programmer-Werte freigeben"))
-                .clicked()
-            {
-                clear = true;
-            }
             ui.label(
                 egui::RichText::new(tr!(
                     "{selected} Geräte · {set_count} Kanäle gesetzt",
@@ -129,9 +126,8 @@ impl View for ProgrammerView {
                 .color(theme::text_dim()),
             );
         });
-        if clear {
-            cx.engine.clear_programmer();
-        }
+        toolbar(ui, cx.engine, cx.state);
+        ui.add_space(theme::SP_S);
 
         // Speicherleiste unten, damit die Fader die restliche Höhe bekommen.
         egui::Panel::bottom("programmer_save")
@@ -387,4 +383,207 @@ pub fn zone_combo(ui: &mut egui::Ui, e: &Engine, zone: &mut Option<ZoneId>, id: 
             }
         });
     before != *zone
+}
+
+/// Werkzeugleiste: Betriebsmodus (Edit/Blind/Live) und Schnellaktionen.
+fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
+    let ids: Vec<FixtureId> = st.selected.iter().copied().collect();
+    let some = !ids.is_empty();
+    let locked = st.locked;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = theme::SP_XS;
+        mode_switch(ui, &mut st.programmer_mode, locked);
+        tool_separator(ui);
+        let mut quick = None;
+        for (q, icon, tip) in [
+            (Quick::Off, Icon::LightOff, t("Beams ausschalten")),
+            (Quick::On, Icon::LightOn, t("Beams anschalten")),
+            (
+                Quick::Center,
+                Icon::Center,
+                t("Beams zentrieren (Pan/Tilt 50 %)"),
+            ),
+        ] {
+            if ui
+                .add(
+                    IconButton::new(icon)
+                        .size(34.0)
+                        .flat()
+                        .enabled(some && !locked),
+                )
+                .on_hover_text(tip)
+                .clicked()
+            {
+                quick = Some(q);
+            }
+        }
+        if let Some(q) = quick {
+            quick_action(e, &ids, q);
+        }
+        tool_separator(ui);
+        let any = !e.programmer().is_empty();
+        if ui
+            .add(
+                IconButton::new(Icon::Undo)
+                    .caption(t("ALLE"))
+                    .size(34.0)
+                    .flat()
+                    .enabled(any && !locked),
+            )
+            .on_hover_text(t("Alle Beams zurücksetzen"))
+            .clicked()
+        {
+            e.clear_programmer();
+        }
+        let sel: Vec<ChannelRef> = e
+            .programmer()
+            .keys()
+            .filter(|c| st.selected.contains(&c.fixture))
+            .copied()
+            .collect();
+        if ui
+            .add(
+                IconButton::new(Icon::Undo)
+                    .caption(t("AUSW."))
+                    .size(34.0)
+                    .flat()
+                    .enabled(!sel.is_empty() && !locked),
+            )
+            .on_hover_text(t("Ausgewählte Beams zurücksetzen"))
+            .clicked()
+        {
+            for c in sel {
+                e.clear_programmer_channel(c);
+            }
+        }
+    });
+}
+
+fn tool_separator(ui: &mut egui::Ui) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(theme::SP_M, 24.0), Sense::hover());
+    ui.painter().line_segment(
+        [
+            egui::pos2(rect.center().x, rect.top()),
+            egui::pos2(rect.center().x, rect.bottom()),
+        ],
+        Stroke::new(1.0, theme::border()),
+    );
+}
+
+/// Drei zusammenhängende Knöpfe EDIT · BLIND · LIVE; der aktive Modus ist in
+/// seiner Farbe gefüllt.
+fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: bool) {
+    let items = [
+        (
+            ProgrammerMode::Edit,
+            Some(t("EDIT")),
+            None,
+            theme::OK,
+            t("Edit: Werte bearbeiten und sofort ausgeben"),
+        ),
+        (
+            ProgrammerMode::Blind,
+            None,
+            Some(Icon::EyeOff),
+            theme::WARN,
+            t("Blind Edit: Werte bearbeiten, ohne sie auszugeben"),
+        ),
+        (
+            ProgrammerMode::Live,
+            Some(t("LIVE")),
+            None,
+            theme::DANGER,
+            t("Live: Show-Betrieb"),
+        ),
+    ];
+    let h = 34.0;
+    let font = theme::heading_font();
+    let widths: Vec<f32> = items
+        .iter()
+        .map(|(_, label, _, _, _)| match label {
+            Some(l) => {
+                ui.painter()
+                    .layout_no_wrap(l.to_string(), font.clone(), Color32::WHITE)
+                    .size()
+                    .x
+                    + 2.0 * theme::SP_M
+            }
+            None => h + 6.0,
+        })
+        .collect();
+    let total: f32 = widths.iter().sum();
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(total, h), Sense::hover());
+    let r = theme::R_S;
+    ui.painter().rect_filled(rect, r, theme::raised());
+    let mut x = rect.left();
+    for (i, ((m, label, icon, color, tip), w)) in items.into_iter().zip(widths).enumerate() {
+        let seg = egui::Rect::from_min_size(egui::pos2(x, rect.top()), Vec2::new(w, h));
+        x += w;
+        let resp = ui
+            .interact(seg, ui.make_persistent_id(("prog_mode", i)), Sense::click())
+            .on_hover_text(tip);
+        let active = *mode == m;
+        let corner = egui::CornerRadius {
+            nw: if i == 0 { r } else { 0 },
+            sw: if i == 0 { r } else { 0 },
+            ne: if i == 2 { r } else { 0 },
+            se: if i == 2 { r } else { 0 },
+        };
+        let p = ui.painter();
+        if active {
+            p.rect_filled(seg, corner, color);
+        } else if resp.hovered() && !locked {
+            p.rect_filled(seg, corner, theme::raised_hover());
+        }
+        if i > 0 && !active && *mode != items_mode(i - 1) {
+            p.line_segment(
+                [
+                    seg.left_top() + Vec2::new(0.0, 6.0),
+                    seg.left_bottom() - Vec2::new(0.0, 6.0),
+                ],
+                Stroke::new(1.0, theme::border()),
+            );
+        }
+        let fg = if active {
+            theme::bg()
+        } else {
+            theme::text_dim()
+        };
+        match (label, icon) {
+            (Some(l), _) => {
+                p.text(
+                    seg.center(),
+                    egui::Align2::CENTER_CENTER,
+                    l,
+                    font.clone(),
+                    fg,
+                );
+            }
+            (None, Some(ic)) => {
+                ic.paint(
+                    p,
+                    egui::Rect::from_center_size(seg.center(), Vec2::splat(16.0)),
+                    fg,
+                );
+            }
+            _ => {}
+        }
+        if resp.clicked() && !locked {
+            *mode = m;
+        }
+    }
+    ui.painter().rect_stroke(
+        rect,
+        r,
+        Stroke::new(1.0, theme::border()),
+        egui::StrokeKind::Inside,
+    );
+}
+
+fn items_mode(i: usize) -> ProgrammerMode {
+    [
+        ProgrammerMode::Edit,
+        ProgrammerMode::Blind,
+        ProgrammerMode::Live,
+    ][i]
 }

@@ -57,6 +57,8 @@ pub enum Icon {
     Music,
     ChevronLeft,
     ChevronRight,
+    /// Durchgestrichenes Auge (Blind-Modus).
+    EyeOff,
 }
 
 impl Icon {
@@ -506,6 +508,31 @@ impl Icon {
                     Stroke::new(2.0, color),
                 ));
             }
+            Icon::EyeOff => {
+                // Auge (zwei Bögen + Pupille), schräg durchgestrichen
+                let w = s * 0.75;
+                let h = s * 0.42;
+                let n = 14;
+                for sign in [-1.0f32, 1.0] {
+                    let pts: Vec<_> = (0..=n)
+                        .map(|i| {
+                            let t = i as f32 / n as f32;
+                            let x = -w + 2.0 * w * t;
+                            let y = sign * h * (1.0 - (x / w).powi(2));
+                            c + Vec2::new(x, y)
+                        })
+                        .collect();
+                    painter.add(Shape::line(pts, stroke));
+                }
+                painter.circle_filled(c, s * 0.2, color);
+                painter.line_segment(
+                    [
+                        c + Vec2::new(-s * 0.6, s * 0.6),
+                        c + Vec2::new(s * 0.6, -s * 0.6),
+                    ],
+                    Stroke::new(stroke.width + 0.6, color),
+                );
+            }
             Icon::Music => {
                 // zwei Achtelnoten mit Balken
                 let l = pos2(c.x - s * 0.45, c.y + s * 0.5);
@@ -672,6 +699,8 @@ pub struct IconButton {
     active: bool,
     flat: bool,
     danger: bool,
+    /// Kleine Beschriftung unter dem Symbol (z. B. „ALLE“).
+    caption: Option<String>,
 }
 
 impl IconButton {
@@ -683,7 +712,13 @@ impl IconButton {
             active: false,
             flat: false,
             danger: false,
+            caption: None,
         }
+    }
+    /// Kleine Beschriftung unter dem Symbol.
+    pub fn caption(mut self, text: impl Into<String>) -> Self {
+        self.caption = Some(text.into());
+        self
     }
     pub fn enabled(mut self, on: bool) -> Self {
         self.enabled = on;
@@ -738,7 +773,23 @@ impl Widget for IconButton {
         } else {
             theme::text()
         };
-        self.icon.paint(p, rect.shrink(6.0), color);
+        match &self.caption {
+            Some(cap) => {
+                let icon = Rect::from_min_max(
+                    rect.min + Vec2::new(rect.width() * 0.22, rect.height() * 0.1),
+                    rect.max - Vec2::new(rect.width() * 0.22, rect.height() * 0.4),
+                );
+                self.icon.paint(p, icon, color);
+                p.text(
+                    pos2(rect.center().x, rect.bottom() - rect.height() * 0.08),
+                    egui::Align2::CENTER_BOTTOM,
+                    cap,
+                    egui::FontId::proportional((rect.height() * 0.27).max(8.0)),
+                    color,
+                );
+            }
+            None => self.icon.paint(p, rect.shrink(6.0), color),
+        }
         resp
     }
 }

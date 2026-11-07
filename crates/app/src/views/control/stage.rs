@@ -40,12 +40,7 @@ enum GroupAction {
 
 impl View for StageView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        section_header(ui, t("Bühne"), |ui| {
-            ui.label(
-                egui::RichText::new(tr!("{n} ausgewählt", n = cx.state.selected.len()))
-                    .color(theme::text_dim()),
-            );
-        });
+        section_header(ui, t("Bühne"), |_| {});
         let mut actions = Vec::new();
         self.group_bar(ui, cx.engine, cx.state, &mut actions);
         self.apply(cx.engine, cx.state, actions);

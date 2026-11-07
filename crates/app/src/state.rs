@@ -33,6 +33,8 @@ pub struct AppState {
     pub selected: BTreeSet<FixtureId>,
     /// Markierte Szenen in STEUERN (für Löschen u. a.).
     pub selected_scenes: BTreeSet<SceneId>,
+    /// Betriebsmodus des Programmers.
+    pub programmer_mode: ProgrammerMode,
     pub patch: PatchForm,
     /// Per Datei importierte Gerätetypen (noch nicht gepatcht).
     pub imported_types: Vec<FixtureType>,
@@ -61,6 +63,7 @@ impl AppState {
             message_time: None,
             selected: BTreeSet::new(),
             selected_scenes: BTreeSet::new(),
+            programmer_mode: ProgrammerMode::default(),
             patch: PatchForm {
                 name: String::new(),
                 count: 1,
@@ -101,4 +104,16 @@ impl AppState {
         self.selected.clear();
         self.append_target = None;
     }
+}
+
+/// Betriebsmodus des Programmers (wie sich Änderungen an Geräten auswirken).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ProgrammerMode {
+    /// Werte bearbeiten und sofort ausgeben.
+    #[default]
+    Edit,
+    /// Werte bearbeiten, ohne dass sie ausgegeben werden.
+    Blind,
+    /// Live-Betrieb.
+    Live,
 }

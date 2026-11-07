@@ -2,28 +2,20 @@
 //! Moving Head zentrieren), Darstellung und Ausgangsgrenzen.
 
 use crate::i18n::t;
-use dmxcraft_core::{
-    ChannelKind, ChannelRef, Engine, FixtureId, FixtureLimits, PlanShape, PLAN_SIZE_RANGE,
-};
+use dmxcraft_core::{ChannelKind, FixtureId, FixtureLimits, PlanShape, PLAN_SIZE_RANGE};
 use eframe::egui;
 
 use crate::ui::theme;
 use crate::ui::widgets::{
     section_header, Icon, IconButton, LimitPad, RangeSlider, ShapeButton, Toggle,
 };
+use crate::views::quick::{quick_action, Quick};
 use crate::views::{View, ViewCtx};
 
 #[derive(Default)]
 pub struct FixtureSettings;
 
 /// Schnelltest über den Programmer.
-#[derive(Clone, Copy)]
-enum Quick {
-    Off,
-    On,
-    Center,
-}
-
 impl View for FixtureSettings {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
@@ -252,42 +244,4 @@ fn range_row(ui: &mut egui::Ui, label: &str, min: &mut u8, max: &mut u8, enabled
         *max = (hi.max(lo) / 100.0 * 255.0).round() as u8;
     }
     ui.end_row();
-}
-
-/// Setzt Programmer-Werte für einen schnellen Test der Auswahl.
-fn quick_action(e: &mut Engine, ids: &[FixtureId], q: Quick) {
-    for id in ids {
-        let Some(ty) = e
-            .show()
-            .fixture(*id)
-            .and_then(|f| e.show().type_of(f))
-            .cloned()
-        else {
-            continue;
-        };
-        let has_white = ty.has_kind(ChannelKind::White);
-        for (i, def) in ty.channels.iter().enumerate() {
-            let ch = ChannelRef {
-                fixture: *id,
-                channel: i as u16,
-            };
-            let value = match (q, def.kind) {
-                (Quick::Off, ChannelKind::Dimmer) => Some(0),
-                (Quick::Off, k) if k.is_color_intensity() => Some(0),
-                (Quick::On, ChannelKind::Dimmer) => Some(255),
-                (Quick::On, ChannelKind::White) => Some(255),
-                (Quick::On, ChannelKind::Red | ChannelKind::Green | ChannelKind::Blue)
-                    if !has_white =>
-                {
-                    Some(255)
-                }
-                (Quick::Center, ChannelKind::Pan | ChannelKind::Tilt) => Some(128),
-                (Quick::Center, ChannelKind::PanFine | ChannelKind::TiltFine) => Some(0),
-                _ => None,
-            };
-            if let Some(v) = value {
-                e.set_programmer(ch, v);
-            }
-        }
-    }
 }
