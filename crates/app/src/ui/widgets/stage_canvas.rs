@@ -564,7 +564,8 @@ fn paint_fixture(
     } else {
         Stroke::new(1.0, theme::border())
     };
-    let fill = |c: Color32, l: f32| if l > 0.02 { c } else { theme::fixture_off() };
+    // aus = schwarz (wie Dimmer zu), damit Ein-/Ausblenden ohne Sprung wirkt
+    let fill = |c: Color32, _l: f32| c;
     let glow = |center: Pos2, radius: f32, c: Color32, l: f32| {
         if l > 0.02 {
             p.circle_filled(center, radius, c.gamma_multiply(0.12 * l));

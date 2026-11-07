@@ -31,6 +31,8 @@ pub struct SceneCard<'a> {
     pub selected: bool,
     /// Ablauf mit mehreren Schritten (Symbol rechts unten).
     pub sequence: bool,
+    /// Ein-/Ausblenden läuft: Rampe in der Fortschrittsleiste.
+    pub fade: Option<dmxcraft_core::FadeState>,
 }
 
 /// Antworten der beiden Bereiche einer Karte.
@@ -144,8 +146,49 @@ impl SceneCard<'_> {
                 },
             );
         }
-        // Fortschritt unten im Hauptbereich
-        if self.active {
+        // Ein-/Ausblenden: Rampe in der Leiste (steigt beim Ein-, fällt beim
+        // Ausblenden), gefüllt bis zum aktuellen Stand
+        if let Some(fade) = self.fade {
+            let bar = Rect::from_min_max(
+                pos2(main_rect.left() + 8.0, main_rect.bottom() - 11.0),
+                pos2(main_rect.right() - 8.0, main_rect.bottom() - 2.0),
+            );
+            let (b, h) = (bar.bottom(), bar.height());
+            let ramp = |x: f32| -> f32 {
+                // Höhe der Rampe an Stelle x (0..1)
+                // nie ganz flach, damit der Anfang sichtbar bleibt
+                0.2 + 0.8
+                    * match fade {
+                        dmxcraft_core::FadeState::In(_) => x,
+                        dmxcraft_core::FadeState::Out(_) => 1.0 - x,
+                    }
+            };
+            let pt = |x: f32| pos2(bar.left() + bar.width() * x, b - h * ramp(x));
+            // Umriss der ganzen Rampe
+            p.add(egui::Shape::convex_polygon(
+                vec![pos2(bar.left(), b), pt(0.0), pt(1.0), pos2(bar.right(), b)],
+                theme::bg(),
+                Stroke::NONE,
+            ));
+            let done = match fade {
+                dmxcraft_core::FadeState::In(l) => l,
+                dmxcraft_core::FadeState::Out(l) => 1.0 - l,
+            }
+            .clamp(0.0, 1.0);
+            if done > 0.0 {
+                p.add(egui::Shape::convex_polygon(
+                    vec![
+                        pos2(bar.left(), b),
+                        pt(0.0),
+                        pt(done),
+                        pos2(bar.left() + bar.width() * done, b),
+                    ],
+                    self.color,
+                    Stroke::NONE,
+                ));
+            }
+        } else if self.active {
+            // Fortschritt unten im Hauptbereich
             let bar = Rect::from_min_max(
                 pos2(main_rect.left() + 8.0, main_rect.bottom() - 4.0),
                 pos2(main_rect.right() - 8.0, main_rect.bottom() - 2.0),

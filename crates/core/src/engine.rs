@@ -38,6 +38,13 @@ struct PlayingScene {
     releasing: Option<f64>,
 }
 
+/// Ein-/Ausblendzustand einer Szene (Pegel 0..=1).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FadeState {
+    In(f32),
+    Out(f32),
+}
+
 /// Fortschritt einer laufenden Szene für die Oberfläche.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SceneProgress {
@@ -219,6 +226,18 @@ impl Engine {
             }
             target -= d;
         }
+    }
+
+    /// Blendet die Szene gerade ein oder aus?
+    pub fn fade_state(&self, id: SceneId) -> Option<FadeState> {
+        let p = self.playing.iter().rev().find(|p| p.scene == id)?;
+        let st = &self.show.scene(id)?.settings;
+        if let Some(r) = p.releasing {
+            let out = f64::from(st.fade_out_ms).max(1.0);
+            return Some(FadeState::Out((1.0 - r / out).clamp(0.0, 1.0) as f32));
+        }
+        (st.fade_in_ms > 0 && p.age_ms < f64::from(st.fade_in_ms))
+            .then(|| FadeState::In((p.age_ms / f64::from(st.fade_in_ms)) as f32))
     }
 
     /// Fortschritt über die ganze Szene (0..=1), falls sie läuft.

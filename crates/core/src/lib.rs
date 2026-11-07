@@ -14,7 +14,7 @@ pub mod plan;
 pub mod show;
 
 pub use dmx::{DmxFrame, UNIVERSE_SIZE};
-pub use engine::{Engine, SceneProgress};
+pub use engine::{Engine, FadeState, SceneProgress};
 pub use fixture::{ChannelDef, ChannelKind, FixtureType};
 pub use show::{
     ChannelRef, ChannelValue, Fixture, FixtureId, FixtureLimits, Group, GroupId, LoopMode,

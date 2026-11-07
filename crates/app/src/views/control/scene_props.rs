@@ -13,7 +13,7 @@ use eframe::egui::{self, pos2, Color32, Rect, Sense, Stroke, Vec2};
 use crate::ui::theme;
 use crate::ui::widgets::knob::Knob;
 use crate::ui::widgets::time_field::time_field;
-use crate::ui::widgets::{form, Icon, IconButton};
+use crate::ui::widgets::{Icon, IconButton};
 use crate::views::{View, ViewCtx};
 
 /// Breite der Reiterleiste.
@@ -119,8 +119,6 @@ fn header(ui: &mut egui::Ui, e: &mut Engine, id: SceneId) {
     let paused = e.progress(id).is_some_and(|p| p.paused);
     ui.horizontal(|ui| {
         ui.set_min_height(34.0);
-        let (sw, _) = ui.allocate_exact_size(Vec2::splat(16.0), Sense::hover());
-        ui.painter().rect_filled(sw, theme::R_S, color);
         ui.label(egui::RichText::new(&name).color(color).strong());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let icon = if active && !paused {
@@ -249,16 +247,19 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     });
     let total = u64::from(duration);
     let elapsed = (f64::from(pos.unwrap_or(0.0)) * total as f64) as u64;
+    // links die verstrichene Zeit (Szenenfarbe), rechts die Gesamtdauer
+    let hours = total >= 3_600_000;
     ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(time_text(elapsed, hours))
+                .font(theme::caption())
+                .color(color),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.label(
-                egui::RichText::new(format!(
-                    "{} / {}",
-                    time_text(elapsed, total >= 3_600_000),
-                    time_text(total, total >= 3_600_000)
-                ))
-                .font(theme::caption())
-                .color(theme::text_dim()),
+                egui::RichText::new(time_text(total, hours))
+                    .font(theme::caption())
+                    .color(theme::text()),
             );
         });
     });
@@ -267,34 +268,39 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     }
     ui.add_space(theme::SP_S);
 
-    // Ein-/Ausblenden als Hüllkurve
-    envelope(ui, &st, duration, pos, color);
-    ui.add_space(theme::SP_S);
-
-    form(ui, "scene_props_form", |f| {
-        f.row(t("Dauer"), |ui| {
-            time_field(ui, "duration", &mut duration, on, true, color)
+    // Felder rechtsbündig, Bezeichnung links
+    let row = |ui: &mut egui::Ui, label: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
+        ui.horizontal(|ui| {
+            ui.set_min_height(32.0);
+            ui.label(egui::RichText::new(label).color(theme::text_dim()));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                add(ui)
+            });
         });
-        f.row(t("Fade in"), |ui| {
-            time_field(ui, "fade_in", &mut st.fade_in_ms, on, false, color)
-        });
-        f.row(t("Fade out"), |ui| {
-            time_field(ui, "fade_out", &mut st.fade_out_ms, on, false, color)
-        });
-        f.row(t("Fade Speed"), |ui| {
-            // 0.1 … 4.0 in Zehnteln, Standard 1.0
-            let mut v = f32::from(st.fade_speed.clamp(1, 40) - 1) / 39.0;
-            let text = format!("{:.1}", f32::from(st.fade_speed) / 10.0);
-            if bar_slider(ui, "fade_speed", &mut v, on, Some(&text), color) {
-                st.fade_speed = (v * 39.0).round() as u8 + 1;
-            }
-        });
-        f.row(t("Phase in"), |ui| {
-            time_field(ui, "phase_in", &mut st.phase_in_ms, on, false, color)
-        });
-        f.row(t("Phase out"), |ui| {
-            time_field(ui, "phase_out", &mut st.phase_out_ms, on, false, color)
-        });
+    };
+    row(ui, t("Dauer"), &mut |ui| {
+        time_field(ui, "duration", &mut duration, on, true, color);
+    });
+    row(ui, t("Fade in"), &mut |ui| {
+        time_field(ui, "fade_in", &mut st.fade_in_ms, on, false, color);
+    });
+    row(ui, t("Fade out"), &mut |ui| {
+        time_field(ui, "fade_out", &mut st.fade_out_ms, on, false, color);
+    });
+    row(ui, t("Fade Speed"), &mut |ui| {
+        // 0.1 … 4.0 in Zehnteln, Standard 1.0
+        ui.set_max_width(150.0);
+        let mut v = f32::from(st.fade_speed.clamp(1, 40) - 1) / 39.0;
+        let text = format!("{:.1}", f32::from(st.fade_speed) / 10.0);
+        if bar_slider(ui, "fade_speed", &mut v, on, Some(&text), color) {
+            st.fade_speed = (v * 39.0).round() as u8 + 1;
+        }
+    });
+    row(ui, t("Phase in"), &mut |ui| {
+        time_field(ui, "phase_in", &mut st.phase_in_ms, on, false, color);
+    });
+    row(ui, t("Phase out"), &mut |ui| {
+        time_field(ui, "phase_out", &mut st.phase_out_ms, on, false, color);
     });
 
     // Änderungen übernehmen (nur wenn sich etwas geändert hat → kein „*“)
@@ -314,81 +320,6 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
 /// Zeit als Text wie im Zeitfeld.
 fn time_text(ms: u64, hours: bool) -> String {
     crate::ui::widgets::time_field::format(ms, hours)
-}
-
-/// Hüllkurve der Szene: Einblenden, Dauer, Ausblenden – mit Positionsmarke.
-fn envelope(
-    ui: &mut egui::Ui,
-    st: &dmxcraft_core::SceneSettings,
-    duration: u32,
-    pos: Option<f32>,
-    color: Color32,
-) {
-    let w = ui.available_width().max(120.0);
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 64.0), Sense::hover());
-    let p = ui.painter();
-    p.rect_filled(rect, theme::R_S, theme::bg());
-    let area = rect.shrink2(Vec2::new(8.0, 10.0));
-    // Breiten: Ein-/Ausblenden mindestens sichtbar, wenn gesetzt
-    let (fi, fo, d) = (
-        f64::from(st.fade_in_ms),
-        f64::from(st.fade_out_ms),
-        f64::from(duration.max(1)),
-    );
-    let sum = (fi + fo + d).max(1.0);
-    let min = if fi > 0.0 || fo > 0.0 { 0.08 } else { 0.0 };
-    let wi = if fi > 0.0 { (fi / sum).max(min) } else { 0.0 } as f32;
-    let wo = if fo > 0.0 { (fo / sum).max(min) } else { 0.0 } as f32;
-    let wd = (1.0 - wi - wo).max(0.2);
-    let k = area.width() / (wi + wd + wo);
-    let x0 = area.left();
-    let x1 = x0 + wi * k;
-    let x2 = x1 + wd * k;
-    let x3 = x2 + wo * k;
-    let (top, bottom) = (area.top(), area.bottom());
-    let pts = vec![
-        pos2(x0, bottom),
-        pos2(x1, top),
-        pos2(x2, top),
-        pos2(x3, bottom),
-    ];
-    // Fläche unter der Kurve (zwei konvexe Teile reichen nicht – als Streifen)
-    let mut mesh = egui::Mesh::default();
-    let fill = color.gamma_multiply(0.25);
-    for w2 in pts.windows(2) {
-        let (a, b) = (w2[0], w2[1]);
-        let i = mesh.vertices.len() as u32;
-        mesh.colored_vertex(a, fill);
-        mesh.colored_vertex(b, fill);
-        mesh.colored_vertex(pos2(b.x, bottom), fill);
-        mesh.colored_vertex(pos2(a.x, bottom), fill);
-        mesh.add_triangle(i, i + 1, i + 2);
-        mesh.add_triangle(i, i + 2, i + 3);
-    }
-    p.add(egui::Shape::mesh(mesh));
-    p.add(egui::Shape::line(pts, Stroke::new(2.0, color)));
-    let label = |x: f32, text: &str| {
-        p.text(
-            pos2(x, rect.bottom() - 2.0),
-            egui::Align2::CENTER_BOTTOM,
-            text,
-            egui::FontId::proportional(9.0),
-            theme::text_faint(),
-        );
-    };
-    if wi > 0.0 {
-        label((x0 + x1) * 0.5, t("Fade in"));
-    }
-    if wo > 0.0 {
-        label((x2 + x3) * 0.5, t("Fade out"));
-    }
-    if let Some(v) = pos {
-        let x = x1 + (x2 - x1) * v;
-        p.line_segment(
-            [pos2(x, rect.top() + 4.0), pos2(x, rect.bottom() - 4.0)],
-            Stroke::new(1.5, theme::text()),
-        );
-    }
 }
 
 /// Waagerechter Balkenregler 0..=1, optional mit Text in der Mitte.

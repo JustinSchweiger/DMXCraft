@@ -783,8 +783,12 @@ fn scene_card(
         width: COLUMN_W,
         selected: is_marked,
         sequence: scene.steps.len() > 1,
+        fade: e.fade_state(id),
     }
     .show(ui);
+    if e.fade_state(id).is_some() {
+        ui.ctx().request_repaint();
+    }
     if !locked {
         resp.select.dnd_set_drag_payload(id);
     }
