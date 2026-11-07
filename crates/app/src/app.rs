@@ -654,6 +654,10 @@ impl eframe::App for DmxCraftApp {
 /// Edit-Modus: markierte Szenen werden ausgegeben (auch wenn sie nicht laufen)
 /// und ihre Geräte beim Markieren ausgewählt. Bühne und DMX-Ausgang zeigen
 /// damit die Szene, die man gerade bearbeitet.
+///
+/// Ist genau eine Szene markiert, ist sie die Bearbeitungsszene: beim
+/// Markieren werden ihre Werte in den Programmer geladen, und jede Änderung
+/// am Programmer wird sofort in ihrem (ersten) Schritt gespeichert.
 fn edit_preview(e: &mut Engine, st: &mut AppState) {
     let edit = st.programmer_mode == ProgrammerMode::Edit;
     let preview: Vec<SceneId> = if edit {
@@ -664,18 +668,67 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
     if e.preview() != preview.as_slice() {
         e.set_preview(preview);
     }
+    let target = match (edit, st.selected_scenes.len()) {
+        (true, 1) => st.selected_scenes.iter().next().copied(),
+        _ => None,
+    };
+    // Wechsel in den Edit-Modus lädt die markierte Szene wie ein neues Markieren
+    if st.programmer_mode != st.programmer_mode_seen {
+        st.programmer_mode_seen = st.programmer_mode;
+        if edit {
+            st.scene_selection_seen.clear();
+            st.scene_selection_seen.insert(SceneId(u32::MAX));
+        }
+    }
     if st.selected_scenes != st.scene_selection_seen {
         st.scene_selection_seen = st.selected_scenes.clone();
-        if edit && !st.selected_scenes.is_empty() {
-            let show = e.show();
-            st.selected = st
-                .selected_scenes
-                .iter()
-                .filter_map(|id| show.scene(*id))
-                .flat_map(|s| s.steps.iter())
-                .flat_map(|step| step.values.iter().map(|v| v.fixture))
-                .filter(|f| show.fixture(*f).is_some())
-                .collect();
+        if edit {
+            if !st.selected_scenes.is_empty() {
+                let show = e.show();
+                st.selected = st
+                    .selected_scenes
+                    .iter()
+                    .filter_map(|id| show.scene(*id))
+                    .flat_map(|s| s.steps.iter())
+                    .flat_map(|step| step.values.iter().map(|v| v.fixture))
+                    .filter(|f| show.fixture(*f).is_some())
+                    .collect();
+            }
+            // Werte der neuen Bearbeitungsszene in den Programmer laden
+            e.clear_programmer();
+            if let Some(step) = target
+                .and_then(|id| e.show().scene(id))
+                .and_then(|s| s.steps.first())
+                .cloned()
+            {
+                for v in step.values {
+                    e.set_programmer(
+                        dmxcraft_core::ChannelRef {
+                            fixture: v.fixture,
+                            channel: v.channel,
+                        },
+                        v.value,
+                    );
+                }
+            }
+            return;
         }
+    }
+    // Programmer-Änderungen in der Bearbeitungsszene speichern
+    let Some(id) = target else {
+        return;
+    };
+    let values = crate::views::control::programmer::programmer_values(e);
+    let Some(scene) = e.show_mut().scene_mut(id) else {
+        return;
+    };
+    if scene.steps.is_empty() {
+        scene.steps.push(dmxcraft_core::Step::new(Vec::new()));
+    }
+    let step = &mut scene.steps[0];
+    let mut current = step.values.clone();
+    current.sort_by_key(|c| (c.fixture, c.channel));
+    if current != values {
+        step.values = values;
     }
 }

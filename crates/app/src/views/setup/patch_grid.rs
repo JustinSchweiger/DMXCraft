@@ -40,6 +40,9 @@ pub struct PatchGrid {
     context_target: Option<FixtureId>,
     /// Laufende Umbenennung: Gerät und bearbeiteter Name.
     rename: Option<(FixtureId, String)>,
+    /// Name noch markieren, bis die Maus nach dem Doppelklick losgelassen ist
+    /// (sonst setzt der zweite Klick den Cursor ins Feld).
+    rename_fresh: bool,
 }
 
 impl View for PatchGrid {
@@ -63,6 +66,7 @@ impl View for PatchGrid {
             if let Some(f) = cx.engine.show().fixture(id) {
                 self.universe = usize::from(f.universe);
                 self.rename = Some((id, f.name.clone()));
+                self.rename_fresh = true;
             }
         }
         let dip_address = (cx.state.selected.len() == 1)
@@ -240,6 +244,7 @@ impl PatchGrid {
         if resp.double_clicked() && self.mode == GridMode::Patch {
             if let Some(id) = hovered_fixture {
                 self.rename = show.fixture(id).map(|f| (id, f.name.clone()));
+                self.rename_fresh = true;
             }
         }
         if resp.clicked() {
@@ -435,10 +440,19 @@ impl PatchGrid {
                     seg,
                     egui::TextEdit::singleline(text)
                         .font(theme::body())
+                        .align(egui::Align2::CENTER_CENTER)
                         .margin(egui::Margin::symmetric(4, 2)),
                 );
                 if !edit.has_focus() && !edit.lost_focus() {
                     edit.request_focus();
+                }
+                if self.rename_fresh {
+                    crate::ui::widgets::dialog::select_all(ui.ctx(), edit.id, text);
+                    let (down, released) =
+                        ui.input(|i| (i.pointer.any_down(), i.pointer.any_released()));
+                    if !down && !released && edit.has_focus() {
+                        self.rename_fresh = false;
+                    }
                 }
                 let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
                 let esc = ui.input(|i| i.key_pressed(egui::Key::Escape));

@@ -34,6 +34,8 @@ pub struct AppState {
     pub selected_scenes: BTreeSet<SceneId>,
     /// Zuletzt verarbeitete Szenen-Markierung (Edit-Modus: Geräte mitwählen).
     pub scene_selection_seen: BTreeSet<SceneId>,
+    /// Zuletzt verarbeiteter Programmer-Modus.
+    pub programmer_mode_seen: ProgrammerMode,
     /// Betriebsmodus des Programmers.
     pub programmer_mode: ProgrammerMode,
     pub patch: PatchForm,
@@ -63,6 +65,7 @@ impl AppState {
             selected_scenes: BTreeSet::new(),
             programmer_mode: ProgrammerMode::default(),
             scene_selection_seen: BTreeSet::new(),
+            programmer_mode_seen: ProgrammerMode::default(),
             patch: PatchForm {
                 name: String::new(),
                 count: 1,

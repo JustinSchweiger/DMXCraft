@@ -14,7 +14,7 @@ use eframe::egui::{self, pos2, Color32, Rect, Sense, Shape, Stroke, StrokeKind, 
 
 use crate::ui::theme;
 
-/// Breite einer Fader-Spalte.
+/// Standardbreite einer Fader-Spalte (schmal, z. B. für „Alle Kanäle“).
 pub const FADER_W: f32 = 44.0;
 const DOT_H: f32 = 20.0;
 const NUM_H: f32 = 18.0;
@@ -41,6 +41,7 @@ pub struct Fader {
     dot: Color32,
     color: Color32,
     height: Option<f32>,
+    width: f32,
 }
 
 impl Fader {
@@ -54,6 +55,7 @@ impl Fader {
             dot: theme::OK,
             color: theme::accent(),
             height: None,
+            width: FADER_W,
         }
     }
 
@@ -81,6 +83,12 @@ impl Fader {
         self
     }
 
+    /// Spaltenbreite.
+    pub fn width(mut self, w: f32) -> Self {
+        self.width = w.max(FADER_W);
+        self
+    }
+
     pub fn hint(mut self, text: impl Into<String>) -> Self {
         self.hint = Some(text.into());
         self
@@ -92,7 +100,7 @@ impl Fader {
             .height
             .unwrap_or_else(|| ui.available_height())
             .max(head + HANDLE.y + 40.0);
-        let (outer, _) = ui.allocate_exact_size(Vec2::new(FADER_W, h), Sense::hover());
+        let (outer, _) = ui.allocate_exact_size(Vec2::new(self.width, h), Sense::hover());
         let id = ui.make_persistent_id(("fader", outer.min.x as i32, self.number));
         let mut event = FaderEvent::None;
         let mut value = self.value;
@@ -135,7 +143,7 @@ impl Fader {
         // Wert – Klick zum Eintippen
         let value_rect = Rect::from_min_size(
             pos2(outer.left() + 3.0, y + 2.0),
-            Vec2::new(FADER_W - 6.0, VALUE_H - 4.0),
+            Vec2::new(self.width - 6.0, VALUE_H - 4.0),
         );
         let edit_id = id.with("edit");
         let editing: Option<String> = ui.data(|d| d.get_temp(edit_id));

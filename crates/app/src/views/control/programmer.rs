@@ -79,6 +79,8 @@ pub struct FaderGroup {
 
 /// Fader eines Gerätetyps samt Namen der ausgewählten Geräte dieses Typs.
 struct FixtureBlock<'a> {
+    /// Typbezeichnung (Hersteller Modell)
+    type_name: String,
     names: Vec<String>,
     faders: Vec<&'a FaderGroup>,
 }
@@ -181,8 +183,14 @@ impl View for ProgrammerView {
                                 ui.add_space(theme::SP_S);
                             }
                             ui.spacing_mut().item_spacing.x = 2.0;
+                            // außer in „Alle Kanäle“ deutlich breitere Fader
+                            let fader_w = if self.category == Category::All {
+                                FADER_W
+                            } else {
+                                76.0
+                            };
                             for block in &blocks {
-                                fixture_block(ui, cx.engine, block, cx.frame, height, dot);
+                                fixture_block(ui, cx.engine, block, cx.frame, height, dot, fader_w);
                             }
                         });
                     });
@@ -226,6 +234,10 @@ fn fixture_blocks<'a>(
             None => blocks.push((
                 f.type_key.clone(),
                 FixtureBlock {
+                    type_name: e.show().type_of(f).map_or_else(
+                        || f.type_key.clone(),
+                        |t| format!("{} {}", t.manufacturer, t.model).trim().to_string(),
+                    ),
                     names: vec![f.name.clone()],
                     faders: faders
                         .iter()
@@ -251,11 +263,12 @@ fn fixture_block(
     frame: &DmxFrame,
     height: f32,
     dot: Color32,
+    fader_w: f32,
 ) {
     const HEAD_H: f32 = 22.0;
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing = Vec2::ZERO;
-        let w = block.faders.len() as f32 * FADER_W;
+        let w = block.faders.len() as f32 * fader_w;
         let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, HEAD_H), Sense::hover());
         let p = ui.painter();
         p.rect_filled(
@@ -268,29 +281,26 @@ fn fixture_block(
             },
             theme::bg(),
         );
-        let title = block.names.join(", ");
-        let galley = p.layout_no_wrap(title.clone(), theme::heading_font(), theme::text_dim());
-        let text = if galley.size().x > w - 12.0 && block.names.len() > 1 {
-            tr!(
-                "{name} + {n} weitere",
-                name = block.names[0],
-                n = block.names.len() - 1
-            )
+        // ein Gerät: sein Name; mehrere desselben Typs: die Typbezeichnung
+        let title = if block.names.len() == 1 {
+            block.names[0].clone()
         } else {
-            title.clone()
+            block.type_name.clone()
         };
-        p.with_clip_rect(rect.shrink2(Vec2::new(4.0, 0.0))).text(
+        let text = elide(p, &title.to_uppercase(), theme::heading_font(), w - 10.0);
+        p.text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
-            text.to_uppercase(),
+            text,
             theme::heading_font(),
             theme::text_dim(),
         );
+        let title = format!("{title}\n{}", block.names.join(", "));
         resp.on_hover_text(title);
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing = Vec2::ZERO;
             for grp in &block.faders {
-                fader(ui, e, grp, frame, height - HEAD_H, dot);
+                fader(ui, e, grp, frame, height - HEAD_H, dot, fader_w);
             }
         });
     });
@@ -303,6 +313,7 @@ fn fader(
     frame: &DmxFrame,
     height: f32,
     dot: Color32,
+    width: f32,
 ) {
     let first = grp.channels[0];
     let active = e.programmer().contains_key(&first);
@@ -311,6 +322,7 @@ fn fader(
         .dot(dot)
         .color(kind_color(grp.kind))
         .height(height)
+        .width(width)
         .hint(tr!("{v} · {label} – {n} Kanal/Kanäle\nZiehen, Mausrad, Doppelklick = 0/voll, Rechtsklick = Menü", v = grp.name, label = t(grp.kind.label()), n = grp.channels.len()))
         .show(ui);
     match ev {
@@ -703,4 +715,26 @@ fn category_list(
             *current = *c;
         }
     }
+}
+
+/// Text auf `max` Pixel kürzen und mit „...“ abschließen.
+fn elide(p: &egui::Painter, text: &str, font: egui::FontId, max: f32) -> String {
+    let width = |s: &str| {
+        p.layout_no_wrap(s.to_string(), font.clone(), Color32::WHITE)
+            .size()
+            .x
+    };
+    if width(text) <= max {
+        return text.to_string();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut n = chars.len();
+    while n > 0 {
+        n -= 1;
+        let s: String = chars[..n].iter().collect::<String>().trim_end().to_string() + "...";
+        if width(&s) <= max {
+            return s;
+        }
+    }
+    "...".into()
 }
