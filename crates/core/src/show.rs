@@ -180,10 +180,8 @@ impl PlanShape {
         use crate::fixture::ChannelKind as K;
         let reds = ty.channels.iter().filter(|c| c.kind == K::Red).count();
         let moving = ty.has_kind(K::Pan) || ty.has_kind(K::Tilt);
-        if moving && reds > 1 {
+        if moving {
             PlanShape::MovingHead
-        } else if moving {
-            PlanShape::Round
         } else if reds >= 9 && (reds as f32).sqrt().fract() == 0.0 {
             PlanShape::Matrix
         } else if reds > 1 {
@@ -864,7 +862,7 @@ mod tests {
             .add_fixture("M", "generic/moving-head-spot-11ch", 0, 20)
             .unwrap();
         assert_eq!(s.plan_shape(par), PlanShape::Round);
-        assert_eq!(s.plan_shape(mh), PlanShape::Round);
+        assert_eq!(s.plan_shape(mh), PlanShape::MovingHead);
         s.fixture_mut(par).unwrap().plan_shape = Some(PlanShape::BarVertical);
         assert_eq!(s.plan_shape(par), PlanShape::BarVertical);
         assert_eq!(s.plan_size(par), 1.0);

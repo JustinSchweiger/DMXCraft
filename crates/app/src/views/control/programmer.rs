@@ -171,7 +171,9 @@ impl View for ProgrammerView {
                 if visible.is_empty() {
                     return;
                 }
-                let height = ui.available_height();
+                // eigener Platz für die Scrollleiste unter den Fadern
+                ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                let height = ui.available_height() - ui.spacing().scroll.allocated_width() - 4.0;
                 egui::ScrollArea::horizontal()
                     .id_salt("faders")
                     .auto_shrink([false, false])
@@ -358,7 +360,18 @@ fn color_bar(
     ];
     let mut changed = false;
     ui.horizontal(|ui| {
-        changed |= ui.color_edit_button_srgb(&mut rgb).changed();
+        // aktuelle Farbe; Klick öffnet den Farbwähler (wie bei Szenen/Bänken)
+        let current = ui
+            .add(Swatch(theme::rgb(rgb)))
+            .on_hover_text(t("Eigene Farbe wählen"));
+        crate::ui::widgets::menu::dropdown(&current, |ui| {
+            ui.set_min_width(212.0);
+            changed |= crate::ui::widgets::color_picker::color_picker(
+                ui,
+                ui.make_persistent_id("programmer_color"),
+                &mut rgb,
+            );
+        });
         ui.add_space(theme::SP_S);
         const PRESETS: [(&str, [u8; 3]); 10] = [
             ("Rot", [255, 0, 0]),

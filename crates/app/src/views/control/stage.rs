@@ -58,6 +58,8 @@ impl View for StageView {
         let mut action = None;
         let clip = cx.state.layout_clipboard.is_some();
         let locked = cx.state.locked;
+        let area = ui.available_rect_before_wrap();
+        let blind = cx.state.programmer_mode == crate::state::ProgrammerMode::Blind;
         // Im Auswahlmodus entstehen keine Verschiebungen.
         let _ = canvas.show(
             ui,
@@ -73,6 +75,16 @@ impl View for StageView {
                 }
             },
         );
+        if blind {
+            // Hinweis: Bühne zeigt die Bearbeitung, nicht den Ausgang
+            ui.painter().text(
+                area.right_bottom() - Vec2::new(14.0, 10.0),
+                egui::Align2::RIGHT_BOTTOM,
+                t("BLIND"),
+                egui::FontId::new(22.0, egui::FontFamily::Name(theme::HEADING_FAMILY.into())),
+                theme::DANGER,
+            );
+        }
         if let Some(a) = action {
             fixture_menu::apply(cx.engine, cx.state, a);
         }

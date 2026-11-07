@@ -112,9 +112,17 @@ impl AppState {
 pub enum ProgrammerMode {
     /// Werte bearbeiten und sofort ausgeben.
     Edit,
-    /// Werte bearbeiten, ohne dass sie ausgegeben werden.
+    /// Wie Edit, aber der Ausgang bleibt auf dem Stand beim Umschalten;
+    /// Bühne und Fader zeigen die Bearbeitung.
     Blind,
     /// Live-Betrieb (Start-Modus).
     #[default]
     Live,
+}
+
+impl ProgrammerMode {
+    /// Edit und Blind Edit bearbeiten die markierte Szene.
+    pub fn is_edit(self) -> bool {
+        matches!(self, ProgrammerMode::Edit | ProgrammerMode::Blind)
+    }
 }

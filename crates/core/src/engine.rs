@@ -55,6 +55,8 @@ pub struct Engine {
     preview: Vec<SceneId>,
     /// Live-Werte (Live-Modus): überschreiben alles, werden nicht gespeichert.
     live: HashMap<ChannelRef, u8>,
+    /// Blind-Modus: Ausgang nutzt diesen eingefrorenen Stand ohne Edit-Werte.
+    blind_show: Option<Show>,
     master: f32,
     blackout: bool,
     speed: f32,
@@ -69,6 +71,7 @@ impl Engine {
             programmer: HashMap::new(),
             preview: Vec::new(),
             live: HashMap::new(),
+            blind_show: None,
             master: 1.0,
             blackout: false,
             speed: 1.0,
@@ -92,6 +95,7 @@ impl Engine {
         self.playing.clear();
         self.programmer.clear();
         self.live.clear();
+        self.blind_show = None;
     }
 
     /// Entfernt Wiedergabe-/Programmer-Zustand, der nach Show-Änderungen
@@ -224,6 +228,23 @@ impl Engine {
         self.programmer.remove(&ch);
     }
 
+    // ---------- Blind ----------
+
+    /// Blind-Modus ein/aus: beim Einschalten wird der Ausgang auf dem
+    /// aktuellen Stand eingefroren, Bearbeitungen wirken erst nach dem
+    /// Ausschalten.
+    pub fn set_blind(&mut self, on: bool) {
+        if on && self.blind_show.is_none() {
+            self.blind_show = Some(self.show.clone());
+        } else if !on {
+            self.blind_show = None;
+        }
+    }
+
+    pub fn is_blind(&self) -> bool {
+        self.blind_show.is_some()
+    }
+
     // ---------- Live-Werte ----------
 
     pub fn set_live(&mut self, ch: ChannelRef, value: u8) {
@@ -331,14 +352,14 @@ impl Engine {
 
     // ---------- Rendering ----------
 
-    fn is_htp(&self, ch: ChannelRef) -> bool {
-        self.show.channel_def(ch).is_some_and(|d| d.kind.is_htp())
+    fn is_htp(show: &Show, ch: ChannelRef) -> bool {
+        show.channel_def(ch).is_some_and(|d| d.kind.is_htp())
     }
 
     /// Aktuelle (überblendete) Werte einer laufenden Szene.
-    fn scene_values(&self, p: &PlayingScene) -> HashMap<ChannelRef, u8> {
+    fn scene_values(&self, show: &Show, p: &PlayingScene) -> HashMap<ChannelRef, u8> {
         let mut out = HashMap::new();
-        let Some(scene) = self.show.scene(p.scene) else {
+        let Some(scene) = show.scene(p.scene) else {
             return out;
         };
         let len = scene.steps.len();
@@ -361,7 +382,7 @@ impl Engine {
             let from = match previous.as_ref().and_then(|m| m.get(&ch)) {
                 Some(&v) => v,
                 // Ohne Vorgänger: Intensität blendet von 0 auf, Rest springt.
-                None if self.is_htp(ch) => 0,
+                None if Self::is_htp(show, ch) => 0,
                 None => to,
             };
             out.insert(ch, lerp(from, to, t));
@@ -369,7 +390,7 @@ impl Engine {
         // Intensitäten, die im neuen Schritt fehlen, blenden aus.
         if let Some(prev) = previous {
             for (ch, from) in prev {
-                if !current.contains_key(&ch) && self.is_htp(ch) {
+                if !current.contains_key(&ch) && Self::is_htp(show, ch) {
                     out.insert(ch, lerp(from, 0, t));
                 }
             }
@@ -377,15 +398,31 @@ impl Engine {
         out
     }
 
-    /// Berechnet den aktuellen DMX-Frame.
+    /// Berechnet den aktuellen DMX-Frame für den Ausgang. Im Blind-Modus ohne
+    /// Edit-Werte und mit dem beim Umschalten eingefrorenen Show-Stand.
     pub fn render(&self, frame: &mut DmxFrame) {
-        frame.resize(usize::from(self.show.universes));
+        match &self.blind_show {
+            Some(frozen) => self.render_show(frozen, false, frame),
+            None => self.render_show(&self.show, true, frame),
+        }
+    }
+
+    /// Frame mit allen Bearbeitungen (Vorschau für Bühne und Fader, auch im
+    /// Blind-Modus).
+    pub fn render_monitor(&self) -> DmxFrame {
+        let mut f = DmxFrame::new(usize::from(self.show.universes));
+        self.render_show(&self.show, true, &mut f);
+        f
+    }
+
+    fn render_show(&self, show: &Show, edit: bool, frame: &mut DmxFrame) {
+        frame.resize(usize::from(show.universes));
         frame.clear();
 
         // 1) Defaults
         let mut values: HashMap<ChannelRef, u8> = HashMap::new();
-        for f in &self.show.fixtures {
-            if let Some(ty) = self.show.type_of(f) {
+        for f in &show.fixtures {
+            if let Some(ty) = show.type_of(f) {
                 for (i, def) in ty.channels.iter().enumerate() {
                     let ch = ChannelRef {
                         fixture: f.id,
@@ -402,7 +439,7 @@ impl Engine {
         // Nur gespeicherte Kanäle einer Szene wirken; nicht gespeicherte
         // bleiben frei für andere Szenen.
         for p in order {
-            for (ch, v) in self.scene_values(p) {
+            for (ch, v) in self.scene_values(show, p) {
                 if let Some(slot) = values.get_mut(&ch) {
                     *slot = v; // Gerät existiert noch
                 }
@@ -410,11 +447,12 @@ impl Engine {
         }
 
         // 3) Vorschau nicht laufender Szenen (erster Schritt, LTP)
-        for id in &self.preview {
+        let preview: &[SceneId] = if edit { &self.preview } else { &[] };
+        for id in preview {
             if self.is_active(*id) {
                 continue;
             }
-            let Some(step) = self.show.scene(*id).and_then(|s| s.steps.first()) else {
+            let Some(step) = show.scene(*id).and_then(|s| s.steps.first()) else {
                 continue;
             };
             for cv in &step.values {
@@ -429,7 +467,7 @@ impl Engine {
         }
 
         // 4) Programmer
-        for (ch, v) in &self.programmer {
+        for (ch, v) in self.programmer.iter().filter(|_| edit) {
             if let Some(slot) = values.get_mut(ch) {
                 *slot = *v;
             }
@@ -445,8 +483,8 @@ impl Engine {
         // 6) Master / Blackout
         let master = if self.blackout { 0.0 } else { self.master };
         if master < 1.0 {
-            for f in &self.show.fixtures {
-                let Some(ty) = self.show.type_of(f) else {
+            for f in &show.fixtures {
+                let Some(ty) = show.type_of(f) else {
                     continue;
                 };
                 let has_dimmer = ty.channels.iter().any(|c| c.kind.is_htp());
@@ -470,12 +508,12 @@ impl Engine {
         }
 
         // 4b) Gerätegrenzen
-        for f in &self.show.fixtures {
+        for f in &show.fixtures {
             let lim = f.limits;
             if lim.is_default() {
                 continue;
             }
-            let Some(ty) = self.show.type_of(f) else {
+            let Some(ty) = show.type_of(f) else {
                 continue;
             };
             let ch = |i: usize| ChannelRef {
@@ -540,7 +578,7 @@ impl Engine {
         }
 
         // 5) In den Frame schreiben
-        for f in &self.show.fixtures {
+        for f in &show.fixtures {
             for (ch, v) in values.iter().filter(|(ch, _)| ch.fixture == f.id) {
                 frame.set(usize::from(f.universe), f.address + ch.channel, *v);
             }
@@ -749,6 +787,30 @@ mod tests {
         e.activate(id);
         e.tick(Duration::from_secs(3600)); // darf nicht hängen
         assert!(e.is_active(id));
+    }
+
+    #[test]
+    fn blind_keeps_output_but_monitor_shows_edits() {
+        let (mut s, a, _) = setup();
+        let red = s.add_scene("Rot", None, vec![Step::new(vec![cv(a, 1, 255)])]);
+        let mut e = Engine::new(s);
+        e.activate(red);
+        e.set_blind(true);
+        // Szene bearbeiten und Programmer setzen: Ausgang bleibt
+        e.show_mut().scene_mut(red).unwrap().steps[0].values[0].value = 10;
+        e.set_programmer(
+            ChannelRef {
+                fixture: a,
+                channel: 3,
+            },
+            200,
+        );
+        let out = e.render_frame();
+        assert_eq!((out.get(0, 2), out.get(0, 4)), (Some(255), Some(0)));
+        let mon = e.render_monitor();
+        assert_eq!((mon.get(0, 2), mon.get(0, 4)), (Some(10), Some(200)));
+        e.set_blind(false);
+        assert_eq!(e.render_frame().get(0, 2), Some(10));
     }
 
     #[test]

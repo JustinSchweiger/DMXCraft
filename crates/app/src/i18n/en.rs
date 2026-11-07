@@ -415,6 +415,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Bankfarbe übernehmen", "Use bank color"),
     ("{n} Szenen", "{n} scenes"),
     ("Alle einblenden", "Show all"),
+    ("BLIND", "BLIND"),
+    ("Eigene Farbe wählen", "Choose a custom color"),
     ("Ungespeicherte Änderungen", "Unsaved changes"),
     ("Nicht speichern", "Don't save"),
     ("Möchtest du die Änderungen an „{name}“ vor dem Schließen speichern?", "Do you want to save the changes to “{name}” before closing?"),

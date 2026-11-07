@@ -683,7 +683,16 @@ impl eframe::App for DmxCraftApp {
         self.fullscreen.update(&ctx);
 
         // ----- Inhalt (randlos, Bereiche nur durch Trennlinien getrennt) -----
-        let frame = self.runtime.last_frame();
+        // Blind: Bühne und Fader zeigen die Bearbeitung, nicht den Ausgang
+        let frame = {
+            let e = Self::lock(&self.engine);
+            if e.is_blind() {
+                e.render_monitor()
+            } else {
+                drop(e);
+                self.runtime.last_frame()
+            }
+        };
         let engine = self.engine.clone();
         {
             let mut e = Self::lock(&engine);
@@ -745,7 +754,8 @@ impl eframe::App for DmxCraftApp {
 /// Markieren werden ihre Werte in den Programmer geladen, und jede Änderung
 /// am Programmer wird sofort in ihrem (ersten) Schritt gespeichert.
 fn edit_preview(e: &mut Engine, st: &mut AppState) {
-    let edit = st.programmer_mode == ProgrammerMode::Edit;
+    let edit = st.programmer_mode.is_edit();
+    e.set_blind(st.programmer_mode == ProgrammerMode::Blind);
     let preview: Vec<SceneId> = if edit {
         st.selected_scenes.iter().copied().collect()
     } else {
@@ -760,12 +770,12 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
     };
     // Wechsel in den Edit-Modus lädt die markierte Szene wie ein neues Markieren
     if st.programmer_mode != st.programmer_mode_seen {
-        let was_edit = st.programmer_mode_seen == ProgrammerMode::Edit;
+        let was_edit = st.programmer_mode_seen.is_edit();
         st.programmer_mode_seen = st.programmer_mode;
-        if edit {
+        if edit && !was_edit {
             st.scene_selection_seen.clear();
             st.scene_selection_seen.insert(SceneId(u32::MAX));
-        } else if was_edit {
+        } else if !edit && was_edit {
             // Edit-Werte liegen in der Szene; der Programmer gibt sie nicht weiter aus
             e.clear_programmer();
         }

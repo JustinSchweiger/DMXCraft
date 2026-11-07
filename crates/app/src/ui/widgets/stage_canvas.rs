@@ -357,7 +357,17 @@ impl StageCanvas<'_> {
                 .map(|(_, p)| fixture_rect(self.show, *id, to_screen(*p), zoom))
                 .unwrap_or(*b);
             let sel = selected.contains(id);
-            let colors = live_colors(self.show, *id, self.frame);
+            let mut colors = live_colors(self.show, *id, self.frame);
+            // Strobe: in der Dunkelphase aus
+            if let Some(hz) = strobe_hz(self.show, *id, self.frame) {
+                let time = ui.input(|i| i.time);
+                if (time * f64::from(hz)).fract() > 0.35 {
+                    for c in &mut colors {
+                        *c = (c.0, 0.0);
+                    }
+                }
+                ui.ctx().request_repaint();
+            }
             paint_fixture(
                 &painter,
                 self.show.plan_shape(*id),
@@ -458,6 +468,19 @@ pub fn fixture_rect(show: &Show, id: FixtureId, center: Pos2, zoom: f32) -> Rect
     Rect::from_center_size(center, size)
 }
 
+/// Blitzfrequenz eines Geräts, wenn sein Strobe-Kanal aktiv ist (Werte unter
+/// 10 gelten als „offen“, darüber 1 bis 20 Hz).
+pub fn strobe_hz(show: &Show, id: FixtureId, frame: &DmxFrame) -> Option<f32> {
+    let f = show.fixture(id)?;
+    let ty = show.type_of(f)?;
+    let i = ty
+        .channels
+        .iter()
+        .position(|c| c.kind == ChannelKind::Strobe)?;
+    let v = frame.get(usize::from(f.universe), f.address + i as u16)?;
+    (v >= 10).then(|| 1.0 + f32::from(v - 10) / 245.0 * 19.0)
+}
+
 /// Eine Anzeigefarbe pro Pixel (bei Leisten mehrere, sonst eine) mit Helligkeit.
 pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32, f32)> {
     let Some(f) = show.fixture(id) else {
@@ -550,7 +573,37 @@ fn paint_fixture(
     let (c0, l0) = colors.first().copied().unwrap_or((theme::bg(), 0.0));
     let n = colors.len().max(1);
     match shape {
-        PlanShape::Round | PlanShape::MovingHead => {
+        PlanShape::MovingHead => {
+            // Kopf: dunkler Körper mit Bügel links/rechts, farbige Linse innen
+            let rad = r.width().min(r.height()) * 0.5;
+            let max_l = colors.iter().map(|c| c.1).fold(0.0, f32::max);
+            glow(r.center(), rad * 1.6, c0, max_l);
+            for dx in [-1.0, 1.0] {
+                let yoke = Rect::from_center_size(
+                    r.center() + Vec2::new(dx * rad * 0.98, rad * 0.15),
+                    Vec2::new(rad * 0.28, rad * 1.3),
+                );
+                p.rect_filled(yoke, 2.0, theme::fixture_off());
+                p.rect_stroke(yoke, 2.0, stroke, StrokeKind::Outside);
+            }
+            p.circle_filled(r.center(), rad * 0.85, theme::fixture_off());
+            p.circle_stroke(r.center(), rad * 0.85, stroke);
+            let lens = rad * 0.55;
+            if n == 1 {
+                p.circle_filled(r.center(), lens, fill(c0, l0));
+            } else {
+                for (i, (c, l)) in colors.iter().enumerate() {
+                    let a = std::f32::consts::TAU * i as f32 / n as f32;
+                    p.circle_filled(
+                        r.center() + Vec2::angled(a) * lens * 0.55,
+                        lens * 0.42,
+                        fill(*c, *l),
+                    );
+                }
+            }
+            p.circle_stroke(r.center(), lens, Stroke::new(1.0, theme::border()));
+        }
+        PlanShape::Round => {
             let rad = r.width().min(r.height()) * 0.5;
             let max_l = colors.iter().map(|c| c.1).fold(0.0, f32::max);
             glow(r.center(), rad * 1.6, c0, max_l);
@@ -595,6 +648,17 @@ fn paint_fixture(
                     Vec2::new(cw, ch),
                 );
                 p.rect_filled(cell.shrink(0.5), 0.0, fill(*c, *l));
+            }
+            if n == 1 {
+                // ein Pixel: Raster andeuten, damit es sich vom Quadrat abhebt
+                p.rect_filled(r, 0.0, fill(c0, l0));
+                let grid = Stroke::new(1.0, theme::bg());
+                for k in 1..3 {
+                    let x = r.left() + r.width() * k as f32 / 3.0;
+                    let y = r.top() + r.height() * k as f32 / 3.0;
+                    p.line_segment([Pos2::new(x, r.top()), Pos2::new(x, r.bottom())], grid);
+                    p.line_segment([Pos2::new(r.left(), y), Pos2::new(r.right(), y)], grid);
+                }
             }
             p.rect_stroke(r, 2.0, stroke, StrokeKind::Outside);
         }
