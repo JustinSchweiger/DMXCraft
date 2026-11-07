@@ -137,6 +137,8 @@ pub struct StageCanvas<'a> {
     pub show_grid: bool,
     /// Immer alles einpassen (ohne Zoom- und Ziehbedienung, z. B. STEUERN).
     pub auto_fit: bool,
+    /// Auswahlreihenfolge: ausgewählte Geräte tragen ihre Nummer.
+    pub order: &'a [FixtureId],
 }
 
 /// Position eines Geräts (gespeichert oder Standard nach Patch-Reihenfolge).
@@ -368,6 +370,22 @@ impl StageCanvas<'_> {
                 sel,
                 Some(*id) == hovered,
             );
+            // Nummer in der Auswahlreihenfolge
+            if let Some(n) = sel
+                .then(|| self.order.iter().position(|f| f == id))
+                .flatten()
+            {
+                let size = (b.height().min(b.width()) * 0.45).clamp(9.0, 16.0);
+                let galley = painter.layout_no_wrap(
+                    (n + 1).to_string(),
+                    egui::FontId::proportional(size),
+                    Color32::WHITE,
+                );
+                let pad = Vec2::new(4.0, 1.0);
+                let tag = Rect::from_center_size(b.center(), galley.size() + pad * 2.0);
+                painter.rect_filled(tag, 3.0, Color32::from_black_alpha(150));
+                painter.galley(tag.min + pad, galley, Color32::WHITE);
+            }
         }
         // Infos zum Gerät nur beim Überfahren
         if let Some(f) = hovered.and_then(|id| self.show.fixture(id)) {

@@ -1,6 +1,8 @@
 //! Effekte von FX-Szenen. Derzeit: COLOR FX – Farbverläufe über die
-//! ausgewählten Geräte („Beams“), berechnet aus einer Farbpalette, der Lage
-//! der Beams im Bühnenplan und der Effektzeit.
+//! ausgewählten Geräte („Beams“), berechnet aus einer Farbpalette und der
+//! Effektzeit. Die meisten Vorlagen laufen entlang der **Beam-Reihenfolge**
+//! (= Reihenfolge, in der die Geräte ausgewählt wurden); Plasma und Perlin
+//! nutzen die Lage im Bühnenplan.
 //!
 //! Die Zeit wird in **Durchläufen** gemessen (`cycles`, 1.0 = eine
 //! Szenendauer); so wirken Dauer, Speed und Phase der Szene wie gewohnt.
@@ -301,25 +303,25 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
     let phase = cycles.rem_euclid(1.0) as f32;
     let round = cycles.floor() as i64;
     let blend = (fx.blend / 100.0).clamp(0.0, 1.0);
-    // Reihenfolge entlang der Laufrichtung (für balken- und füllbasierte Vorlagen)
-    let along = |a: f32| -> Vec<f32> {
-        let (s, c) = a.to_radians().sin_cos();
-        let raw: Vec<f32> = pos.iter().map(|p| p[0] * c + p[1] * s).collect();
-        spread(&raw)
-    };
+    // Lage in der Beam-Reihenfolge: zyklisch (i/n) bzw. von Anfang bis Ende
+    let cyc = order_coords(n, fx.transform, true);
+    let line = order_coords(n, fx.transform, false);
     let colors: Vec<[f32; 3]> = match fx.preset {
         ColorPreset::Rainbow => {
-            let u = along(fx.angle);
+            // Farbenbreite 0: jede Palettenfarbe einmal über alle Beams
             let span = 1.0 / (1.0 + fx.width / 10.0);
-            u.iter()
-                .map(|u| sample(&palette, u * span - phase, blend))
+            let offset = fx.angle / 360.0;
+            cyc.iter()
+                .map(|u| sample(&palette, u * span + offset - phase, blend))
                 .collect()
         }
         ColorPreset::Burst => {
             let rings = 0.25 + fx.width / 100.0 * 1.75;
-            pos.iter()
-                .map(|p| {
-                    let d = ((p[0] - 0.5).powi(2) + (p[1] - 0.5).powi(2)).sqrt() * 2.0;
+            let mid = (n as f32 - 1.0) / 2.0;
+            let half = (n as f32 / 2.0).max(1.0);
+            (0..n)
+                .map(|i| {
+                    let d = (i as f32 - mid).abs() / half;
                     sample(&palette, d * rings - phase, blend)
                 })
                 .collect()
@@ -338,9 +340,9 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
                 })
                 .collect()
         }
-        ColorPreset::KnightRider => knight_rider(fx, &palette, &along(0.0), phase, round),
+        ColorPreset::KnightRider => knight_rider(fx, &palette, &line, phase, round),
         ColorPreset::Sweep => {
-            let u = along(fx.angle);
+            let u = &line;
             let k = palette.len() as i64;
             let reverse = fx.alternate && round.rem_euclid(2) == 1;
             let cur = palette[round.rem_euclid(k) as usize];
@@ -348,7 +350,8 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
             u.iter()
                 .map(|&u| {
                     let u = if reverse { 1.0 - u } else { u };
-                    if u <= phase {
+                    // Schritt so, dass bei Phase 1 alle gefüllt sind
+                    if u * (n as f32 - 1.0) / n as f32 + 1.0 / n as f32 <= phase + 1e-6 {
                         cur
                     } else {
                         prev
@@ -356,14 +359,18 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
                 })
                 .collect()
         }
-        ColorPreset::Sparkle => sparkle(fx, &palette, n, cycles),
+        ColorPreset::Sparkle => {
+            // Funken auf Beam-Nummern, in der gewählten Reihenfolge
+            let base = sparkle(fx, &palette, n, cycles);
+            ranks(&line).iter().map(|&r| base[r]).collect()
+        }
         ColorPreset::RandomFill => {
-            let u = along(0.0);
+            let u = &line;
             let k = palette.len() as i64;
             let cur = palette[round.rem_euclid(k) as usize];
             let prev = palette[(round - 1).rem_euclid(k) as usize];
             let w = fx.dot_width.max(1.0);
-            let order = ranks(&u);
+            let order = ranks(u);
             order
                 .iter()
                 .map(|&rank| {
@@ -469,15 +476,42 @@ fn normalized(beams: &[Beam], t: Transform) -> Vec<[f32; 2]> {
         .collect()
 }
 
-/// Werte auf 0..=1 strecken; liegen alle gleich, gilt die Reihenfolge.
-fn spread(v: &[f32]) -> Vec<f32> {
-    let min = v.iter().copied().fold(f32::MAX, f32::min);
-    let max = v.iter().copied().fold(f32::MIN, f32::max);
-    if max - min < 1e-4 {
-        let n = v.len().max(2) as f32 - 1.0;
-        return (0..v.len()).map(|i| i as f32 / n).collect();
-    }
-    v.iter().map(|x| (x - min) / (max - min)).collect()
+/// Lage jedes Beams in der Reihenfolge, umgeformt. `cyclic`: i/n (für
+/// umlaufende Verläufe, der letzte Beam schließt an den ersten an), sonst
+/// 0..=1 vom ersten bis zum letzten Beam.
+fn order_coords(n: usize, t: Transform, cyclic: bool) -> Vec<f32> {
+    let lin = |i: usize| {
+        if cyclic {
+            i as f32 / n as f32
+        } else {
+            i as f32 / (n.max(2) - 1) as f32
+        }
+    };
+    // gespiegelt: gleiche Lage für i und n-1-i
+    let half = n.div_ceil(2).max(1);
+    let mirror = |i: usize| {
+        let m = i.min(n - 1 - i);
+        if cyclic {
+            m as f32 / half as f32
+        } else {
+            m as f32 / (half.max(2) - 1) as f32
+        }
+    };
+    (0..n)
+        .map(|i| match t {
+            Transform::None => lin(i),
+            Transform::Reverse => lin(n - 1 - i),
+            Transform::VerticalSymmetry | Transform::HorizontalSymmetry => mirror(i),
+            Transform::Center => {
+                let m = mirror(i);
+                if cyclic {
+                    (1.0 - m - 1.0 / half as f32).max(0.0)
+                } else {
+                    1.0 - m
+                }
+            }
+        })
+        .collect()
 }
 
 /// Rang jedes Werts (0 = kleinster); bei Gleichstand gilt die Reihenfolge.
@@ -659,6 +693,24 @@ mod tests {
         assert_ne!(a, c);
         // ein voller Durchlauf ergibt wieder dasselbe Bild
         assert_eq!(a, render(&fx, &b, 1.0));
+    }
+
+    #[test]
+    fn rainbow_follows_beam_order() {
+        let mut fx = ColorFx::new(ColorPreset::Rainbow);
+        fx.palette = (0..9).map(|i| [i * 20, 0, 0]).collect();
+        // Lage im Plan egal: Reihenfolge zählt
+        let mut b = line(9);
+        b.reverse();
+        let now = render(&fx, &b, 0.0);
+        for (i, c) in now.iter().enumerate() {
+            assert_eq!(*c, fx.palette[i], "Beam {i}");
+        }
+        // einen Beam weiter: Farbe wandert von Beam i zu Beam i+1
+        let next = render(&fx, &b, 1.0 / 9.0);
+        for i in 1..9 {
+            assert_eq!(next[i], now[i - 1]);
+        }
     }
 
     #[test]

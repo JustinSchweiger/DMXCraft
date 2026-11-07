@@ -147,6 +147,7 @@ impl View for StageEditorView {
                     snap: self.snap.then_some(self.cells),
                     show_grid: self.grid,
                     auto_fit: false,
+                    order: &[],
                 }
                 .show(
                     ui,

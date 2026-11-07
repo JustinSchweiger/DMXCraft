@@ -479,6 +479,7 @@ impl ScenePropsView {
             }
             ui.allocate_rect(area, Sense::hover());
             if let Some(kind) = pick {
+                cx.state.sync_selection_order(cx.engine.show());
                 if let Some(scene) = cx.engine.show_mut().scene_mut(id) {
                     if kind == EffectKind::Steps && scene.steps.is_empty() {
                         scene.steps.push(dmxcraft_core::Step::new(Vec::new()));
@@ -488,8 +489,9 @@ impl ScenePropsView {
                     self.step_focus = kind == EffectKind::Steps;
                     if kind != EffectKind::Steps {
                         // wirkt auf die ausgewählten Geräte (sonst die der Szene)
+                        // Reihenfolge der Auswahl = Beam-Reihenfolge
                         let mut ids: Vec<dmxcraft_core::FixtureId> =
-                            cx.state.selected.iter().copied().collect();
+                            cx.state.selection_order.clone();
                         if ids.is_empty() {
                             ids = scene
                                 .steps
@@ -499,9 +501,6 @@ impl ScenePropsView {
                             ids.sort();
                             ids.dedup();
                         }
-                        // Reihenfolge wie im Patch
-                        let order = |f: &dmxcraft_core::FixtureId| f.0;
-                        ids.sort_by_key(order);
                         if let Some(e) = scene.effects.iter_mut().find(|e| e.id == fx) {
                             e.fixtures = ids.clone();
                         }
@@ -510,7 +509,7 @@ impl ScenePropsView {
                             scene.steps[0].hold_ms = 4000;
                         }
                         cx.state.fx_target = Some((id, fx));
-                        cx.state.selected = ids.into_iter().collect();
+                        cx.state.select_ordered(&ids);
                     }
                 }
                 self.adding = false;
@@ -656,7 +655,7 @@ impl ScenePropsView {
                 .find(|e| e.id == f && e.kind != EffectKind::Steps)
             {
                 cx.state.fx_target = Some((id, f));
-                cx.state.selected = fx.fixtures.iter().copied().collect();
+                cx.state.select_ordered(&fx.fixtures);
             } else {
                 cx.state.fx_target = None;
             }

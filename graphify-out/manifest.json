@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/app.rs": {
-    "mtime": 1794065818.2833865,
-    "seen": 1794066097.3180654,
-    "ast_hash": "5cb7363d1586e3d6f0bf9ac4f2077e82",
+    "mtime": 1794067079.3679686,
+    "seen": 1794067280.5577874,
+    "ast_hash": "72e84f36df45ccefb89a009a6ef96b68",
     "semantic_hash": ""
   },
   "crates/app/src/demo.rs": {
@@ -186,9 +186,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/state.rs": {
-    "mtime": 1794065771.9041831,
-    "seen": 1794066097.318097,
-    "ast_hash": "53b2065a4e7219d2755570bfffcf4c78",
+    "mtime": 1794067031.8409007,
+    "seen": 1794067280.557819,
+    "ast_hash": "b2447560a97c814b85a977591b77dcd8",
     "semantic_hash": ""
   },
   "crates/app/src/ui/mod.rs": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/stage_canvas.rs": {
-    "mtime": 1794061816.9299798,
-    "seen": 1794061916.4633632,
-    "ast_hash": "205b96956121bdedc72794248eb5c35a",
+    "mtime": 1794067031.841886,
+    "seen": 1794067280.5578597,
+    "ast_hash": "5bac942074a1279825a73bea4ed1a10e",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/swatch.rs": {
@@ -276,9 +276,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/stage.rs": {
-    "mtime": 1794065966.6901753,
-    "seen": 1794066097.318148,
-    "ast_hash": "85cd05dda4aef52147a850c3af8bd498",
+    "mtime": 1794067176.2994585,
+    "seen": 1794067280.5578818,
+    "ast_hash": "ded115fd985044f5c77baab657bbe774",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/mod.rs": {
@@ -288,9 +288,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/stage_editor.rs": {
-    "mtime": 1794060569.5998769,
-    "seen": 1794060718.5596147,
-    "ast_hash": "6f3d6e7089c929f54fe1c443490a7bf5",
+    "mtime": 1794067048.3654041,
+    "seen": 1794067280.5578995,
+    "ast_hash": "3da36985c200484258bb63068671362b",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/zones.rs": {
@@ -444,9 +444,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/i18n/en.rs": {
-    "mtime": 1794065849.1869023,
-    "seen": 1794066097.3180785,
-    "ast_hash": "2b2ab6624619ee60f4fbf0e256b0765c",
+    "mtime": 1794067175.9853444,
+    "seen": 1794067280.557802,
+    "ast_hash": "09393d92979124fcb84ef114fd1e9bde",
     "semantic_hash": ""
   },
   "crates/app/src/i18n/mod.rs": {
@@ -492,9 +492,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/scene_props.rs": {
-    "mtime": 1794066034.410214,
-    "seen": 1794066097.3181462,
-    "ast_hash": "01b46e5315f5137e93c43472efe37344",
+    "mtime": 1794067062.0423915,
+    "seen": 1794067280.5578794,
+    "ast_hash": "7ec4a936a0cd2060e5d6cacef9bb367b",
     "semantic_hash": ""
   },
   "crates/app/assets/fonts/Phosphor-LICENSE.txt": {
@@ -510,21 +510,21 @@
     "semantic_hash": ""
   },
   "crates/app/src/palettes.rs": {
-    "mtime": 1794065857.2887511,
-    "seen": 1794066097.318088,
-    "ast_hash": "d571f669e3aa3345c16b0eede845c296",
+    "mtime": 1794067152.5548866,
+    "seen": 1794067280.5578122,
+    "ast_hash": "e5f029a10c8980304cbbd767d7d404a6",
     "semantic_hash": ""
   },
   "crates/app/src/views/control/fx_color.rs": {
-    "mtime": 1794066034.9007616,
-    "seen": 1794066097.318139,
-    "ast_hash": "b9bf4e1313d594983d19c80ee0c2e416",
+    "mtime": 1794067241.4021168,
+    "seen": 1794067280.5578716,
+    "ast_hash": "4b36aa144e093fc1bec2c96b0fd42be3",
     "semantic_hash": ""
   },
   "crates/core/src/fx.rs": {
-    "mtime": 1794065857.532751,
-    "seen": 1794066097.3181717,
-    "ast_hash": "41d1b30aff5c4b7f2eedecaf09571ba3",
+    "mtime": 1794067122.2876265,
+    "seen": 1794067280.557917,
+    "ast_hash": "80221a66630ad63b8345be7351d463c4",
     "semantic_hash": ""
   }
 }

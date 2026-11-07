@@ -58,6 +58,7 @@ impl View for StageView {
         self.apply(cx.engine, cx.state, actions);
         ui.add_space(theme::SP_S);
         let show = cx.engine.show();
+        let order = cx.state.selection_order.clone();
         let canvas = StageCanvas {
             show,
             frame: cx.frame,
@@ -65,6 +66,7 @@ impl View for StageView {
             snap: None,
             show_grid: false,
             auto_fit: true,
+            order: &order,
         };
         let mut action = None;
         let clip = cx.state.layout_clipboard.is_some();
@@ -236,18 +238,18 @@ fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppSt
             .scene(*scene)
             .is_some_and(|s| s.effects.iter().any(|f| f.id == *fx))
     });
-    let current: Option<BTreeSet<FixtureId>> = target.and_then(|(scene, fx)| {
+    let current: Option<Vec<FixtureId>> = target.and_then(|(scene, fx)| {
         e.show()
             .scene(scene)?
             .effects
             .iter()
             .find(|f| f.id == fx)
-            .map(|f| f.fixtures.iter().copied().collect())
+            .map(|f| f.fixtures.clone())
     });
+    // abweichende Geräte oder andere Reihenfolge
     let pending = !st.locked
-        && current
-            .as_ref()
-            .is_some_and(|c| *c != st.selected && !st.selected.is_empty());
+        && !st.selected.is_empty()
+        && current.as_ref().is_some_and(|c| *c != st.selection_order);
     // rot hinterlegt, sobald sich die Auswahl vom Effekt unterscheidet
     let btn = IconButton::new(Icon::Fx)
         .size(28.0)
@@ -260,8 +262,7 @@ fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppSt
         .on_disabled_hover_text(t("Effekt anklicken, dann Geräte ändern"));
     if r.clicked() && pending {
         if let Some((scene, fx)) = target {
-            let mut ids: Vec<FixtureId> = st.selected.iter().copied().collect();
-            ids.sort();
+            let ids = st.selection_order.clone();
             if let Some(f) = e
                 .show_mut()
                 .scene_mut(scene)

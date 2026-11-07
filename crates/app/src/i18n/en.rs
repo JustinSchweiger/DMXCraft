@@ -416,6 +416,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{n} Szenen", "{n} scenes"),
     ("Alle einblenden", "Show all"),
     ("BLIND", "BLIND"),
+    ("Standardpaletten wiederherstellen", "Restore default palettes"),
+    ("Doppelklick auf den Namen benennt um. Farbfeld anklicken ändert die Farbe, Rechtsklick entfernt sie.", "Double-click a name to rename it. Click a swatch to change its color, right-click to remove it."),
     ("Amplitude", "Amplitude"),
     ("Blau-Magenta", "Blue-magenta"),
     ("Doppelklick zum Umbenennen", "Double-click to rename"),

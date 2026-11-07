@@ -1,5 +1,5 @@
-//! Farbpaletten für COLOR FX: mitgelieferte Vorlagen und eigene, im
-//! Konfigurationsordner gespeicherte Paletten (`palettes.json`).
+//! Farbpaletten für COLOR FX. Alle Paletten (anfangs die mitgelieferten)
+//! sind bearbeitbar und liegen im Konfigurationsordner (`palettes.json`).
 
 use serde::{Deserialize, Serialize};
 
@@ -103,12 +103,12 @@ fn path() -> Option<std::path::PathBuf> {
     crate::settings::Settings::path().map(|p| p.with_file_name("palettes.json"))
 }
 
-/// Eigene Paletten laden (fehlt die Datei: keine).
+/// Alle Paletten laden. Ohne gespeicherte Datei: die mitgelieferten.
 pub fn load_user() -> Vec<NamedPalette> {
     path()
         .and_then(|p| std::fs::read_to_string(p).ok())
         .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+        .unwrap_or_else(builtin)
 }
 
 pub fn save_user(list: &[NamedPalette]) -> Result<(), String> {

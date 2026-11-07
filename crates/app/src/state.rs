@@ -30,6 +30,9 @@ pub struct AppState {
     /// Zeitpunkt der letzten Meldung (Meldungen blenden nach einigen Sekunden aus).
     pub message_time: Option<std::time::Instant>,
     pub selected: BTreeSet<FixtureId>,
+    /// Reihenfolge der Auswahl (zuerst gewählte zuerst) – bestimmt die
+    /// Nummerierung auf der Bühne und die Beam-Reihenfolge neuer Effekte.
+    pub selection_order: Vec<FixtureId>,
     /// Markierte Szenen in STEUERN (für Löschen u. a.).
     pub selected_scenes: BTreeSet<SceneId>,
     /// Zuletzt verarbeitete Szenen-Markierung (Edit-Modus: Geräte mitwählen).
@@ -63,6 +66,32 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Auswahlreihenfolge an die Auswahl anpassen: Abgewählte fallen heraus,
+    /// neu Gewählte kommen hinten dazu (mehrere auf einmal in Patch-Reihenfolge).
+    pub fn sync_selection_order(&mut self, show: &dmxcraft_core::Show) {
+        let sel = &self.selected;
+        self.selection_order.retain(|f| sel.contains(f));
+        if self.selection_order.len() == sel.len() {
+            return;
+        }
+        let known: BTreeSet<FixtureId> = self.selection_order.iter().copied().collect();
+        let mut new: Vec<FixtureId> = sel.difference(&known).copied().collect();
+        let pos = |f: &FixtureId| {
+            show.fixtures
+                .iter()
+                .position(|x| x.id == *f)
+                .unwrap_or(usize::MAX)
+        };
+        new.sort_by_key(pos);
+        self.selection_order.extend(new);
+    }
+
+    /// Auswahl in fester Reihenfolge setzen.
+    pub fn select_ordered(&mut self, ids: &[FixtureId]) {
+        self.selected = ids.iter().copied().collect();
+        self.selection_order = ids.to_vec();
+    }
+
     pub fn new(show_path: String) -> Self {
         Self {
             mode: Mode::Control,
@@ -71,6 +100,7 @@ impl AppState {
             message: None,
             message_time: None,
             selected: BTreeSet::new(),
+            selection_order: Vec::new(),
             selected_scenes: BTreeSet::new(),
             programmer_mode: ProgrammerMode::default(),
             focus: Focus::default(),

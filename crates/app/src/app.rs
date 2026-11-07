@@ -781,6 +781,7 @@ impl eframe::App for DmxCraftApp {
 /// Markieren werden ihre Werte in den Programmer geladen, und jede Änderung
 /// am Programmer wird sofort in ihrem (ersten) Schritt gespeichert.
 fn edit_preview(e: &mut Engine, st: &mut AppState) {
+    st.sync_selection_order(e.show());
     let edit = st.programmer_mode.is_edit();
     e.set_blind(st.programmer_mode == ProgrammerMode::Blind);
     let preview: Vec<SceneId> = if edit {
@@ -839,18 +840,21 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
         if edit {
             if !st.selected_scenes.is_empty() {
                 let show = e.show();
-                st.selected = st
-                    .selected_scenes
-                    .iter()
-                    .filter_map(|id| show.scene(*id))
-                    .flat_map(|s| {
-                        s.steps
-                            .iter()
-                            .flat_map(|step| step.values.iter().map(|v| v.fixture))
-                            .chain(s.effects.iter().flat_map(|e| e.fixtures.iter().copied()))
-                    })
-                    .filter(|f| show.fixture(*f).is_some())
-                    .collect();
+                // Effekt-Geräte zuerst (ihre Reihenfolge zählt), dann die übrigen
+                let mut ids: Vec<dmxcraft_core::FixtureId> = Vec::new();
+                for s in st.selected_scenes.iter().filter_map(|id| show.scene(*id)) {
+                    let fx = s.effects.iter().flat_map(|e| e.fixtures.iter().copied());
+                    let steps = s
+                        .steps
+                        .iter()
+                        .flat_map(|step| step.values.iter().map(|v| v.fixture));
+                    for f in fx.chain(steps) {
+                        if show.fixture(f).is_some() && !ids.contains(&f) {
+                            ids.push(f);
+                        }
+                    }
+                }
+                st.select_ordered(&ids);
             }
             // Werte der neuen Bearbeitungsszene in den Programmer laden
             e.clear_programmer();

@@ -79,88 +79,202 @@ impl PaletteStore {
         }
         if self.manage {
             let mut open = true;
+            let mut list = self.user().clone();
+            let before = list.clone();
             let mut delete = None;
-            let mut start_rename = None;
             let mut rename = self.rename.clone();
+            let mut start_rename = None;
             let mut commit_rename = false;
-            let list = self.user().clone();
-            Dialog::new(t("Paletten verwalten"))
+            let res = Dialog::new(t("Paletten verwalten"))
                 .id("palette_manage")
-                .width(380.0)
+                .resizable([520.0, 460.0])
+                .secondary(t("Standardpaletten wiederherstellen"))
                 .cancel(t("Schließen"))
                 .show(ctx, &mut open, |ui, _| {
-                    if list.is_empty() {
-                        ui.label(
-                            egui::RichText::new(t("Noch keine eigenen Paletten gespeichert."))
-                                .color(theme::text_dim()),
-                        );
-                    }
-                    for (i, p) in list.iter().enumerate() {
-                        ui.horizontal(|ui| {
-                            ui.set_min_height(30.0);
-                            match rename.as_mut().filter(|(r, _)| *r == i) {
-                                Some((_, name)) => {
-                                    let r = ui.add(text_field(name).desired_width(160.0));
-                                    r.request_focus();
-                                    if r.lost_focus() {
-                                        commit_rename = true;
+                    ui.label(
+                        egui::RichText::new(t(
+                            "Doppelklick auf den Namen benennt um. Farbfeld anklicken ändert die Farbe, Rechtsklick entfernt sie.",
+                        ))
+                        .color(theme::text_dim()),
+                    );
+                    ui.add_space(theme::SP_S);
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            for (i, p) in list.iter_mut().enumerate() {
+                                ui.horizontal(|ui| {
+                                    ui.set_min_height(30.0);
+                                    let (nr, _) = ui.allocate_exact_size(
+                                        Vec2::new(150.0, 26.0),
+                                        Sense::hover(),
+                                    );
+                                    let mut child = ui.new_child(
+                                        egui::UiBuilder::new()
+                                            .max_rect(nr)
+                                            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+                                    );
+                                    match rename.as_mut().filter(|(r, _)| *r == i) {
+                                        Some((_, name)) => {
+                                            let r = child.add(text_field(name).desired_width(140.0));
+                                            r.request_focus();
+                                            if r.lost_focus() {
+                                                commit_rename = true;
+                                            }
+                                        }
+                                        None => {
+                                            if child
+                                                .add(
+                                                    egui::Label::new(&p.name)
+                                                        .truncate()
+                                                        .sense(Sense::click()),
+                                                )
+                                                .double_clicked()
+                                            {
+                                                start_rename = Some(i);
+                                            }
+                                        }
                                     }
-                                }
-                                None => {
-                                    if ui
-                                        .add(egui::Label::new(&p.name).sense(Sense::click()))
-                                        .on_hover_text(t("Doppelklick zum Umbenennen"))
-                                        .double_clicked()
-                                    {
-                                        start_rename = Some(i);
-                                    }
-                                }
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui
+                                                .add(
+                                                    crate::ui::widgets::IconButton::new(
+                                                        crate::ui::widgets::Icon::Trash,
+                                                    )
+                                                    .flat(),
+                                                )
+                                                .on_hover_text(t("Palette löschen"))
+                                                .clicked()
+                                            {
+                                                delete = Some(i);
+                                            }
+                                            ui.with_layout(
+                                                egui::Layout::left_to_right(egui::Align::Center),
+                                                |ui| {
+                                                    edit_colors(
+                                                        ui,
+                                                        ("manage", i),
+                                                        &mut p.colors,
+                                                        true,
+                                                        18.0,
+                                                    );
+                                                },
+                                            );
+                                        },
+                                    );
+                                });
                             }
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if ui
-                                        .add(
-                                            crate::ui::widgets::IconButton::new(
-                                                crate::ui::widgets::Icon::Trash,
-                                            )
-                                            .flat(),
-                                        )
-                                        .on_hover_text(t("Palette löschen"))
-                                        .clicked()
-                                    {
-                                        delete = Some(i);
-                                    }
-                                    strip(ui, &p.colors, Vec2::new(120.0, 14.0));
-                                },
-                            );
                         });
-                    }
                 });
             if let Some(i) = start_rename {
                 rename = Some((i, list[i].name.clone()));
             }
             if commit_rename {
                 if let Some((i, name)) = rename.take() {
-                    if !name.trim().is_empty() {
-                        if let Some(p) = self.user().get_mut(i) {
-                            p.name = name.trim().to_string();
-                        }
-                        self.persist();
+                    if let Some(p) = list.get_mut(i).filter(|_| !name.trim().is_empty()) {
+                        p.name = name.trim().to_string();
+                    }
+                }
+            }
+            if let Some(i) = delete {
+                list.remove(i);
+                rename = None;
+            }
+            if res.clicked(0) {
+                // fehlende mitgelieferte Paletten wieder anhängen
+                for b in palettes::builtin() {
+                    if !list.iter().any(|p| p.name == b.name) {
+                        list.push(b);
                     }
                 }
             }
             self.rename = rename;
-            if let Some(i) = delete {
-                self.user().remove(i);
+            if list != before {
+                *self.user() = list;
                 self.persist();
             }
-            if !open {
+            if !open || res.clicked(1) {
                 self.manage = false;
                 self.rename = None;
             }
         }
     }
+}
+
+/// Farbfelder bearbeiten: Klick = Farbwähler, Rechtsklick = entfernen,
+/// „+“ = hinzufügen. `true`, wenn sich etwas geändert hat.
+fn edit_colors(
+    ui: &mut egui::Ui,
+    salt: impl std::hash::Hash + Copy + std::fmt::Debug,
+    colors: &mut Vec<[u8; 3]>,
+    enabled: bool,
+    size: f32,
+) -> bool {
+    let before = colors.clone();
+    ui.spacing_mut().item_spacing.x = 3.0;
+    let n = colors.len();
+    let mut remove = None;
+    for (i, c) in colors.iter_mut().enumerate() {
+        let (r, resp) = ui.allocate_exact_size(
+            Vec2::splat(size),
+            if enabled {
+                Sense::click()
+            } else {
+                Sense::hover()
+            },
+        );
+        let p = ui.painter();
+        p.rect_filled(r, 2.0, theme::rgb(*c));
+        p.rect_stroke(
+            r,
+            2.0,
+            Stroke::new(
+                1.0,
+                if resp.hovered() && enabled {
+                    Color32::WHITE
+                } else {
+                    theme::border()
+                },
+            ),
+            StrokeKind::Inside,
+        );
+        let resp = resp.on_hover_text(format!(
+            "#{:02X}{:02X}{:02X} · {}",
+            c[0],
+            c[1],
+            c[2],
+            t("Rechtsklick: entfernen")
+        ));
+        crate::ui::widgets::menu::dropdown(&resp, |ui| {
+            ui.set_min_width(212.0);
+            crate::ui::widgets::color_picker::color_picker(
+                ui,
+                ui.make_persistent_id(("palette_color", salt, i)),
+                c,
+            );
+        });
+        if resp.secondary_clicked() && n > 1 {
+            remove = Some(i);
+        }
+    }
+    if let Some(i) = remove {
+        colors.remove(i);
+    }
+    if ui
+        .add_enabled(
+            enabled && colors.len() < 16,
+            egui::Button::new(egui::RichText::new("+").color(theme::text_dim()))
+                .frame(false)
+                .min_size(Vec2::splat(size)),
+        )
+        .on_hover_text(t("Farbe hinzufügen"))
+        .clicked()
+    {
+        let last = colors.last().copied().unwrap_or([255, 255, 255]);
+        colors.push(last);
+    }
+    *colors != before
 }
 
 /// Zeigt die Einstellungen; `true`, wenn sich etwas geändert hat.
@@ -197,9 +311,14 @@ pub fn color_fx_ui(
     ui.add_space(theme::SP_XS);
 
     // Farbpalette
+    // Zeile mit Paletten-Menü, darunter die Farbfelder über die volle Breite
     label_row(ui, t("Farbpalette"), |ui| {
         palette_editor(ui, salt, fx, enabled, store);
     });
+    ui.horizontal_wrapped(|ui| {
+        edit_colors(ui, ("fx", salt), &mut fx.palette, enabled, 18.0);
+    });
+    ui.add_space(theme::SP_XS);
     toggle_row(ui, t("Graustufen"), &mut fx.grayscale, enabled);
     label_row(ui, t("Transformieren"), |ui| {
         ui.add_enabled_ui(enabled, |ui| {
@@ -320,16 +439,6 @@ pub fn color_fx_ui(
             );
         }
         ColorPreset::Sweep => {
-            slider_row(
-                ui,
-                id("angle"),
-                t("Winkel"),
-                &mut fx.angle,
-                (0.0, 360.0),
-                0,
-                enabled,
-                accent,
-            );
             toggle_row(ui, t("Richtung ändern"), &mut fx.alternate, enabled);
         }
         ColorPreset::Sparkle => {
@@ -488,75 +597,20 @@ fn slider_row(
 /// „+“ = Farbe hinzufügen, „…“ = gespeicherte Paletten.
 fn palette_editor(
     ui: &mut egui::Ui,
-    salt: u32,
+    _salt: u32,
     fx: &mut ColorFx,
     enabled: bool,
     store: &mut PaletteStore,
 ) {
-    ui.spacing_mut().item_spacing.x = 2.0;
-    let mut remove = None;
-    let n = fx.palette.len();
-    let avail = ui.available_width() - 44.0;
-    let size = (avail / (n.max(1) as f32) - 2.0).clamp(8.0, 16.0);
-    for (i, c) in fx.palette.iter_mut().enumerate() {
-        let (r, resp) = ui.allocate_exact_size(
-            Vec2::splat(size),
-            if enabled {
-                Sense::click()
-            } else {
-                Sense::hover()
-            },
-        );
-        let p = ui.painter();
-        p.rect_filled(r, 2.0, theme::rgb(*c));
-        p.rect_stroke(
-            r,
-            2.0,
-            Stroke::new(
-                1.0,
-                if resp.hovered() {
-                    Color32::WHITE
-                } else {
-                    theme::border()
-                },
-            ),
-            StrokeKind::Inside,
-        );
-        let resp = resp.on_hover_text(format!(
-            "#{:02X}{:02X}{:02X} · {}",
-            c[0],
-            c[1],
-            c[2],
-            t("Rechtsklick: entfernen")
-        ));
-        crate::ui::widgets::menu::dropdown(&resp, |ui| {
-            ui.set_min_width(212.0);
-            crate::ui::widgets::color_picker::color_picker(
-                ui,
-                ui.make_persistent_id(("palette_color", salt, i)),
-                c,
-            );
-        });
-        if resp.secondary_clicked() && n > 1 {
-            remove = Some(i);
-        }
-    }
-    if let Some(i) = remove {
-        fx.palette.remove(i);
-    }
     let small = |ui: &mut egui::Ui, text: &str, tip: &str| {
         ui.add_enabled(
             enabled,
             egui::Button::new(egui::RichText::new(text).color(theme::text_dim()))
                 .frame(false)
-                .min_size(Vec2::new(16.0, 16.0)),
+                .min_size(Vec2::new(18.0, 18.0)),
         )
         .on_hover_text(tip)
     };
-    if small(ui, "+", t("Farbe hinzufügen")).clicked() && fx.palette.len() < 16 {
-        let last = fx.palette.last().copied().unwrap_or([255, 255, 255]);
-        fx.palette.push(last);
-    }
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         let more = small(ui, "•••", t("Paletten"));
         crate::ui::widgets::menu::dropdown(&more, |ui| {
@@ -565,7 +619,7 @@ fn palette_editor(
             ui.set_max_width(220.0);
             let mut pick = None;
             let user = store.user().clone();
-            for p in palettes::builtin().iter().chain(user.iter()) {
+            for p in user.iter() {
                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(220.0, 34.0), Sense::click());
                 let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
                 let r = rect.shrink2(Vec2::new(8.0, 3.0));
@@ -624,9 +678,4 @@ fn paint_strip(p: &egui::Painter, r: Rect, colors: &[[u8; 3]]) {
         Stroke::new(1.0, theme::border()),
         StrokeKind::Inside,
     );
-}
-
-fn strip(ui: &mut egui::Ui, colors: &[[u8; 3]], size: Vec2) {
-    let (r, _) = ui.allocate_exact_size(size, Sense::hover());
-    paint_strip(ui.painter(), r, colors);
 }
