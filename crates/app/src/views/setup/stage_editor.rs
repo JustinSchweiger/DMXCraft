@@ -139,6 +139,7 @@ impl View for StageEditorView {
             .show(ui, |ui| {
                 let show = cx.engine.show();
                 let clip = cx.state.layout_clipboard.is_some();
+                let has_fx_clip = !cx.state.fixture_clipboard.is_empty();
                 let mut action = None;
                 let moves = StageCanvas {
                     show,
@@ -155,9 +156,15 @@ impl View for StageEditorView {
                     &mut self.interaction,
                     &mut cx.state.selected,
                     &mut |ui, target, sel| {
-                        if let Some(a) =
-                            fixture_menu::menu(ui, show, sel, target, MenuPlace::StageEditor, clip)
-                        {
+                        if let Some(a) = fixture_menu::menu(
+                            ui,
+                            show,
+                            sel,
+                            target,
+                            MenuPlace::StageEditor,
+                            clip,
+                            has_fx_clip,
+                        ) {
                             action = Some(a);
                         }
                     },

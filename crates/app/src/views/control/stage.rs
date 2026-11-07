@@ -84,6 +84,7 @@ impl View for StageView {
         };
         let mut action = None;
         let clip = cx.state.layout_clipboard.is_some();
+        let has_fx_clip = !cx.state.fixture_clipboard.is_empty();
         let locked = cx.state.locked;
         let area = ui.available_rect_before_wrap();
         let blind = cx.state.programmer_mode == crate::state::ProgrammerMode::Blind;
@@ -97,7 +98,9 @@ impl View for StageView {
                     ui.label(t("Oberfläche ist gesperrt"));
                     return;
                 }
-                if let Some(a) = fixture_menu::menu(ui, show, sel, target, MenuPlace::Stage, clip) {
+                if let Some(a) =
+                    fixture_menu::menu(ui, show, sel, target, MenuPlace::Stage, clip, has_fx_clip)
+                {
                     action = Some(a);
                 }
             },

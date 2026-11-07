@@ -32,6 +32,41 @@ impl View for SetupView {
         {
             crate::views::fixture_menu::apply(cx.engine, cx.state, FixtureAction::Delete);
         }
+        // Zwischenablage (Strg+X/C/V kommen von egui als Ereignisse), Strg+D, Strg+A
+        if !typing && !cx.state.locked {
+            let (cut, copy, paste, dup, all) = ui.input(|i| {
+                let ev = |f: fn(&egui::Event) -> bool| i.events.iter().any(f);
+                let key = |k| i.modifiers.command && i.key_pressed(k);
+                (
+                    ev(|e| matches!(e, egui::Event::Cut)) || key(egui::Key::X),
+                    ev(|e| matches!(e, egui::Event::Copy)) || key(egui::Key::C),
+                    ev(|e| matches!(e, egui::Event::Paste(_))) || key(egui::Key::V),
+                    key(egui::Key::D),
+                    key(egui::Key::A),
+                )
+            });
+            let some = !cx.state.selected.is_empty();
+            let action = if cut && some {
+                Some(FixtureAction::Cut)
+            } else if copy && some {
+                Some(FixtureAction::Copy)
+            } else if paste && !cx.state.fixture_clipboard.is_empty() {
+                Some(FixtureAction::Paste)
+            } else if dup && some {
+                Some(FixtureAction::Duplicate)
+            } else if all {
+                Some(FixtureAction::SelectAll)
+            } else {
+                None
+            };
+            if let Some(a) = action {
+                if matches!(a, FixtureAction::Cut | FixtureAction::Copy) {
+                    // egui meldet Strg+V nur, wenn die System-Zwischenablage Text enthält
+                    ui.ctx().copy_text("DMXCraft".into());
+                }
+                crate::views::fixture_menu::apply(cx.engine, cx.state, a);
+            }
+        }
         let area = egui::Frame::new()
             .fill(theme::surface())
             .inner_margin(egui::Margin::same(6));

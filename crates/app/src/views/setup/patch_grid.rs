@@ -246,6 +246,12 @@ impl PatchGrid {
                 self.rename_fresh = true;
             }
         }
+        // angeklickte Zelle = Ziel für Einfügen
+        if resp.clicked() || resp.secondary_clicked() {
+            if let Some(c) = hovered_cell {
+                cx.state.patch_cursor = Some((universe, c as u16 + 1));
+            }
+        }
         if resp.clicked() {
             match hovered_fixture {
                 Some(id) if additive => {
@@ -273,9 +279,18 @@ impl PatchGrid {
         let mut action = None;
         let target = self.context_target;
         let has_clip = cx.state.layout_clipboard.is_some();
+        let has_fx_clip = !cx.state.fixture_clipboard.is_empty();
         let selected = &cx.state.selected;
         crate::ui::widgets::menu::context(&resp, |ui| {
-            action = fixture_menu::menu(ui, show, selected, target, MenuPlace::Patch, has_clip);
+            action = fixture_menu::menu(
+                ui,
+                show,
+                selected,
+                target,
+                MenuPlace::Patch,
+                has_clip,
+                has_fx_clip,
+            );
         });
 
         // ----- Zeichnen -----

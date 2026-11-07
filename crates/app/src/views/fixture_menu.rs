@@ -55,6 +55,10 @@ pub enum FixtureAction {
     NextFreeAddress,
     ShowInSetup,
     Rename,
+    Cut,
+    Copy,
+    Paste,
+    Duplicate,
     Delete,
 }
 
@@ -66,6 +70,7 @@ pub fn menu(
     target: Option<FixtureId>,
     place: MenuPlace,
     has_layout_clipboard: bool,
+    has_fixture_clipboard: bool,
 ) -> Option<FixtureAction> {
     let mut out = None;
     let mut act = |ui: &mut egui::Ui, item: MenuItem<'_>, a: FixtureAction| {
@@ -262,6 +267,43 @@ pub fn menu(
         );
     }
 
+    if place != MenuPlace::Stage {
+        let k = |c: &str| crate::titlebar::keys::clip(c);
+        let (kx, kc, kv, kd) = (k("X"), k("C"), k("V"), k("D"));
+        menu::separator(ui);
+        act(
+            ui,
+            MenuItem::new(t("Ausschneiden"))
+                .icon(Icon::Scissors)
+                .shortcut(&kx)
+                .enabled(some),
+            FixtureAction::Cut,
+        );
+        act(
+            ui,
+            MenuItem::new(t("Kopieren"))
+                .icon(Icon::Copy)
+                .shortcut(&kc)
+                .enabled(some),
+            FixtureAction::Copy,
+        );
+        act(
+            ui,
+            MenuItem::new(t("Einfügen"))
+                .icon(Icon::Paste)
+                .shortcut(&kv)
+                .enabled(has_fixture_clipboard),
+            FixtureAction::Paste,
+        );
+        act(
+            ui,
+            MenuItem::new(t("Duplizieren"))
+                .icon(Icon::Copy)
+                .shortcut(&kd)
+                .enabled(some),
+            FixtureAction::Duplicate,
+        );
+    }
     menu::separator(ui);
     if place == MenuPlace::Stage {
         act(
@@ -468,6 +510,41 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
         FixtureAction::Rename => {
             st.mode = Mode::Setup;
             st.rename_request = ids.first().copied();
+        }
+        FixtureAction::Copy | FixtureAction::Cut => {
+            st.fixture_clipboard = ids
+                .iter()
+                .filter_map(|id| e.show().fixture(*id).cloned())
+                .collect();
+            if action == FixtureAction::Cut {
+                apply(e, st, FixtureAction::Delete);
+            } else {
+                st.info(tr!("{n} Gerät(e) kopiert", n = ids.len()));
+            }
+        }
+        FixtureAction::Paste | FixtureAction::Duplicate => {
+            let src: Vec<dmxcraft_core::Fixture> = if action == FixtureAction::Paste {
+                st.fixture_clipboard.clone()
+            } else {
+                ids.iter()
+                    .filter_map(|id| e.show().fixture(*id).cloned())
+                    .collect()
+            };
+            let Some(first) = src.first() else {
+                return;
+            };
+            // Einfügen ab der angeklickten Zelle, sonst hinter dem Original
+            let (u, a) = match (action == FixtureAction::Paste, st.patch_cursor) {
+                (true, Some(c)) => c,
+                _ => (first.universe, first.address),
+            };
+            let new = e.show_mut().paste_fixtures(&src, u, a);
+            if new.len() < src.len() {
+                st.error(t("Nicht alle Geräte passen in den Patch"));
+            }
+            if !new.is_empty() {
+                st.selected = new.into_iter().collect();
+            }
         }
         FixtureAction::Delete => {
             let n = ids.len();

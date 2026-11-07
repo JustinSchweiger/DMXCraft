@@ -417,6 +417,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Spur {n}", "Track {n}"),
     ("Spurfarbe", "Track colour"),
     ("Gitter", "Grid"),
+    ("{n} Gerät(e) kopiert", "{n} fixture(s) copied"),
+    ("Nicht alle Geräte passen in den Patch", "Not all fixtures fit into the patch"),
     ("Keine Farbe", "No colour"),
     ("Klick: Position setzen · Ziehen: hoch/runter zoomen, links/rechts scrollen", "Click: set position · Drag: up/down zooms, left/right scrolls"),
     ("Kommt in einer späteren Version", "Coming in a later version"),

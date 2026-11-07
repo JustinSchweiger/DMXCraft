@@ -482,6 +482,10 @@ pub mod keys {
     pub fn save_as() -> String {
         format!("{}+{}+S", modifier(), t("Umschalt"))
     }
+    /// Zwischenablage-Kürzel: „Strg+X“ usw.
+    pub fn clip(key: &str) -> String {
+        k(key)
+    }
     pub fn undo() -> String {
         k("Z")
     }

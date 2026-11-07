@@ -64,6 +64,10 @@ pub struct AppState {
     pub rename_request: Option<FixtureId>,
     /// Kopiertes Bühnenplan-Layout (Positionen relativ zum ersten Gerät).
     pub layout_clipboard: Option<Vec<[f32; 2]>>,
+    /// Ausgeschnittene/kopierte Geräte (Patch: Strg+X/C/V).
+    pub fixture_clipboard: Vec<dmxcraft_core::Fixture>,
+    /// Zuletzt angeklickte Zelle im Patch (Universum, Adresse): Ziel für Einfügen.
+    pub patch_cursor: Option<(u8, u16)>,
     /// Gerät, das der DMX-Patch beim nächsten Öffnen zeigen soll.
     pub monitor_focus: Option<FixtureId>,
     /// Patch-Raster auf „Ausgang“ umschalten (Tools → DMX-Werte).
@@ -128,6 +132,8 @@ impl AppState {
             zones_open: false,
             rename_request: None,
             layout_clipboard: None,
+            fixture_clipboard: Vec::new(),
+            patch_cursor: None,
             monitor_focus: None,
             show_dmx_levels: false,
         }

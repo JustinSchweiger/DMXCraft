@@ -933,6 +933,78 @@ impl Show {
         map
     }
 
+    /// Kopien von Geräten patchen: jede an die erste freie Adresse ab
+    /// `from` (wenn nötig in den folgenden Universen), in der gegebenen
+    /// Reihenfolge. Namen werden weitergezählt („PAR 4“ → „PAR 5“), die
+    /// Bühnenposition leicht versetzt. Liefert die neuen IDs.
+    pub fn paste_fixtures(&mut self, src: &[Fixture], universe: u8, from: u16) -> Vec<FixtureId> {
+        let mut out = Vec::new();
+        let (mut u, mut a) = (universe, from.max(1));
+        for f in src {
+            let Some(ch) = self.fixture_type(&f.type_key).map(|t| t.channel_count()) else {
+                continue;
+            };
+            // erste freie Stelle ab (u, a) suchen
+            let mut place = None;
+            while u < self.universes && place.is_none() {
+                let mut addr = a;
+                while u32::from(addr) + u32::from(ch) - 1 <= UNIVERSE_SIZE as u32 {
+                    if self.check_placement(&f.type_key, u, addr, None).is_ok() {
+                        place = Some((u, addr));
+                        break;
+                    }
+                    addr += 1;
+                }
+                if place.is_none() {
+                    u += 1;
+                    a = 1;
+                }
+            }
+            let Some((pu, pa)) = place else {
+                break;
+            };
+            let id = self.next_fixture_id();
+            let name = self.next_fixture_name(&f.name);
+            self.fixtures.push(Fixture {
+                id,
+                name,
+                universe: pu,
+                address: pa,
+                plan_pos: f
+                    .plan_pos
+                    .map(|p| [(p[0] + 0.03).min(1.0), (p[1] + 0.03).min(1.0)]),
+                ..f.clone()
+            });
+            out.push(id);
+            u = pu;
+            a = pa + ch;
+        }
+        out
+    }
+
+    /// Freier Name: endet `name` auf eine Zahl, wird bis zum ersten freien
+    /// Namen weitergezählt, sonst „name 2“, „name 3“ ….
+    fn next_fixture_name(&self, name: &str) -> String {
+        let taken = |n: &str| self.fixtures.iter().any(|f| f.name == n);
+        if !taken(name) {
+            return name.to_string();
+        }
+        let digits = name.len() - name.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+        let (stem, mut n) = if digits > 0 {
+            let (s, d) = name.split_at(name.len() - digits);
+            (s.to_string(), d.parse::<u32>().unwrap_or(1))
+        } else {
+            (format!("{name} "), 1)
+        };
+        loop {
+            n += 1;
+            let cand = format!("{stem}{n}");
+            if !taken(&cand) {
+                return cand;
+            }
+        }
+    }
+
     /// Erste freie Adresse in einem Universum, an die `channels` Kanäle passen.
     pub fn next_free_address(&self, universe: u8, channels: u16) -> Option<u16> {
         if channels == 0 || usize::from(channels) > UNIVERSE_SIZE {
@@ -1260,6 +1332,34 @@ mod tests {
             s.upsert_fixture_type(t);
         }
         s
+    }
+
+    #[test]
+    fn paste_fixtures_finds_free_addresses_and_names() {
+        let mut s = show();
+        let a = s
+            .add_fixture("PAR 1", "generic/rgbw-par-6ch", 0, 1)
+            .unwrap();
+        let b = s
+            .add_fixture("PAR 2", "generic/rgbw-par-6ch", 0, 13)
+            .unwrap();
+        let src: Vec<Fixture> = [a, b]
+            .iter()
+            .map(|i| s.fixture(*i).unwrap().clone())
+            .collect();
+        let ids = s.paste_fixtures(&src, 0, 1);
+        let got: Vec<(String, u16)> = ids
+            .iter()
+            .map(|i| {
+                let f = s.fixture(*i).unwrap();
+                (f.name.clone(), f.address)
+            })
+            .collect();
+        // 1..6 belegt, 7..12 frei, 13..18 belegt, danach 19
+        assert_eq!(got, vec![("PAR 3".into(), 7), ("PAR 4".into(), 19)]);
+        // volles Universum: weiter im nächsten
+        let ids = s.paste_fixtures(&src, 0, 510);
+        assert_eq!(s.fixture(ids[0]).unwrap().universe, 1);
     }
 
     #[test]
