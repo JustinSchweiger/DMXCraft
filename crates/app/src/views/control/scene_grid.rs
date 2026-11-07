@@ -921,7 +921,6 @@ fn apply(
                 let id = e
                     .show_mut()
                     .add_scene(name.clone(), Some(zone), vec![Step::new(values)]);
-                st.append_target = Some(id);
                 *scene_rename = Some((id, name));
             }
             Action::RenameScene(id) => {

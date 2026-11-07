@@ -4,7 +4,7 @@ use crate::i18n::t;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use dmxcraft_core::{Engine, Show};
+use dmxcraft_core::{Engine, SceneId, Show};
 use dmxcraft_output::{OutputKind, OutputStatus, Runtime};
 use eframe::egui;
 
@@ -14,7 +14,7 @@ use crate::fullscreen::Fullscreen;
 use crate::history::History;
 use crate::settings::Settings;
 use crate::settings_window::{SettingsCx, SettingsWindow};
-use crate::state::{AppState, Mode};
+use crate::state::{AppState, Mode, ProgrammerMode};
 use crate::titlebar::{self, MenuAction, TitleInfo, UpdateBadge};
 use crate::ui::theme;
 use crate::ui::widgets::{form, text_field, Dialog};
@@ -639,6 +639,7 @@ impl eframe::App for DmxCraftApp {
                         .show(ui, |ui| control.grid.ui(ui, &mut cx));
                 }
             }
+            edit_preview(cx.engine, cx.state);
         }
         self.dialogs(&ctx);
         self.lock_window(&ctx);
@@ -647,5 +648,34 @@ impl eframe::App for DmxCraftApp {
         // Rückgängig: Änderungen erst übernehmen, wenn Ziehen/Tippen beendet ist.
         let busy = ctx.input(|i| i.pointer.any_down()) || ctx.memory(|m| m.focused().is_some());
         self.history.track(Self::lock(&self.engine).show(), busy);
+    }
+}
+
+/// Edit-Modus: markierte Szenen werden ausgegeben (auch wenn sie nicht laufen)
+/// und ihre Geräte beim Markieren ausgewählt. Bühne und DMX-Ausgang zeigen
+/// damit die Szene, die man gerade bearbeitet.
+fn edit_preview(e: &mut Engine, st: &mut AppState) {
+    let edit = st.programmer_mode == ProgrammerMode::Edit;
+    let preview: Vec<SceneId> = if edit {
+        st.selected_scenes.iter().copied().collect()
+    } else {
+        Vec::new()
+    };
+    if e.preview() != preview.as_slice() {
+        e.set_preview(preview);
+    }
+    if st.selected_scenes != st.scene_selection_seen {
+        st.scene_selection_seen = st.selected_scenes.clone();
+        if edit && !st.selected_scenes.is_empty() {
+            let show = e.show();
+            st.selected = st
+                .selected_scenes
+                .iter()
+                .filter_map(|id| show.scene(*id))
+                .flat_map(|s| s.steps.iter())
+                .flat_map(|step| step.values.iter().map(|v| v.fixture))
+                .filter(|f| show.fixture(*f).is_some())
+                .collect();
+        }
     }
 }

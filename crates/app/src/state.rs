@@ -1,10 +1,9 @@
 //! Gemeinsamer UI-Zustand, den mehrere Ansichten brauchen. Ansichtsspezifischer
 //! Zustand liegt in den jeweiligen View-Typen.
 
-use crate::i18n::t;
 use std::collections::BTreeSet;
 
-use dmxcraft_core::{FixtureId, FixtureType, SceneId, ZoneId};
+use dmxcraft_core::{FixtureId, FixtureType, SceneId};
 
 /// Hauptbereich der Oberfläche.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -33,6 +32,8 @@ pub struct AppState {
     pub selected: BTreeSet<FixtureId>,
     /// Markierte Szenen in STEUERN (für Löschen u. a.).
     pub selected_scenes: BTreeSet<SceneId>,
+    /// Zuletzt verarbeitete Szenen-Markierung (Edit-Modus: Geräte mitwählen).
+    pub scene_selection_seen: BTreeSet<SceneId>,
     /// Betriebsmodus des Programmers.
     pub programmer_mode: ProgrammerMode,
     pub patch: PatchForm,
@@ -42,9 +43,6 @@ pub struct AppState {
     pub zones_open: bool,
     /// Gerät, das im Patch-Raster umbenannt werden soll.
     pub rename_request: Option<FixtureId>,
-    pub append_target: Option<SceneId>,
-    pub new_scene_name: String,
-    pub new_scene_zone: Option<ZoneId>,
     /// Kopiertes Bühnenplan-Layout (Positionen relativ zum ersten Gerät).
     pub layout_clipboard: Option<Vec<[f32; 2]>>,
     /// Gerät, das der DMX-Patch beim nächsten Öffnen zeigen soll.
@@ -64,6 +62,7 @@ impl AppState {
             selected: BTreeSet::new(),
             selected_scenes: BTreeSet::new(),
             programmer_mode: ProgrammerMode::default(),
+            scene_selection_seen: BTreeSet::new(),
             patch: PatchForm {
                 name: String::new(),
                 count: 1,
@@ -73,9 +72,6 @@ impl AppState {
             imported_types: Vec::new(),
             zones_open: false,
             rename_request: None,
-            append_target: None,
-            new_scene_name: t("Neue Szene").into(),
-            new_scene_zone: None,
             layout_clipboard: None,
             monitor_focus: None,
             show_dmx_levels: false,
@@ -102,7 +98,6 @@ impl AppState {
     /// Nach dem Laden/Ersetzen einer Show.
     pub fn reset_for_new_show(&mut self) {
         self.selected.clear();
-        self.append_target = None;
     }
 }
 

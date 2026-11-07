@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/app.rs": {
-    "mtime": 1794013429.6183589,
-    "seen": 1794013530.8313358,
-    "ast_hash": "f1cb1f7ff10816ccef206afd3bf7bc6a",
+    "mtime": 1794043215.4598064,
+    "seen": 1794043331.3964984,
+    "ast_hash": "3b47b9feec0d58d20a3251768d40b15c",
     "semantic_hash": ""
   },
   "crates/app/src/demo.rs": {
@@ -84,9 +84,9 @@
     "semantic_hash": ""
   },
   "crates/core/src/engine.rs": {
-    "mtime": 1793993865.3200538,
-    "seen": 1793993904.8118815,
-    "ast_hash": "dde32395e755af67e88fd6c3925ebe1c",
+    "mtime": 1794043192.1353958,
+    "seen": 1794043331.3965778,
+    "ast_hash": "dde8204024f9edd080b191a2db17ea29",
     "semantic_hash": ""
   },
   "crates/core/src/fixture.rs": {
@@ -186,9 +186,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/state.rs": {
-    "mtime": 1794042357.8441978,
-    "seen": 1794042484.8966963,
-    "ast_hash": "075928360c8ac5f769d5e6adcaa51a34",
+    "mtime": 1794043266.0294378,
+    "seen": 1794043331.3965254,
+    "ast_hash": "73be542884e3ce865abacef647248fa3",
     "semantic_hash": ""
   },
   "crates/app/src/ui/mod.rs": {
@@ -234,9 +234,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/segmented.rs": {
-    "mtime": 1794008431.990704,
-    "seen": 1794008921.1694522,
-    "ast_hash": "2aab42fc8dc94ff9446cc4aa71429604",
+    "mtime": 1794043291.468741,
+    "seen": 1794043331.3965478,
+    "ast_hash": "542c931a8a774dc76199dce9c8cf5dbe",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/stage_canvas.rs": {
@@ -264,15 +264,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/programmer.rs": {
-    "mtime": 1794042459.0955951,
-    "seen": 1794042484.8967292,
-    "ast_hash": "8e0e555a512924cef5f0add53800a247",
+    "mtime": 1794043291.7188382,
+    "seen": 1794043331.3965573,
+    "ast_hash": "0c5934e14cb17dd5cabcb6f91885d0e2",
     "semantic_hash": ""
   },
   "crates/app/src/views/control/scene_grid.rs": {
-    "mtime": 1794041643.3340623,
-    "seen": 1794041741.269163,
-    "ast_hash": "37c5ddf6e006606bcc879b4131ee495c",
+    "mtime": 1794043255.7983887,
+    "seen": 1794043331.3965585,
+    "ast_hash": "84defb46d24f59ac0d8d90ba929896ba",
     "semantic_hash": ""
   },
   "crates/app/src/views/control/stage.rs": {

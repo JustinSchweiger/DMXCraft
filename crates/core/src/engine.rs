@@ -47,6 +47,9 @@ pub struct Engine {
     playing: Vec<PlayingScene>,
     next_seq: u64,
     programmer: HashMap<ChannelRef, u8>,
+    /// Vorschau-Szenen (Edit-Modus): werden ausgegeben, auch wenn sie nicht
+    /// laufen – ihr erster Schritt liegt über den laufenden Szenen.
+    preview: Vec<SceneId>,
     master: f32,
     blackout: bool,
     speed: f32,
@@ -59,6 +62,7 @@ impl Engine {
             playing: Vec::new(),
             next_seq: 1,
             programmer: HashMap::new(),
+            preview: Vec::new(),
             master: 1.0,
             blackout: false,
             speed: 1.0,
@@ -210,6 +214,15 @@ impl Engine {
 
     pub fn clear_programmer_channel(&mut self, ch: ChannelRef) {
         self.programmer.remove(&ch);
+    }
+
+    /// Vorschau-Szenen setzen (leer = keine Vorschau).
+    pub fn set_preview(&mut self, scenes: Vec<SceneId>) {
+        self.preview = scenes;
+    }
+
+    pub fn preview(&self) -> &[SceneId] {
+        &self.preview
     }
 
     pub fn clear_programmer(&mut self) {
@@ -373,14 +386,33 @@ impl Engine {
             }
         }
 
-        // 3) Programmer
+        // 3) Vorschau nicht laufender Szenen (erster Schritt, LTP)
+        for id in &self.preview {
+            if self.is_active(*id) {
+                continue;
+            }
+            let Some(step) = self.show.scene(*id).and_then(|s| s.steps.first()) else {
+                continue;
+            };
+            for cv in &step.values {
+                let ch = ChannelRef {
+                    fixture: cv.fixture,
+                    channel: cv.channel,
+                };
+                if let Some(slot) = values.get_mut(&ch) {
+                    *slot = cv.value;
+                }
+            }
+        }
+
+        // 4) Programmer
         for (ch, v) in &self.programmer {
             if let Some(slot) = values.get_mut(ch) {
                 *slot = *v;
             }
         }
 
-        // 4) Master / Blackout
+        // 5) Master / Blackout
         let master = if self.blackout { 0.0 } else { self.master };
         if master < 1.0 {
             for f in &self.show.fixtures {
@@ -668,6 +700,24 @@ mod tests {
         e.activate(id);
         e.tick(Duration::from_secs(3600)); // darf nicht hängen
         assert!(e.is_active(id));
+    }
+
+    #[test]
+    fn preview_outputs_inactive_scene() {
+        let (mut s, a, _) = setup();
+        let id = s.add_scene("P", None, vec![Step::new(vec![cv(a, 1, 77)])]);
+        let mut e = Engine::new(s);
+        let ch = ChannelRef {
+            fixture: a,
+            channel: 1,
+        };
+        let before = e.render_frame();
+        e.set_preview(vec![id]);
+        let f = e.render_frame();
+        assert_eq!(e.output_value(&f, ch), Some(77));
+        assert!(!e.is_active(id));
+        e.set_preview(vec![]);
+        assert_eq!(e.render_frame(), before);
     }
 
     #[test]

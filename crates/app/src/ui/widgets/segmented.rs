@@ -20,12 +20,14 @@ impl<'a, T: PartialEq + Copy> Segmented<'a, T> {
             dimmed: &|_| false,
         }
     }
+    #[allow(dead_code)]
     pub fn vertical(mut self, w: f32) -> Self {
         self.vertical = true;
         self.item_width = Some(w);
         self
     }
     /// Einträge, die gedämpft angezeigt werden (z. B. leere Kategorien).
+    #[allow(dead_code)]
     pub fn dimmed(mut self, f: &'a dyn Fn(T) -> bool) -> Self {
         self.dimmed = f;
         self

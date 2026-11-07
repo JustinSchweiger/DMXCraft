@@ -2,16 +2,12 @@
 //! speichern.
 
 use crate::i18n::t;
-use dmxcraft_core::{
-    ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, FixtureId, Step, ZoneId,
-};
+use dmxcraft_core::{ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, FixtureId};
 use eframe::egui::{self, Color32, Sense, Stroke, Vec2};
 
 use crate::state::{AppState, ProgrammerMode};
 use crate::ui::theme;
-use crate::ui::widgets::{
-    section_header, text_field, Fader, FaderEvent, Icon, IconButton, Segmented, Swatch, XyPad,
-};
+use crate::ui::widgets::{section_header, Fader, FaderEvent, Icon, IconButton, Swatch, XyPad};
 use crate::views::quick::{quick_action, Quick};
 use crate::views::{View, ViewCtx};
 
@@ -129,46 +125,31 @@ impl View for ProgrammerView {
         toolbar(ui, cx.engine, cx.state);
         ui.add_space(theme::SP_S);
 
-        // Speicherleiste unten, damit die Fader die restliche Höhe bekommen.
-        egui::Panel::bottom("programmer_save")
-            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 6)))
-            .show(ui, |ui| save_bar(ui, cx.engine, cx.state));
-
         egui::Panel::left("programmer_categories")
             .resizable(false)
-            .exact_size(124.0)
+            .exact_size(132.0)
             .frame(egui::Frame::new())
-            .show(ui, |ui| {
-                let dimmed =
-                    |c: Category| c != Category::All && !groups.iter().any(|g| c.contains(g.kind));
-                Segmented::new(&Category::ITEMS.map(|(c, l)| (c, t(l))))
-                    .vertical(116.0)
-                    .dimmed(&dimmed)
-                    .show(ui, &mut self.category);
-            });
+            .show(ui, |ui| category_list(ui, &groups, &mut self.category));
 
         egui::CentralPanel::default_margins()
             .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(8, 0)))
             .show(ui, |ui| {
                 if cx.state.selected.is_empty() {
-                    ui.add_space(theme::SP_L);
-                    ui.label(
-                        egui::RichText::new(
-                            t("Im Bühnenplan Geräte auswählen (Klick, Aufziehen, Strg/Shift+Klick) oder eine Gruppe wählen."),
-                        )
-                        .color(theme::text_dim()),
-                    );
                     return;
                 }
-                let visible: Vec<&FaderGroup> =
-                    groups.iter().filter(|g| self.category.contains(g.kind)).collect();
+                let visible: Vec<&FaderGroup> = groups
+                    .iter()
+                    .filter(|g| self.category.contains(g.kind))
+                    .collect();
                 if self.category == Category::Color {
                     color_bar(ui, cx.engine, &groups, cx.frame);
                 }
                 if visible.is_empty() {
                     ui.label(
-                        egui::RichText::new(t("Die ausgewählten Geräte haben keine Kanäle in dieser Kategorie."))
-                            .color(theme::text_dim()),
+                        egui::RichText::new(t(
+                            "Die ausgewählten Geräte haben keine Kanäle in dieser Kategorie.",
+                        ))
+                        .color(theme::text_dim()),
                     );
                     return;
                 }
@@ -295,63 +276,7 @@ fn xy_pad(ui: &mut egui::Ui, e: &mut Engine, groups: &[FaderGroup], frame: &DmxF
     }
 }
 
-/// Programmer-Inhalt als neue Szene oder als Schritt speichern.
-fn save_bar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
-    if e.programmer().is_empty() {
-        ui.label(
-            egui::RichText::new(t("Fader bewegen, um Werte in den Programmer zu legen."))
-                .color(theme::text_faint()),
-        );
-        return;
-    }
-    let values = programmer_values(e);
-    ui.horizontal_wrapped(|ui| {
-        ui.label(egui::RichText::new(t("Als Szene")).color(theme::text_dim()));
-        ui.add(text_field(&mut st.new_scene_name).desired_width(130.0));
-        zone_combo(ui, e, &mut st.new_scene_zone, "new_scene_zone");
-        if ui.button(t("Speichern")).clicked() {
-            let name = st.new_scene_name.trim().to_string();
-            let id = e.show_mut().add_scene(
-                name.clone(),
-                st.new_scene_zone,
-                vec![Step::new(values.clone())],
-            );
-            st.append_target = Some(id);
-            st.info(tr!("Szene „{name}“ angelegt", name = name));
-        }
-        ui.separator();
-        ui.label(egui::RichText::new(t("Schritt an")).color(theme::text_dim()));
-        let name = st
-            .append_target
-            .and_then(|id| e.show().scene(id))
-            .map_or_else(|| t("Szene wählen").into(), |s| s.name.clone());
-        egui::ComboBox::from_id_salt("append_target")
-            .selected_text(name)
-            .width(120.0)
-            .show_ui(ui, |ui| {
-                for s in &e.show().scenes {
-                    ui.selectable_value(&mut st.append_target, Some(s.id), &s.name);
-                }
-            });
-        if ui.button(t("Anhängen")).clicked() {
-            match st.append_target.and_then(|id| e.show_mut().scene_mut(id)) {
-                Some(scene) => {
-                    let mut step = Step::new(values.clone());
-                    step.fade_ms = 1000;
-                    scene.steps.push(step);
-                    let msg = tr!(
-                        "Schritt {n} an „{v}“ angehängt",
-                        n = scene.steps.len(),
-                        v = scene.name
-                    );
-                    st.info(msg);
-                }
-                None => st.error(t("Bitte zuerst eine Szene wählen")),
-            }
-        }
-    });
-}
-
+/// Aktuelle Programmer-Werte (z. B. für eine neue Szene).
 pub fn programmer_values(e: &Engine) -> Vec<ChannelValue> {
     let mut v: Vec<ChannelValue> = e
         .programmer()
@@ -364,25 +289,6 @@ pub fn programmer_values(e: &Engine) -> Vec<ChannelValue> {
         .collect();
     v.sort_by_key(|c| (c.fixture, c.channel));
     v
-}
-
-pub fn zone_combo(ui: &mut egui::Ui, e: &Engine, zone: &mut Option<ZoneId>, id: &str) -> bool {
-    // ohne gültige Bank: erste Bank vorwählen (Szenen gehören immer zu einer Bank)
-    if zone.and_then(|z| e.show().zone(z)).is_none() {
-        *zone = e.show().zones.first().map(|z| z.id);
-    }
-    let name = zone
-        .and_then(|z| e.show().zone(z))
-        .map_or_else(String::new, |z| z.name.clone());
-    let before = *zone;
-    egui::ComboBox::from_id_salt(id)
-        .selected_text(name)
-        .show_ui(ui, |ui| {
-            for z in &e.show().zones {
-                ui.selectable_value(zone, Some(z.id), &z.name);
-            }
-        });
-    before != *zone
 }
 
 /// Werkzeugleiste: Betriebsmodus (Edit/Blind/Live) und Schnellaktionen.
@@ -485,14 +391,14 @@ fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: bool) {
             ProgrammerMode::Blind,
             None,
             Some(Icon::EyeOff),
-            theme::WARN,
+            theme::DANGER,
             t("Blind Edit: Werte bearbeiten, ohne sie auszugeben"),
         ),
         (
             ProgrammerMode::Live,
             Some(t("LIVE")),
             None,
-            theme::DANGER,
+            theme::WARN,
             t("Live: Show-Betrieb"),
         ),
     ];
@@ -586,4 +492,83 @@ fn items_mode(i: usize) -> ProgrammerMode {
         ProgrammerMode::Blind,
         ProgrammerMode::Live,
     ][i]
+}
+
+/// Seitenleiste der Kategorien: Liste mit Markierungsbalken links; die Zahl
+/// rechts nennt die Fader der Auswahl in dieser Kategorie.
+fn category_list(ui: &mut egui::Ui, groups: &[FaderGroup], current: &mut Category) {
+    let full = ui.available_rect_before_wrap();
+    let p = ui.painter().clone();
+    p.rect_filled(full, theme::R_M, theme::bg());
+    p.rect_stroke(
+        full,
+        theme::R_M,
+        Stroke::new(1.0, theme::border()),
+        egui::StrokeKind::Inside,
+    );
+    let row_h = 32.0;
+    let mut y = full.top() + theme::SP_XS;
+    for (i, (c, label)) in Category::ITEMS.iter().enumerate() {
+        if *c == Category::All {
+            // Trennlinie vor „Alle Kanäle“
+            y += theme::SP_XS;
+            p.line_segment(
+                [
+                    egui::pos2(full.left() + theme::SP_S, y),
+                    egui::pos2(full.right() - theme::SP_S, y),
+                ],
+                Stroke::new(1.0, theme::border()),
+            );
+            y += theme::SP_XS;
+        }
+        let row = egui::Rect::from_min_size(
+            egui::pos2(full.left() + 3.0, y),
+            Vec2::new(full.width() - 6.0, row_h),
+        );
+        y += row_h + 1.0;
+        let n = groups.iter().filter(|g| c.contains(g.kind)).count();
+        let resp = ui.interact(row, ui.make_persistent_id(("prog_cat", i)), Sense::click());
+        let active = *current == *c;
+        let empty = n == 0;
+        if active {
+            p.rect_filled(row, theme::R_S, theme::raised());
+            let bar = egui::Rect::from_min_size(
+                row.left_top() + Vec2::new(0.0, 6.0),
+                Vec2::new(3.0, row_h - 12.0),
+            );
+            p.rect_filled(bar, 1.5, theme::accent());
+        } else if resp.hovered() {
+            p.rect_filled(row, theme::R_S, theme::raised_hover());
+        }
+        let fg = if active {
+            theme::text()
+        } else if empty {
+            theme::text_faint()
+        } else {
+            theme::text_dim()
+        };
+        p.text(
+            egui::pos2(row.left() + theme::SP_M, row.center().y),
+            egui::Align2::LEFT_CENTER,
+            t(label),
+            theme::body(),
+            fg,
+        );
+        if n > 0 {
+            p.text(
+                egui::pos2(row.right() - theme::SP_S, row.center().y),
+                egui::Align2::RIGHT_CENTER,
+                n.to_string(),
+                theme::caption(),
+                if active {
+                    theme::accent()
+                } else {
+                    theme::text_faint()
+                },
+            );
+        }
+        if resp.clicked() {
+            *current = *c;
+        }
+    }
 }
