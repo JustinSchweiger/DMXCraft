@@ -22,6 +22,9 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      - name: ALSA (Audio) für Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - name: Formatierung
         if: matrix.os == 'ubuntu-22.04'
         run: cargo fmt --all --check
