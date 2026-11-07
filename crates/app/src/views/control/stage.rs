@@ -59,6 +59,17 @@ impl View for StageView {
         ui.add_space(theme::SP_S);
         let show = cx.engine.show();
         let order = cx.state.selection_order.clone();
+        // angeklicktes Mapping: Bild unter den Geräten, Rahmen darüber
+        let mapping = mapping_target(cx.engine, cx.state);
+        let cycles = mapping
+            .as_ref()
+            .map_or(0.0, |(sc, _, _)| cx.engine.fx_cycles(*sc));
+        let underlay = mapping.as_ref().map(|(_, _, m)| {
+            let m = m.clone();
+            move |p: &egui::Painter, cam: crate::ui::widgets::stage_canvas::Camera| {
+                paint_mapping(p, cam, &m, cycles);
+            }
+        });
         let canvas = StageCanvas {
             show,
             frame: cx.frame,
@@ -67,6 +78,9 @@ impl View for StageView {
             show_grid: false,
             auto_fit: true,
             order: &order,
+            underlay: underlay
+                .as_ref()
+                .map(|f| f as &dyn Fn(&egui::Painter, crate::ui::widgets::stage_canvas::Camera)),
         };
         let mut action = None;
         let clip = cx.state.layout_clipboard.is_some();
@@ -101,7 +115,161 @@ impl View for StageView {
         if let Some(a) = action {
             fixture_menu::apply(cx.engine, cx.state, a);
         }
+        if let (Some((scene, fx, mut m)), Some((rect, cam))) = (mapping, self.interaction.view) {
+            if !locked && mapping_handles(ui, rect, cam, &mut m) {
+                if let Some(f) = cx
+                    .engine
+                    .show_mut()
+                    .scene_mut(scene)
+                    .and_then(|s| s.effects.iter_mut().find(|f| f.id == fx))
+                {
+                    f.mapping = Some(m);
+                }
+            }
+            ui.ctx().request_repaint();
+        }
     }
+}
+
+/// Angeklicktes MAPPINGS/COLOR MAPPINGS (Szene, Effekt, Einstellungen).
+fn mapping_target(
+    e: &Engine,
+    st: &AppState,
+) -> Option<(
+    dmxcraft_core::SceneId,
+    u32,
+    dmxcraft_core::fx::mapping::MappingFx,
+)> {
+    let (scene, fx) = st.fx_target?;
+    let f = e.show().scene(scene)?.effects.iter().find(|f| f.id == fx)?;
+    Some((scene, fx, f.mapping.clone()?))
+}
+
+/// Bild des Mappings als weich eingefärbtes Gitter im Rechteck.
+fn paint_mapping(
+    p: &egui::Painter,
+    cam: crate::ui::widgets::stage_canvas::Camera,
+    m: &dmxcraft_core::fx::mapping::MappingFx,
+    cycles: f64,
+) {
+    const N: u32 = 28;
+    let mut mesh = egui::epaint::Mesh::default();
+    for yi in 0..=N {
+        for xi in 0..=N {
+            let l = [
+                xi as f32 / N as f32 * 2.0 - 1.0,
+                yi as f32 / N as f32 * 2.0 - 1.0,
+            ];
+            let c = m.color_at(l, cycles);
+            let col = Color32::from_rgba_unmultiplied(
+                (c[0] * 255.0) as u8,
+                (c[1] * 255.0) as u8,
+                (c[2] * 255.0) as u8,
+                200,
+            );
+            mesh.colored_vertex(cam.to_screen(m.to_plan(l)), col);
+        }
+    }
+    for yi in 0..N {
+        for xi in 0..N {
+            let i = yi * (N + 1) + xi;
+            mesh.add_triangle(i, i + 1, i + N + 1);
+            mesh.add_triangle(i + 1, i + N + 2, i + N + 1);
+        }
+    }
+    p.add(egui::Shape::mesh(mesh));
+}
+
+/// Rahmen des Mappings auf der Bühne: Fläche ziehen verschiebt, Ecken
+/// skalieren, der Griff oben dreht. `true`, wenn sich etwas geändert hat.
+fn mapping_handles(
+    ui: &mut egui::Ui,
+    area: egui::Rect,
+    cam: crate::ui::widgets::stage_canvas::Camera,
+    m: &mut dmxcraft_core::fx::mapping::MappingFx,
+) -> bool {
+    let before = m.clone();
+    let id = egui::Id::unique("mapping_handles");
+    let p = ui.painter_at(area);
+    let corners =
+        [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]].map(|c| cam.to_screen(m.to_plan(c)));
+    for i in 0..4 {
+        p.add(egui::Shape::dashed_line(
+            &[corners[i], corners[(i + 1) % 4]],
+            Stroke::new(1.5, Color32::WHITE),
+            5.0,
+            4.0,
+        ));
+    }
+    // Fläche: verschieben (als Polygon-Hülle reicht das umschließende Rechteck nicht
+    // bei Drehung – Treffer per lokaler Lage)
+    let body = egui::Rect::from_points(&corners);
+    let r = ui.interact(body, id.with("body"), Sense::drag());
+    let inside = r
+        .interact_pointer_pos()
+        .or(r.hover_pos())
+        .is_some_and(|q| m.local(cam.to_world(q)).is_some());
+    if r.dragged() && inside {
+        let d = r.drag_delta() / cam.scale();
+        m.center = [m.center[0] + d.x, m.center[1] + d.y];
+    }
+    if inside && (r.hovered() || r.dragged()) {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    }
+    // Ecken: Größe
+    for (i, c) in corners.iter().enumerate() {
+        let r = ui.interact(
+            egui::Rect::from_center_size(*c, Vec2::splat(14.0)),
+            id.with(("corner", i)),
+            Sense::drag(),
+        );
+        if r.dragged() {
+            if let Some(q) = r.interact_pointer_pos() {
+                let w = cam.to_world(q);
+                let (s, co) = m.rotation.to_radians().sin_cos();
+                let (dx, dy) = (w[0] - m.center[0], w[1] - m.center[1]);
+                m.size = [
+                    (dx * co + dy * s).abs().max(0.01),
+                    (-dx * s + dy * co).abs().max(0.01),
+                ];
+            }
+        }
+        let hot = r.hovered() || r.dragged();
+        p.rect_filled(
+            egui::Rect::from_center_size(*c, Vec2::splat(8.0)),
+            1.0,
+            if hot { theme::accent() } else { Color32::WHITE },
+        );
+    }
+    // Drehgriff über der oberen Kante
+    let top = cam.to_screen(m.to_plan([0.0, -1.0]));
+    let dir = (top - cam.to_screen(m.center)).normalized();
+    // außerhalb der Fläche: Griff nach innen setzen
+    let knob = if area.shrink(8.0).contains(top + dir * 22.0) {
+        top + dir * 22.0
+    } else {
+        top - dir * 22.0
+    };
+    p.line_segment([top, knob], Stroke::new(1.0, Color32::WHITE));
+    let r = ui.interact(
+        egui::Rect::from_center_size(knob, Vec2::splat(16.0)),
+        id.with("rotate"),
+        Sense::drag(),
+    );
+    if r.dragged() {
+        if let Some(q) = r.interact_pointer_pos() {
+            let w = cam.to_world(q);
+            let a = (w[1] - m.center[1]).atan2(w[0] - m.center[0]).to_degrees() + 90.0;
+            m.rotation = (a / 5.0).round() * 5.0;
+        }
+    }
+    let hot = r.hovered() || r.dragged();
+    p.circle_filled(
+        knob,
+        5.0,
+        if hot { theme::accent() } else { Color32::WHITE },
+    );
+    *m != before
 }
 
 impl StageView {

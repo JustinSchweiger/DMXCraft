@@ -49,6 +49,8 @@ pub struct StageInteraction {
     pub center: [f32; 2],
     /// Beim nächsten Zeichnen so zoomen, dass alle Geräte sichtbar sind.
     pub fit_request: bool,
+    /// Fläche und Kamera des letzten Zeichnens (für Ebenen darüber).
+    pub view: Option<(Rect, Camera)>,
 }
 
 impl Default for StageInteraction {
@@ -61,6 +63,7 @@ impl Default for StageInteraction {
             center: [0.5, 0.5],
             // Beim ersten Anzeigen alles einpassen
             fit_request: true,
+            view: None,
         }
     }
 }
@@ -72,22 +75,25 @@ impl StageInteraction {
     }
 }
 
+/// Zeichnung unter den Geräten.
+pub type Underlay = dyn Fn(&egui::Painter, Camera);
+
 /// Kamera für ein Frame: Bühne (normiert) ↔ Bildschirm.
 #[derive(Clone, Copy)]
-struct Camera {
+pub struct Camera {
     screen_center: Pos2,
     center: [f32; 2],
     zoom: f32,
 }
 
 impl Camera {
-    fn scale(self) -> f32 {
+    pub fn scale(self) -> f32 {
         WORLD * self.zoom
     }
-    fn to_screen(self, p: [f32; 2]) -> Pos2 {
+    pub fn to_screen(self, p: [f32; 2]) -> Pos2 {
         self.screen_center + Vec2::new(p[0] - self.center[0], p[1] - self.center[1]) * self.scale()
     }
-    fn to_world(self, s: Pos2) -> [f32; 2] {
+    pub fn to_world(self, s: Pos2) -> [f32; 2] {
         let d = (s - self.screen_center) / self.scale();
         [self.center[0] + d.x, self.center[1] + d.y]
     }
@@ -139,6 +145,8 @@ pub struct StageCanvas<'a> {
     pub auto_fit: bool,
     /// Auswahlreihenfolge: ausgewählte Geräte tragen ihre Nummer.
     pub order: &'a [FixtureId],
+    /// Unter den Geräten zeichnen (z. B. das Bild eines Mappings).
+    pub underlay: Option<&'a Underlay>,
 }
 
 /// Position eines Geräts (gespeichert oder Standard nach Patch-Reihenfolge).
@@ -210,6 +218,10 @@ impl StageCanvas<'_> {
             zoom: state.zoom,
         };
         self.paint_stage(&painter, rect, cam);
+        state.view = Some((rect, cam));
+        if let Some(under) = self.underlay {
+            under(&painter, cam);
+        }
 
         if self.show.fixtures.is_empty() {
             return moves;

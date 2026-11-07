@@ -512,6 +512,9 @@ impl ScenePropsView {
                         cx.state.select_ordered(&ids);
                     }
                 }
+                if let Some((_, fx)) = cx.state.fx_target.filter(|(s, _)| *s == id) {
+                    fit_mapping(cx.engine.show_mut(), id, fx);
+                }
                 self.adding = false;
             }
             return;
@@ -876,6 +879,41 @@ impl ScenePropsView {
                 Err(e) => cx.state.error(e),
             }
         }
+    }
+}
+
+/// Rechteck eines neuen Mappings um seine Geräte legen.
+fn fit_mapping(show: &mut dmxcraft_core::Show, scene: SceneId, fx: u32) {
+    let Some(e) = show
+        .scene(scene)
+        .and_then(|s| s.effects.iter().find(|e| e.id == fx))
+        .filter(|e| e.mapping.is_some())
+    else {
+        return;
+    };
+    let beams = dmxcraft_core::fx::feature::fixture_beams(show, &e.fixtures);
+    if beams.is_empty() {
+        return;
+    }
+    let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+    for b in &beams {
+        for a in 0..2 {
+            lo[a] = lo[a].min(b.pos[a]);
+            hi[a] = hi[a].max(b.pos[a]);
+        }
+    }
+    let center = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
+    let size = [
+        ((hi[0] - lo[0]) / 2.0 + 0.05).max(0.06),
+        ((hi[1] - lo[1]) / 2.0 + 0.05).max(0.06),
+    ];
+    if let Some(m) = show
+        .scene_mut(scene)
+        .and_then(|s| s.effects.iter_mut().find(|e| e.id == fx))
+        .and_then(|e| e.mapping.as_mut())
+    {
+        m.center = center;
+        m.size = size;
     }
 }
 

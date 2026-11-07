@@ -148,6 +148,7 @@ impl View for StageEditorView {
                     show_grid: self.grid,
                     auto_fit: false,
                     order: &[],
+                    underlay: None,
                 }
                 .show(
                     ui,

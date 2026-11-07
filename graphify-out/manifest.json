@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/stage_canvas.rs": {
-    "mtime": 1794067031.841886,
-    "seen": 1794067280.5578597,
-    "ast_hash": "5bac942074a1279825a73bea4ed1a10e",
+    "mtime": 1794069582.5729146,
+    "seen": 1794069591.4224184,
+    "ast_hash": "b84a7dc4716511ea93f325440593f977",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/swatch.rs": {
@@ -276,9 +276,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/stage.rs": {
-    "mtime": 1794067176.2994585,
-    "seen": 1794067280.5578818,
-    "ast_hash": "ded115fd985044f5c77baab657bbe774",
+    "mtime": 1794069567.3536196,
+    "seen": 1794069591.4224415,
+    "ast_hash": "e87c05d5a2f89b4cc149827c3415a909",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/mod.rs": {
@@ -288,9 +288,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/stage_editor.rs": {
-    "mtime": 1794067048.3654041,
-    "seen": 1794067280.5578995,
-    "ast_hash": "3da36985c200484258bb63068671362b",
+    "mtime": 1794069439.4148443,
+    "seen": 1794069591.422457,
+    "ast_hash": "da114c404e90b20e82f84dec2216b561",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/zones.rs": {
@@ -492,9 +492,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/scene_props.rs": {
-    "mtime": 1794069276.2296023,
-    "seen": 1794069411.856801,
-    "ast_hash": "bddc42f6b0e2cffd977126236534ac79",
+    "mtime": 1794069509.7342684,
+    "seen": 1794069591.4224393,
+    "ast_hash": "e2f0cdc907167f600e3c6f9c9449df62",
     "semantic_hash": ""
   },
   "crates/app/assets/fonts/Phosphor-LICENSE.txt": {
