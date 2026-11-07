@@ -1,13 +1,17 @@
-//! Open Fixture Library (<https://open-fixture-library.org>).
+//! Gerätebibliotheken: Open Fixture Library (<https://open-fixture-library.org>)
+//! und QLC+ (<https://www.qlcplus.org>).
 //!
-//! * [`convert`] wandelt eine OFL-Gerätedatei (JSON) in DMXCraft-Gerätetypen
-//!   um – ein [`FixtureType`] pro DMX-Modus.
-//! * [`Library`] ist die eingebettete, vorkonvertierte Gesamtbibliothek
-//!   (`data/ofl-library.json.gz`, erzeugt mit dem Tool `ofl-bundle`).
+//! * [`convert`] wandelt eine OFL-Gerätedatei (JSON) um, [`qxf`] eine
+//!   QLC+-Gerätedatei (XML) – jeweils ein [`FixtureType`] pro DMX-Modus.
+//! * [`Library`] ist die eingebettete, vorkonvertierte Gesamtbibliothek aus
+//!   `data/ofl-library.json.gz` (Tool `ofl-bundle`) und
+//!   `data/qlc-library.json.gz` (Tool `qlc-bundle`).
 //!
-//! Die OFL-Daten stehen unter MIT-Lizenz (siehe `data/OFL-LICENSE`).
+//! Lizenzen: OFL-Daten MIT (`data/OFL-LICENSE`), QLC+-Daten Apache 2.0
+//! (`data/QLC-LICENSE`, `data/QLC-NOTICE`).
 
 pub mod convert;
+pub mod qxf;
 
 use std::io::Read;
 use std::sync::OnceLock;
@@ -16,6 +20,26 @@ use dmxcraft_core::FixtureType;
 use serde::{Deserialize, Serialize};
 
 pub use convert::{convert_fixture, OflError};
+pub use qxf::convert_qxf;
+
+/// Herkunft eines Bibliotheksgeräts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Source {
+    #[default]
+    Ofl,
+    Qlc,
+}
+
+impl Source {
+    /// Kurzname für die Anzeige.
+    pub fn label(self) -> &'static str {
+        match self {
+            Source::Ofl => "OFL",
+            Source::Qlc => "QLC+",
+        }
+    }
+}
 
 /// Ein Gerät der Bibliothek mit allen Modi.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -27,6 +51,8 @@ pub struct LibraryFixture {
     #[serde(default)]
     pub categories: Vec<String>,
     pub modes: Vec<FixtureType>,
+    #[serde(default)]
+    pub source: Source,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -37,14 +63,36 @@ pub struct Library {
     pub fixtures: Vec<LibraryFixture>,
 }
 
-static EMBEDDED: &[u8] = include_bytes!("../data/ofl-library.json.gz");
+static EMBEDDED_OFL: &[u8] = include_bytes!("../data/ofl-library.json.gz");
+static EMBEDDED_QLC: &[u8] = include_bytes!("../data/qlc-library.json.gz");
 
 impl Library {
-    /// Die mit dem Programm ausgelieferte Bibliothek (wird beim ersten
-    /// Zugriff entpackt).
+    /// Die mit dem Programm ausgelieferte Bibliothek: OFL und QLC+ zusammen,
+    /// nach Hersteller und Name sortiert (wird beim ersten Zugriff entpackt).
     pub fn embedded() -> &'static Library {
         static LIB: OnceLock<Library> = OnceLock::new();
-        LIB.get_or_init(|| Library::from_gzip(EMBEDDED).unwrap_or_default())
+        LIB.get_or_init(|| {
+            let mut lib = Library::from_gzip(EMBEDDED_OFL).unwrap_or_default();
+            if let Ok(qlc) = Library::from_gzip(EMBEDDED_QLC) {
+                lib.fixtures.extend(qlc.fixtures.into_iter().map(|mut f| {
+                    f.source = Source::Qlc;
+                    f
+                }));
+            }
+            lib.fixtures.sort_by(|a, b| {
+                (
+                    a.manufacturer.to_lowercase(),
+                    a.name.to_lowercase(),
+                    a.source as u8,
+                )
+                    .cmp(&(
+                        b.manufacturer.to_lowercase(),
+                        b.name.to_lowercase(),
+                        b.source as u8,
+                    ))
+            });
+            lib
+        })
     }
 
     pub fn from_gzip(bytes: &[u8]) -> Result<Library, OflError> {
@@ -92,6 +140,30 @@ impl Library {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedded_library_has_ofl_and_qlc() {
+        let lib = Library::embedded();
+        let qlc = lib
+            .fixtures
+            .iter()
+            .filter(|f| f.source == Source::Qlc)
+            .count();
+        let ofl = lib
+            .fixtures
+            .iter()
+            .filter(|f| f.source == Source::Ofl)
+            .count();
+        assert!(qlc > 1000, "nur {qlc} QLC+-Geräte");
+        assert!(ofl > 500, "nur {ofl} OFL-Geräte");
+        // Schlüssel der Modi sind eindeutig (Shows finden ihren Typ wieder)
+        let mut keys = std::collections::HashSet::new();
+        for f in &lib.fixtures {
+            for m in &f.modes {
+                assert!(keys.insert(m.key.as_str()), "doppelter Schlüssel {}", m.key);
+            }
+        }
+    }
 
     #[test]
     fn embedded_library_loads() {

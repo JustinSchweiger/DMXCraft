@@ -528,6 +528,7 @@ pub fn convert_fixture(
         name,
         categories,
         modes: out_modes,
+        source: crate::Source::Ofl,
     })
 }
 

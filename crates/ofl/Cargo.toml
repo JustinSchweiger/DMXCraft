@@ -1,6 +1,6 @@
 [package]
 name = "dmxcraft-ofl"
-description = "Import der Open Fixture Library (OFL) in DMXCraft-Gerätetypen"
+description = "Gerätebibliotheken (Open Fixture Library, QLC+) als DMXCraft-Gerätetypen"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,6 +15,7 @@ serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
 thiserror.workspace = true
 flate2 = "1"
+roxmltree = "0.21.2"
 
 [package.metadata.dist]
 dist = false
@@ -22,3 +23,7 @@ dist = false
 [[bin]]
 name = "ofl-bundle"
 path = "src/bin/ofl-bundle.rs"
+
+[[bin]]
+name = "qlc-bundle"
+path = "src/bin/qlc-bundle.rs"

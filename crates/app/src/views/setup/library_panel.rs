@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use dmxcraft_core::library::builtin_fixture_types;
 use dmxcraft_core::{Engine, FixtureType};
-use dmxcraft_ofl::{convert_fixture, Library, LibraryFixture};
+use dmxcraft_ofl::{convert_fixture, convert_qxf, Library, LibraryFixture, Source};
 use eframe::egui;
 
 use crate::state::AppState;
@@ -30,9 +30,9 @@ impl View for LibraryPanel {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         section_header(ui, t("Bibliothek"), |ui| {
             if ui
-                .small_button(t("OFL-Datei"))
+                .small_button(t("Gerätedatei"))
                 .on_hover_text(t(
-                    "Eigene Gerätedatei im Open-Fixture-Library-Format importieren",
+                    "Eigene Gerätedatei importieren (Open Fixture Library .json oder QLC+ .qxf)",
                 ))
                 .clicked()
             {
@@ -112,7 +112,7 @@ impl LibraryPanel {
             }
             self.group(ui, title, searching, |me, ui| {
                 for t in list {
-                    me.type_row(ui, &t.display_name(), &t);
+                    me.type_row(ui, &t.display_name(), &t, None);
                 }
             });
         }
@@ -137,12 +137,16 @@ impl LibraryPanel {
         for (man, fixtures) in by_man {
             self.group(ui, &man, searching, |me, ui| {
                 for f in fixtures {
+                    // Herkunft anhängen, damit gleiche Geräte aus OFL und QLC+
+                    // unterscheidbar sind
+                    let tag = (f.source == Source::Qlc).then(|| f.source.label());
                     if f.modes.len() == 1 {
                         let label =
                             tr!("{v} ({n} Kan.)", v = f.name, n = f.modes[0].channels.len());
-                        me.type_row(ui, &label, &f.modes[0]);
+                        me.type_row(ui, &label, &f.modes[0], tag);
                     } else {
-                        let id = ui.make_persistent_id(("ofl", &f.manufacturer_key, &f.key));
+                        let id =
+                            ui.make_persistent_id((f.source.label(), &f.manufacturer_key, &f.key));
                         egui::collapsing_header::CollapsingState::load_with_default_open(
                             ui.ctx(),
                             id,
@@ -150,12 +154,15 @@ impl LibraryPanel {
                         )
                         .show_header(ui, |ui| {
                             ui.label(&f.name);
+                            if let Some(tag) = tag {
+                                source_tag(ui, tag);
+                            }
                         })
                         .body(|ui| {
                             for m in &f.modes {
                                 let label =
                                     tr!("{mode} ({n} Kan.)", mode = m.mode, n = m.channels.len());
-                                me.type_row(ui, &label, m);
+                                me.type_row(ui, &label, m, None);
                             }
                         });
                     }
@@ -191,9 +198,19 @@ impl LibraryPanel {
         header.show(ui, |ui| body(self, ui));
     }
 
-    fn type_row(&mut self, ui: &mut egui::Ui, label: &str, ty: &FixtureType) {
+    /// Eine Zeile pro Gerätetyp; `tag` = Herkunft (z. B. „QLC+“), klein dahinter.
+    fn type_row(&mut self, ui: &mut egui::Ui, label: &str, ty: &FixtureType, tag: Option<&str>) {
         let selected = self.chosen.as_ref().is_some_and(|c| c.key == ty.key);
-        let r = ui.selectable_label(selected, label).on_hover_text(
+        let r = ui
+            .horizontal(|ui| {
+                let r = ui.selectable_label(selected, label);
+                if let Some(tag) = tag {
+                    source_tag(ui, tag);
+                }
+                r
+            })
+            .inner;
+        let r = r.on_hover_text(
             ty.channels
                 .iter()
                 .enumerate()
@@ -282,7 +299,16 @@ impl LibraryPanel {
             .parent()
             .and_then(|p| p.file_name())
             .map_or("eigene".into(), |s| s.to_string_lossy().to_string());
-        match convert_fixture(&man, &man, &key, &json) {
+        // QLC+-Dateien (.qxf) sind XML, alles andere wird als OFL-JSON gelesen
+        let is_qxf = path
+            .extension()
+            .is_some_and(|x| x.eq_ignore_ascii_case("qxf"));
+        let converted = if is_qxf {
+            convert_qxf(&json)
+        } else {
+            convert_fixture(&man, &man, &key, &json)
+        };
+        match converted {
             Ok(f) => {
                 st.info(tr!("„{v}“ geladen – Modus wählen und patchen", v = f.name));
                 self.query = f.name.clone();
@@ -292,6 +318,11 @@ impl LibraryPanel {
             Err(err) => st.error(err.to_string()),
         }
     }
+}
+
+/// Kleiner grauer Hinweis auf die Herkunft eines Geräts.
+fn source_tag(ui: &mut egui::Ui, tag: &str) {
+    ui.label(egui::RichText::new(tag).small().color(theme::text_faint()));
 }
 
 /// Fügt `count` Geräte des Typs ab der Startadresse hinzu.

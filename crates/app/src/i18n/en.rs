@@ -37,10 +37,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "DMX lighting control for Linux, Windows and macOS.",
     ),
     ("Lizenz: MIT", "License: MIT"),
-    (
-        "Gerätedaten: Open Fixture Library (MIT)",
-        "Fixture data: Open Fixture Library (MIT)",
-    ),
     ("installiere Update", "installing update"),
     ("DMXCraft-Show", "DMXCraft show"),
     ("Ältere Show (JSON)", "Older show (JSON)"),
@@ -293,11 +289,12 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     // ----- Einrichten: Bibliothek -----
     ("Bibliothek", "Library"),
-    ("OFL-Datei", "OFL file"),
+    ("Gerätedatei", "Fixture file"),
     (
-        "Eigene Gerätedatei im Open-Fixture-Library-Format importieren",
-        "Import your own fixture file in Open Fixture Library format",
+        "Eigene Gerätedatei importieren (Open Fixture Library .json oder QLC+ .qxf)",
+        "Import your own fixture file (Open Fixture Library .json or QLC+ .qxf)",
     ),
+    ("Gerätedaten: Open Fixture Library (MIT), QLC+ (Apache 2.0)", "Fixture data: Open Fixture Library (MIT), QLC+ (Apache 2.0)"),
     ("/pfad/hersteller/geraet.json", "/path/manufacturer/fixture.json"),
     ("Laden", "Load"),
     (

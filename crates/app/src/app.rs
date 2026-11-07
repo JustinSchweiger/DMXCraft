@@ -520,8 +520,10 @@ impl DmxCraftApp {
                         ui.add_space(theme::SP_S);
                         ui.label(egui::RichText::new(t("Lizenz: MIT")).color(theme::text_dim()));
                         ui.label(
-                            egui::RichText::new(t("Gerätedaten: Open Fixture Library (MIT)"))
-                                .color(theme::text_dim()),
+                            egui::RichText::new(t(
+                                "Gerätedaten: Open Fixture Library (MIT), QLC+ (Apache 2.0)",
+                            ))
+                            .color(theme::text_dim()),
                         );
                         ui.add_space(theme::SP_S);
                         ui.hyperlink_to(

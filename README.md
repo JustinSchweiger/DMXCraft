@@ -25,7 +25,7 @@ günstige USB-DMX-Kabel (Open DMX / FTDI) aus – ein Kabel je Universum.
 | Ausgabe-Thread mit 40 Hz, automatischer Reconnect | ✅ |
 | **USB-DMX-Kabel (Open DMX / FTDI)**, ein Kabel je Universum | ✅ |
 | Daslight DVC Gold | ❌ verschlüsselt, nicht ansprechbar (siehe `dvc_gold.rs`) |
-| Gerätebibliothek: 650+ Geräte aus der Open Fixture Library, eigene OFL-Dateien importieren | ✅ |
+| Gerätebibliothek: 650+ Geräte aus der Open Fixture Library und 1.781 aus QLC+, eigene OFL- und QLC+-Dateien importieren | ✅ |
 | Installer für Linux/macOS/Windows, Auto-Update | ✅ |
 | Effekt-Generator, 3D-Ansicht, MIDI | ❌ geplant |
 
@@ -66,6 +66,17 @@ Die Gerätebibliothek aktualisieren (Open Fixture Library):
 git clone --depth 1 https://github.com/OpenLightingProject/open-fixture-library /tmp/ofl
 cargo run --release -p dmxcraft-ofl --bin ofl-bundle -- /tmp/ofl crates/ofl/data/ofl-library.json.gz
 ```
+
+Und die QLC+-Geräte:
+
+```sh
+git clone --depth 1 --filter=blob:none --sparse https://github.com/mcallegari/qlcplus /tmp/qlcplus
+(cd /tmp/qlcplus && git sparse-checkout set resources/fixtures)
+cargo run --release -p dmxcraft-ofl --bin qlc-bundle -- /tmp/qlcplus crates/ofl/data/qlc-library.json.gz
+```
+
+Die QLC+-Gerätedaten stehen unter der Apache-2.0-Lizenz (`crates/ofl/data/QLC-LICENSE`,
+`QLC-NOTICE`); die OFL-Daten unter MIT (`crates/ofl/data/OFL-LICENSE`).
 
 ## Bauen und starten
 
@@ -117,7 +128,7 @@ Die Oberfläche hat zwei Bereiche:
   (mit Farbfeldern), Position (mit XY-Feld), Gobo, Strahl und Sonstiges. Fader: ziehen,
   Mausrad (Shift = 10er-Schritte), Doppelklick = 0/voll, Rechtsklick = Freigeben.
 * **EINRICHTEN** – eine Seite, alle Bereiche in der Größe veränderbar: links die **Bibliothek**
-  (Generisch, Open Fixture Library nach Hersteller, eigene OFL-Dateien) mit Patch-Formular,
+  (Generisch, Open Fixture Library und QLC+ nach Hersteller – QLC+-Geräte grau markiert –, eigene OFL-/QLC+-Dateien) mit Patch-Formular,
   in der Mitte oben das **Patch-Raster** (Ziehen = neue Startadresse, Doppelklick = umbenennen,
   Patch/Ausgang, DIP-Schalter oben rechts), darunter der **Bühnenplan** mit Werkzeugen links
   und rechts die **Geräteeinstellungen**: Schnelltest (Licht aus, Licht an, Moving Head

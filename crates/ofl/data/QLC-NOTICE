@@ -1,0 +1,11 @@
+DMXCraft enthält Gerätedefinitionen aus QLC+ (Q Light Controller Plus),
+umgewandelt in das DMXCraft-Format (data/qlc-library.json.gz).
+
+QLC+ – https://www.qlcplus.org – https://github.com/mcallegari/qlcplus
+Copyright (c) Massimo Callegari und die QLC+-Mitwirkenden.
+Lizenz: Apache License 2.0 (siehe QLC-LICENSE).
+
+Quelle: resources/fixtures, Commit 87b988ac2427fe40a1c1e58be9ace62c41b17292
+Änderungen: Die QXF-Dateien wurden in Gerätetypen von DMXCraft umgewandelt
+(Kanalnamen, Kanalarten, Standardwerte, Modi); Fähigkeitsbeschreibungen und
+Abmessungen wurden nicht übernommen.
