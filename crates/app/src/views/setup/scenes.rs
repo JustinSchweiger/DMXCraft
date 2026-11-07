@@ -134,7 +134,7 @@ fn scene_header(ui: &mut egui::Ui, e: &mut Engine, st: &mut UiState, id: SceneId
     ui.horizontal(|ui| {
         ui.label(t("Name"));
         ui.text_edit_singleline(&mut name);
-        ui.label(t("Zone"));
+        ui.label(t("Bank"));
         zone_changed = zone_combo(ui, e, &mut zone, "edit_zone");
         ui.label(t("Ablauf"));
         egui::ComboBox::from_id_salt("loop_mode")

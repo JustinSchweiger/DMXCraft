@@ -27,7 +27,7 @@ impl Windows {
         }
         if cx.state.zones_open {
             let mut open = true;
-            Dialog::new(t("Zonen & Gruppen"))
+            Dialog::new(t("Bänke & Gruppen"))
                 .id("zones")
                 .resizable([860.0, 460.0])
                 .cancel(t("Schließen"))

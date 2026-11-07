@@ -31,6 +31,8 @@ pub struct AppState {
     /// Zeitpunkt der letzten Meldung (Meldungen blenden nach einigen Sekunden aus).
     pub message_time: Option<std::time::Instant>,
     pub selected: BTreeSet<FixtureId>,
+    /// Markierte Szenen in STEUERN (für Löschen u. a.).
+    pub selected_scenes: BTreeSet<SceneId>,
     pub patch: PatchForm,
     /// Per Datei importierte Gerätetypen (noch nicht gepatcht).
     pub imported_types: Vec<FixtureType>,
@@ -61,6 +63,7 @@ impl AppState {
             message: None,
             message_time: None,
             selected: BTreeSet::new(),
+            selected_scenes: BTreeSet::new(),
             patch: PatchForm {
                 name: String::new(),
                 count: 1,

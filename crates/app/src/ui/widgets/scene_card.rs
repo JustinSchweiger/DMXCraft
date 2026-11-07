@@ -15,6 +15,8 @@ pub struct SceneCard<'a> {
     /// Gesamtfortschritt 0..=1 (nur wenn aktiv).
     pub progress: f32,
     pub width: f32,
+    /// Für Bearbeitungen markiert (Strg/Umschalt+Klick, „Alle Szenen auswählen“).
+    pub selected: bool,
 }
 
 impl Widget for SceneCard<'_> {
@@ -34,6 +36,14 @@ impl Widget for SceneCard<'_> {
             Stroke::new(1.0, theme::border())
         };
         p.rect_stroke(rect, r, stroke, StrokeKind::Inside);
+        if self.selected {
+            p.rect_stroke(
+                rect.expand(2.0),
+                r + 2.0,
+                Stroke::new(2.0, theme::accent()),
+                StrokeKind::Inside,
+            );
+        }
         // Farbmarke links
         let mark = Rect::from_min_size(
             rect.min + Vec2::new(0.0, 8.0),

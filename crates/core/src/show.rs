@@ -273,6 +273,9 @@ pub struct Scene {
     pub steps: Vec<Step>,
     #[serde(default)]
     pub loop_mode: LoopMode,
+    /// Eigene Farbe der Szene; `None` = Farbe der Bank.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<[u8; 3]>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -282,6 +285,9 @@ pub struct Zone {
     /// Akzentfarbe der Zone in der Oberfläche (RGB).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<[u8; 3]>,
+    /// In STEUERN ausgeblendet (Szenen laufen trotzdem weiter).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
 }
 
 /// Eine benannte Geräteauswahl (z. B. „Moving Heads“, „PARs Traverse“).
@@ -566,8 +572,42 @@ impl Show {
             id,
             name: name.into(),
             color: None,
+            hidden: false,
         });
         id
+    }
+
+    pub fn zone_mut(&mut self, id: ZoneId) -> Option<&mut Zone> {
+        self.zones.iter_mut().find(|z| z.id == id)
+    }
+
+    /// Kopiert eine Bank samt ihrer Szenen; die Kopie steht direkt dahinter.
+    pub fn duplicate_zone(&mut self, id: ZoneId, name: impl Into<String>) -> Option<ZoneId> {
+        let pos = self.zones.iter().position(|z| z.id == id)?;
+        let new_id = ZoneId(self.zones.iter().map(|z| z.id.0).max().unwrap_or(0) + 1);
+        let mut zone = self.zones[pos].clone();
+        zone.id = new_id;
+        zone.name = name.into();
+        zone.hidden = false;
+        self.zones.insert(pos + 1, zone);
+        let copies: Vec<Scene> = self
+            .scenes
+            .iter()
+            .filter(|s| s.zone == Some(id))
+            .cloned()
+            .collect();
+        for mut sc in copies {
+            sc.id = SceneId(self.scenes.iter().map(|s| s.id.0).max().unwrap_or(0) + 1);
+            sc.zone = Some(new_id);
+            self.scenes.push(sc);
+        }
+        Some(new_id)
+    }
+
+    /// Löscht eine Bank mitsamt ihren Szenen.
+    pub fn remove_zone_with_scenes(&mut self, id: ZoneId) {
+        self.zones.retain(|z| z.id != id);
+        self.scenes.retain(|s| s.zone != Some(id));
     }
 
     pub fn zone(&self, id: ZoneId) -> Option<&Zone> {
@@ -620,12 +660,41 @@ impl Show {
             zone,
             steps,
             loop_mode: LoopMode::Loop,
+            color: None,
         });
         id
     }
 
     pub fn remove_scene(&mut self, id: SceneId) {
         self.scenes.retain(|s| s.id != id);
+    }
+}
+
+#[cfg(test)]
+mod zone_tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_zone_copies_scenes_behind_original() {
+        let mut s = Show::new("T", 8);
+        let a = s.add_zone("A");
+        let b = s.add_zone("B");
+        s.add_scene("x", Some(a), vec![]);
+        s.add_scene("y", Some(a), vec![]);
+        s.add_scene("z", Some(b), vec![]);
+        let c = s.duplicate_zone(a, "A (Kopie)").unwrap();
+        assert_eq!(s.zones.iter().map(|z| z.id).collect::<Vec<_>>(), [a, c, b]);
+        let copied: Vec<_> = s.scenes.iter().filter(|x| x.zone == Some(c)).collect();
+        assert_eq!(copied.len(), 2);
+        // neue, eindeutige IDs
+        let mut ids: Vec<_> = s.scenes.iter().map(|x| x.id).collect();
+        ids.dedup();
+        assert_eq!(ids.len(), 5);
+        s.remove_zone_with_scenes(a);
+        assert_eq!(s.scenes.len(), 3);
+        // Show-Format: ausgeblendet/Farbe nur gespeichert, wenn gesetzt
+        let json = s.to_json().unwrap();
+        assert!(!json.contains("hidden"));
     }
 }
 

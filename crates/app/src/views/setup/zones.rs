@@ -16,7 +16,7 @@ pub struct ZonesView {
 impl Default for ZonesView {
     fn default() -> Self {
         Self {
-            new_zone: t("Neue Zone").into(),
+            new_zone: t("Neue Bank").into(),
             new_group: String::new(),
         }
     }
@@ -33,9 +33,9 @@ impl View for ZonesView {
         ui.columns(2, |cols| {
             // ---------- Zonen ----------
             let ui = &mut cols[0];
-            section_header(ui, t("Zonen"), |_| {});
+            section_header(ui, t("Bänke"), |_| {});
             ui.label(
-                egui::RichText::new(t("Jede Zone ist eine Spalte unter STEUERN. Szenen derselben Zone schließen sich aus."))
+                egui::RichText::new(t("Jede Bank ist eine Spalte unter STEUERN. Szenen derselben Bank schließen sich aus."))
                     .color(theme::text_dim()),
             );
             ui.add_space(theme::SP_S);
@@ -68,7 +68,7 @@ impl View for ZonesView {
             ui.add_space(theme::SP_S);
             ui.horizontal(|ui| {
                 ui.add(text_field(&mut self.new_zone).desired_width(180.0));
-                if ui.button(t("Zone anlegen")).clicked() && !self.new_zone.trim().is_empty() {
+                if ui.button(t("Bank anlegen")).clicked() && !self.new_zone.trim().is_empty() {
                     e.show_mut().add_zone(self.new_zone.trim().to_string());
                 }
             });

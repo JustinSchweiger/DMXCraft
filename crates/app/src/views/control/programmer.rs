@@ -373,12 +373,12 @@ pub fn programmer_values(e: &Engine) -> Vec<ChannelValue> {
 pub fn zone_combo(ui: &mut egui::Ui, e: &Engine, zone: &mut Option<ZoneId>, id: &str) -> bool {
     let name = zone
         .and_then(|z| e.show().zone(z))
-        .map_or_else(|| t("ohne Zone").into(), |z| z.name.clone());
+        .map_or_else(|| t("ohne Bank").into(), |z| z.name.clone());
     let before = *zone;
     egui::ComboBox::from_id_salt(id)
         .selected_text(name)
         .show_ui(ui, |ui| {
-            ui.selectable_value(zone, None, t("ohne Zone"));
+            ui.selectable_value(zone, None, t("ohne Bank"));
             for z in &e.show().zones {
                 ui.selectable_value(zone, Some(z.id), &z.name);
             }

@@ -104,7 +104,7 @@ fn group_bar(ui: &mut egui::Ui, e: &Engine, st: &mut AppState) {
         }
         if e.show().groups.is_empty() {
             ui.label(
-                egui::RichText::new(t("Gruppen legst du unter EINRICHTEN → Zonen & Gruppen an"))
+                egui::RichText::new(t("Gruppen legst du unter Bänke & Gruppen an"))
                     .color(theme::text_faint()),
             );
         }

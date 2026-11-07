@@ -120,9 +120,14 @@ Eine Show hat fest **8 Universen** à 512 Kanäle.
 
 Die Oberfläche hat zwei Bereiche:
 
-* **STEUERN** – oben die Zonen als Spalten mit Szenenkarten (Klick = an/aus, Rechtsklick =
-  bearbeiten/löschen). Jede Spalte hat Tasten für Pause sowie vorherigen/nächsten Schritt und „+“
-  (neue Szene aus dem Programmer). Darüber filtert die Seitenleiste nach Zonen.
+* **STEUERN** – oben die **Bänke** als Spalten mit Szenenkarten (Klick = an/aus, Strg/Umschalt+Klick
+  = markieren, Entf löscht markierte Szenen, Rechtsklick = bearbeiten/löschen). Jede Spalte hat
+  Tasten für Pause sowie vorherigen/nächsten Schritt und „+“ (neue Szene aus dem Programmer).
+  Darüber die Bankleiste: Filter je Bank, **+** für eine neue Bank. Rechtsklick auf eine Bank
+  (Chip oder Spaltenkopf): Umbenennen (auch Doppelklick), Duplizieren (samt Szenen), Ausblenden,
+  Bankfarbe (Vorgaben, Automatisch oder eigene Farbe über den Farbwähler), Bankfarbe allen Szenen
+  zuordnen, Alle Szenen auswählen, Löschen (mit oder ohne Szenen). Ausgeblendete Bänke holt ein
+  Rechtsklick auf „Alle“ zurück.
   Unten links liegt die **Bühne** mit Gruppen: Geräte per Klick, Strg/Shift+Klick oder
   Aufziehen auswählen. Unten rechts ist der **Programmer** mit den Kategorien Dimmer, Farbe
   (mit Farbfeldern), Position (mit XY-Feld), Gobo, Strahl und Sonstiges. Fader: ziehen,

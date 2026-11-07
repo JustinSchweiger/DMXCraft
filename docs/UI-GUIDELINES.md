@@ -31,6 +31,10 @@ Einstellungen → Allgemein) und werden als Funktion gelesen: `theme::bg()`,
 `Palette`-Eintrag in `theme.rs`. Signalfarben (`DANGER`, `OK`, `WARN`) und der
 Akzent bleiben in allen Themes gleich erkennbar.
 
+**Begriffe:** Die Spalten unter STEUERN heißen in der Oberfläche **Bänke**
+(im Code `Zone`). Inline-Umbenennen (Chips, Patch) fokussiert das Feld nur beim
+Start – nie jeden Frame `request_focus()`.
+
 **Sprache:** Jeder sichtbare Text läuft über `t("…")` oder
 `tr!("… {name}", name = x)` (deutsche Quelle, Übersetzung in
 `i18n/en.rs`). Keine Texte per `format!` zusammensetzen, die übersetzt werden
