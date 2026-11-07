@@ -36,6 +36,8 @@ struct PlayingScene {
     age_ms: f64,
     /// Zeit seit dem Stoppen, solange die Szene ausblendet.
     releasing: Option<f64>,
+    /// Abgeschlossene Durchläufe (für „X-mal abspielen“).
+    cycles: u32,
 }
 
 /// Ein-/Ausblendzustand einer Szene (Pegel 0..=1).
@@ -169,14 +171,23 @@ impl Engine {
         }
         let (scene_reverse, scene_len) = (scene.settings.reverse, scene.steps.len());
         let zone = scene.zone;
+        let mode = scene.settings.release_mode.clone();
         let show = &self.show;
-        // dieselbe Szene startet neu; andere Szenen der Bank blenden aus
+        // dieselbe Szene startet neu; andere Szenen werden nach dem
+        // Freigabe-Modus freigegeben, sofern sie nicht davor geschützt sind
         self.playing.retain_mut(|p| {
             if p.scene == id {
                 return false;
             }
-            let same_zone = zone.is_some() && show.scene(p.scene).is_some_and(|s| s.zone == zone);
-            !same_zone || Self::stop(show, p)
+            if p.releasing.is_some() {
+                return true;
+            }
+            let Some(other) = show.scene(p.scene) else {
+                return false;
+            };
+            let target = mode.matches(zone, other.zone);
+            let protected = other.settings.protect.matches(other.zone, zone);
+            !target || protected || Self::stop(show, p)
         });
         self.playing.push(PlayingScene {
             scene: id,
@@ -188,6 +199,7 @@ impl Engine {
             paused: false,
             age_ms: 0.0,
             releasing: None,
+            cycles: 0,
         });
         self.next_seq += 1;
     }
@@ -424,6 +436,7 @@ impl Engine {
             }
             None => true,
         });
+        let mut ended = Vec::new();
         for p in &mut self.playing {
             let Some(scene) = self.show.scene(p.scene) else {
                 continue;
@@ -455,15 +468,33 @@ impl Engine {
                         p.step += 1;
                     }
                     p.first_entry = false;
-                } else if scene.loop_mode == LoopMode::Loop {
+                } else if scene.loop_mode == LoopMode::Loop
+                    || p.cycles + 1 < u32::from(scene.settings.repeat_count.max(1))
+                {
+                    if scene.loop_mode != LoopMode::Loop {
+                        p.cycles += 1;
+                    }
                     p.elapsed_ms -= dur;
                     p.step = if reverse { len - 1 } else { 0 };
                     p.first_entry = false;
                 } else {
                     p.elapsed_ms = dur;
                     p.finished = true;
+                    ended.push(p.scene);
                     break;
                 }
+            }
+        }
+        // Ende nach X Durchläufen: freigeben und/oder zu einer Szene springen
+        for id in ended {
+            let Some(st) = self.show.scene(id).map(|s| s.settings.clone()) else {
+                continue;
+            };
+            if st.release_at_end {
+                self.release(id);
+            }
+            if let Some(next) = st.jump_to.filter(|n| *n != id) {
+                self.activate(next);
             }
         }
     }
@@ -577,8 +608,12 @@ impl Engine {
         }
 
         // 2) Szenen in Startreihenfolge (LTP: spätere überschreiben)
+        // Reihenfolge: Priorität, dann Startreihenfolge (später gewinnt)
         let mut order: Vec<&PlayingScene> = self.playing.iter().collect();
-        order.sort_by_key(|p| p.seq);
+        order.sort_by_key(|p| {
+            let prio = show.scene(p.scene).map_or(0, |s| s.settings.priority);
+            (prio, p.seq)
+        });
         // Nur gespeicherte Kanäle einer Szene wirken; nicht gespeicherte
         // bleiben frei für andere Szenen.
         for p in order {
@@ -1014,6 +1049,73 @@ mod tests {
         e.tick(Duration::from_millis(100));
         e.tick(Duration::from_millis(100));
         assert_eq!(e.render_frame().get(0, 2), Some(3), "Schleife rückwärts");
+    }
+
+    #[test]
+    fn release_modes_and_protection() {
+        use crate::show::BankScope;
+        let (mut s, a, _) = setup();
+        let z1 = s.add_zone("1");
+        let z2 = s.add_zone("2");
+        let one =
+            |s: &mut Show, z, v| s.add_scene("x", Some(z), vec![Step::new(vec![cv(a, 1, v)])]);
+        let a1 = one(&mut s, z1, 1);
+        let a2 = one(&mut s, z1, 2);
+        let b1 = one(&mut s, z2, 3);
+        let mut e = Engine::new(s);
+        // Standard: Bank -> nur Szenen derselben Bank
+        e.activate(a1);
+        e.activate(b1);
+        e.activate(a2);
+        assert!(!e.is_active(a1) && e.is_active(a2) && e.is_active(b1));
+        // Alle
+        e.show_mut().scene_mut(a1).unwrap().settings.release_mode = BankScope::All;
+        e.activate(a1);
+        assert!(e.is_active(a1) && !e.is_active(a2) && !e.is_active(b1));
+        // Schutz: b1 lässt sich von außerhalb seiner Bank nicht freigeben
+        e.show_mut().scene_mut(b1).unwrap().settings.protect = BankScope::OutsideBank;
+        e.activate(b1);
+        e.activate(a1);
+        assert!(e.is_active(b1));
+        // Aus
+        e.show_mut().scene_mut(a2).unwrap().settings.release_mode = BankScope::Off;
+        e.activate(a2);
+        assert!(e.is_active(a1) && e.is_active(a2));
+    }
+
+    #[test]
+    fn priority_beats_start_order() {
+        let (mut s, a, _) = setup();
+        let hi = s.add_scene("hi", None, vec![Step::new(vec![cv(a, 1, 200)])]);
+        let lo = s.add_scene("lo", None, vec![Step::new(vec![cv(a, 1, 50)])]);
+        s.scene_mut(hi).unwrap().settings.priority = 5;
+        let mut e = Engine::new(s);
+        e.activate(hi);
+        e.activate(lo);
+        assert_eq!(e.render_frame().get(0, 2), Some(200));
+    }
+
+    #[test]
+    fn repeat_then_release_and_jump() {
+        let (mut s, a, _) = setup();
+        let mut st = Step::new(vec![cv(a, 1, 9)]);
+        st.hold_ms = 100;
+        let first = s.add_scene("1", None, vec![st]);
+        let next = s.add_scene("2", None, vec![Step::new(vec![cv(a, 1, 7)])]);
+        {
+            let sc = s.scene_mut(first).unwrap();
+            sc.loop_mode = LoopMode::Once;
+            sc.settings.repeat_count = 2;
+            sc.settings.release_at_end = true;
+            sc.settings.jump_to = Some(next);
+        }
+        let mut e = Engine::new(s);
+        e.activate(first);
+        e.tick(Duration::from_millis(150));
+        assert!(e.is_active(first), "erster von zwei Durchläufen");
+        e.tick(Duration::from_millis(100));
+        assert!(!e.is_active(first));
+        assert!(e.is_active(next));
     }
 
     #[test]

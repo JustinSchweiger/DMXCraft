@@ -17,7 +17,7 @@ pub use dmx::{DmxFrame, UNIVERSE_SIZE};
 pub use engine::{Engine, FadeState, SceneProgress};
 pub use fixture::{ChannelDef, ChannelKind, FixtureType};
 pub use show::{
-    ChannelRef, ChannelValue, Effect, EffectKind, Fixture, FixtureId, FixtureLimits, Group,
-    GroupId, LoopMode, PatchError, PlanShape, Scene, SceneId, SceneKind, SceneSettings, Show,
-    ShowError, Step, Zone, ZoneId, PLAN_SIZE_RANGE, UNIVERSES,
+    BankScope, ChannelRef, ChannelValue, Effect, EffectKind, Fixture, FixtureId, FixtureLimits,
+    Group, GroupId, LoopMode, PatchError, PlanShape, Scene, SceneId, SceneKind, SceneSettings,
+    Show, ShowError, Step, Zone, ZoneId, PLAN_SIZE_RANGE, UNIVERSES,
 };

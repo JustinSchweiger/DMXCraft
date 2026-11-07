@@ -339,6 +339,35 @@ pub enum SceneKind {
     Fx,
 }
 
+/// Bezug auf Bänke für Freigabe und Freigabeschutz.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BankScope {
+    /// Keine Szenen.
+    Off,
+    /// Alle Szenen.
+    All,
+    /// Szenen derselben Bank.
+    #[default]
+    Bank,
+    /// Szenen außerhalb der eigenen Bank.
+    OutsideBank,
+    /// Szenen bestimmter Bänke.
+    Banks(Vec<ZoneId>),
+}
+
+impl BankScope {
+    /// Trifft der Bezug eine Szene der Bank `other`, gesehen von `own`?
+    pub fn matches(&self, own: Option<ZoneId>, other: Option<ZoneId>) -> bool {
+        match self {
+            BankScope::Off => false,
+            BankScope::All => true,
+            BankScope::Bank => own.is_some() && own == other,
+            BankScope::OutsideBank => own.is_none() || own != other,
+            BankScope::Banks(list) => other.is_some_and(|z| list.contains(&z)),
+        }
+    }
+}
+
 /// Einstellungen einer Szene in der Seitenleiste „Eigenschaften“.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -360,6 +389,21 @@ pub struct SceneSettings {
     pub fade_speed: u8,
     /// Schritte rückwärts abspielen.
     pub reverse: bool,
+    /// Priorität: höhere Priorität gewinnt bei Überschneidungen, auch wenn
+    /// eine niedrigere später gestartet wurde.
+    pub priority: i8,
+    /// Durchläufe, wenn nicht endlos (`Scene::loop_mode == Once`).
+    pub repeat_count: u16,
+    /// Am Ende (nach den Durchläufen) diese Szene starten.
+    pub jump_to: Option<SceneId>,
+    /// Am Ende (nach den Durchläufen) freigeben.
+    pub release_at_end: bool,
+    /// Welche laufenden Szenen beim Start freigegeben werden.
+    pub release_mode: BankScope,
+    /// Von welchen Szenen diese Szene nicht freigegeben werden kann.
+    pub protect: BankScope,
+    /// Flash: läuft nur, solange die Szene gedrückt wird.
+    pub flash: bool,
     /// Phasen-Versatz beim Start/Stoppen (für Effekte).
     pub phase_in_ms: u32,
     pub phase_out_ms: u32,
@@ -376,6 +420,13 @@ impl Default for SceneSettings {
             fade_out_ms: 0,
             fade_speed: 10,
             reverse: false,
+            priority: 0,
+            repeat_count: 1,
+            jump_to: None,
+            release_at_end: false,
+            release_mode: BankScope::Bank,
+            protect: BankScope::Off,
+            flash: false,
             phase_in_ms: 0,
             phase_out_ms: 0,
         }

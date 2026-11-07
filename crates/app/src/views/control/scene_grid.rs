@@ -38,6 +38,8 @@ enum PageFilter {
 }
 
 enum Action {
+    /// Flash-Szene gedrückt (`true`) bzw. losgelassen.
+    Flash(SceneId, bool),
     Toggle(SceneId),
     Pause(SceneId),
     Jump(SceneId, i32),
@@ -785,6 +787,7 @@ fn scene_card(
         selected: is_marked,
         sequence: scene.steps.len() > 1,
         fade: e.fade_state(id),
+        flash: scene.settings.flash,
     }
     .show(ui);
     if e.fade_state(id).is_some() {
@@ -832,7 +835,22 @@ fn scene_card(
             Action::Select(id)
         });
     }
-    if resp.play.clicked() {
+    if scene.settings.flash {
+        // Flash: läuft nur, solange die Karte gedrückt ist
+        let flag = egui::Id::unique(("flash_down", id.0));
+        let was: bool = ui.data(|d| d.get_temp(flag)).unwrap_or(false);
+        let down = resp.play.is_pointer_button_down_on();
+        if down && !was {
+            ui.data_mut(|d| d.insert_temp(flag, true));
+            actions.push(Action::Flash(id, true));
+            if !locked {
+                actions.push(Action::Select(id));
+            }
+        } else if was && !ui.input(|i| i.pointer.primary_down()) {
+            ui.data_mut(|d| d.insert_temp(flag, false));
+            actions.push(Action::Flash(id, false));
+        }
+    } else if resp.play.clicked() {
         actions.push(Action::Toggle(id));
         // eine gestartete Szene wird zugleich (allein) ausgewählt;
         // Mehrfachauswahl gibt es nur über den Streifen
@@ -917,6 +935,8 @@ fn apply(
     for a in actions {
         match a {
             Action::Toggle(id) => e.toggle(id),
+            Action::Flash(id, true) => e.activate(id),
+            Action::Flash(id, false) => e.release(id),
             Action::Pause(id) => e.toggle_pause(id),
             Action::Jump(id, d) => e.jump_step(id, d),
             Action::NewScene(zone) => {

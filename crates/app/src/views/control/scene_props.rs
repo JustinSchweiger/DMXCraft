@@ -9,13 +9,13 @@ use crate::i18n::t;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
 
-use dmxcraft_core::{Effect, EffectKind, Engine, SceneId};
+use dmxcraft_core::{BankScope, Effect, EffectKind, Engine, LoopMode, SceneId, ZoneId};
 use eframe::egui::{self, pos2, Color32, Rect, Sense, Stroke, Vec2};
 
 use crate::ui::theme;
 use crate::ui::widgets::knob::Knob;
 use crate::ui::widgets::time_field::time_field;
-use crate::ui::widgets::{Icon, IconButton};
+use crate::ui::widgets::{Icon, IconButton, Toggle};
 use crate::views::{View, ViewCtx};
 
 /// Breite der Reiterleiste.
@@ -71,7 +71,7 @@ impl View for ScenePropsView {
         for (tab, icon, tip) in [
             (Tab::Properties, Icon::Settings, t("Eigenschaften")),
             (Tab::Effects, Icon::Fx, t("Effekte")),
-            (Tab::Third, Icon::Builder, t("Folgt später")),
+            (Tab::Third, Icon::Builder, t("Erweiterte Eigenschaften")),
         ] {
             if tab_ui
                 .add(
@@ -113,9 +113,8 @@ impl View for ScenePropsView {
             .auto_shrink([false, false])
             .show(ui, |ui| match self.tab {
                 Tab::Properties => properties(ui, cx.engine, id, locked),
-                Tab::Effects | Tab::Third => {
-                    ui.label(egui::RichText::new(t("Folgt später")).color(theme::text_faint()));
-                }
+                Tab::Third => advanced(ui, cx.engine, id, locked),
+                Tab::Effects => {}
             });
     }
 }
@@ -730,4 +729,184 @@ fn effect_header(
         },
     );
     (head, chevron)
+}
+
+/// Reiter „Erweiterte Eigenschaften“: Priorität, Wiederholung, Ende,
+/// Freigabe, Freigabeschutz und Flash.
+fn advanced(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
+    let Some(scene) = e.show().scene(id) else {
+        return;
+    };
+    let mut st = scene.settings.clone();
+    let mut loop_mode = scene.loop_mode;
+    let color = scene
+        .color
+        .map_or_else(|| theme::zone_color(e.show(), scene.zone), theme::rgb);
+    let scenes: Vec<(SceneId, String)> = e
+        .show()
+        .scenes
+        .iter()
+        .filter(|s| s.id != id)
+        .map(|s| (s.id, s.name.clone()))
+        .collect();
+    let zones: Vec<(ZoneId, String)> = e
+        .show()
+        .zones
+        .iter()
+        .map(|z| (z.id, z.name.clone()))
+        .collect();
+    let on = !locked;
+    let once = loop_mode == LoopMode::Once;
+
+    ui.add_enabled_ui(on, |ui| {
+        row(ui, t("Szenen-Priorität"), |ui| {
+            ui.add(egui::DragValue::new(&mut st.priority).range(-10..=10))
+                .on_hover_text(t("Höhere Priorität gewinnt bei Überschneidungen"));
+        });
+        row(ui, t("Wiederholung"), |ui| {
+            if once {
+                ui.add(
+                    egui::DragValue::new(&mut st.repeat_count)
+                        .range(1..=999)
+                        .suffix("×"),
+                );
+            }
+            for (mode, icon, tip) in [
+                (LoopMode::Once, Icon::Next, t("X-mal abspielen")),
+                (LoopMode::Loop, Icon::Reset, t("Endlosschleife")),
+            ] {
+                if ui
+                    .add(IconButton::new(icon).active(loop_mode == mode).tint(color))
+                    .on_hover_text(tip)
+                    .clicked()
+                {
+                    loop_mode = mode;
+                }
+            }
+        });
+        ui.add_enabled_ui(once, |ui| {
+            row(ui, t("Springe zu"), |ui| {
+                let name = st
+                    .jump_to
+                    .and_then(|j| scenes.iter().find(|(s, _)| *s == j))
+                    .map_or_else(|| t("Keine").to_string(), |(_, n)| n.clone());
+                egui::ComboBox::from_id_salt(("jump_to", id.0))
+                    .selected_text(name)
+                    .width(160.0)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut st.jump_to, None, t("Keine"));
+                        for (sid, n) in &scenes {
+                            ui.selectable_value(&mut st.jump_to, Some(*sid), n);
+                        }
+                    });
+            });
+            row(ui, t("Am Ende freigeben"), |ui| {
+                ui.add(Toggle::new(&mut st.release_at_end, ""));
+            });
+        });
+        ui.add_space(theme::SP_S);
+        scope_row(
+            ui,
+            t("Freigabe-Modus"),
+            ("release_mode", id.0),
+            &mut st.release_mode,
+            &zones,
+            [
+                t("Aus – keine anderen Szenen freigeben"),
+                t("Alle laufenden Szenen"),
+                t("Szenen dieser Bank"),
+                t("Szenen außerhalb der Bank"),
+                t("Szenen bestimmter Bänke"),
+            ],
+        );
+        scope_row(
+            ui,
+            t("Vor Freigabe schützen"),
+            ("protect", id.0),
+            &mut st.protect,
+            &zones,
+            [
+                t("Aus – kein Schutz"),
+                t("Vor allen Szenen"),
+                t("Vor Szenen dieser Bank"),
+                t("Vor Szenen außerhalb der Bank"),
+                t("Vor Szenen bestimmter Bänke"),
+            ],
+        );
+        ui.add_space(theme::SP_S);
+        row(ui, t("Flash-Modus"), |ui| {
+            ui.add(Toggle::new(&mut st.flash, ""))
+                .on_hover_text(t("Läuft nur, solange die Szene gedrückt wird"));
+        });
+    });
+
+    if let Some(scene) = e.show().scene(id) {
+        if scene.settings != st || scene.loop_mode != loop_mode {
+            if let Some(scene) = e.show_mut().scene_mut(id) {
+                scene.settings = st;
+                scene.loop_mode = loop_mode;
+            }
+        }
+    }
+}
+
+/// Zeile: Bezeichnung links, Bedienelement rechtsbündig.
+fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
+    ui.horizontal(|ui| {
+        ui.set_min_height(32.0);
+        ui.label(egui::RichText::new(label).color(theme::text_dim()));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), add);
+    });
+}
+
+/// Auswahl eines Bank-Bezugs; bei „bestimmte Bänke“ darunter die Bänke.
+fn scope_row(
+    ui: &mut egui::Ui,
+    label: &str,
+    id: (&str, u32),
+    scope: &mut BankScope,
+    zones: &[(ZoneId, String)],
+    names: [&str; 5],
+) {
+    let index = match scope {
+        BankScope::Off => 0,
+        BankScope::All => 1,
+        BankScope::Bank => 2,
+        BankScope::OutsideBank => 3,
+        BankScope::Banks(_) => 4,
+    };
+    ui.label(egui::RichText::new(label).color(theme::text_dim()));
+    let mut picked = index;
+    egui::ComboBox::from_id_salt(id)
+        .selected_text(names[index])
+        .width(ui.available_width())
+        .show_ui(ui, |ui| {
+            for (i, n) in names.iter().enumerate() {
+                ui.selectable_value(&mut picked, i, *n);
+            }
+        });
+    if picked != index {
+        *scope = match picked {
+            0 => BankScope::Off,
+            1 => BankScope::All,
+            2 => BankScope::Bank,
+            3 => BankScope::OutsideBank,
+            _ => BankScope::Banks(Vec::new()),
+        };
+    }
+    if let BankScope::Banks(list) = scope {
+        ui.indent((id.0, "banks"), |ui| {
+            for (z, name) in zones {
+                let mut on = list.contains(z);
+                if ui.add(Toggle::new(&mut on, name)).changed() {
+                    if on {
+                        list.push(*z);
+                    } else {
+                        list.retain(|x| x != z);
+                    }
+                }
+            }
+        });
+    }
+    ui.add_space(theme::SP_XS);
 }
