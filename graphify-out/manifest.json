@@ -222,9 +222,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/scene_card.rs": {
-    "mtime": 1794076052.8734086,
-    "seen": 1794076474.7808497,
-    "ast_hash": "d69274e705f8cb6023da47c44f5cd8e7",
+    "mtime": 1794082691.3527098,
+    "seen": 1794082718.780233,
+    "ast_hash": "e4eb2e1a4dec70913293dd9f4e5d8b36",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/section.rs": {

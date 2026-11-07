@@ -69,8 +69,6 @@ impl SceneCard<'_> {
         let r = theme::R_S;
         let fill = if self.active {
             self.color.gamma_multiply(0.18)
-        } else if play.hovered() {
-            theme::raised_hover()
         } else {
             theme::raised()
         };
@@ -104,6 +102,9 @@ impl SceneCard<'_> {
         );
         let outline = if self.active {
             Stroke::new(1.5, self.color)
+        } else if play.hovered() || select.hovered() {
+            // Hover nur am Rand – die Fläche bleibt (Streifen daneben ist grau)
+            Stroke::new(1.5, self.color.gamma_multiply(0.75))
         } else {
             Stroke::new(1.0, theme::border())
         };
