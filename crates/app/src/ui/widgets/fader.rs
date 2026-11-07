@@ -157,6 +157,11 @@ impl Fader {
             Vec2::splat(24.0),
         );
         paint_symbol(&p, sym, self.kind, self.color);
+        // Kanalname nur beim Überfahren des Symbols
+        if let Some(h) = &self.hint {
+            ui.interact(sym, id.with("symbol"), Sense::hover())
+                .on_hover_text(h);
+        }
         y += SYMBOL_H;
 
         // Wert – Klick zum Eintippen
@@ -196,10 +201,27 @@ impl Fader {
                 ui.data_mut(|d| d.insert_temp(edit_id, text));
             }
         } else {
-            let r = ui
-                .interact(value_rect, id.with("value"), Sense::click())
-                .on_hover_text(t("Klicken, um einen Wert einzutippen"));
-            if r.hovered() {
+            // Klick = eintippen, Ziehen nach oben/unten = Wert ändern
+            let r = ui.interact(value_rect, id.with("value"), Sense::click_and_drag());
+            if r.hovered() || r.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+            }
+            let acc_id = id.with("value_drag");
+            if r.drag_started() {
+                ui.data_mut(|d| d.insert_temp(acc_id, 0.0f32));
+            }
+            if r.dragged() {
+                let mut acc: f32 = ui.data(|d| d.get_temp(acc_id)).unwrap_or(0.0);
+                acc -= r.drag_delta().y / 2.0; // 1 Schritt je 2 Punkte
+                let steps = acc.trunc();
+                if steps != 0.0 {
+                    acc -= steps;
+                    value = (f32::from(value) + steps).clamp(0.0, 255.0) as u8;
+                    event = FaderEvent::Changed(value);
+                }
+                ui.data_mut(|d| d.insert_temp(acc_id, acc));
+            }
+            if r.hovered() || r.dragged() {
                 p.rect_filled(value_rect, theme::R_S, theme::raised_hover());
             }
             let (txt, color) = if self.active {
@@ -340,9 +362,6 @@ impl Fader {
             ],
             Stroke::new(2.5, line),
         );
-        if let Some(h) = self.hint {
-            resp.on_hover_text(h);
-        }
         event
     }
 }

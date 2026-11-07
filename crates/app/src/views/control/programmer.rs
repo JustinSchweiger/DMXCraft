@@ -164,12 +164,6 @@ impl View for ProgrammerView {
                     color_bar(ui, cx.engine, &groups, cx.frame);
                 }
                 if visible.is_empty() {
-                    ui.label(
-                        egui::RichText::new(t(
-                            "Die ausgewählten Geräte haben keine Kanäle in dieser Kategorie.",
-                        ))
-                        .color(theme::text_dim()),
-                    );
                     return;
                 }
                 let height = ui.available_height();
@@ -190,7 +184,7 @@ impl View for ProgrammerView {
                                 76.0
                             };
                             for block in &blocks {
-                                fixture_block(ui, cx.engine, block, cx.frame, height, dot, fader_w);
+                                fixture_block(ui, cx.engine, block, height, dot, fader_w);
                             }
                         });
                     });
@@ -260,7 +254,6 @@ fn fixture_block(
     ui: &mut egui::Ui,
     e: &mut Engine,
     block: &FixtureBlock<'_>,
-    frame: &DmxFrame,
     height: f32,
     dot: Color32,
     fader_w: f32,
@@ -300,7 +293,7 @@ fn fixture_block(
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing = Vec2::ZERO;
             for grp in &block.faders {
-                fader(ui, e, grp, frame, height - HEAD_H, dot, fader_w);
+                fader(ui, e, grp, height - HEAD_H, dot, fader_w);
             }
         });
     });
@@ -310,20 +303,21 @@ fn fader(
     ui: &mut egui::Ui,
     e: &mut Engine,
     grp: &FaderGroup,
-    frame: &DmxFrame,
     height: f32,
     dot: Color32,
     width: f32,
 ) {
     let first = grp.channels[0];
     let active = e.programmer().contains_key(&first);
-    let ev = Fader::new(current(e, first, frame), grp.number, grp.kind)
+    // nicht gespeicherte Kanäle stehen auf 0
+    let value = e.programmer().get(&first).copied().unwrap_or(0);
+    let ev = Fader::new(value, grp.number, grp.kind)
         .active(active)
         .dot(dot)
         .color(kind_color(grp.kind))
         .height(height)
         .width(width)
-        .hint(tr!("{v} · {label} – {n} Kanal/Kanäle\nZiehen, Mausrad, Doppelklick = 0/voll, Rechtsklick = Menü", v = grp.name, label = t(grp.kind.label()), n = grp.channels.len()))
+        .hint(grp.name.clone())
         .show(ui);
     match ev {
         FaderEvent::Changed(v) => set_group(e, grp, v),
@@ -635,12 +629,11 @@ fn category_list(
 ) {
     let full = ui.available_rect_before_wrap();
     let p = ui.painter().clone();
-    p.rect_filled(full, theme::R_M, theme::bg());
-    p.rect_stroke(
-        full,
-        theme::R_M,
+    // schlichte Liste auf der Fläche, rechts eine Trennlinie wie zwischen
+    // den übrigen Bereichen
+    p.line_segment(
+        [full.right_top(), full.right_bottom()],
         Stroke::new(1.0, theme::border()),
-        egui::StrokeKind::Inside,
     );
     let row_h = 32.0;
     let mut y = full.top() + theme::SP_XS;
