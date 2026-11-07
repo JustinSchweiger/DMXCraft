@@ -150,20 +150,11 @@ impl SceneCard<'_> {
         }
         // Flash: kleiner Blitz links neben dem Zustandssymbol
         if self.flash {
-            let c = pos2(main_rect.right() - 32.0, main_rect.top() + 13.0);
-            let s = 6.0;
-            let bolt = vec![
-                c + Vec2::new(1.5, -s),
-                c + Vec2::new(-s * 0.6, s * 0.15),
-                c + Vec2::new(-0.2, s * 0.15),
-                c + Vec2::new(-1.5, s),
-                c + Vec2::new(s * 0.6, -s * 0.15),
-                c + Vec2::new(0.2, -s * 0.15),
-            ];
-            p.add(egui::Shape::closed_line(
-                bolt,
-                Stroke::new(1.3, if self.active { self.color } else { theme::WARN }),
-            ));
+            let r = Rect::from_center_size(
+                pos2(main_rect.right() - 32.0, main_rect.top() + 13.0),
+                Vec2::splat(13.0),
+            );
+            Icon::Lightning.paint(p, r, if self.active { self.color } else { theme::WARN });
         }
         // Ein-/Ausblenden: Rampe in der Leiste (steigt beim Ein-, fällt beim
         // Ausblenden), gefüllt bis zum aktuellen Stand

@@ -394,8 +394,8 @@ pub struct SceneSettings {
     pub priority: i8,
     /// Durchläufe, wenn nicht endlos (`Scene::loop_mode == Once`).
     pub repeat_count: u16,
-    /// Am Ende (nach den Durchläufen) diese Szene starten.
-    pub jump_to: Option<SceneId>,
+    /// Am Ende (nach den Durchläufen) diese Szenen starten.
+    pub jump_to_scenes: Vec<SceneId>,
     /// Am Ende (nach den Durchläufen) freigeben.
     pub release_at_end: bool,
     /// Welche laufenden Szenen beim Start freigegeben werden.
@@ -422,7 +422,7 @@ impl Default for SceneSettings {
             reverse: false,
             priority: 0,
             repeat_count: 1,
-            jump_to: None,
+            jump_to_scenes: Vec::new(),
             release_at_end: false,
             release_mode: BankScope::Bank,
             protect: BankScope::Off,

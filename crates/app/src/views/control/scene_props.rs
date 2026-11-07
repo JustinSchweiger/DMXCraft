@@ -15,7 +15,7 @@ use eframe::egui::{self, pos2, Color32, Rect, Sense, Stroke, Vec2};
 use crate::ui::theme;
 use crate::ui::widgets::knob::Knob;
 use crate::ui::widgets::time_field::time_field;
-use crate::ui::widgets::{Icon, IconButton, Toggle};
+use crate::ui::widgets::{Dialog, Icon, IconButton, Toggle};
 use crate::views::{View, ViewCtx};
 
 /// Breite der Reiterleiste.
@@ -38,6 +38,8 @@ pub struct ScenePropsView {
     adding: bool,
     /// Laufender Import/Export-Dialog.
     fx_dialog: Option<FxDialog>,
+    /// Auswahlfenster für Szenen/Bänke.
+    picker: Option<Picker>,
 }
 
 /// Import/Export von Effekten über den Systemdialog (eigener Thread).
@@ -69,9 +71,9 @@ impl View for ScenePropsView {
                 .layout(egui::Layout::top_down(egui::Align::Center)),
         );
         for (tab, icon, tip) in [
-            (Tab::Properties, Icon::Settings, t("Eigenschaften")),
+            (Tab::Properties, Icon::Sliders, t("Eigenschaften")),
             (Tab::Effects, Icon::Fx, t("Effekte")),
-            (Tab::Third, Icon::Builder, t("Erweiterte Eigenschaften")),
+            (Tab::Third, Icon::Gear, t("Erweiterte Eigenschaften")),
         ] {
             if tab_ui
                 .add(
@@ -103,6 +105,7 @@ impl View for ScenePropsView {
         header(ui, cx.engine, id);
         ui.add_space(theme::SP_S);
         let locked = cx.state.locked;
+        picker_window(ui.ctx(), cx.engine, &mut self.picker);
         self.poll_dialog(cx);
         if self.tab == Tab::Effects {
             self.effects_tab(ui, cx, id, locked);
@@ -113,7 +116,7 @@ impl View for ScenePropsView {
             .auto_shrink([false, false])
             .show(ui, |ui| match self.tab {
                 Tab::Properties => properties(ui, cx.engine, id, locked),
-                Tab::Third => advanced(ui, cx.engine, id, locked),
+                Tab::Third => advanced(ui, cx.engine, id, locked, &mut self.picker),
                 Tab::Effects => {}
             });
     }
@@ -731,9 +734,33 @@ fn effect_header(
     (head, chevron)
 }
 
+/// Wofür das Auswahlfenster geöffnet ist.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PickTarget {
+    /// „Springe zu“: Szenen.
+    Jump,
+    /// Freigabe-Modus „Bänke“.
+    Release,
+    /// Freigabeschutz „Bänke“.
+    Protect,
+}
+
+/// Offenes Auswahlfenster (Szenen bzw. Bänke, Mehrfachauswahl).
+pub(super) struct Picker {
+    scene: SceneId,
+    target: PickTarget,
+    chosen: std::collections::BTreeSet<u32>,
+}
+
 /// Reiter „Erweiterte Eigenschaften“: Priorität, Wiederholung, Ende,
 /// Freigabe, Freigabeschutz und Flash.
-fn advanced(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
+fn advanced(
+    ui: &mut egui::Ui,
+    e: &mut Engine,
+    id: SceneId,
+    locked: bool,
+    picker: &mut Option<Picker>,
+) {
     let Some(scene) = e.show().scene(id) else {
         return;
     };
@@ -742,21 +769,15 @@ fn advanced(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     let color = scene
         .color
         .map_or_else(|| theme::zone_color(e.show(), scene.zone), theme::rgb);
-    let scenes: Vec<(SceneId, String)> = e
+    let names: std::collections::HashMap<u32, String> = e
         .show()
         .scenes
         .iter()
-        .filter(|s| s.id != id)
-        .map(|s| (s.id, s.name.clone()))
-        .collect();
-    let zones: Vec<(ZoneId, String)> = e
-        .show()
-        .zones
-        .iter()
-        .map(|z| (z.id, z.name.clone()))
+        .map(|s| (s.id.0, s.name.clone()))
         .collect();
     let on = !locked;
     let once = loop_mode == LoopMode::Once;
+    let mut open = None;
 
     ui.add_enabled_ui(on, |ui| {
         row(ui, t("Szenen-Priorität"), |ui| {
@@ -772,8 +793,8 @@ fn advanced(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
                 );
             }
             for (mode, icon, tip) in [
-                (LoopMode::Once, Icon::Next, t("X-mal abspielen")),
-                (LoopMode::Loop, Icon::Reset, t("Endlosschleife")),
+                (LoopMode::Once, Icon::RepeatOnce, t("X-mal abspielen")),
+                (LoopMode::Loop, Icon::Repeat, t("Endlosschleife")),
             ] {
                 if ui
                     .add(IconButton::new(icon).active(loop_mode == mode).tint(color))
@@ -786,59 +807,55 @@ fn advanced(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         });
         ui.add_enabled_ui(once, |ui| {
             row(ui, t("Springe zu"), |ui| {
-                let name = st
-                    .jump_to
-                    .and_then(|j| scenes.iter().find(|(s, _)| *s == j))
-                    .map_or_else(|| t("Keine").to_string(), |(_, n)| n.clone());
-                egui::ComboBox::from_id_salt(("jump_to", id.0))
-                    .selected_text(name)
-                    .width(160.0)
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut st.jump_to, None, t("Keine"));
-                        for (sid, n) in &scenes {
-                            ui.selectable_value(&mut st.jump_to, Some(*sid), n);
-                        }
-                    });
+                let text = match st.jump_to_scenes.as_slice() {
+                    [] => t("Keine").to_string(),
+                    [one] => names.get(&one.0).cloned().unwrap_or_default(),
+                    many => tr!("{n} Szenen", n = many.len()),
+                };
+                if ui.button(text).clicked() {
+                    open = Some(PickTarget::Jump);
+                }
             });
             row(ui, t("Am Ende freigeben"), |ui| {
                 ui.add(Toggle::new(&mut st.release_at_end, ""));
             });
         });
         ui.add_space(theme::SP_S);
-        scope_row(
+        if scope_row(
             ui,
             t("Freigabe-Modus"),
             ("release_mode", id.0),
             &mut st.release_mode,
-            &zones,
-            [
-                t("Aus – keine anderen Szenen freigeben"),
-                t("Alle laufenden Szenen"),
-                t("Szenen dieser Bank"),
-                t("Szenen außerhalb der Bank"),
-                t("Szenen bestimmter Bänke"),
-            ],
-        );
-        scope_row(
+        ) {
+            open = Some(PickTarget::Release);
+        }
+        if scope_row(
             ui,
             t("Vor Freigabe schützen"),
             ("protect", id.0),
             &mut st.protect,
-            &zones,
-            [
-                t("Aus – kein Schutz"),
-                t("Vor allen Szenen"),
-                t("Vor Szenen dieser Bank"),
-                t("Vor Szenen außerhalb der Bank"),
-                t("Vor Szenen bestimmter Bänke"),
-            ],
-        );
+        ) {
+            open = Some(PickTarget::Protect);
+        }
         ui.add_space(theme::SP_S);
         row(ui, t("Flash-Modus"), |ui| {
             ui.add(Toggle::new(&mut st.flash, ""))
                 .on_hover_text(t("Läuft nur, solange die Szene gedrückt wird"));
         });
     });
+
+    if let Some(target) = open {
+        let chosen = match target {
+            PickTarget::Jump => st.jump_to_scenes.iter().map(|s| s.0).collect(),
+            PickTarget::Release => banks_of(&st.release_mode),
+            PickTarget::Protect => banks_of(&st.protect),
+        };
+        *picker = Some(Picker {
+            scene: id,
+            target,
+            chosen,
+        });
+    }
 
     if let Some(scene) = e.show().scene(id) {
         if scene.settings != st || scene.loop_mode != loop_mode {
@@ -850,6 +867,166 @@ fn advanced(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     }
 }
 
+fn banks_of(scope: &BankScope) -> std::collections::BTreeSet<u32> {
+    match scope {
+        BankScope::Banks(list) => list.iter().map(|z| z.0).collect(),
+        _ => Default::default(),
+    }
+}
+
+/// Eine Bank im Auswahlfenster: ID, Name, Farbe und ihre Szenen.
+type PickColumn = (ZoneId, String, Color32, Vec<(SceneId, String, Color32)>);
+
+/// Auswahlfenster: alle Bänke als Spalten mit ihren Szenen. Je nach Zweck
+/// werden Szenen oder Bänke (Kopf) ausgewählt, mehrere möglich.
+fn picker_window(ctx: &egui::Context, e: &mut Engine, picker: &mut Option<Picker>) {
+    let Some(p) = picker.as_mut() else {
+        return;
+    };
+    let pick_banks = p.target != PickTarget::Jump;
+    let title = if pick_banks {
+        t("Bänke auswählen")
+    } else {
+        t("Szenen auswählen")
+    };
+    let show = e.show();
+    let columns: Vec<PickColumn> = show
+        .zones
+        .iter()
+        .map(|z| {
+            let zc = theme::zone_color(show, Some(z.id));
+            let scenes = show
+                .scenes
+                .iter()
+                .filter(|s| s.zone == Some(z.id) && s.id != p.scene)
+                .map(|s| (s.id, s.name.clone(), s.color.map_or(zc, theme::rgb)))
+                .collect();
+            (z.id, z.name.clone(), zc, scenes)
+        })
+        .collect();
+    let mut open = true;
+    let res = Dialog::new(title)
+        .id("scene_bank_picker")
+        .resizable([760.0, 460.0])
+        .cancel(t("Abbrechen"))
+        .primary(t("Übernehmen"))
+        .show(ctx, &mut open, |ui, _| {
+            ui.label(
+                egui::RichText::new(if pick_banks {
+                    t("Bänke anklicken, um sie aus- oder abzuwählen.")
+                } else {
+                    t("Szenen anklicken, um sie aus- oder abzuwählen.")
+                })
+                .color(theme::text_dim()),
+            );
+            ui.add_space(theme::SP_S);
+            egui::ScrollArea::both()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.horizontal_top(|ui| {
+                        for (zid, zname, zc, scenes) in &columns {
+                            ui.vertical(|ui| {
+                                ui.set_width(150.0);
+                                let on = pick_banks && p.chosen.contains(&zid.0);
+                                if pick_tile(ui, zname, *zc, on, pick_banks, true) {
+                                    toggle(&mut p.chosen, zid.0);
+                                }
+                                for (sid, name, c) in scenes {
+                                    let on = !pick_banks && p.chosen.contains(&sid.0);
+                                    if pick_tile(ui, name, *c, on, !pick_banks, false) {
+                                        toggle(&mut p.chosen, sid.0);
+                                    }
+                                }
+                            });
+                        }
+                    });
+                });
+        });
+    if res.clicked(1) {
+        let (scene, target, chosen) = (p.scene, p.target, p.chosen.clone());
+        if let Some(s) = e.show_mut().scene_mut(scene) {
+            match target {
+                PickTarget::Jump => {
+                    s.settings.jump_to_scenes = chosen.into_iter().map(SceneId).collect();
+                }
+                PickTarget::Release => {
+                    s.settings.release_mode =
+                        BankScope::Banks(chosen.into_iter().map(ZoneId).collect());
+                }
+                PickTarget::Protect => {
+                    s.settings.protect = BankScope::Banks(chosen.into_iter().map(ZoneId).collect());
+                }
+            }
+        }
+        open = false;
+    }
+    if !open {
+        *picker = None;
+    }
+}
+
+fn toggle(set: &mut std::collections::BTreeSet<u32>, v: u32) {
+    if !set.remove(&v) {
+        set.insert(v);
+    }
+}
+
+/// Kachel im Auswahlfenster; `true` beim Anklicken.
+fn pick_tile(
+    ui: &mut egui::Ui,
+    name: &str,
+    color: Color32,
+    on: bool,
+    enabled: bool,
+    head: bool,
+) -> bool {
+    let h = if head { 30.0 } else { 34.0 };
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(150.0, h), Sense::click());
+    let p = ui.painter();
+    let fill = if on {
+        color.gamma_multiply(0.25)
+    } else if enabled && resp.hovered() {
+        theme::raised_hover()
+    } else if head {
+        theme::bg()
+    } else {
+        theme::raised()
+    };
+    p.rect_filled(rect, theme::R_S, fill);
+    let stroke = if on {
+        Stroke::new(1.5, color)
+    } else {
+        Stroke::new(1.0, theme::border())
+    };
+    p.rect_stroke(rect, theme::R_S, stroke, egui::StrokeKind::Inside);
+    if head {
+        p.line_segment(
+            [
+                rect.left_top() + Vec2::new(6.0, 2.0),
+                rect.right_top() + Vec2::new(-6.0, 2.0),
+            ],
+            Stroke::new(2.0, color),
+        );
+    }
+    p.text(
+        pos2(rect.left() + 10.0, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        name,
+        if head {
+            theme::heading_font()
+        } else {
+            theme::body()
+        },
+        if enabled || head {
+            color
+        } else {
+            color.gamma_multiply(0.5)
+        },
+    );
+    ui.add_space(4.0);
+    enabled && resp.clicked()
+}
+
 /// Zeile: Bezeichnung links, Bedienelement rechtsbündig.
 fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
@@ -859,15 +1036,10 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     });
 }
 
-/// Auswahl eines Bank-Bezugs; bei „bestimmte Bänke“ darunter die Bänke.
-fn scope_row(
-    ui: &mut egui::Ui,
-    label: &str,
-    id: (&str, u32),
-    scope: &mut BankScope,
-    zones: &[(ZoneId, String)],
-    names: [&str; 5],
-) {
+/// Bank-Bezug als kurze Auswahl rechts; bei „Bänke“ darunter ein Knopf für
+/// das Auswahlfenster. `true` = Fenster öffnen.
+fn scope_row(ui: &mut egui::Ui, label: &str, id: (&str, u32), scope: &mut BankScope) -> bool {
+    let names = [t("Aus"), t("Alle"), t("Bank"), t("Außerhalb"), t("Bänke")];
     let index = match scope {
         BankScope::Off => 0,
         BankScope::All => 1,
@@ -875,38 +1047,45 @@ fn scope_row(
         BankScope::OutsideBank => 3,
         BankScope::Banks(_) => 4,
     };
-    ui.label(egui::RichText::new(label).color(theme::text_dim()));
     let mut picked = index;
-    egui::ComboBox::from_id_salt(id)
-        .selected_text(names[index])
-        .width(ui.available_width())
-        .show_ui(ui, |ui| {
-            for (i, n) in names.iter().enumerate() {
-                ui.selectable_value(&mut picked, i, *n);
-            }
-        });
+    let mut open = false;
+    row(ui, label, |ui| {
+        egui::ComboBox::from_id_salt(id)
+            .selected_text(names[index])
+            .width(110.0)
+            .show_ui(ui, |ui| {
+                for (i, n) in names.iter().enumerate() {
+                    ui.selectable_value(&mut picked, i, *n);
+                }
+            });
+    });
     if picked != index {
         *scope = match picked {
             0 => BankScope::Off,
             1 => BankScope::All,
             2 => BankScope::Bank,
             3 => BankScope::OutsideBank,
-            _ => BankScope::Banks(Vec::new()),
+            _ => {
+                open = true;
+                BankScope::Banks(Vec::new())
+            }
         };
     }
     if let BankScope::Banks(list) = scope {
-        ui.indent((id.0, "banks"), |ui| {
-            for (z, name) in zones {
-                let mut on = list.contains(z);
-                if ui.add(Toggle::new(&mut on, name)).changed() {
-                    if on {
-                        list.push(*z);
-                    } else {
-                        list.retain(|x| x != z);
-                    }
-                }
+        row(ui, "", |ui| {
+            let text = match list.len() {
+                0 => t("Keine Bank").to_string(),
+                1 => t("1 Bank").to_string(),
+                n => tr!("{n} Bänke", n = n),
+            };
+            if ui
+                .button(text)
+                .on_hover_text(t("Bänke auswählen"))
+                .clicked()
+            {
+                open = true;
             }
         });
     }
-    ui.add_space(theme::SP_XS);
+    open
 }

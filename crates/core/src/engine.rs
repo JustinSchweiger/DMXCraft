@@ -493,8 +493,8 @@ impl Engine {
             if st.release_at_end {
                 self.release(id);
             }
-            if let Some(next) = st.jump_to.filter(|n| *n != id) {
-                self.activate(next);
+            for next in st.jump_to_scenes.iter().filter(|n| **n != id) {
+                self.activate(*next);
             }
         }
     }
@@ -1107,7 +1107,7 @@ mod tests {
             sc.loop_mode = LoopMode::Once;
             sc.settings.repeat_count = 2;
             sc.settings.release_at_end = true;
-            sc.settings.jump_to = Some(next);
+            sc.settings.jump_to_scenes = vec![next];
         }
         let mut e = Engine::new(s);
         e.activate(first);

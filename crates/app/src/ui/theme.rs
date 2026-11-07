@@ -238,6 +238,26 @@ fn install_fonts(ctx: &egui::Context) {
     fonts
         .families
         .insert(egui::FontFamily::Name(HEADING_FAMILY.into()), family);
+    // Symbole (Phosphor, MIT)
+    use crate::ui::widgets::icons::{ICON_FAMILY, ICON_FILL_FAMILY};
+    for (name, bytes) in [
+        (
+            ICON_FAMILY,
+            &include_bytes!("../../assets/fonts/Phosphor.ttf")[..],
+        ),
+        (
+            ICON_FILL_FAMILY,
+            &include_bytes!("../../assets/fonts/Phosphor-Fill.ttf")[..],
+        ),
+    ] {
+        fonts.font_data.insert(
+            name.into(),
+            std::sync::Arc::new(egui::FontData::from_static(bytes)),
+        );
+        fonts
+            .families
+            .insert(egui::FontFamily::Name(name.into()), vec![name.to_string()]);
+    }
     ctx.set_fonts(fonts);
 }
 
