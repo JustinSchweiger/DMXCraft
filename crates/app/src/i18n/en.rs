@@ -417,6 +417,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Spur {n}", "Track {n}"),
     ("Spurfarbe", "Track colour"),
     ("Gitter", "Grid"),
+    ("Alle einblenden", "Show all"),
     ("Ausgeblendete Szenen ({n})", "Hidden scenes ({n})"),
     ("{n} Szene(n) ausgeblendet – Rechtsklick auf die Bank blendet sie wieder ein", "{n} scene(s) hidden – right-click the bank to show them again"),
     ("{n} Gerät(e) kopiert", "{n} fixture(s) copied"),
