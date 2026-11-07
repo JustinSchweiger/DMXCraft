@@ -411,10 +411,24 @@ impl ScenePropsView {
         let effects = scene.effects.clone();
         if effects.is_empty() || self.adding {
             let mut pick = None;
+            // STATIC-Szene: unten Import/Export wie bei FX-Szenen
+            const BAR_H: f32 = 40.0;
+            let with_bar = effects.is_empty();
+            let area = ui.available_rect_before_wrap();
+            let bar_rect = Rect::from_min_max(pos2(area.left(), area.bottom() - BAR_H), area.max);
+            let tiles_h = if with_bar {
+                (area.height() - BAR_H - theme::SP_XS).max(60.0)
+            } else {
+                area.height()
+            };
+            let mut tiles_ui = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(
+                area.min,
+                Vec2::new(area.width(), tiles_h),
+            )));
             egui::ScrollArea::vertical()
                 .id_salt("fx_tiles")
                 .auto_shrink([false, false])
-                .show(ui, |ui| {
+                .show(&mut tiles_ui, |ui| {
                     if self.adding && !effects.is_empty() {
                         ui.horizontal(|ui| {
                             ui.label(theme::heading_text(t("Effekt hinzufügen")));
@@ -435,6 +449,33 @@ impl ScenePropsView {
                     }
                     pick = effect_tiles(ui, !locked, effects.is_empty());
                 });
+            if with_bar {
+                ui.painter().line_segment(
+                    [bar_rect.left_top(), bar_rect.right_top()],
+                    Stroke::new(1.0, theme::border()),
+                );
+                let mut bar = ui.new_child(
+                    egui::UiBuilder::new()
+                        .max_rect(bar_rect.with_min_y(bar_rect.top() + 1.0))
+                        .layout(egui::Layout::right_to_left(egui::Align::Center)),
+                );
+                let on = !locked && self.fx_dialog.is_none();
+                if bar
+                    .add(IconButton::new(Icon::Export).size(30.0).flat().enabled(on))
+                    .on_hover_text(t("Szene exportieren"))
+                    .clicked()
+                {
+                    self.start_dialog(bar.ctx(), id, true);
+                }
+                if bar
+                    .add(IconButton::new(Icon::Import).size(30.0).flat().enabled(on))
+                    .on_hover_text(t("Effekte importieren"))
+                    .clicked()
+                {
+                    self.start_dialog(bar.ctx(), id, false);
+                }
+            }
+            ui.allocate_rect(area, Sense::hover());
             if let Some(kind) = pick {
                 if let Some(scene) = cx.engine.show_mut().scene_mut(id) {
                     if kind == EffectKind::Steps && scene.steps.is_empty() {
@@ -639,11 +680,9 @@ impl ScenePropsView {
                         // keine Effekte mehr -> wieder STATIC
                         scene.effects.retain(|e| e.id != f);
                         if was_steps {
-                            // ohne STEPS bleibt nur der bearbeitete Schritt
-                            let keep = cx.state.edit_step.min(scene.steps.len().saturating_sub(1));
-                            if let Some(st) = scene.steps.get(keep).cloned() {
-                                scene.steps = vec![st];
-                            }
+                            // mit STEPS verschwinden auch alle Schritte samt
+                            // Werten: übrig bleibt eine leere STATIC-Szene
+                            scene.steps = vec![dmxcraft_core::Step::new(Vec::new())];
                             cx.state.edit_step = 0;
                             cx.state.edit_reload = true;
                         }
@@ -723,7 +762,8 @@ impl ScenePropsView {
                 None => s.effects.clone(),
             };
             // STEPS nimmt die Schritte (Werte und Zeiten) mit
-            let steps = if effects.iter().any(|e| e.kind == EffectKind::Steps) {
+            let steps = if effects.is_empty() || effects.iter().any(|e| e.kind == EffectKind::Steps)
+            {
                 s.steps.clone()
             } else {
                 Vec::new()
@@ -785,6 +825,18 @@ impl FxFile {
 /// in eine Schrittszene werden die Schritte angehängt, eine Szene ohne
 /// Effekte wird zur Schrittszene.
 fn import_fx(s: &mut dmxcraft_core::Scene, file: FxFile) -> Result<String, String> {
+    // exportierte STATIC-Szene: ihre Werte übernehmen
+    if file.effects.is_empty() {
+        if !s.effects.is_empty() {
+            return Err(
+                t("Eine statische Szene lässt sich nur in eine STATIC-Szene importieren").into(),
+            );
+        }
+        if let Some(st) = file.steps.into_iter().next() {
+            s.steps = vec![st];
+        }
+        return Ok(t("Szene importiert").into());
+    }
     let with_steps = file.effects.iter().any(|e| e.kind == EffectKind::Steps);
     if with_steps {
         if s.has_steps() {

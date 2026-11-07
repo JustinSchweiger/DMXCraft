@@ -263,7 +263,10 @@ impl Engine {
             .find(|p| p.scene == id && p.releasing.is_none())?;
         let scene = self.show.scene(id)?;
         let total = scene.duration_ms().max(1) as f64;
-        let before: u64 = scene.steps[..p.step].iter().map(|s| s.duration_ms()).sum();
+        let before: u64 = scene.steps[..p.step.min(scene.steps.len())]
+            .iter()
+            .map(|s| s.duration_ms())
+            .sum();
         Some(((before as f64 + p.elapsed_ms) / total).clamp(0.0, 1.0) as f32)
     }
 
@@ -285,7 +288,9 @@ impl Engine {
             .iter()
             .find(|p| p.scene == id && p.releasing.is_none())?;
         let scene = self.show.scene(id)?;
-        let step = scene.steps.get(p.step)?;
+        let step = scene
+            .steps
+            .get(p.step.min(scene.steps.len().saturating_sub(1)))?;
         let dur = step.duration_ms().max(1) as f64;
         Some(SceneProgress {
             step: p.step,
@@ -451,7 +456,15 @@ impl Engine {
             };
             p.age_ms += real_ms;
             let len = scene.steps.len();
-            if len == 0 || p.finished || p.paused {
+            if len == 0 {
+                continue;
+            }
+            // Schritte können während der Wiedergabe gelöscht werden
+            if p.step >= len {
+                p.step = len - 1;
+                p.elapsed_ms = 0.0;
+            }
+            if p.finished || p.paused {
                 continue;
             }
             p.elapsed_ms += dt_ms * f64::from(scene.settings.speed_pct) / 100.0;
@@ -536,7 +549,7 @@ impl Engine {
             return out;
         };
         let len = scene.steps.len();
-        let Some(step) = scene.steps.get(p.step) else {
+        let Some(step) = scene.steps.get(p.step.min(len.saturating_sub(1))) else {
             return out;
         };
         let current = step.value_map();
@@ -850,6 +863,28 @@ mod tests {
         assert_eq!(f.get(0, 100), Some(128)); // Pan
         assert_eq!(f.get(0, 102), Some(128)); // Tilt
         assert_eq!(f.get(0, 105), Some(0)); // Dimmer
+    }
+
+    #[test]
+    fn removing_steps_while_playing_does_not_panic() {
+        let (mut s, a, _) = setup();
+        let id = s.add_scene(
+            "S",
+            None,
+            vec![
+                Step::new(vec![cv(a, 0, 255)]),
+                Step::new(vec![cv(a, 0, 100)]),
+                Step::new(vec![cv(a, 0, 50)]),
+            ],
+        );
+        let mut e = Engine::new(s);
+        e.activate(id);
+        e.tick(Duration::from_millis(2_100));
+        e.show_mut().scene_mut(id).unwrap().steps = vec![Step::new(Vec::new())];
+        e.tick(Duration::from_millis(20));
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 1), Some(0));
+        assert!(e.progress(id).is_some());
     }
 
     #[test]
