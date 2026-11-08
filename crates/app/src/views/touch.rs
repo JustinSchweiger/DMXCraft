@@ -679,11 +679,12 @@ impl TouchView {
 
         // Entf löscht, Pfeiltasten verschieben das gewählte Element
         if editing && !ui.ctx().egui_wants_keyboard_input() {
-            if ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
+            if remove.is_empty()
+                && ui.input(|i| {
+                    i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)
+                })
             {
-                if remove.is_empty() {
-                    remove = cx.state.touch_multi.clone();
-                }
+                remove = cx.state.touch_multi.clone();
             }
             // Strg+A: alles auf der Seite auswählen
             if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::A)) {
