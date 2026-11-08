@@ -724,6 +724,9 @@ pub struct Show {
     /// Tastatur- und MIDI-Zuordnungen.
     #[serde(default, skip_serializing_if = "crate::mapping::Mappings::is_empty")]
     pub mappings: crate::mapping::Mappings,
+    /// Touch-Oberfläche (Seiten mit frei angeordneten Bedienelementen).
+    #[serde(default, skip_serializing_if = "crate::touch::TouchLayout::is_empty")]
+    pub touch: crate::touch::TouchLayout,
 }
 
 impl Default for Show {
@@ -746,6 +749,7 @@ impl Show {
             groups: Vec::new(),
             venue: crate::venue::Venue::default(),
             mappings: Default::default(),
+            touch: Default::default(),
         }
     }
 

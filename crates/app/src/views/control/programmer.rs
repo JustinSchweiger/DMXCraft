@@ -610,7 +610,7 @@ fn color_bar(
         current(e, layer, b.channels[0], frame),
     ];
     let mut changed = false;
-    ui.horizontal(|ui| {
+    let row = ui.horizontal(|ui| {
         // aktuelle Farbe; Klick öffnet den Farbwähler (wie bei Szenen/Bänken)
         let current = ui
             .add(Swatch(theme::rgb(rgb)))
@@ -648,6 +648,14 @@ fn color_bar(
             }
         }
     });
+    // Alt + Klick: Farbrad für diese Geräte auf der Touch-Oberfläche
+    let fixtures = fixtures_of(&r.channels);
+    crate::mapping::touch_source(
+        ui,
+        row.response.rect,
+        dmxcraft_core::touch::TouchKind::Color,
+        &fixtures,
+    );
     ui.add_space(theme::SP_XS);
     if changed {
         for (grp, v) in [(r, rgb[0]), (g, rgb[1]), (b, rgb[2])] {
@@ -669,12 +677,20 @@ fn xy_pad(
     if pan.is_none() && tilt.is_none() {
         return;
     }
+    let fixtures = fixtures_of(&pan.or(tilt).map(|g| g.channels.clone()).unwrap_or_default());
     let pad = XyPad {
         x: pan.map_or(128, |g| current(e, layer, g.channels[0], frame)),
         y: tilt.map_or(128, |g| current(e, layer, g.channels[0], frame)),
         size: (height - 8.0).clamp(120.0, 260.0),
     };
-    if let Some((x, y)) = pad.show(ui) {
+    let shown = ui.scope(|ui| pad.show(ui));
+    crate::mapping::touch_source(
+        ui,
+        shown.response.rect,
+        dmxcraft_core::touch::TouchKind::Xy,
+        &fixtures,
+    );
+    if let Some((x, y)) = shown.inner {
         if let Some(g) = pan {
             set_group(e, layer, g, x);
         }
@@ -682,6 +698,17 @@ fn xy_pad(
             set_group(e, layer, g, y);
         }
     }
+}
+
+/// Geräte einer Kanalliste (Reihenfolge bleibt, ohne Doppelte).
+fn fixtures_of(channels: &[ChannelRef]) -> Vec<dmxcraft_core::FixtureId> {
+    let mut out: Vec<dmxcraft_core::FixtureId> = Vec::new();
+    for c in channels {
+        if !out.contains(&c.fixture) {
+            out.push(c.fixture);
+        }
+    }
+    out
 }
 
 /// Aktuelle Programmer-Werte (z. B. für eine neue Szene).

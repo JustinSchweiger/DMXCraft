@@ -1031,6 +1031,19 @@ fn scene_card(
         if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
             actions.extend(targets.iter().map(|s| Action::DuplicateScene(*s)));
         }
+        if menu::item(
+            ui,
+            MenuItem::new(t("Zur Touch-Oberfläche hinzufügen")).icon(Icon::Touch),
+        ) {
+            for s in &targets {
+                mapping::touch_pick_control(
+                    ui.ctx(),
+                    Control::Scene {
+                        target: SceneTarget::Scene { id: *s },
+                    },
+                );
+            }
+        }
         if menu::item(ui, MenuItem::new(t("Ausblenden")).icon(Icon::EyeOff)) {
             actions.push(Action::HideScenes(targets.clone()));
         }

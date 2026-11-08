@@ -15,6 +15,7 @@ pub mod mapping;
 pub mod plan;
 pub mod show;
 pub mod timeline;
+pub mod touch;
 pub mod venue;
 
 pub use dmx::{DmxFrame, UNIVERSE_SIZE};

@@ -94,6 +94,11 @@ fn take_fire(ctx: &egui::Context, key: u64) -> Option<UiFire> {
     })
 }
 
+/// Gemeldete Zustände der Bedienelemente (für Touch-Schaltflächen).
+pub fn ui_states(ctx: &egui::Context) -> HashMap<u64, bool> {
+    ctx.data(|d| d.get_temp(states_id())).unwrap_or_default()
+}
+
 /// Zustand eines Elements für die LED-Rückmeldung merken.
 fn report(ctx: &egui::Context, key: u64, on: bool) {
     ctx.data_mut(|d| {
@@ -251,6 +256,12 @@ fn target_shape(
         return false;
     };
     let Some(kind) = o.kind else {
+        // Alt + Klick: Element zur Touch-Oberfläche hinzufügen
+        let mut chans = channels.to_vec();
+        alt_click(ui, rect, rotation, control, |p| {
+            p.name = matches!(control, Control::Ui { .. }).then(name);
+            p.channels = std::mem::take(&mut chans);
+        });
         return false;
     };
     let rotated = rotation.rem_euclid(360.0) != 0.0;
@@ -319,6 +330,133 @@ fn target_shape(
         );
     }
     true
+}
+
+/// Element für die Touch-Oberfläche (Alt + Klick bzw. Kontextmenü).
+#[derive(Clone, Debug, Default)]
+pub struct TouchPick {
+    pub kind: dmxcraft_core::touch::TouchKind,
+    pub control: Option<Control>,
+    pub name: Option<(String, String)>,
+    pub channels: Vec<dmxcraft_core::ChannelRef>,
+    pub fixtures: Vec<dmxcraft_core::FixtureId>,
+}
+
+fn touch_pick_id() -> egui::Id {
+    egui::Id::unique("touch_pick")
+}
+
+/// Element zur Touch-Oberfläche vormerken (verarbeitet der App-Rahmen).
+pub fn touch_pick(ctx: &egui::Context, p: TouchPick) {
+    ctx.data_mut(|d| {
+        d.get_temp_mut_or_default::<Vec<TouchPick>>(touch_pick_id())
+            .push(p);
+    });
+}
+
+/// Vorgemerkte Elemente abholen.
+pub fn take_touch_picks(ctx: &egui::Context) -> Vec<TouchPick> {
+    ctx.data_mut(|d| d.remove_temp::<Vec<TouchPick>>(touch_pick_id()))
+        .unwrap_or_default()
+}
+
+/// Bedienelement über ein Kontextmenü zur Touch-Oberfläche vormerken.
+pub fn touch_pick_control(ctx: &egui::Context, control: Control) {
+    touch_pick(
+        ctx,
+        TouchPick {
+            control: Some(control),
+            ..Default::default()
+        },
+    );
+}
+
+/// Ist Alt gedrückt, liegt eine Klickfläche über dem Element (hebt es hervor)
+/// und ein Klick merkt es für die Touch-Oberfläche vor.
+fn alt_click(
+    ui: &egui::Ui,
+    rect: Rect,
+    rotation: f32,
+    control: Control,
+    fill: impl FnOnce(&mut TouchPick),
+) {
+    if !ui.input(|i| i.modifiers.alt) {
+        return;
+    }
+    let quad = rotated_quad(rect, rotation);
+    let hit = Rect::from_points(&quad);
+    let id = ui.scope_id().with(("touch_alt", format!("{control:?}")));
+    let resp = ui
+        .interact(hit, id, Sense::click())
+        .on_hover_text(t_touch_hint());
+    if resp.hovered() {
+        ui.painter().add(egui::Shape::closed_line(
+            quad.to_vec(),
+            Stroke::new(2.0, theme::accent()),
+        ));
+    }
+    if resp.clicked() {
+        let fader = matches!(
+            control,
+            Control::Master
+                | Control::Channel { .. }
+                | Control::Channels
+                | Control::Ui { fader: true, .. }
+        );
+        let mut p = TouchPick {
+            kind: if fader {
+                dmxcraft_core::touch::TouchKind::Fader
+            } else {
+                dmxcraft_core::touch::TouchKind::Button
+            },
+            control: Some(control),
+            ..Default::default()
+        };
+        fill(&mut p);
+        if !p.channels.is_empty() {
+            p.kind = dmxcraft_core::touch::TouchKind::Fader;
+        }
+        touch_pick(ui.ctx(), p);
+    }
+}
+
+fn t_touch_hint() -> &'static str {
+    crate::i18n::t("Zur Touch-Oberfläche hinzufügen")
+}
+
+/// Farbfeld bzw. XY-Feld des Programmers: Alt + Klick legt ein Farbrad bzw.
+/// XY-Feld für die ausgewählten Geräte auf der Touch-Oberfläche an.
+pub fn touch_source(
+    ui: &egui::Ui,
+    rect: Rect,
+    kind: dmxcraft_core::touch::TouchKind,
+    fixtures: &[dmxcraft_core::FixtureId],
+) {
+    if !ui.input(|i| i.modifiers.alt) || fixtures.is_empty() {
+        return;
+    }
+    let id = ui.scope_id().with(("touch_src", kind as u8));
+    let resp = ui
+        .interact(rect, id, Sense::click())
+        .on_hover_text(t_touch_hint());
+    if resp.hovered() {
+        ui.painter().rect_stroke(
+            rect,
+            theme::R_S,
+            Stroke::new(2.0, theme::accent()),
+            StrokeKind::Inside,
+        );
+    }
+    if resp.clicked() {
+        touch_pick(
+            ui.ctx(),
+            TouchPick {
+                kind,
+                fixtures: fixtures.to_vec(),
+                ..Default::default()
+            },
+        );
+    }
 }
 
 /// Anzeigename einer Zuordnung: (Kategorie, Ziel).
@@ -405,6 +543,17 @@ pub fn describe(show: &Show, c: &Control) -> (String, String) {
             t("Alle Szenen stoppen").to_string(),
         ),
         Control::Ui { .. } => (t("Oberfläche").to_string(), t("Bedienelement").to_string()),
+        Control::Group { id } => (
+            t("Gruppe").to_string(),
+            match id {
+                None => t("Alle").to_string(),
+                Some(g) => show
+                    .groups
+                    .iter()
+                    .find(|x| x.id == *g)
+                    .map_or_else(|| t("(gelöscht)").to_string(), |x| x.name.clone()),
+            },
+        ),
         Control::Fixture { id } => (
             t("Gerät").to_string(),
             show.fixture(*id)
@@ -412,6 +561,22 @@ pub fn describe(show: &Show, c: &Control) -> (String, String) {
         ),
         Control::Channel { channel } => (t("Gerät").to_string(), channel_name(show, *channel)),
         Control::Channels => (t("Programmer").to_string(), t("Feste Kanäle").to_string()),
+    }
+}
+
+/// Geräte einer Gruppe (`None` = alle).
+fn group_set(
+    show: &Show,
+    id: Option<dmxcraft_core::GroupId>,
+) -> std::collections::BTreeSet<dmxcraft_core::FixtureId> {
+    match id {
+        None => show.fixtures.iter().map(|f| f.id).collect(),
+        Some(g) => show
+            .groups
+            .iter()
+            .find(|x| x.id == g)
+            .map(|x| x.fixtures.iter().copied().collect())
+            .unwrap_or_default(),
     }
 }
 
@@ -465,7 +630,7 @@ pub fn resolve(show: &Show, st: &AppState, t: &SceneTarget) -> Vec<SceneId> {
 }
 
 /// Zustand „an“ eines Elements (für die LED-Rückmeldung).
-fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, m: &Mapping) -> bool {
+pub(crate) fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, m: &Mapping) -> bool {
     match &m.control {
         Control::Channels => m
             .channels
@@ -482,6 +647,10 @@ fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, m: &Mapping) ->
         Control::Master => e.master() > 0.0,
         Control::Ui { key, .. } => states.get(key).copied().unwrap_or(false),
         Control::Fixture { id } => st.selected.contains(id),
+        Control::Group { id } => {
+            let set = group_set(e.show(), *id);
+            !set.is_empty() && st.selected == set
+        }
         Control::Channel { channel } => e.live().get(channel).is_some_and(|v| *v > 0),
         Control::BankStep { .. } | Control::StopAll => false,
     }
@@ -577,6 +746,17 @@ fn fire(
         Control::StopAll => {
             if pressed {
                 e.release_all();
+            }
+        }
+        Control::Group { id } => {
+            if pressed {
+                let set = group_set(e.show(), *id);
+                st.selected = if st.selected == set {
+                    Default::default()
+                } else {
+                    set
+                };
+                st.selection_order = st.selected.iter().copied().collect();
             }
         }
         Control::Fixture { id } => {
@@ -821,6 +1001,31 @@ impl Mapper {
         let events = self.midi.drain();
         for ev in events {
             self.midi_event(&ev, e, st);
+        }
+        // Touch-Oberfläche: Schaltflächen und Fader lösen wie Tasten aus
+        for (m, pressed, value, cc) in std::mem::take(&mut st.touch_fire) {
+            fire(e, st, &mut self.ui_fires, &m, pressed, value, cc);
+        }
+        // Touch-Elemente gelöschter Szenen/Geräte leeren
+        let show = e.show();
+        let stale_touch = show.touch.pages.iter().flat_map(|p| &p.items).any(|i| {
+            i.fixtures.iter().any(|f| show.fixture(*f).is_none())
+                || match i.control {
+                    Some(Control::Scene {
+                        target: SceneTarget::Scene { id },
+                    }) => show.scene(id).is_none(),
+                    Some(Control::Fixture { id }) => show.fixture(id).is_none(),
+                    Some(Control::Channel { channel }) => show.fixture(channel.fixture).is_none(),
+                    _ => false,
+                }
+        });
+        if stale_touch {
+            let scenes: Vec<SceneId> = show.scenes.iter().map(|s| s.id).collect();
+            let fixtures: Vec<dmxcraft_core::FixtureId> =
+                show.fixtures.iter().map(|f| f.id).collect();
+            e.show_mut()
+                .touch
+                .retain(|s| scenes.contains(&s), |f| fixtures.contains(&f));
         }
         let fires = std::mem::take(&mut self.ui_fires);
         if !fires.is_empty() {

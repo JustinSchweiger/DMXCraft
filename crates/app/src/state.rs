@@ -10,6 +10,8 @@ use dmxcraft_core::{FixtureId, FixtureType, SceneId};
 pub enum Mode {
     Setup,
     Control,
+    /// Touch-Oberfläche (frei angeordnete Bedienelemente).
+    Touch,
 }
 
 /// Formular „Geräte hinzufügen“ (geteilt zwischen Patch und Gerätebibliothek).
@@ -45,6 +47,13 @@ pub struct AppState {
     pub shown_bank: Option<dmxcraft_core::ZoneId>,
     /// Anfrage an das Szenenraster, eine Bank anzuzeigen.
     pub request_bank: Option<Option<dmxcraft_core::ZoneId>>,
+    /// Touch: angezeigte Seite, Bearbeiten-Modus, gewähltes Element.
+    pub touch_page: Option<u32>,
+    pub touch_edit: bool,
+    pub touch_sel: Option<u32>,
+    /// Touch: ausgelöste Schaltflächen/Fader (Zuordnung, gedrückt, Wert,
+    /// Regler) – verarbeitet der Zuordnungs-Rahmen am Ende des Bilds.
+    pub touch_fire: Vec<(dmxcraft_core::mapping::Mapping, bool, u8, bool)>,
     /// Zuletzt verarbeitete Szenen-Markierung (Edit-Modus: Geräte mitwählen).
     pub scene_selection_seen: BTreeSet<SceneId>,
     /// Zuletzt verarbeiteter Programmer-Modus.
@@ -148,6 +157,10 @@ impl AppState {
             map_learn: false,
             shown_bank: None,
             request_bank: None,
+            touch_page: None,
+            touch_edit: false,
+            touch_sel: None,
+            touch_fire: Vec::new(),
             programmer_mode: ProgrammerMode::default(),
             focus: Focus::default(),
             scene_selection_seen: BTreeSet::new(),

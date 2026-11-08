@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::show::{ChannelRef, SceneId, ZoneId};
+use crate::show::{ChannelRef, GroupId, SceneId, ZoneId};
 use crate::FixtureId;
 
 /// Alle Zuordnungen einer Show.
@@ -143,6 +143,10 @@ pub enum Control {
         delta: i32,
     },
     Blackout,
+    /// Gruppe auswählen (`None` = alle Geräte); nochmal: Auswahl leeren.
+    Group {
+        id: Option<GroupId>,
+    },
     /// Gerät im Plan: Auswahl umschalten.
     Fixture {
         id: FixtureId,

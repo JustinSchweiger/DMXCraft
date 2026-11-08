@@ -34,6 +34,7 @@ struct ControlViews {
     stage: StageView,
     programmer: ProgrammerView,
     props: ScenePropsView,
+    touch: crate::views::touch::TouchView,
 }
 
 /// Dialog zum Sperren (Passwort festlegen) oder Entsperren.
@@ -126,6 +127,9 @@ impl DmxCraftApp {
         );
         let mut state = AppState::new(show_path.unwrap_or_default());
         state.message = message;
+        if settings.start_touch {
+            state.mode = Mode::Touch;
+        }
         Self {
             engine,
             runtime,
@@ -827,7 +831,8 @@ impl eframe::App for DmxCraftApp {
                         .frame(egui::Frame::new().fill(theme::surface()))
                         .show(ui, |ui| self.setup.ui(ui, &mut cx));
                 }
-                Mode::Control => {
+                Mode::Control | Mode::Touch => {
+                    let touch_mode = cx.state.mode == Mode::Touch;
                     let control = &mut self.control;
                     egui::Panel::bottom("live_bottom")
                         .resizable(true)
@@ -845,20 +850,32 @@ impl eframe::App for DmxCraftApp {
                                 .frame(area)
                                 .show(ui, |ui| control.stage.ui(ui, &mut cx));
                         });
-                    // Seitenleiste mit den Einstellungen der ausgewählten Szene
-                    egui::Panel::right("scene_props")
-                        .resizable(true)
-                        .default_size(360.0)
-                        .min_size(340.0)
-                        .frame(area)
-                        .show(ui, |ui| control.props.ui(ui, &mut cx));
-                    egui::CentralPanel::default_margins()
-                        .frame(area)
-                        .show(ui, |ui| control.grid.ui(ui, &mut cx));
+                    if touch_mode {
+                        egui::CentralPanel::default_margins()
+                            .frame(area)
+                            .show(ui, |ui| control.touch.ui(ui, &mut cx));
+                    } else {
+                        // Seitenleiste mit den Einstellungen der ausgewählten Szene
+                        egui::Panel::right("scene_props")
+                            .resizable(true)
+                            .default_size(360.0)
+                            .min_size(340.0)
+                            .frame(area)
+                            .show(ui, |ui| control.props.ui(ui, &mut cx));
+                        egui::CentralPanel::default_margins()
+                            .frame(area)
+                            .show(ui, |ui| control.grid.ui(ui, &mut cx));
+                    }
                 }
             }
             crate::mapping::window::show(&ctx, cx.engine, cx.state, &mut self.mapper);
             self.mapper.end_frame(&ctx, cx.engine, cx.state);
+            // Alt + Klick: Element zur Touch-Oberfläche
+            for p in crate::mapping::take_touch_picks(&ctx) {
+                if !cx.state.locked {
+                    crate::views::touch::apply_pick(cx.engine, cx.state, p);
+                }
+            }
             edit_preview(cx.engine, cx.state);
             cx.engine.set_timeline_cursor(cx.state.timeline_cursor);
             cx.state.audio.update(cx.engine);

@@ -125,6 +125,18 @@ impl View for StageView {
                 {
                     action = Some(a);
                 }
+                menu::separator(ui);
+                if menu::item(
+                    ui,
+                    MenuItem::new(t("Zur Touch-Oberfläche hinzufügen")).icon(Icon::Touch),
+                ) {
+                    for id in &ids {
+                        crate::mapping::touch_pick_control(
+                            ui.ctx(),
+                            dmxcraft_core::mapping::Control::Fixture { id: *id },
+                        );
+                    }
+                }
             },
         );
         if blind {
@@ -352,7 +364,7 @@ impl StageView {
             ui.label(theme::heading_text(t("Gruppen")));
             ui.label(egui::RichText::new("|").color(theme::text_faint()));
             let all: BTreeSet<FixtureId> = show.fixtures.iter().map(|f| f.id).collect();
-            if let Some(a) = group_pill(ui, "groups/all", t("Alle"), &all, &st.selected) {
+            if let Some(a) = group_pill(ui, None, t("Alle"), &all, &st.selected) {
                 actions.push(a);
             }
             for g in &show.groups {
@@ -380,8 +392,7 @@ impl StageView {
                     }
                     continue;
                 }
-                let key = format!("groups/{}", g.id.0);
-                let pill = PillResult::show(ui, &key, &g.name, &set, &st.selected);
+                let pill = PillResult::show(ui, Some(g.id), &g.name, &set, &st.selected);
                 if let Some(a) = pill.action {
                     actions.push(a);
                 }
@@ -516,12 +527,12 @@ fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppSt
 
 fn group_pill(
     ui: &mut egui::Ui,
-    key: &str,
+    group: Option<GroupId>,
     label: &str,
     set: &BTreeSet<FixtureId>,
     selected: &BTreeSet<FixtureId>,
 ) -> Option<GroupAction> {
-    PillResult::show(ui, key, label, set, selected).action
+    PillResult::show(ui, group, label, set, selected).action
 }
 
 struct PillResult {
@@ -534,7 +545,7 @@ impl PillResult {
     /// teilweise ausgewählt = farbiger Rand.
     fn show(
         ui: &mut egui::Ui,
-        key: &str,
+        group: Option<GroupId>,
         label: &str,
         set: &BTreeSet<FixtureId>,
         selected: &BTreeSet<FixtureId>,
@@ -622,15 +633,13 @@ impl PillResult {
         );
 
         let mut action = None;
-        let mapped = crate::mapping::button(ui, &resp, key, full, || {
-            (t("Gruppe").to_string(), label.to_string())
-        });
-        if resp.clicked() || mapped {
-            let mods = if mapped {
-                egui::Modifiers::NONE
-            } else {
-                ui.input(|i| i.modifiers)
-            };
+        crate::mapping::target(
+            ui,
+            resp.rect,
+            dmxcraft_core::mapping::Control::Group { id: group },
+        );
+        if resp.clicked() {
+            let mods = ui.input(|i| i.modifiers);
             action = Some(GroupAction::Select(if mods.command || mods.shift {
                 // hinzufügen bzw. herausnehmen
                 if full {
