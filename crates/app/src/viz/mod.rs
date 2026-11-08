@@ -7,6 +7,7 @@
 pub mod camera;
 pub mod gltf_import;
 pub mod mesh;
+mod outline;
 mod panels;
 pub mod render;
 pub mod rig;
@@ -127,10 +128,18 @@ pub struct VizView {
     missing: Vec<Missing>,
     /// Griff, an dem gerade gezogen wird (Achse 0–2, Ring 3–5),
     /// Ausgangslage und Startpunkt des Zeigers.
-    gizmo: Option<(usize, SelFrame, egui::Pos2)>,
+    gizmo: Option<GizmoDrag>,
+    /// Ausgewählte Objekte (Mehrfachauswahl; `selected` ist die Hauptauswahl).
+    sel_objects: std::collections::BTreeSet<u32>,
+    /// Lagen aller ausgewählten beim Beginn des Ziehens auf dem Boden.
+    drag_frames: Vec<(Pick, SelFrame)>,
     /// Reiter der linken Leiste, Suchtext und Anker der Geräteliste.
     outline: panels::OutlineTab,
     fixture_filter: String,
+    fixture_sort: outline::FixtureSort,
+    /// Objekt oder Geräteordner, der gerade umbenannt wird.
+    renaming: Option<outline::Renaming>,
+    rename_focus: bool,
     fixture_anchor: Option<FixtureId>,
     /// Objekt im Baum aufklappen und zeigen / Gerät in der Liste zeigen.
     reveal: Option<u32>,
@@ -234,6 +243,40 @@ fn sel_frame(show: &Show, sel: Pick) -> Option<SelFrame> {
                 parent: Mat4::IDENTITY,
             })
         }
+    }
+}
+
+/// Ziehen an einem Griff: welcher, Lage der Hauptauswahl und aller
+/// ausgewählten beim Start, Startpunkt des Zeigers.
+struct GizmoDrag {
+    handle: usize,
+    primary: SelFrame,
+    frames: Vec<(Pick, SelFrame)>,
+    start: egui::Pos2,
+}
+
+/// Alle um denselben Weg (Welt) verschieben.
+fn move_all(cx: &mut ViewCtx<'_>, frames: &[(Pick, SelFrame)], delta: Vec3) {
+    for (pick, f) in frames {
+        let mut np = f.local;
+        np.position = f
+            .parent
+            .inverse()
+            .transform_point3(f.world + delta)
+            .to_array();
+        apply_placement(cx, *pick, np);
+    }
+}
+
+/// Alle an Ort und Stelle um dieselbe Weltachse drehen.
+fn rotate_all(cx: &mut ViewCtx<'_>, frames: &[(Pick, SelFrame)], axis: Vec3, deg: f32) {
+    for (pick, f) in frames {
+        let local_axis = (glam::Mat3::from_mat4(f.parent).inverse() * axis).normalize_or(axis);
+        let q =
+            glam::Quat::from_axis_angle(local_axis, deg.to_radians()) * quat_deg(f.local.rotation);
+        let mut np = f.local;
+        np.rotation = deg_quat(q);
+        apply_placement(cx, *pick, np);
     }
 }
 
@@ -363,11 +406,16 @@ impl Default for VizView {
             fps: (Instant::now(), 0, 0.0),
             missing: Vec::new(),
             gizmo: None,
+            sel_objects: Default::default(),
+            drag_frames: Vec::new(),
             aim: [0.0; 3],
             aim_pick: false,
             model_job: None,
             outline: Default::default(),
             fixture_filter: String::new(),
+            fixture_sort: Default::default(),
+            renaming: None,
+            rename_focus: false,
             fixture_anchor: None,
             reveal: None,
             reveal_fixture: None,
@@ -592,28 +640,31 @@ impl VizView {
                 .zip(origin)
                 .and_then(|(g, o)| g.hit(o).map(|i| (i, o)));
             if let (Some((i, o)), Some(f)) = (hit, sel_place) {
-                self.gizmo = Some((i, f, o));
+                self.gizmo = Some(GizmoDrag {
+                    handle: i,
+                    primary: f,
+                    frames: Self::group_frames(self.selected, &self.sel_objects, cx),
+                    start: o,
+                });
             }
         }
-        if let (Some((handle, f0, start)), Some(g), Some(p), Some(sel)) =
-            (self.gizmo, gizmo.as_ref(), ptr, self.selected)
-        {
-            let mut np = f0.local;
-            if handle < 3 {
-                if let Some((a, b)) = g.axes[handle] {
+        if let (Some(gd), Some(g), Some(p)) = (self.gizmo.as_ref(), gizmo.as_ref(), ptr) {
+            let f0 = gd.primary;
+            if gd.handle < 3 {
+                if let Some((a, b)) = g.axes[gd.handle] {
                     let s = b - a;
-                    let along = (p - start).dot(s) / s.length_sq().max(1.0) * g.len;
+                    let along = (p - gd.start).dot(s) / s.length_sq().max(1.0) * g.len;
                     let mut w = f0.world;
-                    w[handle] += along;
+                    w[gd.handle] += along;
                     if !mods.command {
-                        w[handle] = (w[handle] * 20.0).round() / 20.0;
+                        w[gd.handle] = (w[gd.handle] * 20.0).round() / 20.0;
                     }
-                    np.position = f0.parent.inverse().transform_point3(w).to_array();
+                    move_all(cx, &gd.frames, w - f0.world);
                 }
             } else {
-                let axis = [Vec3::X, Vec3::Y, Vec3::Z][handle - 3];
+                let axis = [Vec3::X, Vec3::Y, Vec3::Z][gd.handle - 3];
                 let ang = |q: egui::Pos2| (q.y - g.center.y).atan2(q.x - g.center.x);
-                let mut d = ang(p) - ang(start);
+                let mut d = ang(p) - ang(gd.start);
                 // Bildschirm-y zeigt nach unten: zeigt die Achse zum Betrachter, dreht
                 // ein Ziehen im Uhrzeigersinn negativ
                 if axis.dot(cam.eye() - f0.world) > 0.0 {
@@ -623,14 +674,8 @@ impl VizView {
                 if !mods.command {
                     deg = (deg / 5.0).round() * 5.0;
                 }
-                // Achse im System des Elternteils
-                let local_axis =
-                    (glam::Mat3::from_mat4(f0.parent).inverse() * axis).normalize_or(axis);
-                let q = glam::Quat::from_axis_angle(local_axis, deg.to_radians())
-                    * quat_deg(f0.local.rotation);
-                np.rotation = deg_quat(q);
+                rotate_all(cx, &gd.frames, axis, deg);
             }
-            apply_placement(cx, sel, np);
         }
         if self.gizmo.is_some() {
             // Griff zieht – die Kamera bleibt stehen
@@ -644,10 +689,15 @@ impl VizView {
                 let (o, d) = cam.ray(uv(p), aspect);
                 let show = cx.engine.show();
                 let pos = match sel {
-                    Pick::Object(id) => show.venue.find(id).map(|o| o.transform.position),
+                    Pick::Object(id) => show
+                        .venue
+                        .find(id)
+                        .filter(|o| !o.locked)
+                        .map(|o| o.transform.position),
                     Pick::Fixture(id) => Some(rig::placement(show, id).position),
                 };
                 if resp.drag_started() {
+                    self.drag_frames = Self::group_frames(self.selected, &self.sel_objects, cx);
                     self.drag = pos.and_then(|pos| hit_y(o, d, pos[1]).map(|h| (h, pos)));
                     // nur ziehen, wenn auf/nahe der Auswahl begonnen
                     if let (Some((h, p0)), Some(pick)) =
@@ -672,22 +722,17 @@ impl VizView {
                         }
                     };
                     let new = [snap(new[0]), new[1], snap(new[2])];
-                    match sel {
-                        Pick::Object(id) => {
-                            if let Some(ob) = cx.engine.show_mut().venue.find_mut(id) {
-                                if !ob.locked {
-                                    ob.transform.position = new;
-                                }
-                            }
-                        }
-                        Pick::Fixture(id) => {
-                            let mut pl = rig::placement(cx.engine.show(), id);
-                            pl.position = new;
-                            if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
-                                f.place3d = Some(pl);
-                            }
-                        }
-                    }
+                    // Verschiebung der Hauptauswahl auf alle ausgewählten übertragen
+                    // (in Weltkoordinaten, auch in gedrehten Gruppen)
+                    let parent = self
+                        .drag_frames
+                        .iter()
+                        .find(|f| f.0 == sel)
+                        .map_or(Mat4::IDENTITY, |f| f.1.parent);
+                    let dw = parent.transform_vector3(Vec3::from(new) - Vec3::from(p0));
+                    let frames = std::mem::take(&mut self.drag_frames);
+                    move_all(cx, &frames, dw);
+                    self.drag_frames = frames;
                 } else {
                     cam.rotate(Vec2::new(delta.x, delta.y));
                 }
@@ -722,16 +767,18 @@ impl VizView {
                             }
                         } else {
                             cx.state.selected = [id].into();
+                            self.sel_objects.clear();
                         }
                         self.selected = hit;
                         self.reveal_fixture = Some(id);
                     }
                     Some(Pick::Object(id)) if building => {
-                        self.selected = hit;
+                        self.select_object(cx, id, mods.command || mods.shift);
                         self.reveal = Some(id);
                     }
                     _ => {
                         self.selected = None;
+                        self.sel_objects.clear();
                         if !building {
                             cx.state.selected.clear();
                         }
@@ -802,7 +849,7 @@ impl VizView {
         );
         painter.galley(at, galley, theme::text_dim());
         if let Some(g) = &gizmo {
-            g.paint(&painter, self.gizmo.map(|g| g.0), gizmo_hover);
+            g.paint(&painter, self.gizmo.as_ref().map(|g| g.handle), gizmo_hover);
         }
         if self.aim_pick {
             painter.text(
@@ -1269,6 +1316,65 @@ fn vec3_row(ui: &mut egui::Ui, label: &str, v: &mut [f32; 3], speed: f64) {
             ui.add(egui::DragValue::new(c).speed(speed).max_decimals(3));
         }
     });
+}
+
+impl VizView {
+    /// Alle ausgewählten (Objekte und Geräte) mit ihrer Lage; Objekte, deren
+    /// Gruppe mit ausgewählt ist, bewegen sich mit der Gruppe.
+    fn group_frames(
+        selected: Option<Pick>,
+        sel_objects: &std::collections::BTreeSet<u32>,
+        cx: &ViewCtx<'_>,
+    ) -> Vec<(Pick, SelFrame)> {
+        let show = cx.engine.show();
+        let mut picks: Vec<Pick> = sel_objects.iter().map(|id| Pick::Object(*id)).collect();
+        picks.extend(cx.state.selected.iter().map(|id| Pick::Fixture(*id)));
+        if let Some(p) = selected {
+            if !picks.contains(&p) {
+                picks.push(p);
+            }
+        }
+        let objs: std::collections::BTreeSet<u32> = picks
+            .iter()
+            .filter_map(|p| match p {
+                Pick::Object(id) => Some(*id),
+                Pick::Fixture(_) => None,
+            })
+            .collect();
+        picks
+            .into_iter()
+            .filter(|p| match p {
+                Pick::Object(id) => !show.venue.ancestors(*id).iter().any(|a| objs.contains(a)),
+                Pick::Fixture(_) => true,
+            })
+            .filter_map(|p| sel_frame(show, p).map(|f| (p, f)))
+            .collect()
+    }
+
+    /// Objekt auswählen (`add`: zur Auswahl hinzufügen bzw. wieder entfernen).
+    fn select_object(&mut self, cx: &mut ViewCtx<'_>, id: u32, add: bool) {
+        self.select_object_in(&mut cx.state.selected, id, add);
+    }
+
+    fn select_object_in(
+        &mut self,
+        fixtures: &mut std::collections::BTreeSet<FixtureId>,
+        id: u32,
+        add: bool,
+    ) {
+        if add {
+            if !self.sel_objects.remove(&id) {
+                self.sel_objects.insert(id);
+                self.selected = Some(Pick::Object(id));
+            } else if self.selected == Some(Pick::Object(id)) {
+                self.selected = self.sel_objects.iter().next().map(|i| Pick::Object(*i));
+            }
+        } else {
+            self.sel_objects = [id].into();
+            self.selected = Some(Pick::Object(id));
+            fixtures.clear();
+        }
+    }
 }
 
 /// Lage eines Objekts oder Geräts setzen (gesperrte Objekte bleiben).

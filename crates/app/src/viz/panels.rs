@@ -1,7 +1,7 @@
 //! Seitenleisten im Bau-Modus: links Raum, Objektbaum und Geräte, rechts
 //! die Eigenschaften der Auswahl (angedockt).
 
-use dmxcraft_core::venue::{Material, Object, Placement, Shape, Transform, TrussProfile, Venue};
+use dmxcraft_core::venue::{Material, Placement, Shape, Transform, TrussProfile, Venue};
 use dmxcraft_core::FixtureId;
 use eframe::egui::{self, Color32};
 use glam::Vec3;
@@ -11,7 +11,7 @@ use super::{
 };
 use crate::i18n::t;
 use crate::ui::theme;
-use crate::ui::widgets::{fold_section, Icon, IconButton, Segmented};
+use crate::ui::widgets::{fold_section, Segmented};
 use crate::views::ViewCtx;
 
 /// Reiter der linken Leiste.
@@ -34,13 +34,14 @@ impl VizView {
         .show(ui, &mut self.outline);
         ui.add_space(theme::SP_S);
         if self.outline == OutlineTab::Fixtures {
+            self.fixture_list_header(ui, cx);
             ui.add(
                 egui::TextEdit::singleline(&mut self.fixture_filter)
                     .hint_text(t("Suchen"))
                     .desired_width(f32::INFINITY),
             );
             ui.label(
-                egui::RichText::new(t("Klick wählt aus, Strg: hinzufügen, Umschalt: Bereich"))
+                egui::RichText::new(t("Klick wählt aus, Strg: hinzufügen, Umschalt: Bereich, ziehen: in einen Ordner, Rechtsklick: Menü"))
                     .small()
                     .color(theme::text_faint()),
             );
@@ -158,16 +159,6 @@ impl VizView {
                         v.objects.push(o);
                     }
                 }
-                if ui.button(t("Gruppe")).clicked() {
-                    let o = v.object(
-                        t("Gruppe"),
-                        Shape::Group,
-                        Transform::default(),
-                        Material::default(),
-                    );
-                    self.selected = Some(Pick::Object(o.id));
-                    v.objects.push(o);
-                }
             });
             let loading = self.model_job.is_some();
             let label = if loading {
@@ -179,102 +170,14 @@ impl VizView {
                 self.open_dialog(ui.ctx(), DialogKind::ImportModel);
             }
         });
-        let reveal = self.reveal.take().map(|id| (id, v.ancestors(id)));
         fold_section(ui, "viz_objects", t("Objekte"), true, |ui| {
-            let mut act = TreeAction::None;
-            object_tree(ui, &v.objects, 0, self.selected, reveal.as_ref(), &mut act);
-            match act {
-                TreeAction::None => {}
-                TreeAction::Select(id) => self.selected = Some(Pick::Object(id)),
-                TreeAction::ToggleHidden(id) => {
-                    if let Some(o) = v.find_mut(id) {
-                        o.hidden = !o.hidden;
-                    }
-                }
-            }
+            self.object_tree(ui, cx);
         });
         self.missing_section(ui, cx);
     }
 
     fn fixtures_tab(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        let show = cx.engine.show();
-        let filter = self.fixture_filter.to_lowercase();
-        let mut list: Vec<(FixtureId, String, u8, u16, bool)> = show
-            .fixtures
-            .iter()
-            .filter(|f| filter.is_empty() || f.name.to_lowercase().contains(&filter))
-            .map(|f| {
-                (
-                    f.id,
-                    f.name.clone(),
-                    f.universe,
-                    f.address,
-                    f.place3d.is_none(),
-                )
-            })
-            .collect();
-        list.sort_by_key(|f| (f.2, f.3));
-        let mods = ui.input(|i| i.modifiers);
-        let mut clicked = None;
-        for (i, (id, name, uni, addr, auto)) in list.iter().enumerate() {
-            let sel = cx.state.selected.contains(id);
-            let r = ui
-                .horizontal(|ui| {
-                    let r = ui.selectable_label(sel, name);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if *auto {
-                            ui.label(
-                                egui::RichText::new(t("auto"))
-                                    .small()
-                                    .color(theme::text_faint()),
-                            )
-                            .on_hover_text(t("Lage aus dem Bühnenplan abgeleitet"));
-                        }
-                        ui.label(
-                            egui::RichText::new(format!("{}·{}", uni + 1, addr))
-                                .small()
-                                .color(theme::text_dim()),
-                        );
-                    });
-                    r
-                })
-                .inner;
-            if r.clicked() {
-                clicked = Some((i, *id));
-            }
-            if self.reveal_fixture == Some(*id) {
-                r.scroll_to_me(Some(egui::Align::Center));
-                self.reveal_fixture = None;
-            }
-        }
-        if list.is_empty() {
-            ui.label(egui::RichText::new(t("Keine Geräte")).color(theme::text_faint()));
-        }
-        if let Some((i, id)) = clicked {
-            let anchor = self
-                .fixture_anchor
-                .and_then(|a| list.iter().position(|f| f.0 == a));
-            if mods.shift {
-                if let Some(a) = anchor {
-                    let (lo, hi) = (a.min(i), a.max(i));
-                    if !mods.command {
-                        cx.state.selected.clear();
-                    }
-                    cx.state.selected.extend(list[lo..=hi].iter().map(|f| f.0));
-                } else {
-                    cx.state.selected = [id].into();
-                }
-            } else if mods.command {
-                if !cx.state.selected.remove(&id) {
-                    cx.state.selected.insert(id);
-                }
-                self.fixture_anchor = Some(id);
-            } else {
-                cx.state.selected = [id].into();
-                self.fixture_anchor = Some(id);
-            }
-            self.selected = Some(Pick::Fixture(id));
-        }
+        self.fixture_list(ui, cx);
     }
 
     fn missing_section(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
@@ -649,89 +552,6 @@ impl VizView {
                     fm.place3d = None;
                 }
             }
-        }
-    }
-}
-
-enum TreeAction {
-    None,
-    Select(u32),
-    ToggleHidden(u32),
-}
-
-/// Objektbaum; Gruppen lassen sich auf- und zuklappen.
-fn object_tree(
-    ui: &mut egui::Ui,
-    list: &[Object],
-    depth: usize,
-    sel: Option<Pick>,
-    reveal: Option<&(u32, Vec<u32>)>,
-    act: &mut TreeAction,
-) {
-    for o in list {
-        let id = ui.make_persistent_id(("viz_tree", o.id));
-        let has_children = !o.children.is_empty();
-        let mut state =
-            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false);
-        if reveal.is_some_and(|r| r.1.contains(&o.id)) {
-            state.set_open(true);
-        }
-        let open = state.is_open();
-        let row = ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            ui.add_space(depth as f32 * 12.0);
-            if has_children {
-                let icon = if open {
-                    Icon::ChevronDown
-                } else {
-                    Icon::ChevronRight
-                };
-                if ui.add(IconButton::new(icon).size(18.0).flat()).clicked() {
-                    state.toggle(ui);
-                }
-            } else {
-                ui.add_space(18.0 + 2.0);
-            }
-            if ui
-                .add(
-                    IconButton::new(if o.hidden { Icon::EyeOff } else { Icon::Eye })
-                        .size(18.0)
-                        .flat(),
-                )
-                .clicked()
-            {
-                *act = TreeAction::ToggleHidden(o.id);
-            }
-            let active = sel == Some(Pick::Object(o.id));
-            let mut text = egui::RichText::new(&o.name);
-            if o.hidden {
-                text = text.color(theme::text_faint());
-            }
-            if o.locked {
-                text = text.italics();
-            }
-            let r = ui.selectable_label(active, text);
-            if has_children {
-                ui.label(
-                    egui::RichText::new(o.children.len().to_string())
-                        .small()
-                        .color(theme::text_faint()),
-                );
-            }
-            if r.clicked() {
-                *act = TreeAction::Select(o.id);
-            }
-            if r.double_clicked() && has_children {
-                state.toggle(ui);
-            }
-            r
-        });
-        if reveal.is_some_and(|r| r.0 == o.id) {
-            row.inner.scroll_to_me(Some(egui::Align::Center));
-        }
-        state.store(ui.ctx());
-        if has_children && state.is_open() {
-            object_tree(ui, &o.children, depth + 1, sel, reveal, act);
         }
     }
 }

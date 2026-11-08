@@ -28,6 +28,9 @@ pub struct Venue {
     pub cameras: Vec<CameraPreset>,
     #[serde(default)]
     pub next_id: u32,
+    /// Ordner für Geräte (nur zum Sortieren der Geräteliste im Visualisierer).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixture_folders: Vec<FixtureFolder>,
     /// Eingebettete 3D-Modelle (Schlüssel → Modell), benutzt von `Shape::Model`.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub models: std::collections::BTreeMap<String, model::Model>,
@@ -35,6 +38,15 @@ pub struct Venue {
 
 fn format_version() -> u32 {
     VENUE_FORMAT_VERSION
+}
+
+/// Ordner der Geräteliste. Ein Gerät steht in höchstens einem Ordner.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FixtureFolder {
+    pub id: u32,
+    pub name: String,
+    #[serde(default)]
+    pub fixtures: Vec<crate::FixtureId>,
 }
 
 /// Licht und Luft im Raum.
@@ -253,6 +265,7 @@ impl Venue {
             cameras: Vec::new(),
             next_id: 1,
             models: Default::default(),
+            fixture_folders: Vec::new(),
         };
         let [w, h, d] = size;
         let floor = v.object(
@@ -373,6 +386,56 @@ impl Venue {
             None
         }
         walk(&mut self.objects, id)
+    }
+
+    /// Liste der Kinder einer Gruppe (`None` = oberste Ebene).
+    pub fn list_mut(&mut self, parent: Option<u32>) -> Option<&mut Vec<Object>> {
+        match parent {
+            None => Some(&mut self.objects),
+            Some(id) => self.find_mut(id).map(|o| &mut o.children),
+        }
+    }
+
+    /// Gruppe, in der ein Objekt liegt (`None` = oberste Ebene).
+    pub fn parent_of(&self, id: u32) -> Option<u32> {
+        self.ancestors(id).last().copied()
+    }
+
+    /// Kinder einer Gruppe (bzw. oberste Ebene) nach Namen sortieren.
+    pub fn sort_by_name(&mut self, parent: Option<u32>) {
+        if let Some(list) = self.list_mut(parent) {
+            list.sort_by_key(|o| o.name.to_lowercase());
+        }
+    }
+
+    /// Ordner, in dem ein Gerät steht.
+    pub fn folder_of(&self, f: crate::FixtureId) -> Option<u32> {
+        self.fixture_folders
+            .iter()
+            .find(|d| d.fixtures.contains(&f))
+            .map(|d| d.id)
+    }
+
+    /// Geräte in einen Ordner verschieben (`None` = aus allen Ordnern nehmen).
+    pub fn move_fixtures(&mut self, ids: &[crate::FixtureId], folder: Option<u32>) {
+        for d in &mut self.fixture_folders {
+            d.fixtures.retain(|f| !ids.contains(f));
+        }
+        if let Some(d) = folder.and_then(|id| self.fixture_folders.iter_mut().find(|d| d.id == id))
+        {
+            d.fixtures.extend_from_slice(ids);
+        }
+    }
+
+    /// Neuer Geräteordner, gibt seine ID zurück.
+    pub fn add_fixture_folder(&mut self, name: impl Into<String>) -> u32 {
+        let id = self.new_id();
+        self.fixture_folders.push(FixtureFolder {
+            id,
+            name: name.into(),
+            fixtures: Vec::new(),
+        });
+        id
     }
 
     /// Objekt entfernen (auch aus Gruppen).
@@ -565,6 +628,22 @@ mod tests {
 
     fn close(a: [f32; 3], b: [f32; 3]) -> bool {
         a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-4)
+    }
+
+    #[test]
+    fn fixture_folders_are_exclusive() {
+        use crate::FixtureId;
+        let mut v = Venue::room("t", [10.0, 6.0, 10.0]);
+        let a = v.add_fixture_folder("A");
+        let b = v.add_fixture_folder("B");
+        v.move_fixtures(&[FixtureId(1), FixtureId(2)], Some(a));
+        v.move_fixtures(&[FixtureId(2)], Some(b));
+        assert_eq!(v.folder_of(FixtureId(1)), Some(a));
+        assert_eq!(v.folder_of(FixtureId(2)), Some(b));
+        v.move_fixtures(&[FixtureId(1)], None);
+        assert_eq!(v.folder_of(FixtureId(1)), None);
+        let j = v.to_json().unwrap();
+        assert_eq!(Venue::from_json(&j).unwrap(), v);
     }
 
     #[test]
