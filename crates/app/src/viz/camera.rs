@@ -27,6 +27,52 @@ impl OrbitCamera {
         }
     }
 
+    /// Aus einem gespeicherten Kamerapunkt.
+    pub fn from_preset(p: &dmxcraft_core::venue::CameraPreset) -> Self {
+        Self {
+            target: Vec3::from(p.target),
+            yaw: p.yaw,
+            pitch: p.pitch,
+            distance: p.distance,
+            fov: p.fov,
+        }
+    }
+
+    /// Als Kamerapunkt speichern.
+    pub fn to_preset(self, name: impl Into<String>) -> dmxcraft_core::venue::CameraPreset {
+        let r = |v: f32| (v * 1000.0).round() / 1000.0;
+        dmxcraft_core::venue::CameraPreset {
+            name: name.into(),
+            target: self.target.to_array().map(r),
+            yaw: r(self.yaw),
+            pitch: r(self.pitch),
+            distance: r(self.distance),
+            fov: r(self.fov),
+        }
+    }
+
+    /// Fast gleich (für die Markierung des aktiven Kamerapunkts).
+    pub fn near(&self, o: &Self) -> bool {
+        let dyaw = ((self.yaw - o.yaw + 540.0).rem_euclid(360.0) - 180.0).abs();
+        dyaw < 0.5
+            && (self.pitch - o.pitch).abs() < 0.5
+            && (self.distance - o.distance).abs() < 0.05
+            && self.target.distance(o.target) < 0.05
+            && (self.fov - o.fov).abs() < 0.5
+    }
+
+    /// Zwischenstellung für Kamerafahrten (`k` 0–1, Drehung auf kurzem Weg).
+    pub fn lerp(&self, o: &Self, k: f32) -> Self {
+        let dyaw = (o.yaw - self.yaw + 540.0).rem_euclid(360.0) - 180.0;
+        Self {
+            target: self.target.lerp(o.target, k),
+            yaw: (self.yaw + dyaw * k).rem_euclid(360.0),
+            pitch: self.pitch + (o.pitch - self.pitch) * k,
+            distance: self.distance + (o.distance - self.distance) * k,
+            fov: self.fov + (o.fov - self.fov) * k,
+        }
+    }
+
     pub fn eye(&self) -> Vec3 {
         let (y, p) = (self.yaw.to_radians(), self.pitch.to_radians());
         self.target + Vec3::new(p.cos() * y.sin(), p.sin(), p.cos() * y.cos()) * self.distance

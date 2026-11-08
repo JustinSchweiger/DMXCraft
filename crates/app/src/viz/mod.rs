@@ -14,6 +14,7 @@ mod panels;
 pub mod render;
 pub mod rig;
 pub mod textures;
+mod toolbar;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
@@ -29,7 +30,6 @@ use glam::{Mat4, Vec2, Vec3};
 
 use crate::i18n::t;
 use crate::ui::theme;
-use crate::ui::widgets::{Icon, IconButton, Segmented};
 use crate::views::ViewCtx;
 use camera::OrbitCamera;
 use render::{Frame3d, Gpu, Instance, Light, MeshKey};
@@ -156,6 +156,11 @@ pub struct VizView {
     aim_pick: bool,
     /// Modell, das gerade im Hintergrund geladen wird.
     model_job: Option<Receiver<Result<venue::model::Model, String>>>,
+    /// Kamerafahrt zu einem Kamerapunkt: von, nach, Beginn.
+    fly: Option<(OrbitCamera, OrbitCamera, Instant)>,
+    /// Kamerapunkt, der gerade umbenannt wird (Index, Text).
+    cam_rename: Option<(usize, String)>,
+    cam_rename_focus: bool,
 }
 
 /// Gerät aus einem Import ohne Gegenstück im Patch, mit vorgeschlagenem Typ.
@@ -459,6 +464,9 @@ impl Default for VizView {
             aim: [0.0; 3],
             aim_pick: false,
             model_job: None,
+            fly: None,
+            cam_rename: None,
+            cam_rename_focus: false,
             outline: Default::default(),
             fixture_filter: String::new(),
             fixture_sort: Default::default(),
@@ -491,6 +499,7 @@ impl VizView {
             self.camera = Some(OrbitCamera::for_room(size));
             self.room = size;
         }
+        self.camera_keys(ui, cx);
         self.toolbar(ui, cx, locked, window);
         ui.add_space(theme::SP_XS);
         if self.mode == Mode::Build && !locked {
@@ -515,119 +524,6 @@ impl VizView {
             .show(ui, |ui| self.viewport(ui, cx, rs));
     }
 
-    fn toolbar(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, locked: bool, window: bool) {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = theme::SP_S;
-            let mut mode = self.mode;
-            Segmented::new(&[(Mode::Build, t("Bauen")), (Mode::Live, t("Live"))])
-                .show(ui, &mut mode);
-            if !locked {
-                self.mode = mode;
-            }
-            if self.mode == Mode::Build && !locked {
-                if ui
-                    .add_enabled(cx.state.can_undo, IconButton::new(Icon::Undo).size(26.0))
-                    .on_hover_text(t("Rückgängig (Strg+Z)"))
-                    .clicked()
-                {
-                    cx.state.history_request = Some(true);
-                }
-                if ui
-                    .add_enabled(cx.state.can_redo, IconButton::new(Icon::Redo).size(26.0))
-                    .on_hover_text(t("Wiederholen (Strg+Y)"))
-                    .clicked()
-                {
-                    cx.state.history_request = Some(false);
-                }
-            }
-            ui.separator();
-            let env = &mut cx.engine.show_mut().venue.environment;
-            for (label, v) in [
-                (t("Umgebung"), &mut env.ambient),
-                (t("Strahlen"), &mut env.beams),
-                (t("Nebel"), &mut env.fog),
-            ] {
-                ui.vertical(|ui| {
-                    ui.spacing_mut().item_spacing.y = 0.0;
-                    ui.label(
-                        egui::RichText::new(label.to_uppercase())
-                            .small()
-                            .color(theme::text_dim()),
-                    );
-                    let mut pct = (*v * 100.0).round() as i32;
-                    let r = ui.add_enabled(
-                        !locked,
-                        egui::DragValue::new(&mut pct)
-                            .range(0..=100)
-                            .suffix(" %")
-                            .speed(0.5),
-                    );
-                    if r.changed() {
-                        *v = pct as f32 / 100.0;
-                    }
-                });
-            }
-            ui.separator();
-            let mut q = cx.state.viz_quality;
-            egui::ComboBox::from_id_salt("viz_quality")
-                .selected_text(tr!("Qualität: {q}", q = q.label()))
-                .show_ui(ui, |ui| {
-                    for v in Quality::ALL {
-                        ui.selectable_value(&mut q, v, v.label());
-                    }
-                });
-            cx.state.viz_quality = q;
-            if ui
-                .add(IconButton::new(Icon::ZoomFit))
-                .on_hover_text(t("Ansicht zurücksetzen"))
-                .clicked()
-            {
-                self.camera = Some(OrbitCamera::for_room(self.room));
-            }
-            ui.separator();
-            if ui
-                .add(IconButton::new(Icon::Import).enabled(!locked))
-                .on_hover_text(t("Easy View 2 importieren (als XML) …"))
-                .clicked()
-            {
-                self.open_dialog(ui.ctx(), DialogKind::ImportEv2);
-            }
-            if ui
-                .add(IconButton::new(Icon::FileOpen).enabled(!locked))
-                .on_hover_text(t("Veranstaltungsort laden …"))
-                .clicked()
-            {
-                self.open_dialog(ui.ctx(), DialogKind::LoadVenue);
-            }
-            if ui
-                .add(IconButton::new(Icon::Save))
-                .on_hover_text(t("Veranstaltungsort speichern unter …"))
-                .clicked()
-            {
-                self.open_dialog(ui.ctx(), DialogKind::SaveVenue);
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if window {
-                    let full = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
-                    if ui
-                        .add(IconButton::new(Icon::Fullscreen).active(full))
-                        .on_hover_text(t("Vollbild"))
-                        .clicked()
-                    {
-                        ui.ctx()
-                            .send_viewport_cmd(egui::ViewportCommand::Fullscreen(!full));
-                    }
-                } else if ui
-                    .add(IconButton::new(Icon::Fullscreen).active(cx.state.viz_window))
-                    .on_hover_text(t("In eigenem Fenster öffnen (z. B. zweiter Bildschirm)"))
-                    .clicked()
-                {
-                    cx.state.viz_window = !cx.state.viz_window;
-                }
-            });
-        });
-    }
-
     fn viewport(
         &mut self,
         ui: &mut egui::Ui,
@@ -648,6 +544,13 @@ impl VizView {
             );
             return;
         };
+        if self.advance_fly() {
+            ui.ctx().request_repaint();
+        }
+        // eigenes Drehen/Zoomen beendet eine Kamerafahrt
+        if resp.dragged() || (resp.hovered() && ui.input(|i| i.smooth_scroll_delta.y != 0.0)) {
+            self.fly = None;
+        }
         let cam = self
             .camera
             .get_or_insert_with(|| OrbitCamera::for_room(self.room));

@@ -65,7 +65,9 @@ der Grafikkarte (das Fenster muss nicht offen sein) und liefert sie als Bild –
 so kann der Assistent Positionen, Ausrichtung und Farben prüfen. Kamera über
 `view` (`front`, `back`, `left`, `right`, `top`, `overview`) und/oder `yaw`,
 `pitch`, `distance`, `target`, `fov`; `front` blickt von der Publikumsseite
-(+z). `set_visualizer` setzt dieselben Angaben für das Fenster.
+(+z); gespeicherte Kamerapunkte über `point` (Name oder Nummer).
+`set_visualizer` setzt dieselben Angaben für das Fenster und legt mit
+`save_point`/`delete_point` Kamerapunkte an bzw. entfernt sie.
 
 **Profile Builder:** `save_profile` speichert wie der Profile Builder in den
 Konfigurationsordner (`fixtures/`), macht die Bereiche lückenlos und nennt

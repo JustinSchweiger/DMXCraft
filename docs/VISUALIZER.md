@@ -77,6 +77,18 @@
 * Geräte ohne eigene 3D-Lage stehen automatisch nach dem Bühnenplan unter der
   Decke.
 
+## Kamerapunkte
+
+Rechts in der Leiste (neben Vollbild): „+“ speichert die aktuelle Ansicht als
+Kamerapunkt (gleich umbenennen, Enter). Ein Klick auf einen Punkt – oder die
+Tasten 1–9 – fährt die Kamera weich dorthin; Rechtsklick: mit der aktuellen
+Ansicht überschreiben, umbenennen, löschen; Doppelklick: umbenennen. Der
+Punkt, an dem die Kamera gerade steht, ist hervorgehoben. Passen die Punkte
+nicht in die Leiste (schmales Fenster), erscheinen sie als Auswahlliste.
+Kamerapunkte gehören zum Ort (in der Show und in `.dmxvenue` gespeichert) und
+sind auch für den KI-Assistenten nutzbar (`set_visualizer`,
+`visualizer_screenshot` mit `camera.point`).
+
 ## Import aus Easy View 2
 
 Erwartet die Datei als XML. Übernommen werden Raum, Bauten (Quader, Flächen),
@@ -91,4 +103,4 @@ Daslight-Gerätebibliothek.
 ## Nächste Schritte
 
 Farbfelder und Gobo-Bilder je Gerät (Profile Builder), Zellen aus den
-physischen Gerätedaten, Normal-/Rauheitskarten, Kamera-Voreinstellungen.
+physischen Gerätedaten, Normal-/Rauheitskarten.

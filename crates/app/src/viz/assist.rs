@@ -10,6 +10,7 @@ use super::camera::OrbitCamera;
 use super::render::Gpu;
 use super::{upload_assets, Quality, VizView};
 use crate::views::ViewCtx;
+use dmxcraft_core::venue::CameraPreset;
 
 impl VizView {
     /// Auftrag ausführen: `get`, `set` oder `screenshot`.
@@ -36,9 +37,36 @@ impl VizView {
                         format!("Qualität „{q}“ unbekannt – low, medium, high oder ultra")
                     })?;
                 }
+                let points = cx.engine.show().venue.cameras.clone();
                 if let Some(c) = args.get("camera") {
-                    let cam = apply_camera(self.camera.expect("Kamera"), room, c)?;
-                    self.camera = Some(cam);
+                    let cam = apply_camera(self.camera.expect("Kamera"), room, &points, c)?;
+                    // sichtbar hinfahren, wenn das Fenster offen ist
+                    self.fly_to(cam);
+                    if !cx.state.viz_window {
+                        self.camera = Some(cam);
+                        self.fly = None;
+                    }
+                }
+                if let Some(name) = args.get("save_point").and_then(Value::as_str) {
+                    let name = name.trim();
+                    if name.is_empty() {
+                        return Err("save_point braucht einen Namen".into());
+                    }
+                    let cam = match args.get("camera") {
+                        Some(c) => apply_camera(self.camera.expect("Kamera"), room, &points, c)?,
+                        None => self.camera.expect("Kamera"),
+                    };
+                    let list = &mut cx.engine.show_mut().venue.cameras;
+                    match list.iter_mut().find(|p| p.name.eq_ignore_ascii_case(name)) {
+                        Some(p) => *p = cam.to_preset(p.name.clone()),
+                        None => list.push(cam.to_preset(name)),
+                    }
+                }
+                if let Some(name) = args.get("delete_point").and_then(Value::as_str) {
+                    let list = &mut cx.engine.show_mut().venue.cameras;
+                    let i = find_point(list, &Value::String(name.to_string()))
+                        .ok_or_else(|| format!("Kamerapunkt „{name}“ nicht gefunden"))?;
+                    list.remove(i);
                 }
                 Ok((self.info(cx), None))
             }
@@ -48,7 +76,8 @@ impl VizView {
                     .ok_or("Keine geeignete Grafikkarte für den Visualisierer verfügbar")?;
                 let mut cam = self.camera.expect("Kamera");
                 if let Some(c) = args.get("camera") {
-                    cam = apply_camera(cam, room, c)?;
+                    let points = cx.engine.show().venue.cameras.clone();
+                    cam = apply_camera(cam, room, &points, c)?;
                 }
                 let dim = |k: &str, d: u64, lo: u64, hi: u64| {
                     args.get(k)
@@ -85,12 +114,18 @@ impl VizView {
     }
 
     fn info(&self, cx: &ViewCtx<'_>) -> Value {
-        let cam = self.camera.expect("Kamera");
+        // während einer Kamerafahrt deren Ziel
+        let cam = self.fly.map(|f| f.1).or(self.camera).expect("Kamera");
         json!({
             "window_open": cx.state.viz_window,
             "quality": quality_key(cx.state.viz_quality),
             "camera": camera_json(&cam),
             "room": cx.engine.show().venue.size,
+            "camera_points": cx.engine.show().venue.cameras.iter().enumerate().map(|(i, p)| json!({
+                "number": i + 1,
+                "name": p.name,
+                "camera": camera_json(&OrbitCamera::from_preset(p)),
+            })).collect::<Vec<_>>(),
         })
     }
 }
@@ -130,9 +165,42 @@ fn camera_json(c: &OrbitCamera) -> Value {
     })
 }
 
-/// Kameraangaben anwenden: erst eine Ansicht (`view`), dann einzelne Werte.
-/// Wie im Ort: z zeigt zum Publikum, „front“ blickt also von +z.
-fn apply_camera(mut cam: OrbitCamera, room: [f32; 3], c: &Value) -> Result<OrbitCamera, String> {
+/// Kamerapunkt nach Name (ohne Groß/Klein) oder Nummer (ab 1).
+fn find_point(list: &[CameraPreset], v: &Value) -> Option<usize> {
+    if let Some(n) = v.as_u64() {
+        return (n >= 1 && (n as usize) <= list.len()).then(|| n as usize - 1);
+    }
+    let s = v.as_str()?.trim();
+    if let Ok(n) = s.parse::<usize>() {
+        if n >= 1 && n <= list.len() {
+            return Some(n - 1);
+        }
+    }
+    list.iter().position(|p| p.name.eq_ignore_ascii_case(s))
+}
+
+/// Kameraangaben anwenden: erst ein Kamerapunkt (`point`) oder eine Ansicht
+/// (`view`), dann einzelne Werte. Wie im Ort: z zeigt zum Publikum, „front“
+/// blickt also von +z.
+fn apply_camera(
+    mut cam: OrbitCamera,
+    room: [f32; 3],
+    points: &[CameraPreset],
+    c: &Value,
+) -> Result<OrbitCamera, String> {
+    if let Some(v) = c.get("point") {
+        let i = find_point(points, v).ok_or_else(|| {
+            format!(
+                "Kamerapunkt {v} nicht gefunden – vorhanden: {}",
+                points
+                    .iter()
+                    .map(|p| p.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+        cam = OrbitCamera::from_preset(&points[i]);
+    }
     let base = OrbitCamera::for_room(room);
     let [w, h, d] = room;
     let far = (w.max(d)) * 1.1 + h;
@@ -208,11 +276,12 @@ mod tests {
     fn camera_views_and_values() {
         let room = [10.0, 5.0, 8.0];
         let c = OrbitCamera::for_room(room);
-        let top = apply_camera(c, room, &json!({ "view": "top" })).unwrap();
+        let top = apply_camera(c, room, &[], &json!({ "view": "top" })).unwrap();
         assert!(top.pitch > 80.0);
         let f = apply_camera(
             c,
             room,
+            &[],
             &json!({ "view": "front", "pitch": 30, "target": [1, 2, 3] }),
         )
         .unwrap();
@@ -221,13 +290,21 @@ mod tests {
         assert_eq!(f.target, Vec3::new(1.0, 2.0, 3.0));
         // von vorn: Auge auf der Publikumsseite (+z)
         assert!(
-            apply_camera(c, room, &json!({ "view": "front" }))
+            apply_camera(c, room, &[], &json!({ "view": "front" }))
                 .unwrap()
                 .eye()
                 .z
                 > 0.0
         );
-        assert!(apply_camera(c, room, &json!({ "view": "sideways" })).is_err());
+        assert!(apply_camera(c, room, &[], &json!({ "view": "sideways" })).is_err());
         assert_eq!(quality("Hoch"), Some(Quality::High));
+        // Kamerapunkt nach Name oder Nummer
+        let pts = vec![top.to_preset("Bühne")];
+        let p = apply_camera(c, room, &pts, &json!({ "point": "bühne" })).unwrap();
+        assert!(p.near(&top));
+        assert!(apply_camera(c, room, &pts, &json!({ "point": 1 }))
+            .unwrap()
+            .near(&top));
+        assert!(apply_camera(c, room, &pts, &json!({ "point": "x" })).is_err());
     }
 }

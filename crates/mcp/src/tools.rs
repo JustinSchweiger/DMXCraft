@@ -107,8 +107,9 @@ fn venue_object_schema() -> Value {
 fn camera_schema() -> Value {
     json!({
         "type": "object",
-        "description": "Kamera (alles optional): view = \"front\" | \"back\" | \"left\" | \"right\" | \"top\" | \"overview\" (Grundstellung) als Ausgangspunkt, dann yaw (Grad um die Hochachse; 0 = von vorn, also von der Publikumsseite +z; 90 = von rechts +x), pitch (Grad, positiv = von oben, -89–89), distance (m), target [x, y, z] (Blickpunkt in m), fov (Öffnungswinkel in Grad).",
+        "description": "Kamera (alles optional): point = gespeicherter Kamerapunkt (Name oder Nummer ab 1, siehe get_visualizer) oder view = \"front\" | \"back\" | \"left\" | \"right\" | \"top\" | \"overview\" (Grundstellung) als Ausgangspunkt, dann yaw (Grad um die Hochachse; 0 = von vorn, also von der Publikumsseite +z; 90 = von rechts +x), pitch (Grad, positiv = von oben, -89–89), distance (m), target [x, y, z] (Blickpunkt in m), fov (Öffnungswinkel in Grad).",
         "properties": {
+            "point": { "type": ["string", "integer"] },
             "view": { "type": "string" },
             "yaw": { "type": "number" },
             "pitch": { "type": "number" },
@@ -453,18 +454,20 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "get_visualizer",
         title: "3D-Visualisierer abfragen",
-        description: "Zustand des 3D-Visualisierers: Fenster offen, Qualität, Kamera (yaw, pitch, distance, target, fov) und Raumgröße. Den Ort selbst (Bauten, Geräte-Lagen) liefert get_venue; Umgebungslicht, Strahlen und Nebel stellt set_venue ein.",
+        description: "Zustand des 3D-Visualisierers: Fenster offen, Qualität, Kamera (yaw, pitch, distance, target, fov), gespeicherte Kamerapunkte und Raumgröße. Den Ort selbst (Bauten, Geräte-Lagen) liefert get_venue; Umgebungslicht, Strahlen und Nebel stellt set_venue ein.",
         schema: || obj(json!({}), &[]),
         read_only: true,
     },
     Tool {
         name: "set_visualizer",
         title: "3D-Visualisierer einstellen",
-        description: "Fenster öffnen/schließen, Qualität (\"low\", \"medium\", \"high\", \"ultra\") und die Kamera der Ansicht setzen.",
+        description: "Fenster öffnen/schließen, Qualität (\"low\", \"medium\", \"high\", \"ultra\") und die Kamera der Ansicht setzen (bei offenem Fenster mit Kamerafahrt). Kamerapunkte (in der Leiste des Visualisierers per Klick bzw. Taste 1–9 erreichbar, in der Show gespeichert) mit `save_point` anlegen bzw. überschreiben (aktuelle Kamera oder `camera`) und mit `delete_point` entfernen.",
         schema: || obj(props! {
             "open": boolean("Fenster öffnen (true) oder schließen (false)"),
             "quality": string("low | medium | high | ultra"),
             "camera": camera_schema(),
+            "save_point": string("Kamerapunkt mit diesem Namen speichern (vorhandener gleichen Namens wird überschrieben)"),
+            "delete_point": string("Kamerapunkt (Name oder Nummer) entfernen"),
         }, &[]),
         read_only: false,
     },

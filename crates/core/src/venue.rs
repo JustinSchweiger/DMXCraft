@@ -74,6 +74,8 @@ impl Default for Environment {
     }
 }
 
+/// Kamerapunkt des 3D-Visualisierers (in der Titelleiste des Visualisierers
+/// mit einem Klick bzw. Taste 1–9 erreichbar).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CameraPreset {
     pub name: String,
@@ -83,6 +85,13 @@ pub struct CameraPreset {
     /// Neigung (Grad, positiv = von oben).
     pub pitch: f32,
     pub distance: f32,
+    /// Öffnungswinkel senkrecht (Grad).
+    #[serde(default = "default_fov")]
+    pub fov: f32,
+}
+
+fn default_fov() -> f32 {
+    45.0
 }
 
 /// Ein Objekt im Raum; Gruppen enthalten weitere Objekte.
