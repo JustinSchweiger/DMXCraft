@@ -121,13 +121,11 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
         main_menu(ui, info, &mut actions);
         ui.add_space(theme::SP_XS);
         if info.locked {
-            Segmented::new(&[(Mode::Control, t("Steuern")), (Mode::Visual, t("3D"))])
-                .show(ui, mode);
+            Segmented::new(&[(Mode::Control, t("Steuern"))]).show(ui, mode);
         } else {
             Segmented::new(&[
                 (Mode::Setup, t("Einrichten")),
                 (Mode::Control, t("Steuern")),
-                (Mode::Visual, t("3D")),
             ])
             .show(ui, mode);
         }

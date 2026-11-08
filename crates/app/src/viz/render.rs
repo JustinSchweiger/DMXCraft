@@ -33,6 +33,23 @@ pub enum MeshKey {
     Cone,
     /// Länge und Breite in mm, Vierpunkt?
     Truss(u32, u32, bool),
+    /// Teil eines eigenen Modells (Schlüssel-Hash, Teil)
+    Model(u64, u16),
+}
+
+impl MeshKey {
+    /// Schlüssel eines Modellteils.
+    pub fn model(key: &str, part: usize) -> Self {
+        let h = key
+            .strip_prefix('m')
+            .and_then(|h| u64::from_str_radix(h, 16).ok())
+            .unwrap_or_else(|| {
+                key.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+                    (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+                })
+            });
+        MeshKey::Model(h, part as u16)
+    }
 }
 
 #[repr(C)]
@@ -672,17 +689,12 @@ impl Gpu {
         );
     }
 
-    fn mesh(&mut self, device: &wgpu::Device, key: MeshKey) {
-        if self.meshes.contains_key(&key) {
-            return;
-        }
-        let m: Mesh = match key {
-            MeshKey::Cube => mesh::cube(),
-            MeshKey::Plane => mesh::plane(),
-            MeshKey::Cylinder => mesh::cylinder(24),
-            MeshKey::Cone => mesh::cone(40),
-            MeshKey::Truss(len, w, sq) => mesh::truss(len as f32 / 1000.0, w as f32 / 1000.0, sq),
-        };
+    pub fn has_mesh(&self, key: MeshKey) -> bool {
+        self.meshes.contains_key(&key)
+    }
+
+    /// Netz hochladen (eigene Modelle; eingebaute Formen entstehen von selbst).
+    pub fn add_mesh(&mut self, device: &wgpu::Device, key: MeshKey, m: &Mesh) {
         let vb = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("viz vb"),
             contents: bytemuck::cast_slice(&m.vertices),
@@ -701,6 +713,22 @@ impl Gpu {
                 count: m.indices.len() as u32,
             },
         );
+    }
+
+    fn mesh(&mut self, device: &wgpu::Device, key: MeshKey) {
+        if self.meshes.contains_key(&key) {
+            return;
+        }
+        let m: Mesh = match key {
+            // werden vorher mit `add_mesh` geladen; sonst Platzhalter
+            MeshKey::Model(..) => mesh::cube(),
+            MeshKey::Cube => mesh::cube(),
+            MeshKey::Plane => mesh::plane(),
+            MeshKey::Cylinder => mesh::cylinder(24),
+            MeshKey::Cone => mesh::cone(40),
+            MeshKey::Truss(len, w, sq) => mesh::truss(len as f32 / 1000.0, w as f32 / 1000.0, sq),
+        };
+        self.add_mesh(device, key, &m);
     }
 
     fn ensure_targets(&mut self, rs: &egui_wgpu::RenderState, size: [u32; 2], msaa: u32) {

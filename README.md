@@ -157,9 +157,10 @@ Die Oberfläche hat zwei Bereiche:
 
 ## 3D-Visualisierer
 
-Reiter *3D*: Veranstaltungsort bauen oder aus Easy View 2 (XML) importieren
+*Tools → 3D-Visualisierer* (eigenes Fenster): Veranstaltungsort bauen, eigene
+glTF-Modelle einsetzen oder aus Easy View 2 (XML) importieren
 und die Geräte live sehen – auf der Grafikkarte (Vulkan/Metal/DirectX 12),
-auch im eigenen Fenster auf einem zweiten Bildschirm. Details in
+gern auf einem zweiten Bildschirm. Details in
 [docs/VISUALIZER.md](docs/VISUALIZER.md).
 
 ## KI-Assistent (MCP)

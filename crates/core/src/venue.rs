@@ -6,6 +6,7 @@
 //! für andere Shows weitergeben.
 
 pub mod ev2;
+pub mod model;
 
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +28,9 @@ pub struct Venue {
     pub cameras: Vec<CameraPreset>,
     #[serde(default)]
     pub next_id: u32,
+    /// Eingebettete 3D-Modelle (Schlüssel → Modell), benutzt von `Shape::Model`.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub models: std::collections::BTreeMap<String, model::Model>,
 }
 
 fn format_version() -> u32 {
@@ -96,6 +100,8 @@ pub enum Shape {
     Plane { size: [f32; 2] },
     /// Zylinder entlang y, Mittelpunkt im Ursprung.
     Cylinder { radius: f32, height: f32 },
+    /// Eigenes Modell aus `Venue::models`; Mitte in x/z, Unterkante bei y = 0.
+    Model { model: String },
     /// Traverse entlang x, Mittelpunkt im Ursprung.
     Truss {
         length: f32,
@@ -246,6 +252,7 @@ impl Venue {
             objects: Vec::new(),
             cameras: Vec::new(),
             next_id: 1,
+            models: Default::default(),
         };
         let [w, h, d] = size;
         let floor = v.object(
@@ -418,6 +425,56 @@ impl Venue {
             }
         }
         best
+    }
+
+    /// Modelle entfernen, die kein Objekt mehr benutzt.
+    pub fn prune_models(&mut self) {
+        let used: std::collections::BTreeSet<String> = self
+            .flatten()
+            .into_iter()
+            .filter_map(|(o, _)| match &o.shape {
+                Shape::Model { model } => Some(model.clone()),
+                _ => None,
+            })
+            .collect();
+        self.models.retain(|k, _| used.contains(k));
+    }
+
+    /// Kette der Gruppen über einem Objekt (äußerste zuerst, ohne das Objekt).
+    pub fn ancestors(&self, id: u32) -> Vec<u32> {
+        fn walk(list: &[Object], id: u32, path: &mut Vec<u32>) -> bool {
+            for o in list {
+                if o.id == id {
+                    return true;
+                }
+                path.push(o.id);
+                if walk(&o.children, id, path) {
+                    return true;
+                }
+                path.pop();
+            }
+            false
+        }
+        let mut path = Vec::new();
+        if walk(&self.objects, id, &mut path) {
+            path
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Weltmatrix des Elternteils eines Objekts (Einheitsmatrix auf oberster Ebene).
+    pub fn parent_matrix(&self, id: u32) -> [[f32; 4]; 4] {
+        let mut m = IDENTITY;
+        let mut list = &self.objects;
+        for a in self.ancestors(id) {
+            let Some(o) = list.iter().find(|o| o.id == a) else {
+                break;
+            };
+            m = mul(m, o.transform.matrix());
+            list = &o.children;
+        }
+        m
     }
 
     pub fn flatten(&self) -> Vec<(&Object, [[f32; 4]; 4])> {

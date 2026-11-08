@@ -1,7 +1,7 @@
 # 3D-Visualisierer
 
-Reiter **3D** (oder *Tools → 3D-Visualisierer* für ein eigenes Fenster, z. B.
-auf einem zweiten Bildschirm).
+*Tools → 3D-Visualisierer* öffnet den Visualisierer in einem eigenen Fenster
+(z. B. auf einem zweiten Bildschirm, Vollbild über den Knopf oben rechts).
 
 ## Technik
 
@@ -36,8 +36,18 @@ auf einem zweiten Bildschirm).
 * **Bauen**: Objekte hinzufügen, im Objektbaum auswählen, Lage/Maße/Farbe/
   Deckkraft/Glanz/Leuchten ändern; Objekte und Geräte mit der Maus auf dem
   Boden verschieben (Raster 5 cm, Strg: frei).
-* **Griffe** an der Auswahl: rote/grüne/blaue Achse verschiebt entlang x/y/z,
-  der gelbe Ring dreht um die Hochachse (5°-Raster, Strg: frei).
+* **Aufteilung**: links Raum, Hinzufügen und der Objektbaum (Gruppen
+  aufklappbar; ein Klick im Bild klappt bis zum Objekt auf) bzw. im Reiter
+  *Geräte* die Geräteliste mit Suche (Strg/Umschalt für Mehrfachauswahl);
+  rechts angedockt die Eigenschaften der Auswahl in aufklappbaren Abschnitten.
+  Rückgängig/Wiederholen oben neben *Bauen/Live* (oder Strg+Z/Strg+Y).
+* **Griffe** an der Auswahl: rote/grüne/blaue Achse verschiebt entlang x/y/z
+  des Raums, die drei Ringe drehen um x/y/z des Raums (5-cm- bzw. 5°-Raster,
+  Strg: frei) – auch für Objekte in gedrehten Gruppen und für Geräte.
+* **Eigene 3D-Modelle** (glTF/GLB) importieren: Geometrie mit allen
+  Knoten-Lagen und die Grundfarben der Materialien (ohne Texturen) werden in
+  die Show eingebettet; das Modell steht mit der Unterkante auf dem Boden.
+  Bis 2 Mio. Dreiecke.
 * **Geräte ausrichten**: auf einen Zielpunkt richten (Zahlen oder im Bild
   anklicken), senkrecht nach unten, an die nächste Traverse hängen – jeweils
   für alle ausgewählten Geräte.
@@ -57,5 +67,5 @@ Daslight-Gerätebibliothek.
 
 ## Nächste Schritte
 
-Farbfelder und Gobo-Bilder je Gerät (Profile Builder), Zellen aus den physischen Gerätedaten, eigene 3D-Modelle
-(glTF), Kamera-Voreinstellungen.
+Farbfelder und Gobo-Bilder je Gerät (Profile Builder), Zellen aus den
+physischen Gerätedaten, Texturen in Modellen, Kamera-Voreinstellungen.

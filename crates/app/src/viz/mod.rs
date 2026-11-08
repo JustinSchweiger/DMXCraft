@@ -1,11 +1,13 @@
 //! 3D-Visualisierer: Veranstaltungsort bauen und die Geräte live sehen.
 //!
 //! Gezeichnet wird auf der Grafikkarte (wgpu: Vulkan, Metal oder DirectX 12)
-//! in eine Textur, die egui anzeigt – im Reiter „3D“ oder in einem eigenen
+//! in eine Textur, die egui anzeigt – in einem eigenen
 //! Fenster (z. B. auf einem zweiten Bildschirm).
 
 pub mod camera;
+pub mod gltf_import;
 pub mod mesh;
+mod panels;
 pub mod render;
 pub mod rig;
 
@@ -105,6 +107,7 @@ enum Pick {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DialogKind {
     ImportEv2,
+    ImportModel,
     LoadVenue,
     SaveVenue,
 }
@@ -122,13 +125,22 @@ pub struct VizView {
     fps: (Instant, u32, f32),
     /// Geräte aus dem letzten Import ohne Gegenstück im Patch.
     missing: Vec<Missing>,
-    /// Griff, an dem gerade gezogen wird (Achse 0–2, 3 = Drehung um y),
+    /// Griff, an dem gerade gezogen wird (Achse 0–2, Ring 3–5),
     /// Ausgangslage und Startpunkt des Zeigers.
-    gizmo: Option<(usize, Placement, egui::Pos2)>,
+    gizmo: Option<(usize, SelFrame, egui::Pos2)>,
+    /// Reiter der linken Leiste, Suchtext und Anker der Geräteliste.
+    outline: panels::OutlineTab,
+    fixture_filter: String,
+    fixture_anchor: Option<FixtureId>,
+    /// Objekt im Baum aufklappen und zeigen / Gerät in der Liste zeigen.
+    reveal: Option<u32>,
+    reveal_fixture: Option<FixtureId>,
     /// Zielpunkt zum Ausrichten von Geräten.
     aim: [f32; 3],
     /// Nächster Klick ins Bild setzt den Zielpunkt.
     aim_pick: bool,
+    /// Modell, das gerade im Hintergrund geladen wird.
+    model_job: Option<Receiver<Result<venue::model::Model, String>>>,
 }
 
 /// Gerät aus einem Import ohne Gegenstück im Patch, mit vorgeschlagenem Typ.
@@ -169,11 +181,10 @@ fn propose_type(library_name: &str) -> (FixtureType, bool) {
 }
 
 /// Achsenfarben der Griffe (x rot, y grün, z blau).
-const AXIS_COLORS: [Color32; 4] = [
+const AXIS_COLORS: [Color32; 3] = [
     Color32::from_rgb(230, 80, 80),
     Color32::from_rgb(90, 200, 90),
     Color32::from_rgb(80, 140, 240),
-    Color32::from_rgb(235, 190, 60),
 ];
 
 /// Welt- in Bildschirmkoordinaten.
@@ -189,11 +200,67 @@ fn project(vp: Mat4, rect: Rect, p: Vec3) -> Option<egui::Pos2> {
     ))
 }
 
-/// Griffe um `pos`: drei Achsen (Anfang, Ende) und der Drehring (Punkte).
+/// Lage der Auswahl: eigene Werte, Weltposition und Elternmatrix.
+#[derive(Clone, Copy, Debug)]
+struct SelFrame {
+    local: Placement,
+    world: Vec3,
+    parent: Mat4,
+}
+
+fn sel_frame(show: &Show, sel: Pick) -> Option<SelFrame> {
+    match sel {
+        Pick::Object(id) => {
+            let o = show.venue.find(id)?;
+            if o.locked {
+                return None;
+            }
+            let parent = Mat4::from_cols_array_2d(&show.venue.parent_matrix(id));
+            let local = Placement {
+                position: o.transform.position,
+                rotation: o.transform.rotation,
+            };
+            Some(SelFrame {
+                local,
+                world: parent.transform_point3(Vec3::from(local.position)),
+                parent,
+            })
+        }
+        Pick::Fixture(id) => {
+            let local = rig::placement(show, id);
+            Some(SelFrame {
+                local,
+                world: Vec3::from(local.position),
+                parent: Mat4::IDENTITY,
+            })
+        }
+    }
+}
+
+/// Euler-Winkel (Grad; X, dann Y, dann Z) als Quaternion.
+pub fn quat_deg(r: [f32; 3]) -> glam::Quat {
+    let [x, y, z] = r.map(f32::to_radians);
+    glam::Quat::from_euler(glam::EulerRot::ZYX, z, y, x)
+}
+
+/// Quaternion als Euler-Winkel (Grad, auf 0,01° gerundet).
+pub fn deg_quat(q: glam::Quat) -> [f32; 3] {
+    let (z, y, x) = q.normalize().to_euler(glam::EulerRot::ZYX);
+    [x, y, z].map(|a| {
+        let d = (a.to_degrees() * 100.0).round() / 100.0;
+        if d == -0.0 {
+            0.0
+        } else {
+            d
+        }
+    })
+}
+
+/// Griffe um `pos`: drei Achsen (Anfang, Ende) und drei Drehringe.
 struct Handles {
     center: egui::Pos2,
     axes: [Option<(egui::Pos2, egui::Pos2)>; 3],
-    ring: Vec<egui::Pos2>,
+    rings: [Vec<egui::Pos2>; 3],
     /// Weltlänge einer Achse
     len: f32,
 }
@@ -203,20 +270,22 @@ fn handles(vp: Mat4, eye: Vec3, rect: Rect, pos: Vec3) -> Option<Handles> {
     let len = (pos.distance(eye) * 0.12).clamp(0.15, 3.0);
     let axes =
         [Vec3::X, Vec3::Y, Vec3::Z].map(|a| Some((center, project(vp, rect, pos + a * len)?)));
-    let ring = (0..=48)
-        .filter_map(|k| {
-            let a = k as f32 / 48.0 * std::f32::consts::TAU;
-            project(
-                vp,
-                rect,
-                pos + Vec3::new(a.cos(), 0.0, a.sin()) * len * 0.75,
-            )
-        })
-        .collect();
+    let ring = |u: Vec3, v: Vec3| -> Vec<egui::Pos2> {
+        (0..=64)
+            .filter_map(|k| {
+                let a = k as f32 / 64.0 * std::f32::consts::TAU;
+                project(vp, rect, pos + (u * a.cos() + v * a.sin()) * len * 0.75)
+            })
+            .collect()
+    };
     Some(Handles {
         center,
         axes,
-        ring,
+        rings: [
+            ring(Vec3::Y, Vec3::Z),
+            ring(Vec3::X, Vec3::Z),
+            ring(Vec3::X, Vec3::Y),
+        ],
         len,
     })
 }
@@ -228,40 +297,52 @@ fn seg_dist(p: egui::Pos2, a: egui::Pos2, b: egui::Pos2) -> f32 {
 }
 
 impl Handles {
-    /// Griff unter dem Zeiger (Achsen vor dem Ring).
+    /// Griff unter dem Zeiger: 0–2 Achsen, 3–5 Ringe (Achsen haben Vorrang).
     fn hit(&self, p: egui::Pos2) -> Option<usize> {
+        let near = |d: f32, max: f32| d < max;
         let axis = self
             .axes
             .iter()
             .enumerate()
             .filter_map(|(i, a)| a.map(|(s, e)| (i, seg_dist(p, s, e))))
-            .filter(|(_, d)| *d < 7.0)
+            .filter(|(_, d)| near(*d, 7.0))
             .min_by(|a, b| a.1.total_cmp(&b.1));
         if let Some((i, _)) = axis {
             return Some(i);
         }
-        self.ring
-            .windows(2)
-            .any(|w| seg_dist(p, w[0], w[1]) < 6.0)
-            .then_some(3)
+        self.rings
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| {
+                r.windows(2)
+                    .map(|w| seg_dist(p, w[0], w[1]))
+                    .min_by(f32::total_cmp)
+                    .map(|d| (i + 3, d))
+            })
+            .filter(|(_, d)| near(*d, 6.0))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(i, _)| i)
     }
 
     fn paint(&self, painter: &egui::Painter, active: Option<usize>, hover: Option<usize>) {
-        let width = |i: usize| {
-            if active == Some(i) || hover == Some(i) {
-                4.0
+        let hot = |i: usize| active == Some(i) || hover == Some(i);
+        for (k, r) in self.rings.iter().enumerate() {
+            let i = k + 3;
+            let c = if hot(i) {
+                AXIS_COLORS[k]
             } else {
-                2.5
-            }
-        };
-        painter.add(egui::Shape::line(
-            self.ring.clone(),
-            egui::Stroke::new(width(3), AXIS_COLORS[3]),
-        ));
+                AXIS_COLORS[k].gamma_multiply(0.6)
+            };
+            painter.add(egui::Shape::line(
+                r.clone(),
+                egui::Stroke::new(if hot(i) { 3.5 } else { 1.8 }, c),
+            ));
+        }
         for (i, a) in self.axes.iter().enumerate() {
             if let Some((s, e)) = a {
-                painter.line_segment([*s, *e], egui::Stroke::new(width(i), AXIS_COLORS[i]));
-                painter.circle_filled(*e, width(i) + 2.5, AXIS_COLORS[i]);
+                let w = if hot(i) { 4.0 } else { 2.5 };
+                painter.line_segment([*s, *e], egui::Stroke::new(w, AXIS_COLORS[i]));
+                painter.circle_filled(*e, w + 2.5, AXIS_COLORS[i]);
             }
         }
         painter.circle_filled(self.center, 3.5, Color32::WHITE);
@@ -284,6 +365,12 @@ impl Default for VizView {
             gizmo: None,
             aim: [0.0; 3],
             aim_pick: false,
+            model_job: None,
+            outline: Default::default(),
+            fixture_filter: String::new(),
+            fixture_anchor: None,
+            reveal: None,
+            reveal_fixture: None,
         }
     }
 }
@@ -300,6 +387,7 @@ impl VizView {
         window: bool,
     ) {
         self.poll_dialog(cx);
+        self.poll_model(cx);
         let locked = cx.state.locked;
         let size = cx.engine.show().venue.size;
         if self.camera.is_none() || self.room != size {
@@ -309,16 +397,21 @@ impl VizView {
         self.toolbar(ui, cx, locked, window);
         ui.add_space(theme::SP_XS);
         if self.mode == Mode::Build && !locked {
-            egui::Panel::right("viz_build")
+            let frame = egui::Frame::new()
+                .fill(theme::surface())
+                .inner_margin(egui::Margin::same(6));
+            egui::Panel::left("viz_outline")
+                .resizable(true)
+                .default_size(270.0)
+                .min_size(220.0)
+                .frame(frame)
+                .show(ui, |ui| self.outline_panel(ui, cx));
+            egui::Panel::right("viz_props")
                 .resizable(true)
                 .default_size(320.0)
                 .min_size(260.0)
-                .frame(
-                    egui::Frame::new()
-                        .fill(theme::surface())
-                        .inner_margin(egui::Margin::same(6)),
-                )
-                .show(ui, |ui| self.build_panel(ui, cx));
+                .frame(frame)
+                .show(ui, |ui| self.props_panel(ui, cx));
         }
         egui::CentralPanel::default_margins()
             .frame(egui::Frame::new())
@@ -333,6 +426,22 @@ impl VizView {
                 .show(ui, &mut mode);
             if !locked {
                 self.mode = mode;
+            }
+            if self.mode == Mode::Build && !locked {
+                if ui
+                    .add_enabled(cx.state.can_undo, IconButton::new(Icon::Undo).size(26.0))
+                    .on_hover_text(t("Rückgängig (Strg+Z)"))
+                    .clicked()
+                {
+                    cx.state.history_request = Some(true);
+                }
+                if ui
+                    .add_enabled(cx.state.can_redo, IconButton::new(Icon::Redo).size(26.0))
+                    .on_hover_text(t("Wiederholen (Strg+Y)"))
+                    .clicked()
+                {
+                    cx.state.history_request = Some(false);
+                }
             }
             ui.separator();
             let env = &mut cx.engine.show_mut().venue.environment;
@@ -465,19 +574,14 @@ impl VizView {
             )
         };
         let building = self.mode == Mode::Build && !cx.state.locked;
-        // Griffe der Auswahl (Achsen verschieben, Ring dreht um y)
+        // Griffe der Auswahl (Achsen verschieben, Ringe drehen um x/y/z des Raums)
         let vp = cam.proj(aspect) * cam.view();
-        let sel_place = match self.selected {
-            Some(Pick::Object(id)) if building => {
-                cx.engine.show().venue.find(id).map(|o| Placement {
-                    position: o.transform.position,
-                    rotation: o.transform.rotation,
-                })
-            }
-            Some(Pick::Fixture(id)) if building => Some(rig::placement(cx.engine.show(), id)),
-            _ => None,
+        let sel_place = if building {
+            self.selected.and_then(|s| sel_frame(cx.engine.show(), s))
+        } else {
+            None
         };
-        let gizmo = sel_place.and_then(|p| handles(vp, cam.eye(), rect, Vec3::from(p.position)));
+        let gizmo = sel_place.and_then(|f| handles(vp, cam.eye(), rect, f.world));
         let gizmo_hover = gizmo.as_ref().zip(ptr).and_then(|(g, p)| g.hit(p));
         if resp.drag_started_by(egui::PointerButton::Primary) {
             // dort prüfen, wo die Taste gedrückt wurde (bei wenig Bildern pro Sekunde
@@ -487,45 +591,44 @@ impl VizView {
                 .as_ref()
                 .zip(origin)
                 .and_then(|(g, o)| g.hit(o).map(|i| (i, o)));
-            if let (Some((i, o)), Some(p0)) = (hit, sel_place) {
-                self.gizmo = Some((i, p0, o));
+            if let (Some((i, o)), Some(f)) = (hit, sel_place) {
+                self.gizmo = Some((i, f, o));
             }
         }
-        if let (Some((axis, p0, start)), Some(g), Some(p), Some(sel)) =
+        if let (Some((handle, f0, start)), Some(g), Some(p), Some(sel)) =
             (self.gizmo, gizmo.as_ref(), ptr, self.selected)
         {
-            let mut np = p0;
-            if axis < 3 {
-                if let Some((a, b)) = g.axes[axis] {
+            let mut np = f0.local;
+            if handle < 3 {
+                if let Some((a, b)) = g.axes[handle] {
                     let s = b - a;
                     let along = (p - start).dot(s) / s.length_sq().max(1.0) * g.len;
-                    let v = p0.position[axis] + along;
-                    np.position[axis] = if mods.command {
-                        v
-                    } else {
-                        (v * 20.0).round() / 20.0
-                    };
+                    let mut w = f0.world;
+                    w[handle] += along;
+                    if !mods.command {
+                        w[handle] = (w[handle] * 20.0).round() / 20.0;
+                    }
+                    np.position = f0.parent.inverse().transform_point3(w).to_array();
                 }
             } else {
+                let axis = [Vec3::X, Vec3::Y, Vec3::Z][handle - 3];
                 let ang = |q: egui::Pos2| (q.y - g.center.y).atan2(q.x - g.center.x);
-                let mut d = (ang(p) - ang(start)).to_degrees();
-                // Bildschirm-y zeigt nach unten: Drehsinn hängt von der Blickrichtung ab
-                if cam.eye().y < p0.position[1] {
+                let mut d = ang(p) - ang(start);
+                // Bildschirm-y zeigt nach unten: zeigt die Achse zum Betrachter, dreht
+                // ein Ziehen im Uhrzeigersinn negativ
+                if axis.dot(cam.eye() - f0.world) > 0.0 {
                     d = -d;
                 }
-                let d = if mods.command {
-                    d
-                } else {
-                    (d / 5.0).round() * 5.0
-                };
-                match sel {
-                    Pick::Object(_) => np.rotation[1] = p0.rotation[1] - d,
-                    Pick::Fixture(_) => {
-                        let dir = Vec3::from(p0.direction());
-                        let rot = glam::Quat::from_rotation_y(-d.to_radians());
-                        np.aim_at((Vec3::from(p0.position) + rot * dir).into());
-                    }
+                let mut deg = d.to_degrees();
+                if !mods.command {
+                    deg = (deg / 5.0).round() * 5.0;
                 }
+                // Achse im System des Elternteils
+                let local_axis =
+                    (glam::Mat3::from_mat4(f0.parent).inverse() * axis).normalize_or(axis);
+                let q = glam::Quat::from_axis_angle(local_axis, deg.to_radians())
+                    * quat_deg(f0.local.rotation);
+                np.rotation = deg_quat(q);
             }
             apply_placement(cx, sel, np);
         }
@@ -621,8 +724,12 @@ impl VizView {
                             cx.state.selected = [id].into();
                         }
                         self.selected = hit;
+                        self.reveal_fixture = Some(id);
                     }
-                    Some(Pick::Object(_)) if building => self.selected = hit,
+                    Some(Pick::Object(id)) if building => {
+                        self.selected = hit;
+                        self.reveal = Some(id);
+                    }
                     _ => {
                         self.selected = None;
                         if !building {
@@ -644,6 +751,25 @@ impl VizView {
         let time = self.start.elapsed().as_secs_f32();
         let frame = self.frame3d(cx, &cam, aspect, time, q, building);
         let gpu = self.gpu.get_or_insert_with(|| Gpu::new(rs));
+        for (key, model) in &cx.engine.show().venue.models {
+            for (i, part) in model.parts.iter().enumerate() {
+                let k = MeshKey::model(key, i);
+                if !gpu.has_mesh(k) {
+                    let m = mesh::Mesh {
+                        vertices: part
+                            .vertices()
+                            .into_iter()
+                            .map(|v| mesh::Vertex {
+                                pos: [v[0], v[1], v[2]],
+                                normal: [v[3], v[4], v[5]],
+                            })
+                            .collect(),
+                        indices: part.indices(),
+                    };
+                    gpu.add_mesh(&rs.device, k, &m);
+                }
+            }
+        }
         gpu.render(rs, px, msaa, &frame);
         if let Some(tex) = gpu.texture {
             painter.image(
@@ -653,7 +779,7 @@ impl VizView {
                 Color32::WHITE,
             );
         }
-        // Angaben unten rechts: Grafikkarte, Bilder pro Sekunde
+        // Angaben oben rechts: Grafikkarte, Bilder pro Sekunde
         self.fps.1 += 1;
         let el = self.fps.0.elapsed().as_secs_f32();
         if el >= 1.0 {
@@ -668,7 +794,7 @@ impl VizView {
             egui::FontId::proportional(theme::FS_CAPTION - 1.0),
             theme::text_dim(),
         );
-        let at = rect.right_bottom() - galley.size() - vec2(8.0, 6.0);
+        let at = rect.right_top() + vec2(-galley.size().x - 8.0, 6.0);
         painter.rect_filled(
             Rect::from_min_size(at - vec2(4.0, 2.0), galley.size() + vec2(8.0, 4.0)),
             3.0,
@@ -689,11 +815,15 @@ impl VizView {
         }
         if building {
             let hint = t("Linke Maustaste: drehen · auf der Auswahl: verschieben · Griffe: Achse bzw. Drehung (Strg: ohne Raster) · Rechts/Mitte: verschieben · Rad: zoomen");
-            painter.text(
-                rect.left_bottom() + vec2(8.0, -8.0),
-                egui::Align2::LEFT_BOTTOM,
-                hint,
+            let galley = painter.layout(
+                hint.to_string(),
                 egui::FontId::proportional(theme::FS_CAPTION - 1.0),
+                theme::text_faint(),
+                rect.width() - 16.0,
+            );
+            painter.galley(
+                rect.left_bottom() + vec2(8.0, -8.0 - galley.size().y),
+                galley,
                 theme::text_faint(),
             );
         }
@@ -724,6 +854,18 @@ impl VizView {
             }
         }
         for (ob, m) in show.venue.flatten() {
+            if let Shape::Model { model } = &ob.shape {
+                if let Some(md) = show.venue.models.get(model) {
+                    let s = Vec3::from(md.size).max(Vec3::splat(0.02));
+                    let world = Mat4::from_cols_array_2d(&m)
+                        * Mat4::from_translation(Vec3::new(0.0, s.y * 0.5, 0.0))
+                        * Mat4::from_scale(s);
+                    if let Some(t) = ray_box(o, d, world) {
+                        take(t, Pick::Object(ob.id));
+                    }
+                }
+                continue;
+            }
             let Some((key_scale, _)) = shape_mesh(&ob.shape) else {
                 continue;
             };
@@ -764,6 +906,30 @@ impl VizView {
             ..Default::default()
         };
         for (ob, m) in venue.flatten() {
+            if let Shape::Model { model } = &ob.shape {
+                let Some(md) = venue.models.get(model) else {
+                    continue;
+                };
+                let sel = building && self.selected == Some(Pick::Object(ob.id));
+                let mat = ob.material;
+                for (i, part) in md.parts.iter().enumerate() {
+                    let inst = Instance::new(
+                        Mat4::from_cols_array_2d(&m),
+                        rig::linear(part.color),
+                        mat.opacity,
+                        mat.gloss,
+                        if sel { 0.12 } else { mat.emissive },
+                    );
+                    let key = MeshKey::model(model, i);
+                    if mat.opacity < 0.99 {
+                        f.transparent.push((key, inst));
+                    } else {
+                        f.opaque.push((key, inst));
+                        f.casters.push((key, inst));
+                    }
+                }
+                continue;
+            }
             let Some((scale, key)) = shape_mesh(&ob.shape) else {
                 continue;
             };
@@ -873,236 +1039,6 @@ impl VizView {
 
     // ---------- Bauen ----------
 
-    fn build_panel(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            ui.label(theme::heading_text(t("Raum")));
-            let v = &mut cx.engine.show_mut().venue;
-            ui.horizontal(|ui| {
-                ui.label(t("Name"));
-                ui.text_edit_singleline(&mut v.name);
-            });
-            ui.horizontal(|ui| {
-                ui.label(t("Größe (m)"));
-                for (i, c) in ["B", "H", "T"].iter().enumerate() {
-                    ui.add(egui::DragValue::new(&mut v.size[i]).range(1.0..=200.0).speed(0.05).prefix(format!("{c} ")).max_decimals(2));
-                }
-            });
-            if ui.button(t("Leeren Raum mit dieser Größe anlegen")).clicked() {
-                let size = v.size;
-                let name = v.name.clone();
-                let env = v.environment;
-                *v = Venue::room(name, size);
-                v.environment = env;
-                self.selected = None;
-            }
-            ui.add_space(theme::SP_M);
-            ui.label(theme::heading_text(t("Hinzufügen")));
-            ui.horizontal_wrapped(|ui| {
-                let at = self.camera.map_or(Vec3::ZERO, |c| c.target);
-                let items: [(&str, Shape, [f32; 3]); 6] = [
-                    (t("Quader"), Shape::Box { size: [1.0, 1.0, 1.0] }, [at.x, 0.5, at.z]),
-                    (t("Podest"), Shape::Box { size: [2.0, 0.4, 1.0] }, [at.x, 0.2, at.z]),
-                    (t("Fläche"), Shape::Plane { size: [2.0, 2.0] }, [at.x, 0.01, at.z]),
-                    (t("Zylinder"), Shape::Cylinder { radius: 0.2, height: 2.0 }, [at.x, 1.0, at.z]),
-                    (t("Traverse 2 m"), Shape::Truss { length: 2.0, profile: TrussProfile::Triangle, width: 0.29 }, [at.x, 4.0, at.z]),
-                    (t("Traverse 3 m"), Shape::Truss { length: 3.0, profile: TrussProfile::Square, width: 0.29 }, [at.x, 4.0, at.z]),
-                ];
-                for (label, shape, pos) in items {
-                    if ui.button(label).clicked() {
-                        let material = if matches!(shape, Shape::Truss { .. }) {
-                            Material { color: [190, 190, 195], gloss: 0.6, ..Material::default() }
-                        } else {
-                            Material::default()
-                        };
-                        let o = v.object(label, shape, Transform { position: pos, ..Transform::default() }, material);
-                        self.selected = Some(Pick::Object(o.id));
-                        v.objects.push(o);
-                    }
-                }
-            });
-            ui.add_space(theme::SP_M);
-            ui.label(theme::heading_text(t("Objekte")));
-            let mut select = None;
-            let mut toggle = None;
-            object_tree(ui, &v.objects, 0, self.selected, &mut select, &mut toggle);
-            if let Some(id) = select {
-                self.selected = Some(Pick::Object(id));
-            }
-            if let Some(id) = toggle {
-                if let Some(o) = v.find_mut(id) {
-                    o.hidden = !o.hidden;
-                }
-            }
-            if !self.missing.is_empty() {
-                ui.add_space(theme::SP_M);
-                ui.label(theme::heading_text(t("Ohne Gegenstück im Patch")));
-                ui.label(egui::RichText::new(t("Diese Geräte aus dem Import haben im Patch kein Gerät mit gleichem Universum und gleicher Adresse. Vorgeschlagen ist ein passender Typ aus der Bibliothek (kursiv: nur ähnlich, bitte prüfen).")).small().color(theme::text_faint()));
-                for m in &mut self.missing {
-                    let f = &m.fixture;
-                    ui.horizontal(|ui| {
-                        ui.checkbox(&mut m.create, "");
-                        ui.vertical(|ui| {
-                            ui.label(egui::RichText::new(format!("{} · U{}/{}", f.name, f.universe + 1, f.address)).small());
-                            let ty = format!("{} {} ({} · {} Kanäle)", m.proposal.manufacturer, m.proposal.model, m.proposal.mode, m.proposal.channels.len());
-                            let mut txt = egui::RichText::new(ty).small().color(theme::text_dim());
-                            if !m.exact {
-                                txt = txt.italics();
-                            }
-                            ui.label(txt).on_hover_text(&f.library_name);
-                        });
-                    });
-                }
-                let n = self.missing.iter().filter(|m| m.create).count();
-                ui.horizontal(|ui| {
-                    if ui
-                        .add_enabled(n > 0, egui::Button::new(tr!("{n} Geräte anlegen", n = n)))
-                        .clicked()
-                    {
-                        let show = cx.engine.show_mut();
-                        let mut failed = Vec::new();
-                        let mut made = 0;
-                        for m in self.missing.drain(..) {
-                            if !m.create {
-                                continue;
-                            }
-                            show.upsert_fixture_type(m.proposal.clone());
-                            let f = &m.fixture;
-                            match show.add_fixture(f.name.clone(), &m.proposal.key, f.universe, f.address) {
-                                Ok(id) => {
-                                    if let Some(x) = show.fixture_mut(id) {
-                                        x.place3d = Some(f.placement);
-                                    }
-                                    made += 1;
-                                }
-                                Err(e) => failed.push(format!("{}: {e}", f.name)),
-                            }
-                        }
-                        dmxcraft_ofl::fill_physical(show);
-                        if failed.is_empty() {
-                            cx.state.info(tr!("{n} Geräte angelegt", n = made));
-                        } else {
-                            cx.state.error(tr!("{n} Geräte angelegt, nicht möglich: {f}", n = made, f = failed.join(", ")));
-                        }
-                    }
-                    if ui.button(t("Liste ausblenden")).clicked() {
-                        self.missing.clear();
-                    }
-                });
-            }
-            ui.add_space(theme::SP_M);
-            match self.selected {
-                Some(Pick::Object(id)) => self.object_props(ui, cx, id),
-                Some(Pick::Fixture(id)) => self.fixture_props(ui, cx, id),
-                None => {
-                    ui.label(egui::RichText::new(t("Objekt oder Gerät anklicken, um es zu bearbeiten.")).color(theme::text_faint()));
-                }
-            }
-        });
-    }
-
-    fn object_props(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, id: u32) {
-        let v = &mut cx.engine.show_mut().venue;
-        let mut remove = false;
-        let mut duplicate = false;
-        let Some(o) = v.find_mut(id) else {
-            self.selected = None;
-            return;
-        };
-        ui.label(theme::heading_text(t("Eigenschaften")));
-        ui.horizontal(|ui| {
-            ui.label(t("Name"));
-            ui.text_edit_singleline(&mut o.name);
-        });
-        ui.checkbox(&mut o.locked, t("Gesperrt"));
-        let enabled = !o.locked;
-        ui.add_enabled_ui(enabled, |ui| {
-            vec3_row(ui, t("Position (m)"), &mut o.transform.position, 0.01);
-            vec3_row(ui, t("Drehung (°)"), &mut o.transform.rotation, 0.5);
-            vec3_row(ui, t("Skalierung"), &mut o.transform.scale, 0.01);
-            match &mut o.shape {
-                Shape::Box { size } => vec3_row(ui, t("Maße (m)"), size, 0.01),
-                Shape::Plane { size } => {
-                    ui.horizontal(|ui| {
-                        ui.label(t("Maße (m)"));
-                        ui.add(
-                            egui::DragValue::new(&mut size[0])
-                                .speed(0.01)
-                                .range(0.01..=500.0),
-                        );
-                        ui.add(
-                            egui::DragValue::new(&mut size[1])
-                                .speed(0.01)
-                                .range(0.01..=500.0),
-                        );
-                    });
-                }
-                Shape::Cylinder { radius, height } => {
-                    ui.horizontal(|ui| {
-                        ui.label(t("Radius / Höhe (m)"));
-                        ui.add(
-                            egui::DragValue::new(radius)
-                                .speed(0.005)
-                                .range(0.005..=50.0),
-                        );
-                        ui.add(egui::DragValue::new(height).speed(0.01).range(0.01..=100.0));
-                    });
-                }
-                Shape::Truss {
-                    length, profile, ..
-                } => {
-                    ui.horizontal(|ui| {
-                        ui.label(t("Länge (m)"));
-                        ui.add(egui::DragValue::new(length).speed(0.05).range(0.25..=30.0));
-                        let mut sq = *profile == TrussProfile::Square;
-                        ui.checkbox(&mut sq, t("Vierpunkt"));
-                        *profile = if sq {
-                            TrussProfile::Square
-                        } else {
-                            TrussProfile::Triangle
-                        };
-                    });
-                }
-                Shape::Group => {}
-            }
-            if !matches!(o.shape, Shape::Group) {
-                ui.horizontal(|ui| {
-                    ui.label(t("Farbe"));
-                    let mut c = Color32::from_rgb(
-                        o.material.color[0],
-                        o.material.color[1],
-                        o.material.color[2],
-                    );
-                    if ui.color_edit_button_srgba(&mut c).changed() {
-                        o.material.color = [c.r(), c.g(), c.b()];
-                    }
-                });
-                ui.add(egui::Slider::new(&mut o.material.opacity, 0.05..=1.0).text(t("Deckkraft")));
-                ui.add(egui::Slider::new(&mut o.material.gloss, 0.0..=1.0).text(t("Glanz")));
-                ui.add(egui::Slider::new(&mut o.material.emissive, 0.0..=1.0).text(t("Leuchten")));
-            }
-        });
-        ui.horizontal(|ui| {
-            duplicate = ui
-                .add_enabled(enabled, egui::Button::new(t("Duplizieren")))
-                .clicked();
-            remove = ui
-                .add_enabled(enabled, egui::Button::new(t("Löschen")))
-                .clicked();
-        });
-        if duplicate {
-            if let Some(mut copy) = v.find(id).cloned() {
-                renumber(v, &mut copy);
-                copy.transform.position[0] += 0.5;
-                self.selected = Some(Pick::Object(copy.id));
-                v.objects.push(copy);
-            }
-        }
-        if remove {
-            v.remove(id);
-            self.selected = None;
-        }
-    }
-
     // ---------- Dateien ----------
 
     fn open_dialog(&mut self, ctx: &egui::Context, kind: DialogKind) {
@@ -1116,6 +1052,10 @@ impl VizView {
                 DialogKind::ImportEv2 => rfd::FileDialog::new()
                     .set_title(t("Easy View 2 importieren"))
                     .add_filter(t("Easy View 2 (XML)"), &["xml", "ev2"])
+                    .pick_file(),
+                DialogKind::ImportModel => rfd::FileDialog::new()
+                    .set_title(t("3D-Modell importieren"))
+                    .add_filter(t("glTF-Modell"), &["glb", "gltf"])
                     .pick_file(),
                 DialogKind::LoadVenue => rfd::FileDialog::new()
                     .set_title(t("Veranstaltungsort laden"))
@@ -1140,6 +1080,47 @@ impl VizView {
         self.dialog = Some((kind, rx));
     }
 
+    /// Fertig geladenes Modell in den Ort setzen (an den Blickpunkt).
+    fn poll_model(&mut self, cx: &mut ViewCtx<'_>) {
+        let Some(rx) = &self.model_job else {
+            return;
+        };
+        let Ok(result) = rx.try_recv() else {
+            return;
+        };
+        self.model_job = None;
+        match result {
+            Ok(model) => {
+                let at = self.camera.map_or(Vec3::ZERO, |c| c.target);
+                let v = &mut cx.engine.show_mut().venue;
+                let key = model.content_key();
+                let name = model
+                    .name
+                    .rsplit_once('.')
+                    .map_or(model.name.clone(), |(n, _)| n.to_string());
+                let tris = model.triangles();
+                v.models.entry(key.clone()).or_insert(model);
+                let o = v.object(
+                    &name,
+                    Shape::Model { model: key },
+                    Transform {
+                        position: [at.x, 0.0, at.z],
+                        ..Transform::default()
+                    },
+                    Material::default(),
+                );
+                self.selected = Some(Pick::Object(o.id));
+                v.objects.push(o);
+                cx.state.info(tr!(
+                    "Modell importiert: {n} ({k} Dreiecke)",
+                    n = name,
+                    k = tris
+                ));
+            }
+            Err(e) => cx.state.error(tr!("Import fehlgeschlagen: {e}", e = e)),
+        }
+    }
+
     fn poll_dialog(&mut self, cx: &mut ViewCtx<'_>) {
         let Some((kind, rx)) = &self.dialog else {
             return;
@@ -1154,6 +1135,13 @@ impl VizView {
         };
         let p = path.display().to_string();
         match kind {
+            DialogKind::ImportModel => {
+                let (tx, rx) = channel();
+                std::thread::spawn(move || {
+                    let _ = tx.send(gltf_import::load(&path));
+                });
+                self.model_job = Some(rx);
+            }
             DialogKind::SaveVenue => {
                 let v = &cx.engine.show().venue;
                 match v
@@ -1239,7 +1227,7 @@ impl VizView {
 /// Netz und Skalierung einer Form (`None` = Gruppe).
 fn shape_mesh(s: &Shape) -> Option<(Mat4, MeshKey)> {
     Some(match *s {
-        Shape::Group => return None,
+        Shape::Group | Shape::Model { .. } => return None,
         Shape::Box { size } => (Mat4::from_scale(Vec3::from(size)), MeshKey::Cube),
         Shape::Plane { size } => (
             Mat4::from_scale(Vec3::new(size[0], 1.0, size[1])),
@@ -1271,45 +1259,13 @@ fn renumber(v: &mut Venue, o: &mut Object) {
     }
 }
 
-fn object_tree(
-    ui: &mut egui::Ui,
-    list: &[Object],
-    depth: usize,
-    sel: Option<Pick>,
-    select: &mut Option<u32>,
-    toggle: &mut Option<u32>,
-) {
-    for o in list {
-        ui.horizontal(|ui| {
-            ui.add_space(depth as f32 * 14.0);
-            if ui
-                .add(
-                    IconButton::new(if o.hidden { Icon::EyeOff } else { Icon::Eye })
-                        .size(20.0)
-                        .flat(),
-                )
-                .clicked()
-            {
-                *toggle = Some(o.id);
-            }
-            let active = sel == Some(Pick::Object(o.id));
-            let text = if o.locked {
-                format!("{} ·", o.name)
-            } else {
-                o.name.clone()
-            };
-            if ui.selectable_label(active, text).clicked() {
-                *select = Some(o.id);
-            }
-        });
-        object_tree(ui, &o.children, depth + 1, sel, select, toggle);
-    }
-}
-
 fn vec3_row(ui: &mut egui::Ui, label: &str, v: &mut [f32; 3], speed: f64) {
     ui.horizontal(|ui| {
         ui.label(label);
         for c in v.iter_mut() {
+            if *c == 0.0 {
+                *c = 0.0; // kein „-0.0“ anzeigen
+            }
             ui.add(egui::DragValue::new(c).speed(speed).max_decimals(3));
         }
     });
@@ -1350,89 +1306,6 @@ fn aim_selected(cx: &mut ViewCtx<'_>, sel: Option<Pick>, target: [f32; 3]) {
         let mut p = rig::placement(cx.engine.show(), id);
         p.aim_at(target);
         apply_placement(cx, Pick::Fixture(id), p);
-    }
-}
-
-impl VizView {
-    fn fixture_props(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, id: FixtureId) {
-        let show = cx.engine.show();
-        let Some(f) = show.fixture(id) else {
-            return;
-        };
-        ui.label(theme::heading_text(&f.name));
-        ui.label(
-            egui::RichText::new(format!("U{} · {}", f.universe + 1, f.address))
-                .color(theme::text_dim()),
-        );
-        let auto = f.place3d.is_none();
-        let mut p: Placement = rig::placement(show, id);
-        let before = p;
-        vec3_row(ui, t("Position (m)"), &mut p.position, 0.01);
-        vec3_row(ui, t("Drehung (°)"), &mut p.rotation, 0.5);
-        if p != before {
-            apply_placement(cx, Pick::Fixture(id), p);
-        }
-        let n = targets(cx, self.selected).len();
-        ui.add_space(theme::SP_S);
-        let title = if n > 1 {
-            tr!("Ausrichten ({n} Geräte)", n = n)
-        } else {
-            t("Ausrichten").to_string()
-        };
-        ui.label(theme::heading_text(&title));
-        vec3_row(ui, t("Zielpunkt (m)"), &mut self.aim, 0.05);
-        ui.horizontal_wrapped(|ui| {
-            if ui.button(t("Auf Zielpunkt richten")).clicked() {
-                aim_selected(cx, self.selected, self.aim);
-            }
-            if ui
-                .selectable_label(self.aim_pick, t("Zielpunkt im Bild wählen"))
-                .clicked()
-            {
-                self.aim_pick = !self.aim_pick;
-            }
-            if ui.button(t("Senkrecht nach unten")).clicked() {
-                for fid in targets(cx, self.selected) {
-                    let mut p = rig::placement(cx.engine.show(), fid);
-                    p.rotation = [0.0; 3];
-                    apply_placement(cx, Pick::Fixture(fid), p);
-                }
-            }
-        });
-        let has_truss = cx
-            .engine
-            .show()
-            .venue
-            .flatten()
-            .iter()
-            .any(|(o, _)| matches!(o.shape, Shape::Truss { .. }));
-        if ui
-            .add_enabled(
-                has_truss,
-                egui::Button::new(t("An nächste Traverse hängen")),
-            )
-            .clicked()
-        {
-            for fid in targets(cx, self.selected) {
-                let mut p = rig::placement(cx.engine.show(), fid);
-                if let Some(h) = cx.engine.show().venue.nearest_truss(p.position) {
-                    p.position = h.point;
-                    apply_placement(cx, Pick::Fixture(fid), p);
-                }
-            }
-        }
-        ui.add_space(theme::SP_S);
-        if ui
-            .add_enabled(
-                !auto,
-                egui::Button::new(t("Automatisch (aus dem Bühnenplan)")),
-            )
-            .clicked()
-        {
-            if let Some(fm) = cx.engine.show_mut().fixture_mut(id) {
-                fm.place3d = None;
-            }
-        }
     }
 }
 
@@ -1494,6 +1367,25 @@ fn ray_aabb_exit(o: Vec3, d: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn euler_matches_core_rotation() {
+        for r in [
+            [0.0, 0.0, 0.0],
+            [30.0, 0.0, 0.0],
+            [10.0, 20.0, 30.0],
+            [-45.0, 60.0, 120.0],
+        ] {
+            let m = glam::Mat3::from_cols_array_2d(&venue::rotation(r));
+            let q = glam::Mat3::from_quat(quat_deg(r));
+            assert!(m.abs_diff_eq(q, 1e-5), "{r:?}");
+            let back = deg_quat(quat_deg(r));
+            assert!(
+                glam::Mat3::from_quat(quat_deg(back)).abs_diff_eq(m, 1e-3),
+                "{r:?} → {back:?}"
+            );
+        }
+    }
 
     #[test]
     fn proposals_for_easy_view_names() {

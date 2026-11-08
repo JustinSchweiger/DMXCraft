@@ -304,7 +304,6 @@ impl DmxCraftApp {
                 }
             }
             MenuAction::Visualizer => {
-                self.state.mode = Mode::Visual;
                 self.state.viz_window = !self.state.viz_window;
             }
             MenuAction::ProfileBuilder => {
@@ -816,26 +815,6 @@ impl eframe::App for DmxCraftApp {
                         .frame(area)
                         .show(ui, |ui| control.grid.ui(ui, &mut cx));
                 }
-                Mode::Visual => {
-                    let viz = &mut self.viz;
-                    egui::CentralPanel::default_margins()
-                        .frame(area)
-                        .show(ui, |ui| {
-                            if cx.state.viz_window {
-                                // läuft im eigenen Fenster
-                                ui.centered_and_justified(|ui| {
-                                    if ui
-                                        .button(t("Der 3D-Visualisierer läuft im eigenen Fenster – hier zurückholen"))
-                                        .clicked()
-                                    {
-                                        cx.state.viz_window = false;
-                                    }
-                                });
-                            } else {
-                                viz.ui(ui, &mut cx, rs.as_ref(), false);
-                            }
-                        });
-                }
             }
             edit_preview(cx.engine, cx.state);
             cx.engine.set_timeline_cursor(cx.state.timeline_cursor);
@@ -904,6 +883,18 @@ impl eframe::App for DmxCraftApp {
             self.settings.viz_quality = self.state.viz_quality.key();
             self.save_settings();
         }
+        if let Some(undo) = self.state.history_request.take() {
+            self.apply_menu(
+                &ctx,
+                if undo {
+                    MenuAction::Undo
+                } else {
+                    MenuAction::Redo
+                },
+            );
+        }
+        self.state.can_undo = self.history.can_undo();
+        self.state.can_redo = self.history.can_redo();
         self.dialogs(&ctx);
         self.lock_window(&ctx);
         titlebar::resize_handles(&ctx, self.fullscreen.is_on());
