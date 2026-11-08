@@ -12,6 +12,10 @@ pub enum Mode {
     Control,
     /// Touch-Oberfläche (frei angeordnete Bedienelemente).
     Touch,
+    /// 3D-Visualisierer als Reiter (Einstellung „Tools als Reiter“).
+    Visualizer,
+    /// Profile Builder als Reiter (Einstellung „Tools als Reiter“).
+    Builder,
 }
 
 /// Formular „Geräte hinzufügen“ (geteilt zwischen Patch und Gerätebibliothek).

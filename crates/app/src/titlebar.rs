@@ -37,6 +37,8 @@ pub struct TitleInfo<'a> {
     pub audio: AudioInfo,
     /// Anzahl fehlender Audiodateien (rotes Ausrufezeichen).
     pub missing_audio: usize,
+    /// 3D-Visualisierer und Profile Builder als Reiter.
+    pub tools_as_tabs: bool,
 }
 
 /// Zustand des Ton-Masters für die Titelleiste.
@@ -147,17 +149,19 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
         ui.add_space(6.0);
         main_menu(ui, info, &mut actions);
         ui.add_space(theme::SP_XS);
-        if info.locked {
-            Segmented::new(&[(Mode::Control, t("Steuern")), (Mode::Touch, t("Touch"))])
-                .show(ui, mode);
-        } else {
-            Segmented::new(&[
-                (Mode::Setup, t("Einrichten")),
-                (Mode::Control, t("Steuern")),
-                (Mode::Touch, t("Touch")),
-            ])
-            .show(ui, mode);
+        let mut tabs: Vec<(Mode, &str)> = Vec::new();
+        if !info.locked {
+            tabs.push((Mode::Setup, t("Einrichten")));
         }
+        tabs.push((Mode::Control, t("Steuern")));
+        tabs.push((Mode::Touch, t("Touch")));
+        if info.tools_as_tabs {
+            tabs.push((Mode::Visualizer, t("3D-Visualisierer")));
+            if !info.locked {
+                tabs.push((Mode::Builder, t("Profile Builder")));
+            }
+        }
+        Segmented::new(&tabs).show(ui, mode);
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;

@@ -597,6 +597,15 @@ fn customize(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
             "Aus: schlichte Schienen; die Bezeichnung erscheint weiter beim Bewegen",
         ))
         .changed();
+    ch.save |= ui
+        .add(Toggle::new(
+            &mut s.tools_as_tabs,
+            t("3D-Visualisierer und Profile Builder als Reiter in der Titelleiste"),
+        ))
+        .on_hover_text(t(
+            "Zusätzlich zu Einrichten, Steuern und Touch; über den Knopf im Reiter lassen sie sich weiterhin im eigenen Fenster öffnen",
+        ))
+        .changed();
 }
 
 /// Start: was beim Programmstart passiert.

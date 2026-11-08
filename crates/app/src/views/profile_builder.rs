@@ -120,21 +120,22 @@ impl ProfileBuilder {
         self.draft != self.saved
     }
 
-    /// Anfrage aus Menü oder Bibliothek.
-    pub fn request(&mut self, req: BuilderRequest) {
-        self.raise = true;
+    /// Anfrage aus Menü oder Bibliothek. `window`: im eigenen Fenster öffnen
+    /// (sonst nur den Entwurf laden – für den Reiter).
+    pub fn request(&mut self, req: BuilderRequest, window: bool) {
+        self.raise = window;
         let next = match req {
             BuilderRequest::Open => {
-                if !self.open && self.draft == Profile::default() {
+                if self.draft == Profile::default() {
                     self.load(new_profile(), true);
                 }
-                self.open = true;
+                self.open |= window;
                 return;
             }
             BuilderRequest::New => new_profile(),
             BuilderRequest::Edit(p) | BuilderRequest::Template(p) => *p,
         };
-        self.open = true;
+        self.open |= window;
         if self.dirty() && self.draft != Profile::default() {
             self.pending = Some(next);
         } else {
@@ -164,6 +165,15 @@ impl ProfileBuilder {
         self.open = false;
     }
 
+    /// Im eigenen Fenster öffnen (aus dem Reiter heraus).
+    pub fn open_window(&mut self) {
+        if self.draft == Profile::default() {
+            self.load(new_profile(), true);
+        }
+        self.open = true;
+        self.raise = true;
+    }
+
     /// Fenstertitel (mit * bei ungespeicherten Änderungen).
     pub fn title(&self) -> String {
         let name = self.draft.display_name();
@@ -181,6 +191,18 @@ impl ProfileBuilder {
 
     /// Inhalt des eigenen Fensters: Reiter links, Inhalt, Fußzeile.
     pub fn window(&mut self, root: &mut Ui, engine: &mut Engine, st: &mut AppState) {
+        self.body(root, engine, st, false);
+    }
+
+    /// Inhalt im Reiter der Titelleiste (statt „Schließen“: „Im Fenster öffnen“).
+    pub fn embedded(&mut self, root: &mut Ui, engine: &mut Engine, st: &mut AppState) {
+        if self.draft == Profile::default() {
+            self.load(new_profile(), true);
+        }
+        self.body(root, engine, st, true);
+    }
+
+    fn body(&mut self, root: &mut Ui, engine: &mut Engine, st: &mut AppState, embedded: bool) {
         let ctx = &root.ctx().clone();
         self.poll_file(st);
         if std::mem::take(&mut self.raise) {
@@ -216,7 +238,15 @@ impl ProfileBuilder {
                 row.spacing_mut().item_spacing = vec2(theme::SP_S, 0.0);
                 let buttons = [
                     (t("Speichern"), true, 3),
-                    (t("Schließen"), false, 2),
+                    (
+                        if embedded {
+                            t("Im Fenster öffnen")
+                        } else {
+                            t("Schließen")
+                        },
+                        false,
+                        2,
+                    ),
                     (t("Exportieren …"), false, 1),
                     (t("Importieren …"), false, 0),
                 ];
@@ -261,7 +291,13 @@ impl ProfileBuilder {
         match clicked {
             Some(0) => self.file = Some((FileJob::Import, pick_import(ctx))),
             Some(1) => self.file = Some((FileJob::Export, pick_export(ctx, &self.draft))),
-            Some(2) => self.open = false,
+            Some(2) => {
+                if embedded {
+                    self.open_window();
+                } else {
+                    self.open = false;
+                }
+            }
             Some(3) => self.save(engine, st),
             _ => {}
         }

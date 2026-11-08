@@ -321,7 +321,11 @@ impl DmxCraftApp {
                 }
             }
             MenuAction::Visualizer => {
-                self.state.viz_window = !self.state.viz_window;
+                if self.settings.tools_as_tabs && !self.state.viz_window {
+                    self.state.mode = Mode::Visualizer;
+                } else {
+                    self.state.viz_window = !self.state.viz_window;
+                }
             }
             MenuAction::ProfileBuilder => {
                 self.state.builder = Some(crate::views::profile_builder::BuilderRequest::Open);
@@ -796,6 +800,7 @@ impl eframe::App for DmxCraftApp {
             message: message.as_ref().map(|(m, e)| (m.as_str(), *e)),
             update,
             mapping: self.state.mapping,
+            tools_as_tabs: self.settings.tools_as_tabs,
             audio: titlebar::AudioInfo {
                 master: self.state.audio.master,
                 mute: self.state.audio.mute,
@@ -853,7 +858,47 @@ impl eframe::App for DmxCraftApp {
             let area = egui::Frame::new()
                 .fill(theme::surface())
                 .inner_margin(egui::Margin::same(6));
+            // Reiter der Tools nur mit der Einstellung (Builder nicht gesperrt)
+            let tool_tab = match cx.state.mode {
+                Mode::Visualizer => true,
+                Mode::Builder => !cx.state.locked,
+                _ => false,
+            };
+            if matches!(cx.state.mode, Mode::Visualizer | Mode::Builder)
+                && !(self.settings.tools_as_tabs && tool_tab)
+            {
+                cx.state.mode = Mode::Control;
+            }
             match cx.state.mode {
+                Mode::Visualizer => {
+                    egui::CentralPanel::default_margins()
+                        .frame(area)
+                        .show(ui, |ui| {
+                            if cx.state.viz_window {
+                                if moved_out(ui, t("Der 3D-Visualisierer ist in einem eigenen Fenster geöffnet.")) {
+                                    cx.state.viz_window = false;
+                                }
+                            } else {
+                                self.viz.ui(ui, &mut cx, rs.as_ref(), false);
+                            }
+                        });
+                }
+                Mode::Builder => {
+                    if self.builder.is_open() {
+                        egui::CentralPanel::default_margins()
+                            .frame(area)
+                            .show(ui, |ui| {
+                                if moved_out(
+                                    ui,
+                                    t("Der Profile Builder ist in einem eigenen Fenster geöffnet."),
+                                ) {
+                                    self.builder.close();
+                                }
+                            });
+                    } else {
+                        self.builder.embedded(ui, cx.engine, cx.state);
+                    }
+                }
                 Mode::Setup => {
                     egui::CentralPanel::default_margins()
                         .frame(egui::Frame::new().fill(theme::surface()))
@@ -976,7 +1021,13 @@ impl eframe::App for DmxCraftApp {
         }
         // Profile Builder im eigenen Fenster
         if let Some(req) = self.state.builder.take() {
-            self.builder.request(req);
+            // als Reiter: dort öffnen, außer das Fenster ist schon offen
+            if self.settings.tools_as_tabs && !self.builder.is_open() {
+                self.builder.request(req, false);
+                self.state.mode = Mode::Builder;
+            } else {
+                self.builder.request(req, true);
+            }
         }
         if self.state.locked {
             self.builder.close();
@@ -1185,4 +1236,21 @@ fn load_step(e: &mut Engine, id: SceneId, i: usize) {
             v.value,
         );
     }
+}
+
+/// Platzhalter im Reiter, wenn das Tool im eigenen Fenster läuft. `true`, wenn
+/// es in den Reiter zurückgeholt werden soll.
+fn moved_out(ui: &mut egui::Ui, text: &str) -> bool {
+    let mut back = false;
+    ui.vertical_centered(|ui| {
+        ui.add_space(ui.available_height() * 0.38);
+        ui.label(
+            egui::RichText::new(text)
+                .color(theme::text_dim())
+                .size(theme::FS_TITLE),
+        );
+        ui.add_space(theme::SP_M);
+        back = ui.button(t("Hier anzeigen")).clicked();
+    });
+    back
 }

@@ -1299,4 +1299,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Zum Kamerapunkt „{name}“ fahren{key}\nRechtsklick: überschreiben, umbenennen, löschen", "Move to camera point “{name}”{key}\nRight-click: overwrite, rename, delete"),
     ("Kamera", "Camera"),
     ("Kamerapunkte (Taste 1–9)", "Camera points (keys 1–9)"),
+    ("Der 3D-Visualisierer ist in einem eigenen Fenster geöffnet.", "The 3D visualizer is open in its own window."),
+    ("Der Profile Builder ist in einem eigenen Fenster geöffnet.", "The Profile Builder is open in its own window."),
+    ("Hier anzeigen", "Show here"),
+    ("Im Fenster öffnen", "Open in window"),
+    ("3D-Visualisierer und Profile Builder als Reiter in der Titelleiste", "3D visualizer and Profile Builder as tabs in the title bar"),
+    ("Zusätzlich zu Einrichten, Steuern und Touch; über den Knopf im Reiter lassen sie sich weiterhin im eigenen Fenster öffnen", "In addition to Setup, Control and Touch; the button in the tab still opens them in their own window"),
 ];

@@ -42,6 +42,9 @@ pub struct Settings {
     pub mcp_port: u16,
     /// Touch-Fernbedienung im lokalen Netz (Web-App für Smartphone/Tablet).
     pub remote_enabled: bool,
+    /// 3D-Visualisierer und Profile Builder zusätzlich als Reiter in der
+    /// Titelleiste (statt nur als Fenster).
+    pub tools_as_tabs: bool,
     /// Port der Fernbedienung (http://<rechner>:<port>).
     pub remote_port: u16,
     /// Optionale PIN der Fernbedienung (leer = ohne).
@@ -80,6 +83,7 @@ impl Default for Settings {
             mcp_enabled: false,
             mcp_port: dmxcraft_mcp::DEFAULT_PORT,
             remote_enabled: false,
+            tools_as_tabs: false,
             remote_port: crate::remote::DEFAULT_PORT,
             remote_pin: String::new(),
             audio_reset_on_start: true,
