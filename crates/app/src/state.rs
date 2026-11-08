@@ -61,6 +61,9 @@ pub struct AppState {
     pub can_redo: bool,
     /// Ansicht bittet um Rückgängig (`true`) bzw. Wiederholen (`false`).
     pub history_request: Option<bool>,
+    /// In einem eigenen Fenster (3D, Profile Builder) wird gerade gezogen
+    /// oder getippt – Rückgängig übernimmt erst danach einen Schritt.
+    pub viewport_busy: bool,
     pub timeline_cursor: f64,
     /// Audiowiedergabe und Wellenformen.
     pub audio: crate::audio::AudioPlayer,
@@ -144,6 +147,7 @@ impl AppState {
             can_undo: false,
             can_redo: false,
             history_request: None,
+            viewport_busy: false,
             timeline_cursor: 0.0,
             audio: Default::default(),
             patch: PatchForm {

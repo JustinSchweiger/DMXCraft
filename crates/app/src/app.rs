@@ -829,6 +829,7 @@ impl eframe::App for DmxCraftApp {
             cx.engine.set_timeline_cursor(cx.state.timeline_cursor);
             cx.state.audio.update(cx.engine);
         }
+        self.state.viewport_busy = false;
         // 3D-Visualisierer im eigenen Fenster (z. B. auf dem zweiten Bildschirm)
         if self.state.viz_window {
             let engine = self.engine.clone();
@@ -856,6 +857,7 @@ impl eframe::App for DmxCraftApp {
                             };
                             viz.ui(ui, &mut cx, rs.as_ref(), true);
                         });
+                    viewport_input(vctx, state, true);
                     if vctx.input(|i| i.viewport().close_requested()) {
                         state.viz_window = false;
                     }
@@ -882,6 +884,7 @@ impl eframe::App for DmxCraftApp {
                 |vctx, _class| {
                     let mut e = Self::lock(&engine);
                     builder.window(vctx, &mut e, state);
+                    viewport_input(vctx, state, false);
                     if vctx.input(|i| i.viewport().close_requested()) {
                         builder.close();
                     }
@@ -909,8 +912,36 @@ impl eframe::App for DmxCraftApp {
         titlebar::resize_handles(&ctx, self.fullscreen.is_on());
 
         // Rückgängig: Änderungen erst übernehmen, wenn Ziehen/Tippen beendet ist.
-        let busy = ctx.input(|i| i.pointer.any_down()) || ctx.memory(|m| m.focused().is_some());
+        let busy = ctx.input(|i| i.pointer.any_down())
+            || ctx.memory(|m| m.focused().is_some())
+            || self.state.viewport_busy;
         self.history.track(&Self::lock(&self.engine), busy);
+    }
+}
+
+/// Eingaben eines eigenen Fensters: Ziehen/Tippen dort zählt für den
+/// Verlauf als „beschäftigt“ (sonst würde jeder Zwischenstand eines Ziehens
+/// ein eigener Rückgängig-Schritt), und Strg+Z / Strg+Y / Strg+Umschalt+Z
+/// wirken auch dort.
+fn viewport_input(ui: &mut egui::Ui, state: &mut AppState, undo_keys: bool) {
+    use egui::{Key, Modifiers};
+    let typing = ui.memory(|m| m.focused().is_some());
+    state.viewport_busy |= typing || ui.input(|i| i.pointer.any_down());
+    if !undo_keys || typing || state.locked {
+        return;
+    }
+    let cmd = Modifiers::COMMAND;
+    let request = ui.input_mut(|i| {
+        if i.consume_key(cmd | Modifiers::SHIFT, Key::Z) || i.consume_key(cmd, Key::Y) {
+            Some(false)
+        } else if i.consume_key(cmd, Key::Z) {
+            Some(true)
+        } else {
+            None
+        }
+    });
+    if request.is_some() {
+        state.history_request = request;
     }
 }
 

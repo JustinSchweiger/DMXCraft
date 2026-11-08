@@ -574,6 +574,7 @@ impl ScenePropsView {
         let mut step_clicked = false;
         let mut toggle = None;
         let mut select = None;
+        let mut menu_delete = None;
         ui.allocate_ui(Vec2::new(ui.available_width(), list_h), |ui| {
             egui::ScrollArea::vertical()
                 .id_salt("fx_list")
@@ -586,6 +587,30 @@ impl ScenePropsView {
                         }
                         if head.clicked() {
                             select = Some(fx.id);
+                        }
+                        if !locked {
+                            crate::ui::widgets::menu::context(&head, |ui| {
+                                use crate::ui::widgets::menu::{self, MenuItem};
+                                menu::begin(ui);
+                                menu::title(ui, fx.kind.label());
+                                let collapse = if fx.collapsed {
+                                    t("Ausklappen")
+                                } else {
+                                    t("Einklappen")
+                                };
+                                if menu::item(ui, MenuItem::new(collapse)) {
+                                    toggle = Some(fx.id);
+                                }
+                                menu::separator(ui);
+                                if menu::item(
+                                    ui,
+                                    MenuItem::new(t("Effekt löschen"))
+                                        .icon(Icon::Trash)
+                                        .danger(),
+                                ) {
+                                    menu_delete = Some(fx.id);
+                                }
+                            });
                         }
                         if !fx.collapsed {
                             let is_steps = fx.kind == EffectKind::Steps;
@@ -707,6 +732,14 @@ impl ScenePropsView {
                 fx.collapsed = !fx.collapsed;
             }
         }
+        // Kontextmenü „Effekt löschen“
+        if let (Some(f), false) = (menu_delete, locked) {
+            if let Some(scene) = cx.engine.show_mut().scene_mut(id) {
+                self.selected_fx = remove_effect(scene, f, cx.state).map(|e| (id, e));
+                cx.state.focus = crate::state::Focus::Scenes;
+            }
+            return;
+        }
 
         // Werkzeugleiste: feste Leiste am unteren Rand, Knöpfe mittig
         ui.painter().line_segment(
@@ -783,20 +816,7 @@ impl ScenePropsView {
                     } else if let (Some(f), Some(scene)) =
                         (selected, cx.engine.show_mut().scene_mut(id))
                     {
-                        let was_steps = scene
-                            .effects
-                            .iter()
-                            .any(|e| e.id == f && e.kind == EffectKind::Steps);
-                        // keine Effekte mehr -> wieder STATIC
-                        scene.effects.retain(|e| e.id != f);
-                        if was_steps {
-                            // mit STEPS verschwinden auch alle Schritte samt
-                            // Werten: übrig bleibt eine leere STATIC-Szene
-                            scene.steps = vec![dmxcraft_core::Step::new(Vec::new())];
-                            cx.state.edit_step = 0;
-                            cx.state.edit_reload = true;
-                        }
-                        self.selected_fx = scene.effects.last().map(|e| (id, e.id));
+                        self.selected_fx = remove_effect(scene, f, cx.state).map(|e| (id, e));
                         cx.state.focus = crate::state::Focus::Scenes;
                     }
                 }
@@ -1301,6 +1321,32 @@ fn steps_table(
 }
 
 /// Kopfzeile eines Effekts: Zuklapp-Pfeil, Name; Antwort für Auswahl und Pfeil.
+/// Effekt aus der Szene entfernen. Gibt den danach ausgewählten Effekt
+/// zurück (den letzten verbliebenen).
+fn remove_effect(
+    scene: &mut dmxcraft_core::Scene,
+    f: u32,
+    state: &mut crate::state::AppState,
+) -> Option<u32> {
+    let was_steps = scene
+        .effects
+        .iter()
+        .any(|e| e.id == f && e.kind == EffectKind::Steps);
+    // keine Effekte mehr -> wieder STATIC
+    scene.effects.retain(|e| e.id != f);
+    if was_steps {
+        // mit STEPS verschwinden auch alle Schritte samt Werten: übrig bleibt
+        // eine leere STATIC-Szene
+        scene.steps = vec![dmxcraft_core::Step::new(Vec::new())];
+        state.edit_step = 0;
+        state.edit_reload = true;
+    }
+    if state.fx_target.is_some_and(|(_, e)| e == f) {
+        state.fx_target = None;
+    }
+    scene.effects.last().map(|e| e.id)
+}
+
 fn effect_header(
     ui: &mut egui::Ui,
     fx: &Effect,

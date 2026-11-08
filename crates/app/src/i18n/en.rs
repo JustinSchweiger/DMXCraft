@@ -1078,4 +1078,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Kanal duplizieren", "Duplicate channel"),
     ("Kanal löschen", "Delete channel"),
     ("Grenze ziehen oder oben/unten klicken (±1)", "Drag the boundary or click top/bottom (±1)"),
+    ("Ausklappen", "Expand"),
+    ("Effekt löschen", "Delete effect"),
 ];
