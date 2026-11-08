@@ -23,6 +23,7 @@ use crate::state::AppState;
 use crate::ui::theme;
 use crate::ui::widgets::dialog::FooterButton;
 use crate::ui::widgets::dialog::INPUT_H;
+use crate::ui::widgets::fader::{kind_color, paint_symbol};
 use crate::ui::widgets::{form, text_field, Dialog, Icon, IconButton, Segmented};
 
 const SIDEBAR_W: f32 = 170.0;
@@ -100,6 +101,10 @@ pub struct ProfileBuilder {
     /// Stand beim Laden/Speichern (für „ungespeichert“).
     saved: Profile,
     sel_channel: usize,
+    /// Ausgewählter Bereich im ausgewählten Kanal.
+    sel_range: usize,
+    /// Ziehen an einer Bereichsgrenze: noch nicht verbrauchte Pixel.
+    drag_acc: f32,
     sel_mode: usize,
     /// Wartet auf Bestätigung: ungespeicherte Änderungen verwerfen?
     pending: Option<Profile>,
@@ -147,6 +152,7 @@ impl ProfileBuilder {
         self.draft = p;
         self.tab = Tab::General;
         self.sel_channel = 0;
+        self.sel_range = 0;
         self.sel_mode = 0;
     }
 
@@ -400,24 +406,62 @@ impl ProfileBuilder {
     // ------------------------------------------------------------ Kanäle
 
     fn channels_tab(&mut self, ui: &mut Ui, rect: Rect) {
-        let (list_rect, detail_rect) = split(rect);
+        // drei Spalten: Kanäle | Bereiche | Eigenschaften
+        let gap = theme::SP_L;
+        let list_w = (rect.width() * 0.3).clamp(240.0, 380.0);
+        let props_w = (rect.width() * 0.34).clamp(320.0, 480.0);
+        let list = Rect::from_min_size(rect.min, vec2(list_w, rect.height()));
+        let props = Rect::from_min_max(pos2(rect.right() - props_w, rect.top()), rect.max);
+        let ranges = Rect::from_min_max(
+            pos2(list.right() + gap, rect.top()),
+            pos2(props.left() - gap, rect.bottom()),
+        );
+        self.channel_list(ui, list);
+        separator_v(ui, list.right() + gap / 2.0, rect);
+        if self.sel_channel >= self.draft.channels.len() {
+            return;
+        }
+        separator_v(ui, props.left() - gap / 2.0, rect);
+        self.range_stack(ui, ranges);
+        self.channel_props(ui, props);
+    }
+
+    /// Linke Spalte: Kanäle als Karten mit Symbol, Name und Art.
+    fn channel_list(&mut self, ui: &mut Ui, rect: Rect) {
         let p = &mut self.draft;
-        // Liste links
-        let mut lui = ui.new_child(egui::UiBuilder::new().max_rect(list_rect));
+        let mut lui = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         let mut action: Option<ListAction> = None;
-        list_header(&mut lui, t("Kanal hinzufügen"), || {
-            action = Some(ListAction::Add)
+        lui.horizontal(|ui| {
+            ui.set_height(ROW_H);
+            ui.label(theme::heading_text(t("Kanäle")));
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui
+                    .add(IconButton::new(Icon::Plus))
+                    .on_hover_text(t("Kanal hinzufügen"))
+                    .clicked()
+                {
+                    action = Some(ListAction::Add);
+                }
+            });
         });
+        lui.add_space(theme::SP_XS);
         egui::ScrollArea::vertical()
             .id_salt("builder_channels")
             .auto_shrink([false, false])
             .show(&mut lui, |ui| {
+                ui.spacing_mut().item_spacing.y = theme::SP_XS;
                 for (i, c) in p.channels.iter().enumerate() {
-                    let kind = t(c.kind().label());
+                    let kind = c.kind();
+                    let sub = if c.fine > 0 {
+                        format!("{} · {} Bit", t(kind.label()), 8 * (u32::from(c.fine) + 1))
+                    } else {
+                        t(kind.label()).to_string()
+                    };
                     let name = if c.name.is_empty() { "–" } else { &c.name };
-                    let r = list_row(ui, i == self.sel_channel, name, kind);
-                    if r.clicked() {
+                    let r = card_row(ui, i == self.sel_channel, i + 1, kind, name, &sub);
+                    if r.clicked() && self.sel_channel != i {
                         self.sel_channel = i;
+                        self.sel_range = 0;
                     }
                     crate::ui::widgets::menu::context(&r, |ui| {
                         use crate::ui::widgets::menu::{self, MenuItem};
@@ -432,6 +476,11 @@ impl ProfileBuilder {
                     });
                 }
             });
+        self.apply_channel_action(action);
+    }
+
+    fn apply_channel_action(&mut self, action: Option<ListAction>) {
+        let p = &mut self.draft;
         match action {
             Some(ListAction::Add) => {
                 let name = unique(&p.available_names(), t("Kanal"));
@@ -440,6 +489,7 @@ impl ProfileBuilder {
                     ..ProfileChannel::default()
                 });
                 self.sel_channel = p.channels.len() - 1;
+                self.sel_range = 0;
                 self.focus_name = true;
             }
             Some(ListAction::Duplicate(i)) => {
@@ -452,92 +502,250 @@ impl ProfileBuilder {
             Some(ListAction::Remove(i)) => {
                 p.remove_channel(i);
                 self.sel_channel = self.sel_channel.min(p.channels.len().saturating_sub(1));
+                self.sel_range = 0;
             }
             None => {}
         }
-        separator_v(ui, list_rect.right() + theme::SP_S, rect);
-
-        let i = self.sel_channel;
-        if i >= self.draft.channels.len() {
-            return;
-        }
-        let mut dui = ui.new_child(
-            egui::UiBuilder::new()
-                .max_rect(detail_rect)
-                .layout(Layout::top_down(Align::Min)),
-        );
-        egui::ScrollArea::vertical()
-            .id_salt(("builder_channel_detail", i))
-            .auto_shrink([false, false])
-            .show(&mut dui, |ui| {
-                ui.set_width(detail_rect.width() - theme::SP_S);
-                self.channel_detail(ui, i);
-            });
     }
 
-    fn channel_detail(&mut self, ui: &mut Ui, i: usize) {
-        let focus = std::mem::take(&mut self.focus_name);
-        let p = &mut self.draft;
-        form(ui, "builder_channel", |f| {
-            f.row(t("Name"), |ui| {
-                let mut name = p.channels[i].name.clone();
-                let r = ui.add(text_field(&mut name).desired_width(f32::INFINITY));
-                if focus {
-                    r.request_focus();
-                    crate::ui::widgets::dialog::select_all(ui.ctx(), r.id, &name);
-                }
-                if name != p.channels[i].name {
-                    p.rename_channel(i, &name);
-                }
-            });
-            f.row(t("Auflösung"), |ui| {
-                let mut fine = p.channels[i].fine;
-                let items = [(0u8, "8 Bit"), (1, "16 Bit"), (2, "24 Bit")];
-                if Segmented::new(&items).show(ui, &mut fine) {
-                    p.set_fine(i, fine);
-                }
-            });
-            f.row(t("Standardwert"), |ui| {
-                ui.add(egui::DragValue::new(&mut p.channels[i].default).range(0..=255))
-                    .on_hover_text(t("Wert, solange keine Szene den Kanal setzt"));
-            });
-            f.row(t("Erkannt als"), |ui| {
-                ui.label(t(p.channels[i].kind().label()));
-            });
-        });
-        ui.add_space(theme::SP_M);
-        let ch = &mut p.channels[i];
+    /// Mittlere Spalte: Bereiche als Stapel von 0 (oben) bis 255 (unten).
+    /// Die Grenzen lassen sich ziehen oder mit den Pfeilen um 1 verschieben.
+    fn range_stack(&mut self, ui: &mut Ui, rect: Rect) {
+        let i = self.sel_channel;
+        let mut rui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(rect)
+                .layout(Layout::top_down(Align::Min)),
+        );
+        let ch = &mut self.draft.channels[i];
         ch.normalize_ranges();
-        ui.horizontal(|ui| {
-            ui.label(theme::heading_text(t("Funktionen")));
+        let mut add = false;
+        rui.horizontal(|ui| {
+            ui.set_height(ROW_H);
+            ui.label(theme::heading_text(t("Bereiche")));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
                     .add(IconButton::new(Icon::Plus).enabled(ch.capabilities.len() < 256))
                     .on_hover_text(t("Bereich hinzufügen"))
                     .clicked()
                 {
-                    ch.add_range();
+                    add = true;
                 }
             });
         });
-        ui.add_space(theme::SP_XS);
-        range_bar(ui, ch);
-        ui.add_space(theme::SP_S);
-        let count = ch.capabilities.len();
-        let mut action = None;
-        for ci in 0..count {
-            let last = ci + 1 == count;
-            match capability_card(ui, (i, ci), &mut ch.capabilities[ci], last, count > 1) {
-                CardAction::None => {}
-                a => action = Some((ci, a)),
-            }
-            ui.add_space(theme::SP_XS);
+        rui.add_space(theme::SP_XS);
+        if add {
+            ch.add_range();
+            self.sel_range = ch.capabilities.len() - 1;
         }
-        match action {
-            Some((ci, CardAction::End(v))) => ch.set_range_end(ci, v),
-            Some((ci, CardAction::Remove)) => ch.remove_range(ci),
-            _ => {}
+        self.sel_range = self.sel_range.min(ch.capabilities.len() - 1);
+        let avail_h = rui.available_height() - theme::SP_S;
+        let px_per_value = (avail_h / 256.0).max(1.0);
+        let mut op: Option<(usize, i32)> = None;
+        let mut select = None;
+        egui::ScrollArea::vertical()
+            .id_salt(("builder_ranges", i))
+            .auto_shrink([false, false])
+            .show(&mut rui, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                let full_w = ui.available_width();
+                let label_w = 36.0;
+                let mut blocks = Vec::new();
+                for (ci, cap) in ch.capabilities.iter().enumerate() {
+                    let width = f32::from(cap.end - cap.start) + 1.0;
+                    let h = (width * px_per_value).max(RANGE_MIN_H);
+                    let (row, _) = ui.allocate_exact_size(vec2(full_w, h), Sense::hover());
+                    let block = Rect::from_min_max(pos2(row.left() + label_w, row.top()), row.max);
+                    let resp =
+                        ui.interact(block, ui.scope_id().with(("range", ci)), Sense::click());
+                    if resp.clicked() {
+                        select = Some(ci);
+                    }
+                    paint_range_block(ui, block, cap, ci == self.sel_range, resp.hovered());
+                    // Wertgrenzen links
+                    let p = ui.painter();
+                    p.text(
+                        pos2(row.left() + label_w - 6.0, row.top() + 2.0),
+                        Align2::RIGHT_TOP,
+                        cap.start.to_string(),
+                        theme::caption(),
+                        theme::text_dim(),
+                    );
+                    if cap.end > cap.start {
+                        p.text(
+                            pos2(row.left() + label_w - 6.0, row.bottom() - 2.0),
+                            Align2::RIGHT_BOTTOM,
+                            cap.end.to_string(),
+                            theme::caption(),
+                            theme::text_faint(),
+                        );
+                    }
+                    blocks.push(block);
+                }
+                // Griffe an den Grenzen (nicht nach dem letzten Bereich)
+                for (ci, block) in blocks
+                    .iter()
+                    .enumerate()
+                    .take(blocks.len().saturating_sub(1))
+                {
+                    let handle = Rect::from_center_size(
+                        pos2(block.center().x, block.bottom()),
+                        vec2(26.0, 30.0),
+                    );
+                    let id = ui.scope_id().with(("range_handle", ci));
+                    let resp = ui.interact(handle, id, Sense::click_and_drag());
+                    paint_handle(ui, handle, resp.hovered() || resp.dragged());
+                    if resp.hovered() || resp.dragged() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                    }
+                    if resp.drag_started() {
+                        self.drag_acc = 0.0;
+                    }
+                    if resp.dragged() {
+                        self.drag_acc += resp.drag_delta().y;
+                        let steps = (self.drag_acc / px_per_value).trunc();
+                        if steps != 0.0 {
+                            self.drag_acc -= steps * px_per_value;
+                            op = Some((ci, steps as i32));
+                        }
+                    } else if resp.clicked() {
+                        let up = resp
+                            .interact_pointer_pos()
+                            .is_some_and(|p| p.y < handle.center().y);
+                        op = Some((ci, if up { -1 } else { 1 }));
+                    }
+                    resp.on_hover_text(t("Grenze ziehen oder oben/unten klicken (±1)"));
+                }
+            });
+        if let Some(ci) = select {
+            self.sel_range = ci;
         }
+        if let Some((ci, delta)) = op {
+            let end = (i32::from(ch.capabilities[ci].end) + delta).clamp(0, 254) as u8;
+            ch.set_range_end(ci, end);
+        }
+    }
+
+    /// Rechte Spalte: Kanal- und Bereichseigenschaften, Aktionen.
+    fn channel_props(&mut self, ui: &mut Ui, rect: Rect) {
+        let i = self.sel_channel;
+        let focus = std::mem::take(&mut self.focus_name);
+        let mut pui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(rect)
+                .layout(Layout::top_down(Align::Min)),
+        );
+        let mut channel_action = None;
+        let mut remove_range = false;
+        egui::ScrollArea::vertical()
+            .id_salt("builder_channel_props")
+            .auto_shrink([false, false])
+            .show(&mut pui, |ui| {
+                ui.set_width(rect.width() - theme::SP_S);
+                let p = &mut self.draft;
+                ui.horizontal(|ui| {
+                    ui.set_height(ROW_H);
+                    ui.label(theme::heading_text(t("Kanal")));
+                });
+                form(ui, "builder_channel", |f| {
+                    f.row(t("Name"), |ui| {
+                        let mut name = p.channels[i].name.clone();
+                        let r = ui.add(text_field(&mut name).desired_width(f32::INFINITY));
+                        if focus {
+                            r.request_focus();
+                            crate::ui::widgets::dialog::select_all(ui.ctx(), r.id, &name);
+                        }
+                        if name != p.channels[i].name {
+                            p.rename_channel(i, &name);
+                        }
+                    });
+                    f.row(t("Auflösung"), |ui| {
+                        let mut fine = p.channels[i].fine;
+                        let items = [(0u8, "8 Bit"), (1, "16 Bit"), (2, "24 Bit")];
+                        if Segmented::new(&items).show(ui, &mut fine) {
+                            p.set_fine(i, fine);
+                        }
+                    });
+                    f.row(t("Standardwert"), |ui| {
+                        ui.add(egui::DragValue::new(&mut p.channels[i].default).range(0..=255))
+                            .on_hover_text(t("Wert, solange keine Szene den Kanal setzt"));
+                    });
+                    f.row(t("Erkannt als"), |ui| {
+                        let k = p.channels[i].kind();
+                        let (r, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
+                        paint_symbol(ui.painter(), r, k, kind_color(k));
+                        ui.label(t(k.label()));
+                    });
+                });
+                ui.add_space(theme::SP_L);
+                let ch = &mut p.channels[i];
+                let ci = self.sel_range.min(ch.capabilities.len() - 1);
+                let count = ch.capabilities.len();
+                let last = ci + 1 == count;
+                ui.horizontal(|ui| {
+                    ui.set_height(ROW_H);
+                    ui.label(theme::heading_text(&tr!("Bereich {n}", n = ci + 1)));
+                });
+                let mut new_end = None;
+                let cap = &mut ch.capabilities[ci];
+                form(ui, "builder_range", |f| {
+                    f.row(t("Werte"), |ui| {
+                        ui.label(
+                            egui::RichText::new(cap.start.to_string()).color(theme::text_dim()),
+                        );
+                        ui.label(egui::RichText::new("–").color(theme::text_faint()));
+                        let mut end = cap.end;
+                        let r = ui
+                            .add(egui::DragValue::new(&mut end).range(cap.start..=255))
+                            .on_hover_text(if last {
+                                t("Ende – kleiner als 255 legt für den Rest einen neuen Bereich an")
+                            } else {
+                                t("Ende – die folgenden Bereiche rücken automatisch nach")
+                            });
+                        if end != cap.end && (r.changed() || r.lost_focus()) {
+                            new_end = Some(end);
+                        }
+                    });
+                    f.row(t("Typ"), |ui| {
+                        let mut kind = cap.kind;
+                        full_combo(ui, ("builder_cap_kind", i, ci), kind_label(kind), |ui| {
+                            for k in CapabilityKind::ALL {
+                                ui.selectable_value(&mut kind, k, kind_label(k));
+                            }
+                        });
+                        if kind != cap.kind {
+                            cap.set_kind(kind);
+                        }
+                    });
+                    f.row(t("Kommentar"), |ui| {
+                        ui.add(text_field(&mut cap.comment).desired_width(f32::INFINITY));
+                    });
+                });
+                ui.add_space(theme::SP_XS);
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(theme::SP_S, theme::SP_S);
+                    capability_fields(ui, (i, ci), cap);
+                });
+                if let Some(end) = new_end {
+                    ch.set_range_end(ci, end);
+                }
+                ui.add_space(theme::SP_L);
+                if wide_button(ui, t("Bereich löschen"), false, count > 1).clicked() {
+                    remove_range = true;
+                }
+                if wide_button(ui, t("Kanal duplizieren"), false, true).clicked() {
+                    channel_action = Some(ListAction::Duplicate(i));
+                }
+                if wide_button(ui, t("Kanal löschen"), true, true).clicked() {
+                    channel_action = Some(ListAction::Remove(i));
+                }
+            });
+        if remove_range {
+            let ch = &mut self.draft.channels[i];
+            ch.remove_range(self.sel_range);
+            self.sel_range = self.sel_range.min(ch.capabilities.len() - 1);
+        }
+        self.apply_channel_action(channel_action);
     }
 
     // ------------------------------------------------------------ Modi
@@ -1214,139 +1422,203 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
 
 // ------------------------------------------------------------ Funktionen
 
-enum CardAction {
-    None,
-    /// Neues Ende des Bereichs (die folgenden rücken nach).
-    End(u8),
-    Remove,
-}
+/// Mindesthöhe eines Bereichs im Stapel.
+const RANGE_MIN_H: f32 = 46.0;
 
-/// Balken 0–255 mit der Aufteilung in Bereiche.
-fn range_bar(ui: &mut Ui, ch: &ProfileChannel) {
-    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
-    let p = ui.painter();
-    p.rect_filled(rect, theme::R_S as f32, theme::bg());
-    let x = |v: f32| rect.left() + rect.width() * v / 256.0;
-    let mut hover = None;
-    for (i, c) in ch.capabilities.iter().enumerate() {
-        let r = Rect::from_min_max(
-            pos2(x(f32::from(c.start)), rect.top()),
-            pos2(x(f32::from(c.end) + 1.0), rect.bottom()),
-        );
-        let fill = if i % 2 == 0 {
-            theme::accent_dim()
-        } else {
-            theme::raised_hover()
-        };
-        p.rect_filled(r.shrink2(vec2(0.5, 0.0)), 2.0, fill);
-        if r.width() > 34.0 {
-            p.with_clip_rect(r).text(
-                r.center(),
-                Align2::CENTER_CENTER,
-                format!("{}", i + 1),
-                theme::caption(),
-                theme::text_dim(),
-            );
-        }
-        if resp.hover_pos().is_some_and(|h| r.contains(h)) {
-            hover = Some((i, c));
-        }
-    }
-    if let Some((i, c)) = hover {
-        resp.on_hover_text(format!(
-            "{} · {}–{} · {}",
-            i + 1,
-            c.start,
-            c.end,
-            kind_label(c.kind)
-        ));
-    }
-}
-
-/// Karte für einen DMX-Bereich. Der Anfang ergibt sich aus dem vorherigen
-/// Bereich; einstellbar ist nur das Ende.
-fn capability_card(
+/// Kanal-Karte: Nummer, Symbol der Kanalart, Name und Art darunter.
+fn card_row(
     ui: &mut Ui,
-    salt: (usize, usize),
-    cap: &mut Capability,
-    last: bool,
-    removable: bool,
-) -> CardAction {
-    let mut action = CardAction::None;
-    egui::Frame::new()
-        .fill(theme::raised())
-        .stroke(Stroke::new(1.0, theme::border()))
-        .corner_radius(theme::R_S)
-        .inner_margin(egui::Margin::same(theme::SP_S as i8))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.set_height(INPUT_H);
-                ui.add_sized(
-                    vec2(30.0, INPUT_H),
-                    egui::Label::new(
-                        egui::RichText::new(cap.start.to_string()).color(theme::text_dim()),
-                    ),
-                );
-                ui.label(egui::RichText::new("–").color(theme::text_faint()));
-                let mut end = cap.end;
-                let r = ui
-                    .add(egui::DragValue::new(&mut end).range(cap.start..=255))
-                    .on_hover_text(if last {
-                        t("Ende – kleiner als 255 legt für den Rest einen neuen Bereich an")
-                    } else {
-                        t("Ende – die folgenden Bereiche rücken automatisch nach")
-                    });
-                if end != cap.end && (r.changed() || r.lost_focus()) {
-                    action = CardAction::End(end);
-                }
-                ui.add_space(theme::SP_S);
-                let mut kind = cap.kind;
-                ui.scope(|ui| {
-                    ui.set_width(200.0);
-                    full_combo(ui, ("builder_cap_kind", salt), kind_label(kind), |ui| {
-                        for k in CapabilityKind::ALL {
-                            ui.selectable_value(&mut kind, k, kind_label(k));
-                        }
-                    });
-                });
-                if kind != cap.kind {
-                    cap.set_kind(kind);
-                }
-                ui.add_space(theme::SP_S);
-                ui.label(
-                    egui::RichText::new(t(cap.channel_kind().label()))
-                        .small()
-                        .color(theme::text_faint()),
-                )
-                .on_hover_text(t("So verwendet DMXCraft diesen Bereich"));
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if ui
-                        .add(
-                            IconButton::new(Icon::Trash)
-                                .flat()
-                                .danger()
-                                .enabled(removable),
-                        )
-                        .on_hover_text(t("Bereich löschen"))
-                        .clicked()
-                    {
-                        action = CardAction::Remove;
-                    }
-                });
-            });
-            ui.add_space(theme::SP_XS);
-            ui.horizontal(|ui| {
-                ui.set_height(INPUT_H);
-                capability_fields(ui, salt, cap);
-                ui.add(
-                    text_field(&mut cap.comment)
-                        .hint_text(t("Kommentar"))
-                        .desired_width(ui.available_width()),
-                );
-            });
-        });
-    action
+    selected: bool,
+    number: usize,
+    kind: dmxcraft_core::ChannelKind,
+    name: &str,
+    sub: &str,
+) -> egui::Response {
+    let (row, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 48.0), Sense::click());
+    let p = ui.painter();
+    p.text(
+        pos2(row.left() + 14.0, row.center().y),
+        Align2::CENTER_CENTER,
+        number.to_string(),
+        theme::caption(),
+        theme::text_faint(),
+    );
+    let card = Rect::from_min_max(pos2(row.left() + 28.0, row.top()), row.max);
+    let (fill, stroke) = if selected {
+        (theme::raised(), Stroke::new(1.5, theme::accent()))
+    } else if resp.hovered() {
+        (theme::raised_hover(), Stroke::new(1.0, theme::border()))
+    } else {
+        (theme::raised(), Stroke::new(1.0, theme::border()))
+    };
+    p.rect(
+        card,
+        theme::R_S as f32,
+        fill,
+        stroke,
+        egui::StrokeKind::Inside,
+    );
+    let icon = Rect::from_center_size(pos2(card.left() + 22.0, card.center().y), vec2(24.0, 24.0));
+    paint_symbol(p, icon, kind, kind_color(kind));
+    let text_x = card.left() + 44.0;
+    let clip = Rect::from_min_max(
+        pos2(text_x, card.top()),
+        pos2(card.right() - 8.0, card.bottom()),
+    );
+    let pc = p.with_clip_rect(clip);
+    pc.text(
+        pos2(text_x, card.center().y - 8.0),
+        Align2::LEFT_CENTER,
+        name,
+        theme::body(),
+        theme::text(),
+    );
+    pc.text(
+        pos2(text_x, card.center().y + 9.0),
+        Align2::LEFT_CENTER,
+        sub,
+        theme::caption(),
+        theme::text_dim(),
+    );
+    resp
+}
+
+/// Ein Bereich im Stapel: Symbol, Typ und Details.
+fn paint_range_block(ui: &Ui, r: Rect, cap: &Capability, selected: bool, hovered: bool) {
+    let p = ui.painter();
+    let (fill, stroke) = if selected {
+        (theme::raised(), Stroke::new(1.5, theme::accent()))
+    } else if hovered {
+        (theme::raised_hover(), Stroke::new(1.0, theme::border()))
+    } else {
+        (theme::raised(), Stroke::new(1.0, theme::border()))
+    };
+    p.rect(
+        r.shrink2(vec2(0.0, 1.0)),
+        theme::R_S as f32,
+        fill,
+        stroke,
+        egui::StrokeKind::Inside,
+    );
+    let k = cap.channel_kind();
+    let icon = Rect::from_center_size(pos2(r.left() + 22.0, r.center().y), vec2(22.0, 22.0));
+    paint_symbol(p, icon, k, kind_color(k));
+    let mut title = kind_label(cap.kind).to_string();
+    let detail = match cap.kind {
+        CapabilityKind::ColorIntensity => color_label(&cap.color).to_string(),
+        CapabilityKind::ShutterStrobe => shutter_label(cap.shutter).to_string(),
+        CapabilityKind::WheelSlot => {
+            let name = if cap.label.trim().is_empty() {
+                slot_label(cap.slot_kind).to_string()
+            } else {
+                cap.label.trim().to_string()
+            };
+            format!("{} {} · {name}", t("Slot"), cap.slot)
+        }
+        _ => cap.label.trim().to_string(),
+    };
+    if !detail.is_empty() {
+        title = format!("{title} – {detail}");
+    }
+    let sub = match (cap.from.trim(), cap.to.trim()) {
+        ("", "") => cap.comment.trim().to_string(),
+        (a, b) if a == b || b.is_empty() => a.to_string(),
+        (a, "") => a.to_string(),
+        (a, b) => format!("{a} – {b}"),
+    };
+    let x = r.left() + 42.0;
+    let clip = Rect::from_min_max(pos2(x, r.top()), pos2(r.right() - 8.0, r.bottom()));
+    let pc = p.with_clip_rect(clip);
+    let (ty, sy) = if sub.is_empty() || r.height() < 40.0 {
+        (r.center().y, None)
+    } else {
+        (r.center().y - 8.0, Some(r.center().y + 9.0))
+    };
+    pc.text(
+        pos2(x, ty),
+        Align2::LEFT_CENTER,
+        title,
+        theme::body(),
+        theme::text(),
+    );
+    if let Some(sy) = sy {
+        pc.text(
+            pos2(x, sy),
+            Align2::LEFT_CENTER,
+            sub,
+            theme::caption(),
+            theme::text_dim(),
+        );
+    }
+}
+
+/// Griff an einer Bereichsgrenze: Pfeil hoch/runter.
+fn paint_handle(ui: &Ui, r: Rect, active: bool) {
+    let p = ui.painter();
+    let (fill, stroke) = if active {
+        (theme::raised_hover(), theme::accent())
+    } else {
+        (theme::surface(), theme::border())
+    };
+    p.rect(
+        r,
+        4.0,
+        fill,
+        Stroke::new(1.0, stroke),
+        egui::StrokeKind::Inside,
+    );
+    let color = if active {
+        theme::text()
+    } else {
+        theme::text_dim()
+    };
+    let half = |top: bool| {
+        let c = if top {
+            pos2(r.center().x, r.top() + r.height() * 0.28)
+        } else {
+            pos2(r.center().x, r.bottom() - r.height() * 0.28)
+        };
+        Rect::from_center_size(c, vec2(12.0, 12.0))
+    };
+    Icon::ChevronUp.paint(p, half(true), color);
+    Icon::ChevronDown.paint(p, half(false), color);
+}
+
+/// Breiter Knopf (Aktionen in der Eigenschaftsspalte).
+fn wide_button(ui: &mut Ui, label: &str, danger: bool, enabled: bool) -> egui::Response {
+    let sense = if enabled {
+        Sense::click()
+    } else {
+        Sense::hover()
+    };
+    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), sense);
+    let hovered = resp.hovered() && enabled;
+    let fill = if hovered {
+        theme::raised_hover()
+    } else {
+        theme::raised()
+    };
+    let text = match (enabled, danger) {
+        (false, _) => theme::text_faint(),
+        (true, true) => theme::DANGER,
+        (true, false) => theme::text(),
+    };
+    ui.painter().rect(
+        r,
+        16.0,
+        fill,
+        Stroke::new(1.0, theme::border()),
+        egui::StrokeKind::Inside,
+    );
+    ui.painter().text(
+        r.center(),
+        Align2::CENTER_CENTER,
+        label,
+        theme::body(),
+        text,
+    );
+    ui.add_space(theme::SP_XS);
+    resp
 }
 
 /// Felder, die vom Typ abhängen (Farbe, Effekt, Slot, Start-/Endwert).

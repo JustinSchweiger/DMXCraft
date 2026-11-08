@@ -1006,4 +1006,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Lüfter", "Fan"),
     ("Programm", "Program"),
     ("Steuerung", "Control"),
+    ("Bereiche", "Ranges"),
+    ("Bereich {n}", "Range {n}"),
+    ("Typ", "Type"),
+    ("Kanal duplizieren", "Duplicate channel"),
+    ("Kanal löschen", "Delete channel"),
+    ("Grenze ziehen oder oben/unten klicken (±1)", "Drag the boundary or click top/bottom (±1)"),
 ];
