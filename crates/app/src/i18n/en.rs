@@ -616,6 +616,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Ausgewählte Geräte (folgt der Auswahl)", "Selected devices (follows the selection)"),
     ("Fest: {devices}", "Fixed: {devices}"),
     ("Feste Kanäle", "Fixed channels"),
+    ("{n} Geräte: {chan}", "{n} devices: {chan}"),
     ("Zielpunkt auf dem Boden anklicken", "Click the target point on the floor"),
     ("Ausrichten ({n} Geräte)", "Aim ({n} fixtures)"),
     ("Ausrichten", "Aim"),

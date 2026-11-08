@@ -1,22 +1,22 @@
 # Graph Report - dmxcraft-src  (2026-11-08)
 
 ## Corpus Check
-- 124 files · ~164,444 words
+- 124 files · ~164,507 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 16 file(s) not represented in the graph (top: (none) 5, .ttf 3, .ico 2)
 
 ## Summary
-- 3227 nodes · 7880 edges · 245 communities (130 shown, 115 thin omitted)
+- 3227 nodes · 7881 edges · 247 communities (133 shown, 114 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 412 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ce01e4be`
+- Built from commit: `917472de`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- profile_builder.rs
+- server.rs
 - library_panel.rs
 - runtime.rs
 - open_dmx.rs
@@ -37,7 +37,7 @@
 - announce
 - build-local-artifacts
 - Icon
-- Scene
+- Serialize
 - rig.rs
 - scene_props.rs
 - host
@@ -62,7 +62,7 @@
 - DmxCraftApp
 - settings_window.rs
 - MenuAction
-- send_frame
+- DmxLine
 - BankScope
 - PlanShape
 - ViewCtx
@@ -90,12 +90,12 @@
 - ProfileBuilder
 - MapPreset
 - scene_card.rs
-- SlotKind
+- call
 - qxf.rs
 - file_dialog.rs
 - en.rs
 - Theme
-- control/timeline.rs
+- Rect
 - engine.rs
 - ev2.rs
 - knob.rs
@@ -103,14 +103,14 @@
 - outline.rs
 - convert.rs
 - DvcGoldUsb
-- Lang
+- gltf_import.rs
 - CurveShape
 - ColorPreset
-- super
+- control/timeline.rs
 - audio.rs
 - Profile
 - stage_canvas.rs
-- Builder
+- protocol.rs
 - HeaderAction
 - plan.rs
 - MenuItem<'a>
@@ -121,32 +121,32 @@
 - ShutterEffect
 - .viewport
 - Fullscreen
-- Shape
+- ClipAction
 - Transform
 - ChaserPreset
 - VizView
 - Problem
 - swatch.rs
 - plan
-- core/src/lib.rs
+- Scene
 - Snapshot
-- Venue
+- palettes.rs
 - Vec2
 - stage_editor.rs
 - src/mapping.rs
 - lock.rs
 - tools.rs
 - dip.rs
-- Dialog<'a>
+- Drag
 - demo.rs
 - ProfileChannel
 - Tab
-- audio.rs
+- .check_placement
 - midi.rs
 - color_picker.rs
-- FixtureLimits
+- BuilderRequest
 - mapping/mod.rs
-- Mapper
+- .feedback
 - qlc-bundle.rs
 - ShowError
 - arc
@@ -159,7 +159,9 @@
 - Timeline
 - T
 - FooterButton<'a>
+- paint_symbol
 - Tastatur- und MIDI-Zuordnung
+- GridMode
 
 ## God Nodes (most connected - your core abstractions)
 1. `Engine` - 188 edges
@@ -189,32 +191,32 @@
 - 1-file cycle: `crates/core/src/fixture.rs -> crates/core/src/fixture.rs`
 - 1-file cycle: `crates/app/src/views/fixture_menu.rs -> crates/app/src/views/fixture_menu.rs`
 - 2-file cycle: `crates/output/src/backends.rs -> crates/output/src/lib.rs -> crates/output/src/backends.rs`
+- 2-file cycle: `crates/output/src/dvc_gold.rs -> crates/output/src/lib.rs -> crates/output/src/dvc_gold.rs`
 - 2-file cycle: `crates/output/src/lib.rs -> crates/output/src/runtime.rs -> crates/output/src/lib.rs`
 - 2-file cycle: `crates/output/src/lib.rs -> crates/output/src/open_dmx.rs -> crates/output/src/lib.rs`
-- 2-file cycle: `crates/output/src/dvc_gold.rs -> crates/output/src/lib.rs -> crates/output/src/dvc_gold.rs`
 - 2-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/convert.rs`
 - 2-file cycle: `crates/ofl/src/lib.rs -> crates/ofl/src/qxf.rs -> crates/ofl/src/lib.rs`
 - 3-file cycle: `crates/output/src/backends.rs -> crates/output/src/lib.rs -> crates/output/src/runtime.rs -> crates/output/src/backends.rs`
 - 3-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/profile.rs -> crates/ofl/src/convert.rs`
 - 3-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/qxf.rs -> crates/ofl/src/convert.rs`
 
-## Communities (245 total, 115 thin omitted)
+## Communities (247 total, 114 thin omitted)
 
-### Community 0 - "profile_builder.rs"
-Cohesion: 0.11
-Nodes (12): card_row(), FOOT_H, list_row(), LIST_W, MAX_FORM_W, pick_export(), pick_import(), RANGE_MIN_H (+4 more)
+### Community 0 - "server.rs"
+Cohesion: 0.12
+Nodes (13): dechunk(), dechunks(), error_for(), forward(), not_running_gives_error_with_id(), run(), bridge_forwards_to_server(), header() (+5 more)
 
 ### Community 1 - "library_panel.rs"
 Cohesion: 0.17
 Nodes (11): LibraryDrag, template(), drag_ghost(), LibAction, Builder, Delete, LibraryPanel, MAX_FIXTURES_PER_SEARCH (+3 more)
 
 ### Community 2 - "runtime.rs"
-Cohesion: 0.13
-Nodes (10): engine_keeps_running_without_device(), OutputStatus, Connecting, Error, Running, Stopped, RECONNECT_DELAY, record_load() (+2 more)
+Cohesion: 0.12
+Nodes (11): engine_keeps_running_without_device(), Failing, OutputStatus, Connecting, Error, Running, Stopped, RECONNECT_DELAY (+3 more)
 
 ### Community 3 - "open_dmx.rs"
-Cohesion: 0.16
-Nodes (12): BREAK, DMX_BAUD, FRAME_TIME, FTDI_VENDOR_ID, list_ports(), MAB, open_without_assignment_fails_clearly(), resolve() (+4 more)
+Cohesion: 0.13
+Nodes (16): BREAK, DMX_BAUD, frame_is_break_mark_startcode_and_512_channels(), frame_over_pseudo_terminal(), FRAME_TIME, FTDI_VENDOR_ID, list_ports(), MAB (+8 more)
 
 ### Community 4 - "theme.rs"
 Cohesion: 0.10
@@ -238,11 +240,11 @@ Nodes (24): all_presets_render_every_beam(), apply(), apply_effect(), Beam, beam
 
 ### Community 9 - "OutputError"
 Cohesion: 0.12
-Nodes (8): NullOutput, RecordingOutput, DmxOutput, OutputError, NotFound, NotImplemented, Transfer, Failing
+Nodes (8): NullOutput, RecordingOutput, DmxOutput, OutputConfig, OutputError, NotFound, NotImplemented, Transfer
 
 ### Community 10 - "Deserialize"
-Cohesion: 0.05
-Nodes (26): builtin(), load_user(), named(), NamedPalette, path(), save_user(), ChannelDef, ChannelRange (+18 more)
+Cohesion: 0.11
+Nodes (13): ChannelDef, ChannelRange, Physics, RangeEffect, Closed, Color, Gobo, Open (+5 more)
 
 ### Community 11 - "Engine"
 Cohesion: 0.06
@@ -253,8 +255,8 @@ Cohesion: 0.25
 Nodes (8): accent(), bg(), border(), caption(), raised(), text_dim(), DipSwitch, XyPad
 
 ### Community 13 - "viz/library.rs"
-Cohesion: 0.13
-Nodes (16): BLACK, builtin(), builtins_insert_with_fresh_ids(), DARK, EXT, GREY, load_user(), METAL (+8 more)
+Cohesion: 0.11
+Nodes (17): BLACK, Builder, builtin(), builtins_insert_with_fresh_ids(), DARK, EXT, GREY, load_user() (+9 more)
 
 ### Community 14 - "jobs"
 Cohesion: 0.17
@@ -269,8 +271,8 @@ Cohesion: 0.08
 Nodes (22): Aufbau, Einschalten, KI-Assistent (MCP), Sicherheit, Verbinden, Werkzeuge, 3D-Visualisierer, Import aus Easy View 2 (+14 more)
 
 ### Community 19 - "titlebar.rs"
-Cohesion: 0.21
-Nodes (19): clip(), delete(), HEIGHT, k(), levels(), lock(), main_menu(), modifier() (+11 more)
+Cohesion: 0.15
+Nodes (23): clip(), delete(), HEIGHT, k(), levels(), load_meter(), lock(), main_menu() (+15 more)
 
 ### Community 20 - "announce"
 Cohesion: 0.25
@@ -284,9 +286,9 @@ Nodes (9): container, if, name, needs, runs-on, strategy, build-local-artifacts,
 Cohesion: 0.03
 Nodes (77): Icon, AlignH, AlignV, ArrangeGrid, ArrangeRow, ArrowsH, Builder, Center (+69 more)
 
-### Community 23 - "Scene"
-Cohesion: 0.19
-Nodes (4): duplicate_zone_copies_scenes_behind_original(), free_scenes_get_a_bank(), move_scenes_between_banks(), steps_insert_remove_and_normalize()
+### Community 23 - "Serialize"
+Cohesion: 0.10
+Nodes (10): load_file(), B64, b64_decode(), b64_encode(), base64_roundtrip(), Blob, Model, ModelPart (+2 more)
 
 ### Community 24 - "rig.rs"
 Cohesion: 0.12
@@ -309,8 +311,8 @@ Cohesion: 0.29
 Nodes (7): with, merge-multiple, name, path, pattern, persist-credentials, submodules
 
 ### Community 30 - "ofl/src/lib.rs"
-Cohesion: 0.11
-Nodes (17): OflError, Invalid, Json, Skip, best_match_finds_easy_view_names(), embedded_library_has_ofl_and_qlc(), embedded_library_loads(), EMBEDDED_OFL (+9 more)
+Cohesion: 0.14
+Nodes (13): best_match_finds_easy_view_names(), embedded_library_has_ofl_and_qlc(), embedded_library_loads(), EMBEDDED_OFL, EMBEDDED_QLC, fill_details(), fill_physical(), Library (+5 more)
 
 ### Community 31 - "fx_color.rs"
 Cohesion: 0.18
@@ -325,12 +327,12 @@ Cohesion: 0.80
 Nodes (5): dmxcraft, dmxcraft-core, dmxcraft-mcp, dmxcraft-ofl, dmxcraft-output
 
 ### Community 34 - "Venue"
-Cohesion: 0.11
-Nodes (14): aim_at_points_beam_to_target(), apply(), CameraPreset, close(), Environment, hang_below_nearest_truss(), IDENTITY, Material (+6 more)
+Cohesion: 0.08
+Nodes (18): aim_at_points_beam_to_target(), apply(), CameraPreset, close(), Environment, fixture_folders_are_exclusive(), FixtureFolder, hang_below_nearest_truss() (+10 more)
 
 ### Community 36 - "Ui"
-Cohesion: 0.17
-Nodes (14): list_header(), ListAction, Add, Duplicate, Remove, ModeOp, Add, Down (+6 more)
+Cohesion: 0.14
+Nodes (20): kind_color(), card_row(), full_combo(), list_header(), list_row(), ListAction, Add, Duplicate (+12 more)
 
 ### Community 37 - "mapping.rs"
 Cohesion: 0.17
@@ -353,12 +355,12 @@ Cohesion: 0.44
 Nodes (3): drag_number(), endless_delta(), raw_available()
 
 ### Community 43 - "textures.rs"
-Cohesion: 0.09
-Nodes (26): linear_to_srgb(), load(), loads_base_color_texture(), loads_embedded_triangle_with_node_transform(), MAX_TRIANGLES, percent_decode(), percent_decoding(), RawPart (+18 more)
+Cohesion: 0.19
+Nodes (16): brick(), builtin(), builtins_are_seamless_and_decode(), carpet(), concrete(), fbm(), make(), mix() (+8 more)
 
 ### Community 44 - "Fader"
-Cohesion: 0.11
-Nodes (11): Fader, FaderEvent, Changed, None, Release, ToggleFx, FaderRange, fine_mark() (+3 more)
+Cohesion: 0.12
+Nodes (8): Fader, FaderEvent, Changed, None, Release, ToggleFx, FaderRange, fader_ranges()
 
 ### Community 45 - "render.rs"
 Cohesion: 0.06
@@ -377,16 +379,12 @@ Cohesion: 0.05
 Nodes (41): APC_MK2_PALETTE, color32(), detect_and_match(), DeviceModel, .ALL, ApcMiniMk2, Generic, matching_output() (+33 more)
 
 ### Community 50 - "MenuAction"
-Cohesion: 0.08
-Nodes (24): load_meter(), MenuAction, About, CheckUpdates, DmxLevels, InstallUpdate, Mapping, NewShow (+16 more)
-
-### Community 51 - "send_frame"
-Cohesion: 0.17
-Nodes (7): Box<dyn serialport::SerialPort>, DmxLine, frame_is_break_mark_startcode_and_512_channels(), frame_over_pseudo_terminal(), packet(), Recorder, send_frame()
+Cohesion: 0.10
+Nodes (20): MenuAction, About, CheckUpdates, DmxLevels, InstallUpdate, NewShow, OpenRecent, OpenShow (+12 more)
 
 ### Community 65 - "BankScope"
-Cohesion: 0.21
-Nodes (7): BankScope, All, Bank, Banks, Off, OutsideBank, Zone
+Cohesion: 0.14
+Nodes (9): BankScope, All, Bank, Banks, Off, OutsideBank, duplicate_zone_copies_scenes_behind_original(), move_scenes_between_banks() (+1 more)
 
 ### Community 66 - "PlanShape"
 Cohesion: 0.20
@@ -397,28 +395,28 @@ Cohesion: 0.18
 Nodes (7): fold_section(), ViewCtx, proposals_for_easy_view_names(), propose_type(), vec3_row(), apply_texture(), VizView
 
 ### Community 69 - "window.rs"
-Cohesion: 0.11
-Nodes (25): color(), Overlay, channel_label(), channel_labels(), combo(), hint(), LIST_H, MAP_EXT (+17 more)
+Cohesion: 0.14
+Nodes (21): color(), Mapper, channel_label(), channel_labels(), combo(), hint(), LIST_H, MAP_EXT (+13 more)
 
 ### Community 70 - "stage.rs"
 Cohesion: 0.16
 Nodes (14): fx_button(), group_pill(), GroupAction, AddSelection, Delete, New, Rename, Select (+6 more)
 
 ### Community 71 - "Host"
-Cohesion: 0.14
-Nodes (13): bridge_command(), installed_bridge(), McpLink, McpStatus, Error, Off, Running, AppEvent (+5 more)
+Cohesion: 0.15
+Nodes (14): bridge_command(), installed_bridge(), McpLink, McpStatus, Error, Off, Running, AppEvent (+6 more)
 
 ### Community 72 - "Show"
-Cohesion: 0.16
-Nodes (8): .VIRTUAL_DIMMER, Fixture, PatchError, BadUniverse, OutOfRange, Overlap, UnknownType, Show
+Cohesion: 0.19
+Nodes (4): .VIRTUAL_DIMMER, Fixture, paste_fixtures_finds_free_addresses_and_names(), Show
 
 ### Community 73 - "feature.rs"
 Cohesion: 0.16
 Nodes (14): apply_levels(), block(), chaser_levels(), ChaserFx, curve_levels(), curve_phasing_shifts_beams(), CurveFx, custom_value() (+6 more)
 
 ### Community 74 - "OutputKind"
-Cohesion: 0.18
-Nodes (6): OutputConfig, OutputKind, .ALL, DvcGoldUsb, OpenDmx, Simulation
+Cohesion: 0.29
+Nodes (5): OutputKind, .ALL, DvcGoldUsb, OpenDmx, Simulation
 
 ### Community 76 - "motion.rs"
 Cohesion: 0.09
@@ -433,28 +431,32 @@ Cohesion: 0.23
 Nodes (14): BodyCtx, combo(), curve_graph(), effect_body(), features_ui(), grid(), mode_row(), move_editor() (+6 more)
 
 ### Community 79 - "egui"
-Cohesion: 0.12
-Nodes (16): DOT_H, FADER_W, HANDLE, NUM_H, SYMBOL_H, VALUE_H, WHEEL_STEP, ICON_FAMILY (+8 more)
+Cohesion: 0.11
+Nodes (19): DOT_H, FADER_W, HANDLE, NUM_H, SYMBOL_H, VALUE_H, WHEEL_STEP, ICON_FAMILY (+11 more)
+
+### Community 80 - "OpenDmx"
+Cohesion: 0.27
+Nodes (3): missing_cable_is_reported_not_fatal(), open_without_assignment_fails_clearly(), OpenDmx
 
 ### Community 86 - "show.rs"
-Cohesion: 0.30
-Nodes (12): address_map_marks_ranges(), groups_follow_fixture_removal(), json_roundtrip(), id_type!, next_free_address_skips_used(), paste_fixtures_finds_free_addresses_and_names(), patch_rejects_overlap_and_range(), plan_shape_is_guessed_from_type() (+4 more)
+Cohesion: 0.11
+Nodes (22): address_map_marks_ranges(), FixtureLimits, Group, groups_follow_fixture_removal(), json_roundtrip(), LoopMode, Loop, Once (+14 more)
 
 ### Community 87 - "dialog.rs"
-Cohesion: 0.08
-Nodes (13): Button, Dialog, FOOTER_H, FooterButton, Form, HEADER_H, INPUT_H, Kind (+5 more)
+Cohesion: 0.07
+Nodes (14): Button, Dialog, Dialog<'a>, DialogResult, FOOTER_H, FooterButton, Form, HEADER_H (+6 more)
 
 ### Community 89 - "profile.rs"
-Cohesion: 0.09
-Nodes (19): CATEGORIES, DMX_CONNECTORS, entity(), entity_text(), fixture_types_detect_kinds_and_keep_keys(), import_real_ofl_with_16bit_ranges(), INTENSITY_COLORS, KEY_PREFIX (+11 more)
+Cohesion: 0.08
+Nodes (21): cap_for_kind(), Capability, CATEGORIES, DMX_CONNECTORS, entity(), entity_text(), fixture_types_detect_kinds_and_keep_keys(), import_real_ofl_with_16bit_ranges() (+13 more)
 
 ### Community 90 - "app.rs"
 Cohesion: 0.18
 Nodes (10): edit_preview(), load_step(), LockDialog, OUTPUT_HZ, UpdateBadge, Available, Busy, Error (+2 more)
 
 ### Community 92 - "t"
-Cohesion: 0.20
-Nodes (20): t(), text_field(), capability_fields(), category_label(), check(), color_label(), full_combo(), general() (+12 more)
+Cohesion: 0.12
+Nodes (26): t(), text_field(), capability_fields(), category_label(), check(), color_label(), FOOT_H, general() (+18 more)
 
 ### Community 93 - "viz/mod.rs"
 Cohesion: 0.11
@@ -470,11 +472,11 @@ Nodes (51): select_all(), CARD_H, COMPACT_H, programmer_values(), Action, Bank, 
 
 ### Community 96 - "CapabilityKind"
 Cohesion: 0.06
-Nodes (32): cap_for_kind(), Capability, CapabilityKind, .ALL, ColorIntensity, ColorPreset, ColorTemperature, Effect (+24 more)
+Nodes (30): CapabilityKind, .ALL, ColorIntensity, ColorPreset, ColorTemperature, Effect, EffectSpeed, Focus (+22 more)
 
 ### Community 97 - "ProfileBuilder"
-Cohesion: 0.14
-Nodes (11): BuilderRequest, Edit, New, Open, Template, FileJob, Export, Import (+3 more)
+Cohesion: 0.19
+Nodes (7): FileJob, Export, Import, new_profile(), pick_export(), pick_import(), ProfileBuilder
 
 ### Community 99 - "MapPreset"
 Cohesion: 0.09
@@ -484,9 +486,9 @@ Nodes (22): default_palette(), MapPreset, .ALL, Bounce, Burst, Butterfly, Explos
 Cohesion: 0.24
 Nodes (4): clip(), SceneCard, SceneCardResponse, STRIP_W
 
-### Community 101 - "SlotKind"
-Cohesion: 0.21
-Nodes (7): SlotKind, .ALL, Color, Frost, Gobo, Open, Prism
+### Community 101 - "call"
+Cohesion: 0.25
+Nodes (25): add_clips(), add_effect(), add_fixtures(), build_steps(), call(), channel_kind(), collect_values(), create_scene() (+17 more)
 
 ### Community 104 - "qxf.rs"
 Cohesion: 0.20
@@ -500,21 +502,17 @@ Nodes (7): Pending, Purpose, OpenShow, SaveShowAs, save_as_gets_show_extension()
 Cohesion: 0.25
 Nodes (6): active(), set_theme(), Theme, .ALL, Gray, Navy
 
-### Community 109 - "control/timeline.rs"
-Cohesion: 0.07
-Nodes (34): add_audio(), add_audio_dialog(), AUDIO_TRACK_H, ClipAction, Copy, Cut, Delete, Duplicate (+26 more)
+### Community 109 - "Rect"
+Cohesion: 0.23
+Nodes (7): fader(), target(), target_with(), fmt_ms(), grid_options(), paint_clip(), TimelineView
 
 ### Community 110 - "engine.rs"
 Cohesion: 0.22
 Nodes (32): blind_keeps_output_but_monitor_shows_edits(), color_fx_drives_rgb_and_moves(), cv(), defaults_are_rendered(), fades_between_steps_and_loops(), first_step_fades_intensity_in(), latest_scene_wins_for_stored_channels(), limits_cap_dimmer_and_position() (+24 more)
 
 ### Community 113 - "ev2.rs"
-Cohesion: 0.24
-Nodes (12): argb(), DEFAULT_TRUSS_LEN, Ev2Fixture, Ev2Import, import(), imports_geometry_and_fixtures(), node(), RECT_SIZE (+4 more)
-
-### Community 117 - "knob.rs"
-Cohesion: 0.18
-Nodes (4): Knob, Knob<'a>, SIZE, SWEEP
+Cohesion: 0.12
+Nodes (22): argb(), DEFAULT_TRUSS_LEN, Ev2Fixture, Ev2Import, import(), imports_geometry_and_fixtures(), node(), RECT_SIZE (+14 more)
 
 ### Community 118 - "EffectKind"
 Cohesion: 0.12
@@ -525,16 +523,16 @@ Cohesion: 0.09
 Nodes (29): renumber(), drag_row(), DragFixtures, DragObjects, drop_marker(), FixtureSort, Address, Name (+21 more)
 
 ### Community 121 - "convert.rs"
-Cohesion: 0.14
-Nodes (24): capabilities(), channel_kind(), convert_fixture(), default_value(), fine_aliases(), kinds(), Lookup, Lookup<'a> (+16 more)
+Cohesion: 0.12
+Nodes (28): capabilities(), channel_kind(), convert_fixture(), default_value(), fine_aliases(), kinds(), Lookup, Lookup<'a> (+20 more)
 
 ### Community 123 - "DvcGoldUsb"
 Cohesion: 0.18
 Nodes (4): DVC_GOLD_PRODUCT_ID, DVC_GOLD_UNIVERSES, DvcGoldUsb, NICOLAUDIE_VENDOR_ID_GUESS
 
-### Community 128 - "Lang"
-Cohesion: 0.25
-Nodes (6): Lang, lang(), .ALL, De, En, set_lang()
+### Community 128 - "gltf_import.rs"
+Cohesion: 0.18
+Nodes (9): linear_to_srgb(), load(), loads_base_color_texture(), loads_embedded_triangle_with_node_transform(), MAX_TRIANGLES, percent_decode(), percent_decoding(), RawPart (+1 more)
 
 ### Community 132 - "CurveShape"
 Cohesion: 0.14
@@ -544,21 +542,29 @@ Nodes (13): CurveShape, .ALL, Custom, InverseRamp, Pulse, Ramp, Random, Sine (+5
 Cohesion: 0.17
 Nodes (10): ColorPreset, .ALL, Burst, KnightRider, Perlin, Plasma, Rainbow, RandomFill (+2 more)
 
+### Community 136 - "control/timeline.rs"
+Cohesion: 0.15
+Nodes (13): add_audio(), add_audio_dialog(), AUDIO_TRACK_H, DEFAULT_CLIP_MS, EDGE, HEADER_W, LANE_H, mark_clipboard() (+5 more)
+
 ### Community 137 - "audio.rs"
-Cohesion: 0.13
-Nodes (10): AudioPlayer, duration_ms(), read_wave(), wav(), Waveform, waveform_and_duration(), WaveState, Failed (+2 more)
+Cohesion: 0.06
+Nodes (24): AudioPlayer, duration_ms(), read_wave(), wav(), Waveform, waveform_and_duration(), WaveState, Failed (+16 more)
 
 ### Community 140 - "Profile"
-Cohesion: 0.18
-Nodes (10): delete(), file(), load_all(), load_user(), save(), sort(), sort_user(), today() (+2 more)
+Cohesion: 0.17
+Nodes (11): delete(), file(), load_all(), load_user(), save(), sort(), sort_user(), today() (+3 more)
 
 ### Community 141 - "stage_canvas.rs"
 Cohesion: 0.15
 Nodes (18): AMBER, BOX, Camera, fit(), fixture_pos(), fixture_rect(), live_colors(), MenuFn (+10 more)
 
+### Community 143 - "protocol.rs"
+Cohesion: 0.36
+Nodes (10): call_tool(), error(), handle(), handle_one(), host(), initialize(), initialize_and_list(), INSTRUCTIONS (+2 more)
+
 ### Community 146 - "HeaderAction"
-Cohesion: 0.33
-Nodes (6): HeaderAction, Delete, Duplicate, ExpandAll, Insert, Toggle
+Cohesion: 0.24
+Nodes (9): HeaderAction, Delete, Duplicate, ExpandAll, Insert, Toggle, row_h(), track_h() (+1 more)
 
 ### Community 147 - "plan.rs"
 Cohesion: 0.29
@@ -577,8 +583,8 @@ Cohesion: 0.39
 Nodes (12): add_object(), add_truss_and_hang_fixture(), apply_object(), delete_objects(), get_venue(), num(), object_json(), place_fixtures() (+4 more)
 
 ### Community 156 - "ShutterEffect"
-Cohesion: 0.15
-Nodes (12): ShutterEffect, .ALL, Burst, Closed, Lightning, Open, Pulse, RampDown (+4 more)
+Cohesion: 0.09
+Nodes (19): ShutterEffect, .ALL, Burst, Closed, Lightning, Open, Pulse, RampDown (+11 more)
 
 ### Community 157 - ".viewport"
 Cohesion: 0.25
@@ -588,9 +594,9 @@ Nodes (6): Quality, .ALL, High, Low, Medium, Ultra
 Cohesion: 0.22
 Nodes (5): Fullscreen, SETTLE, Step, Enter, Maximize
 
-### Community 159 - "Shape"
-Cohesion: 0.20
-Nodes (10): Shape, Box, Cylinder, Group, Model, Plane, Truss, TrussProfile (+2 more)
+### Community 159 - "ClipAction"
+Cohesion: 0.25
+Nodes (8): ClipAction, Copy, Cut, Delete, Duplicate, EditScene, ResetSpeed, Split
 
 ### Community 160 - "Transform"
 Cohesion: 0.25
@@ -612,17 +618,17 @@ Nodes (20): fine_names(), Problem, DuplicateChannel, DuplicateInMode, DuplicateM
 Cohesion: 0.29
 Nodes (7): plan, publishing, tag, tag-flag, env, outputs, runs-on
 
-### Community 168 - "core/src/lib.rs"
-Cohesion: 0.11
-Nodes (14): ChannelValue, Group, LoopMode, Loop, Once, PLAN_SIZE_RANGE, Scene, SceneKind (+6 more)
+### Community 168 - "Scene"
+Cohesion: 0.15
+Nodes (5): free_scenes_get_a_bank(), Scene, SceneSettings, Step, steps_insert_remove_and_normalize()
 
 ### Community 169 - "Snapshot"
 Cohesion: 0.28
 Nodes (5): History, LIMIT, live_values_are_undoable(), Snapshot, undo_redo_roundtrip()
 
-### Community 170 - "Venue"
-Cohesion: 0.16
-Nodes (5): fixture_folders_are_exclusive(), FixtureFolder, Object, room_and_tree(), Venue
+### Community 170 - "palettes.rs"
+Cohesion: 0.62
+Nodes (6): builtin(), load_user(), named(), NamedPalette, path(), save_user()
 
 ### Community 172 - "stage_editor.rs"
 Cohesion: 0.14
@@ -630,51 +636,55 @@ Nodes (13): CanvasMode, Edit, Select, StageCanvas, Underlay, Arrange, AlignH, Al
 
 ### Community 173 - "src/mapping.rs"
 Cohesion: 0.07
-Nodes (34): add_find_and_json(), ButtonMode, Toggle, Value, channels_key(), Control, BankStep, Blackout (+26 more)
+Nodes (36): Overlay, MapFile, add_find_and_json(), ButtonMode, Toggle, Value, channels_key(), Control (+28 more)
 
 ### Community 174 - "lock.rs"
-Cohesion: 0.43
-Nodes (5): digest(), hash_and_verify(), hash_password(), hex(), verify()
+Cohesion: 0.24
+Nodes (6): digest(), hash_and_verify(), hash_password(), hex(), verify(), addresses_are_one_based()
 
 ### Community 176 - "tools.rs"
-Cohesion: 0.06
-Nodes (79): dechunk(), dechunks(), error_for(), forward(), not_running_gives_error_with_id(), run(), Host, call_tool() (+71 more)
+Cohesion: 0.12
+Nodes (30): any_obj(), apply_scene_fields(), boolean(), clip_schema(), find_type(), fixture_json(), full_workflow(), helpful_errors() (+22 more)
 
 ### Community 178 - "dip.rs"
 Cohesion: 0.57
 Nodes (6): known_addresses(), on_switches(), roundtrip(), switch_value(), SWITCHES, switches()
 
+### Community 179 - "Drag"
+Cohesion: 0.33
+Nodes (6): Drag, FadeIn, FadeOut, Left, Move, Right
+
 ### Community 180 - "demo.rs"
-Cohesion: 0.48
-Nodes (4): cv(), demo_show(), empty_show(), ensure_builtin_types()
+Cohesion: 0.31
+Nodes (5): cv(), demo_show(), empty_show(), ensure_builtin_types(), ChannelValue
 
 ### Community 181 - "ProfileChannel"
 Cohesion: 0.27
 Nodes (5): add_range_until_every_value_is_used(), normalize_repairs_gaps(), ProfileChannel, ranges(), ranges_always_cover_0_to_255()
 
 ### Community 183 - "Tab"
-Cohesion: 0.25
-Nodes (8): sidebar(), Tab, .ALL, Channels, Check, General, Modes, Physical
+Cohesion: 0.29
+Nodes (7): Tab, .ALL, Channels, Check, General, Modes, Physical
 
-### Community 184 - "audio.rs"
-Cohesion: 0.17
-Nodes (8): all_texts_translated(), EN, fill(), fill_replaces_names(), LANG, tr!, texts_in_source(), ACTIVE
+### Community 184 - ".check_placement"
+Cohesion: 0.53
+Nodes (5): PatchError, BadUniverse, OutOfRange, Overlap, UnknownType
 
 ### Community 185 - "midi.rs"
-Cohesion: 0.22
-Nodes (7): MidiEvent, MidiHub, parse(), parses_note_and_cc(), MidiMessage, Cc, Note
+Cohesion: 0.15
+Nodes (10): MidiEvent, MidiHub, parse(), parses_note_and_cc(), Input, Key, Midi, MidiMessage (+2 more)
 
 ### Community 187 - "color_picker.rs"
 Cohesion: 0.16
 Nodes (13): color_picker(), color_swatches(), hex_parsing(), hsv_color(), HUE_H, parse_hex(), PRESET_COLORS, SV_H (+5 more)
 
-### Community 192 - "mapping/mod.rs"
-Cohesion: 0.12
-Nodes (35): bank_step_wraps(), button_rect(), channel_mapping_sets_live_value(), channel_name(), describe(), describe_mapping(), fader(), fader_channels() (+27 more)
+### Community 188 - "BuilderRequest"
+Cohesion: 0.40
+Nodes (5): BuilderRequest, Edit, New, Open, Template
 
-### Community 193 - "Mapper"
-Cohesion: 0.26
-Nodes (3): default_feedback(), Mapper, Sent
+### Community 192 - "mapping/mod.rs"
+Cohesion: 0.10
+Nodes (33): bank_step_wraps(), button_rect(), channel_mapping_sets_live_value(), channel_name(), default_feedback(), describe(), describe_mapping(), fader_channels() (+25 more)
 
 ### Community 197 - "qlc-bundle.rs"
 Cohesion: 0.26
@@ -713,32 +723,36 @@ Cohesion: 0.22
 Nodes (9): Category, All, Beam, Color, Dimmer, Gobo, .ITEMS, Other (+1 more)
 
 ### Community 224 - "Timeline"
-Cohesion: 0.12
-Nodes (14): Clip, ClipContent, Audio, Scene, fades(), GridMode, Beat, Time (+6 more)
+Cohesion: 0.14
+Nodes (11): Clip, ClipContent, Audio, Scene, fades(), one(), paste_finds_free_place_and_keeps_gaps(), split_and_length() (+3 more)
 
 ### Community 242 - "Tastatur- und MIDI-Zuordnung"
 Cohesion: 0.29
 Nodes (6): Fenster, MIDI-Controller einrichten (Einstellungen → MIDI), Neue Elemente zuordenbar machen, Tastatur- und MIDI-Zuordnung, Zuordenbare Elemente, Zuordnung einschalten
 
+### Community 243 - "GridMode"
+Cohesion: 0.67
+Nodes (3): GridMode, Beat, Time
+
 ## Knowledge Gaps
-- **473 isolated node(s):** `Edit`, `New`, `Open`, `Template`, `Closed` (+468 more)
+- **473 isolated node(s):** `Closed`, `Color`, `Gobo`, `Open`, `Other` (+468 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1110 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **115 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **114 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `t()` connect `t` to `Lang`, `profile_builder.rs`, `library_panel.rs`, `programmer.rs`, `Deserialize`, `Profile`, `.show`, `viz/library.rs`, `Builder`, `titlebar.rs`, `scene_props.rs`, `.viewport`, `fx_color.rs`, `VizView`, `Ui`, `FixtureAction`, `textures.rs`, `Fader`, `stage_editor.rs`, `DmxCraftApp`, `settings_window.rs`, `MenuAction`, `Dialog<'a>`, `audio.rs`, `color_picker.rs`, `mapping/mod.rs`, `ViewCtx`, `window.rs`, `stage.rs`, `View`, `fx_ui.rs`, `egui`, `dialog.rs`, `apply`, `app.rs`, `viz/mod.rs`, `scene_grid.rs`, `ProfileBuilder`, `file_dialog.rs`, `control/timeline.rs`, `outline.rs`?**
-  _High betweenness centrality (0.129) - this node is a cross-community bridge._
+- **Why does `Show` connect `Show` to `library_panel.rs`, `runtime.rs`, `theme.rs`, `fx.rs`, `Engine`, `stage_canvas.rs`, `rig.rs`, `VizView`, `Venue`, `FixtureAction`, `Snapshot`, `Scene`, `stage_editor.rs`, `src/mapping.rs`, `DmxCraftApp`, `tools.rs`, `demo.rs`, `.check_placement`, `mapping/mod.rs`, `BankScope`, `window.rs`, `stage.rs`, `feature.rs`, `ShowError`, `motion.rs`, `show.rs`, `app.rs`, `viz/mod.rs`, `scene_grid.rs`, `call`, `engine.rs`, `EffectKind`?**
+  _High betweenness centrality (0.162) - this node is a cross-community bridge._
 - **Are the 144 inferred relationships involving `t()` (e.g. with `.apply_menu()` and `.dialogs()`) actually correct?**
   _`t()` has 144 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Edit`, `New`, `Open` to the rest of the system?**
+- **What connects `Closed`, `Color`, `Gobo` to the rest of the system?**
   _473 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `profile_builder.rs` be split into smaller, more focused modules?**
-  _Cohesion score 0.11255411255411256 - nodes in this community are weakly interconnected._
-- **Why does `Show` connect `Show` to `library_panel.rs`, `runtime.rs`, `theme.rs`, `fx.rs`, `Engine`, `stage_canvas.rs`, `Scene`, `rig.rs`, `VizView`, `FixtureAction`, `Snapshot`, `core/src/lib.rs`, `Venue`, `stage_editor.rs`, `src/mapping.rs`, `DmxCraftApp`, `tools.rs`, `demo.rs`, `mapping/mod.rs`, `BankScope`, `window.rs`, `stage.rs`, `feature.rs`, `ShowError`, `motion.rs`, `show.rs`, `app.rs`, `viz/mod.rs`, `scene_grid.rs`, `engine.rs`, `EffectKind`?**
-  _High betweenness centrality (0.126) - this node is a cross-community bridge._
+- **Should `server.rs` be split into smaller, more focused modules?**
+  _Cohesion score 0.11822660098522167 - nodes in this community are weakly interconnected._
+- **Why does `t()` connect `t` to `library_panel.rs`, `programmer.rs`, `control/timeline.rs`, `audio.rs`, `Profile`, `.show`, `viz/library.rs`, `HeaderAction`, `titlebar.rs`, `Serialize`, `scene_props.rs`, `.viewport`, `fx_color.rs`, `VizView`, `Ui`, `FixtureAction`, `palettes.rs`, `textures.rs`, `Fader`, `stage_editor.rs`, `DmxCraftApp`, `settings_window.rs`, `color_picker.rs`, `mapping/mod.rs`, `ViewCtx`, `window.rs`, `stage.rs`, `View`, `fx_ui.rs`, `egui`, `dialog.rs`, `apply`, `app.rs`, `viz/mod.rs`, `scene_grid.rs`, `ProfileBuilder`, `file_dialog.rs`, `Rect`, `outline.rs`?**
+  _High betweenness centrality (0.111) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `Show` (e.g. with `Mappings` and `Venue`) actually correct?**
   _`Show` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Should `runtime.rs` be split into smaller, more focused modules?**
-  _Cohesion score 0.13043478260869565 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.11692307692307692 - nodes in this community are weakly interconnected._

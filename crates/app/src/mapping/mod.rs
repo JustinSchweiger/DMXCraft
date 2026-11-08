@@ -324,6 +324,19 @@ fn target_shape(
 /// Anzeigename einer Zuordnung: (Kategorie, Ziel).
 pub fn describe_mapping(show: &Show, m: &Mapping) -> (String, String) {
     match (&m.control, &m.name) {
+        // feste Kanäle: aktuelle Gerätenamen (Umbenennen wirkt sofort)
+        (Control::Channels, _) if !m.channels.is_empty() => {
+            let fixtures: std::collections::BTreeSet<_> =
+                m.channels.iter().map(|c| c.fixture).collect();
+            let label = channel_name(show, m.channels[0]);
+            let label = if fixtures.len() > 1 {
+                let chan = label.split_once(": ").map_or(label.as_str(), |x| x.1);
+                crate::tr!("{n} Geräte: {chan}", n = fixtures.len(), chan = chan)
+            } else {
+                label
+            };
+            (crate::i18n::t("Programmer").to_string(), label)
+        }
         (Control::Ui { .. } | Control::Channels, Some(n)) => n.clone(),
         (c, _) => describe(show, c),
     }
