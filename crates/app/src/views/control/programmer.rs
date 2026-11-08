@@ -473,12 +473,13 @@ fn fader(
     let shown = ui.scope(|ui| fader.show(ui));
     let ev = shown.inner;
     let key = format!("programmer/fader/{:?}/{}", grp.kind, grp.number);
-    if let Some(v) = crate::mapping::fader(
+    if let Some(v) = crate::mapping::fader_channels(
         ui,
         shown.response.rect,
         &key,
         f32::from(value) / 255.0,
-        || (t("Programmer").to_string(), grp.name.clone()),
+        &grp.channels,
+        || (t("Programmer").to_string(), fader_label(e, grp)),
     ) {
         set_group(e, layer, grp, (v * 255.0).round() as u8);
         return;
@@ -554,6 +555,19 @@ fn fx_target_id() -> egui::Id {
 }
 
 /// Kanaltyp dem Effekt zuordnen bzw. wieder entfernen.
+/// Name eines Faders für die Zuordnungsliste: Kanal und Geräte.
+fn fader_label(e: &Engine, grp: &FaderGroup) -> String {
+    let fixtures: std::collections::BTreeSet<_> = grp.channels.iter().map(|c| c.fixture).collect();
+    let who = match fixtures.iter().next() {
+        Some(f) if fixtures.len() == 1 => e
+            .show()
+            .fixture(*f)
+            .map_or_else(String::new, |f| f.name.clone()),
+        _ => tr!("{n} Geräte", n = fixtures.len()),
+    };
+    format!("{}: {}", who, grp.name)
+}
+
 fn toggle_feature(
     e: &mut Engine,
     scene: dmxcraft_core::SceneId,

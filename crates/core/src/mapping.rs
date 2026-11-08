@@ -50,6 +50,7 @@ impl Mappings {
             flash: false,
             feedback: None,
             name: None,
+            channels: Vec::new(),
         });
         id
     }
@@ -103,6 +104,10 @@ pub struct Mapping {
     /// ([`Control::Ui`]); andere Ziele werden aus der Show beschriftet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<(String, String)>,
+    /// Feste Kanäle (Programmer-Fader, zugeordnet mit einer Geräteauswahl):
+    /// Ziel bei [`Control::Channels`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub channels: Vec<ChannelRef>,
 }
 
 impl Mapping {
@@ -146,6 +151,9 @@ pub enum Control {
     Channel {
         channel: ChannelRef,
     },
+    /// Feste Kanäle der Zuordnung ([`Mapping::channels`]) als Live-Werte –
+    /// wirkt unabhängig von der Auswahl.
+    Channels,
     /// Bedienelement der Oberfläche (Knopf, Regler, Farbfeld …), erkannt
     /// über einen festen Schlüssel ([`ui_key`]). Das Element reagiert selbst,
     /// solange es angezeigt wird.
@@ -265,6 +273,15 @@ pub fn ui_key(name: &str) -> u64 {
     name.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
         (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
     })
+}
+
+/// Prüfsumme einer Kanalliste (für den Schlüssel „Fader mit diesen Geräten“).
+pub fn channels_key(channels: &[ChannelRef]) -> u64 {
+    let mut s = String::new();
+    for c in channels {
+        s.push_str(&format!("{}.{};", c.fixture.0, c.channel));
+    }
+    ui_key(&s)
 }
 
 /// Notenname wie in vielen DAWs und Daslight-Listen: 60 = C3, 0 = C-2.

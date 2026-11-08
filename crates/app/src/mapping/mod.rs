@@ -45,10 +45,27 @@ fn pick_id() -> egui::Id {
     egui::Id::unique("mapping_pick")
 }
 
-/// Angeklicktes Element mit Anzeigename (nur bei [`Control::Ui`]).
-type Pick = (Control, Option<(String, String)>);
+/// Angeklicktes Element mit Anzeigename (nur bei [`Control::Ui`]) und den
+/// Kanälen, die es gerade steuert (Programmer-Fader).
+#[derive(Clone, Debug)]
+struct Pick {
+    element: Control,
+    name: Option<(String, String)>,
+    channels: Vec<dmxcraft_core::ChannelRef>,
+}
 
-fn pick(ctx: &egui::Context, p: Pick) {
+fn pick(ctx: &egui::Context, element: Control, name: Option<(String, String)>) {
+    pick_full(
+        ctx,
+        Pick {
+            element,
+            name,
+            channels: Vec::new(),
+        },
+    );
+}
+
+fn pick_full(ctx: &egui::Context, p: Pick) {
     ctx.data_mut(|d| d.insert_temp(pick_id(), Some(p)));
 }
 
@@ -126,10 +143,40 @@ pub fn fader(
     value: f32,
     name: impl FnOnce() -> (String, String),
 ) -> Option<f32> {
+    fader_channels(ui, rect, key, value, &[], name)
+}
+
+/// Wie [`fader`] für einen Fader, der gerade bestimmte Kanäle steuert
+/// (Programmer). Eine neue Zuordnung steuert dann fest diese Kanäle – auch
+/// wenn die Geräte später nicht mehr ausgewählt sind. Im Fenster lässt sich
+/// stattdessen „Ausgewählte Geräte“ wählen (folgt der Auswahl).
+pub fn fader_channels(
+    ui: &egui::Ui,
+    rect: Rect,
+    key: &str,
+    value: f32,
+    channels: &[dmxcraft_core::ChannelRef],
+    name: impl FnOnce() -> (String, String),
+) -> Option<f32> {
     let key = dmxcraft_core::mapping::ui_key(key);
-    let control = Control::Ui { key, fader: true };
+    // Element = Fader mit genau diesen Kanälen (Schlüssel ^ Kanalliste)
+    let element = if channels.is_empty() {
+        key
+    } else {
+        key ^ dmxcraft_core::mapping::channels_key(channels)
+    };
     report(ui.ctx(), key, value > 0.0);
-    if target_with(ui, rect, control, name) {
+    if target_shape(
+        ui,
+        rect,
+        0.0,
+        Control::Ui {
+            key: element,
+            fader: true,
+        },
+        name,
+        channels,
+    ) {
         return None;
     }
     let f = take_fire(ui.ctx(), key)?;
@@ -149,9 +196,14 @@ pub fn target(ui: &egui::Ui, rect: Rect, control: Control) -> bool {
 /// Wie [`target`] für eine gedrehte Fläche (Grad um die Mitte), z. B. ein
 /// gedrehtes Gerät im Bühnenplan.
 pub fn target_rotated(ui: &egui::Ui, rect: Rect, rotation: f32, control: Control) -> bool {
-    target_shape(ui, rect, rotation, control, || {
-        (String::new(), String::new())
-    })
+    target_shape(
+        ui,
+        rect,
+        rotation,
+        control,
+        || (String::new(), String::new()),
+        &[],
+    )
 }
 
 /// Wie [`target`], mit Anzeigename für Bedienelemente der Oberfläche.
@@ -161,7 +213,7 @@ fn target_with(
     control: Control,
     name: impl FnOnce() -> (String, String),
 ) -> bool {
-    target_shape(ui, rect, 0.0, control, name)
+    target_shape(ui, rect, 0.0, control, name, &[])
 }
 
 /// Ecken eines um seine Mitte gedrehten Rechtecks.
@@ -195,6 +247,7 @@ fn target_shape(
     rotation: f32,
     control: Control,
     name: impl FnOnce() -> (String, String),
+    channels: &[dmxcraft_core::ChannelRef],
 ) -> bool {
     let Some(o) = ui.ctx().data(|d| d.get_temp::<Overlay>(overlay_id())) else {
         return false;
@@ -258,7 +311,14 @@ fn target_shape(
     }
     if resp.clicked() && inside {
         let name = matches!(control, Control::Ui { .. }).then(name);
-        pick(ui.ctx(), (control, name));
+        pick_full(
+            ui.ctx(),
+            Pick {
+                element: control,
+                name,
+                channels: channels.to_vec(),
+            },
+        );
     }
     true
 }
@@ -266,7 +326,7 @@ fn target_shape(
 /// Anzeigename einer Zuordnung: (Kategorie, Ziel).
 pub fn describe_mapping(show: &Show, m: &Mapping) -> (String, String) {
     match (&m.control, &m.name) {
-        (Control::Ui { .. }, Some(n)) => n.clone(),
+        (Control::Ui { .. } | Control::Channels, Some(n)) => n.clone(),
         (c, _) => describe(show, c),
     }
 }
@@ -340,6 +400,7 @@ pub fn describe(show: &Show, c: &Control) -> (String, String) {
                 .map_or_else(|| t("(gelöscht)").to_string(), |f| f.name.clone()),
         ),
         Control::Channel { channel } => (t("Gerät").to_string(), channel_name(show, *channel)),
+        Control::Channels => (t("Programmer").to_string(), t("Feste Kanäle").to_string()),
     }
 }
 
@@ -348,10 +409,13 @@ pub fn channel_name(show: &Show, ch: dmxcraft_core::ChannelRef) -> String {
     let Some(f) = show.fixture(ch.fixture) else {
         return t_deleted();
     };
-    let name = show
-        .type_of(f)
-        .and_then(|ty| ty.channels.get(usize::from(ch.channel)))
-        .map_or_else(|| format!("{}", ch.channel + 1), |c| c.name.clone());
+    let name = if ch.is_virtual() {
+        crate::i18n::t("Dimmer (virtuell)").to_string()
+    } else {
+        show.type_of(f)
+            .and_then(|ty| ty.channels.get(usize::from(ch.channel)))
+            .map_or_else(|| format!("{}", ch.channel + 1), |c| c.name.clone())
+    };
     format!("{}: {}", f.name, name)
 }
 
@@ -390,8 +454,12 @@ pub fn resolve(show: &Show, st: &AppState, t: &SceneTarget) -> Vec<SceneId> {
 }
 
 /// Zustand „an“ eines Elements (für die LED-Rückmeldung).
-fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, c: &Control) -> bool {
-    match c {
+fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, m: &Mapping) -> bool {
+    match &m.control {
+        Control::Channels => m
+            .channels
+            .iter()
+            .any(|c| e.live().get(c).is_some_and(|v| *v > 0)),
         Control::Scene { target } => resolve(e.show(), st, target)
             .iter()
             .any(|id| e.is_active(*id)),
@@ -503,6 +571,30 @@ fn fire(
         Control::Fixture { id } => {
             if pressed && !st.selected.remove(id) {
                 st.selected.insert(*id);
+            }
+        }
+        Control::Channels => {
+            let any_on = m
+                .channels
+                .iter()
+                .any(|c| e.live().get(c).is_some_and(|v| *v > 0));
+            for ch in &m.channels {
+                let ch = *ch;
+                if cc || m.mode == ButtonMode::Value {
+                    e.set_live(ch, ((u32::from(value) * 255 + 63) / 127) as u8);
+                } else if m.flash {
+                    if pressed {
+                        e.set_live(ch, 255);
+                    } else {
+                        e.clear_live_channel(ch);
+                    }
+                } else if pressed {
+                    if any_on {
+                        e.clear_live_channel(ch);
+                    } else {
+                        e.set_live(ch, 255);
+                    }
+                }
             }
         }
         Control::Channel { channel } => {
@@ -657,7 +749,14 @@ impl Mapper {
             }
         }
         // angeklicktes Element: vorhandene Zuordnung wählen oder neue anlegen
-        if let (Some(kind), Some(Some((c, name)))) = (
+        if let (
+            Some(kind),
+            Some(Some(Pick {
+                element: c,
+                name,
+                channels,
+            })),
+        ) = (
             st.mapping,
             ctx.data(|d| d.get_temp::<Option<Pick>>(pick_id())),
         ) {
@@ -685,6 +784,12 @@ impl Mapper {
                     if let Some(m) = maps.find_mut(kind, id) {
                         m.flash = flash;
                         m.name = name;
+                        // Programmer-Fader: fest die gerade gesteuerten Kanäle
+                        if !channels.is_empty() {
+                            m.element = Some(c);
+                            m.control = Control::Channels;
+                            m.channels = channels;
+                        }
                         if matches!(
                             c,
                             Control::Master
@@ -921,7 +1026,7 @@ impl Mapper {
             }
             let on = match preview {
                 Some((id, p)) if id == m.id => p,
-                _ => is_on(e, st, states, &m.control),
+                _ => is_on(e, st, states, m),
             };
             let s = if on { fb.on } else { fb.off };
             want.insert(
@@ -1004,6 +1109,7 @@ mod tests {
             flash,
             feedback: None,
             name: None,
+            channels: Vec::new(),
         }
     }
 
@@ -1105,5 +1211,25 @@ mod tests {
         };
         assert_eq!(s.message(), [0x96, 56, 21]);
         assert_eq!(s.blank(), [0x90, 56, 0]);
+    }
+
+    #[test]
+    fn fixed_channels_work_without_selection() {
+        let (mut e, mut st, _, _, _) = setup();
+        let chans = vec![
+            dmxcraft_core::ChannelRef {
+                fixture: dmxcraft_core::FixtureId(1),
+                channel: 0,
+            },
+            dmxcraft_core::ChannelRef::virtual_dimmer(dmxcraft_core::FixtureId(2)),
+        ];
+        let mut m = mapping(Control::Channels, false);
+        m.channels = chans.clone();
+        assert!(st.selected.is_empty());
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, true);
+        assert!(chans.iter().all(|c| e.live().get(c) == Some(&255)));
+        // Taste: an/aus für alle zusammen
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, false);
+        assert!(chans.iter().all(|c| e.live().get(c).is_none()));
     }
 }

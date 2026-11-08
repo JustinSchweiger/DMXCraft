@@ -129,7 +129,7 @@ fn presets(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, 
             ];
             for (c, label) in items {
                 if ui.button(label).clicked() {
-                    super::pick(ui.ctx(), (c, None));
+                    super::pick(ui.ctx(), c, None);
                     ui.close();
                 }
             }
@@ -534,8 +534,38 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
 fn targets(show: &Show, m: &Mapping) -> Vec<(Control, String)> {
     let scene = |target| Control::Scene { target };
     let mut out = Vec::new();
+    // Programmer-Fader: feste Geräte oder der Auswahl folgen
+    if let (Control::Ui { key, fader: true }, false) = (m.element(), m.channels.is_empty()) {
+        let fixtures: std::collections::BTreeSet<_> =
+            m.channels.iter().map(|c| c.fixture).collect();
+        let fixed = match fixtures.iter().next() {
+            Some(f) if fixtures.len() == 1 => show
+                .fixture(*f)
+                .map_or_else(|| t("(gelöscht)").to_string(), |f| f.name.clone()),
+            _ => crate::tr!("{n} Geräte", n = fixtures.len()),
+        };
+        out.push((
+            Control::Channels,
+            crate::tr!("Fest: {devices}", devices = fixed),
+        ));
+        out.push((
+            Control::Ui {
+                key: key ^ dmxcraft_core::mapping::channels_key(&m.channels),
+                fader: true,
+            },
+            t("Ausgewählte Geräte (folgt der Auswahl)").to_string(),
+        ));
+    }
     if let Control::Fixture { id } = m.element() {
         out.push((Control::Fixture { id }, t("Auswahl umschalten").to_string()));
+        if show.virtual_dimmer(id).is_some() {
+            out.push((
+                Control::Channel {
+                    channel: dmxcraft_core::ChannelRef::virtual_dimmer(id),
+                },
+                t("Dimmer (virtuell)").to_string(),
+            ));
+        }
         if let Some(ty) = show.fixture(id).and_then(|f| show.type_of(f)) {
             for (i, c) in ty.channels.iter().enumerate() {
                 out.push((

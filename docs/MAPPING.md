@@ -42,6 +42,8 @@ Zwei Arten von Elementen verhalten sich verschieden:
 * **Szenen, Bänke und globale Befehle** wirken immer.
 * **Elemente der Oberfläche** (Programmer, Seitenleiste, Bühne) wirken wie ein Klick bzw. eine Reglerbewegung. Das geht nur, solange das Element angezeigt wird. Der Dimmer-Fader des Programmers wirkt also auf die gerade ausgewählten Geräte.
 
+**Programmer-Fader** werden mit den gerade ausgewählten Geräten zugeordnet: Die Zuordnung steuert fest deren Kanal als Live-Wert, auch wenn die Geräte später nicht mehr ausgewählt sind („Ziel: Fest“). Wer lieber einen Fader möchte, der immer auf die aktuelle Auswahl wirkt, wählt unter „Ziel“ „Ausgewählte Geräte (folgt der Auswahl)“. Derselbe Fader kann mit verschiedenen Geräteauswahlen mehrfach zugeordnet werden.
+
 Regler (Fader, Drehregler) folgen einem MIDI-Regler (CC) direkt. Eine Taste schaltet einen Regler zwischen 0 und voll um.
 
 ## Fenster
