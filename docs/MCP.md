@@ -52,11 +52,27 @@ Sitzungen).
 | Wiedergabe | `play_scene`, `stop_scene`, `pause_scene`, `set_output` (Master, Blackout, Tempo) |
 | Live | `set_live_values`, `clear_live_values` |
 | 3D-Ort | `get_venue`, `set_venue`, `add_venue_object`, `update_venue_object`, `delete_venue_objects`, `place_fixtures` (Position, an Traverse hängen, auf Punkt ausrichten) |
+| 3D-Visualisierer | `get_visualizer`, `set_visualizer` (Fenster, Qualität, Kamera), `visualizer_screenshot` (PNG-Bild der Ansicht mit dem aktuellen DMX-Ausgang) |
+| Profile Builder | `list_profiles`, `get_profile`, `describe_profile_format`, `save_profile`, `delete_profile` |
 | Datei | `save_show` |
 
 Kanalwerte gibt man entweder einzeln an (`{fixture, channel, value}`, Kanal
 als Index, Art wie `"Red"` oder Name) oder bequem je Kanalart für mehrere
 Geräte: `{"fixtures": [1,2,3], "set": {"Dimmer": 255, "color": "#ff8800"}}`.
+
+**3D-Visualisierer:** `visualizer_screenshot` rendert die Ansicht direkt auf
+der Grafikkarte (das Fenster muss nicht offen sein) und liefert sie als Bild –
+so kann der Assistent Positionen, Ausrichtung und Farben prüfen. Kamera über
+`view` (`front`, `back`, `left`, `right`, `top`, `overview`) und/oder `yaw`,
+`pitch`, `distance`, `target`, `fov`; `front` blickt von der Publikumsseite
+(+z). `set_visualizer` setzt dieselben Angaben für das Fenster.
+
+**Profile Builder:** `save_profile` speichert wie der Profile Builder in den
+Konfigurationsordner (`fixtures/`), macht die Bereiche lückenlos und nennt
+Probleme (fehlender Modus, Winkel bei Pan …) statt zu speichern. Eigene
+Profile erscheinen in `search_fixture_library` (mit `own_profile`) und lassen
+sich mit `add_fixtures` patchen; bereits gepatchte Geräte werden beim
+Speichern aktualisiert. `describe_profile_format` liefert eine Vorlage.
 
 Effekte werden über ihre JSON-Einstellungen gesteuert: `describe_effect`
 liefert die Vorlage, `add_effect`/`update_effect` übernehmen davon nur die

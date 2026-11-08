@@ -8,8 +8,10 @@ use std::sync::{Arc, Mutex};
 
 use dmxcraft_core::Engine;
 use dmxcraft_mcp::server::McpServer;
-use dmxcraft_mcp::{AppEvent, Host};
+use dmxcraft_mcp::{AppEvent, Host, ProfileStore, VizReply};
+use dmxcraft_ofl::Profile;
 use eframe::egui;
+use serde_json::Value;
 
 use crate::settings::Settings;
 
@@ -22,8 +24,37 @@ pub enum McpStatus {
     Error(String),
 }
 
+/// Auftrag an den 3D-Visualisierer (wird in der Oberfläche ausgeführt).
+pub struct VizJob {
+    pub action: String,
+    pub args: Value,
+    pub reply: Sender<Result<VizReply, String>>,
+}
+
+/// Eigene Geräteprofile im Konfigurationsordner (wie der Profile Builder).
+struct AppProfiles;
+
+impl ProfileStore for AppProfiles {
+    fn load(&self) -> Vec<Profile> {
+        crate::profiles::load_all()
+    }
+    fn save(&self, p: &mut Profile) -> Result<(), String> {
+        let others = crate::profiles::load_all();
+        let today = crate::profiles::today();
+        if p.created.is_empty() {
+            p.created = today.clone();
+        }
+        p.modified = today;
+        crate::profiles::save(p, &others).map(|_| ())
+    }
+    fn delete(&self, key: &str) -> Result<(), String> {
+        crate::profiles::delete(key)
+    }
+}
+
 pub struct McpLink {
     server: Option<McpServer>,
+    viz_jobs: Arc<Mutex<Vec<VizJob>>>,
     tx: Sender<AppEvent>,
     rx: Receiver<AppEvent>,
     show_path: Arc<Mutex<String>>,
@@ -38,6 +69,7 @@ impl Default for McpLink {
         let (tx, rx) = channel();
         Self {
             server: None,
+            viz_jobs: Arc::default(),
             tx,
             rx,
             show_path: Arc::default(),
@@ -84,6 +116,14 @@ impl McpLink {
         self.rx.try_iter().collect()
     }
 
+    /// Wartende Aufträge an den 3D-Visualisierer.
+    pub fn take_viz_jobs(&self) -> Vec<VizJob> {
+        self.viz_jobs
+            .lock()
+            .map(|mut j| std::mem::take(&mut *j))
+            .unwrap_or_default()
+    }
+
     /// Erneut versuchen (z. B. nach Ändern des Ports).
     pub fn retry(&mut self) {
         self.server = None;
@@ -92,6 +132,8 @@ impl McpLink {
 
     fn host(&self, ctx: &egui::Context, engine: &Arc<Mutex<Engine>>) -> Host {
         let tx = self.tx.clone();
+        let jobs = self.viz_jobs.clone();
+        let vctx = ctx.clone();
         let ctx = ctx.clone();
         Host {
             engine: engine.clone(),
@@ -102,6 +144,21 @@ impl McpLink {
             }),
             audio_duration_ms: Arc::new(crate::audio::duration_ms),
             locked: self.locked.clone(),
+            profiles: Arc::new(AppProfiles),
+            // Auftrag einreihen, Oberfläche wecken und auf die Antwort warten
+            viz: Arc::new(move |action, args| {
+                let (reply, rx) = channel();
+                jobs.lock()
+                    .map_err(|_| "Visualisierer nicht verfügbar".to_string())?
+                    .push(VizJob {
+                        action: action.to_string(),
+                        args: args.clone(),
+                        reply,
+                    });
+                vctx.request_repaint();
+                rx.recv_timeout(std::time::Duration::from_secs(20))
+                    .map_err(|_| "Der Visualisierer hat nicht geantwortet (Oberfläche beschäftigt oder minimiert?)".to_string())?
+            }),
         }
     }
 }

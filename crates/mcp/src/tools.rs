@@ -104,6 +104,21 @@ fn venue_object_schema() -> Value {
     )
 }
 
+fn camera_schema() -> Value {
+    json!({
+        "type": "object",
+        "description": "Kamera (alles optional): view = \"front\" | \"back\" | \"left\" | \"right\" | \"top\" | \"overview\" (Grundstellung) als Ausgangspunkt, dann yaw (Grad um die Hochachse; 0 = von vorn, also von der Publikumsseite +z; 90 = von rechts +x), pitch (Grad, positiv = von oben, -89–89), distance (m), target [x, y, z] (Blickpunkt in m), fov (Öffnungswinkel in Grad).",
+        "properties": {
+            "view": { "type": "string" },
+            "yaw": { "type": "number" },
+            "pitch": { "type": "number" },
+            "distance": { "type": "number" },
+            "target": { "type": "array", "items": { "type": "number" } },
+            "fov": { "type": "number" }
+        }
+    })
+}
+
 fn clip_schema() -> Value {
     json!({
         "type": "object",
@@ -436,6 +451,70 @@ const TOOLS: &[Tool] = &[
         read_only: false,
     },
     Tool {
+        name: "get_visualizer",
+        title: "3D-Visualisierer abfragen",
+        description: "Zustand des 3D-Visualisierers: Fenster offen, Qualität, Kamera (yaw, pitch, distance, target, fov) und Raumgröße. Den Ort selbst (Bauten, Geräte-Lagen) liefert get_venue; Umgebungslicht, Strahlen und Nebel stellt set_venue ein.",
+        schema: || obj(json!({}), &[]),
+        read_only: true,
+    },
+    Tool {
+        name: "set_visualizer",
+        title: "3D-Visualisierer einstellen",
+        description: "Fenster öffnen/schließen, Qualität (\"low\", \"medium\", \"high\", \"ultra\") und die Kamera der Ansicht setzen.",
+        schema: || obj(props! {
+            "open": boolean("Fenster öffnen (true) oder schließen (false)"),
+            "quality": string("low | medium | high | ultra"),
+            "camera": camera_schema(),
+        }, &[]),
+        read_only: false,
+    },
+    Tool {
+        name: "visualizer_screenshot",
+        title: "Bild des 3D-Visualisierers",
+        description: "Rendert die 3D-Ansicht mit dem aktuellen DMX-Ausgang als PNG-Bild (Lichtstrahlen, Lichtflecken, Bauten) – z. B. um Positionen, Ausrichtung oder Farben einer Szene zu prüfen. Ohne `camera` aus Sicht der aktuellen Kamera. Das Fenster muss dafür nicht offen sein.",
+        schema: || obj(props! {
+            "camera": camera_schema(),
+            "width": int("Breite in Pixel (Standard 1280, 320–2560)"),
+            "height": int("Höhe in Pixel (Standard 720, 240–1600)"),
+        }, &[]),
+        read_only: true,
+    },
+    Tool {
+        name: "list_profiles",
+        title: "Eigene Geräteprofile",
+        description: "Eigene Geräteprofile aus dem Profile Builder mit Modi, Gerätetyp-Schlüsseln (type_key für add_fixtures) und offenen Problemen.",
+        schema: || obj(json!({}), &[]),
+        read_only: true,
+    },
+    Tool {
+        name: "get_profile",
+        title: "Geräteprofil lesen",
+        description: "Ein eigenes Geräteprofil vollständig (Kanäle mit Bereichen, Modi, physische Daten) – zum Ändern lesen, anpassen und mit save_profile speichern.",
+        schema: || obj(props! { "key": string("Schlüssel aus list_profiles") }, &["key"]),
+        read_only: true,
+    },
+    Tool {
+        name: "describe_profile_format",
+        title: "Format der Geräteprofile",
+        description: "Vorlage (Beispielprofil), Hinweise und alle Bereichsarten (capability kinds) mit ihren Werten für save_profile.",
+        schema: || obj(json!({}), &[]),
+        read_only: true,
+    },
+    Tool {
+        name: "save_profile",
+        title: "Geräteprofil speichern",
+        description: "Legt ein eigenes Geräteprofil an (ohne key) oder ersetzt eines (mit key) – wie Speichern im Profile Builder. Bereiche werden lückenlos gemacht; bei Fehlern (fehlender Name, Modus, Winkel …) wird nicht gespeichert und die Probleme werden genannt. Bereits gepatchte Geräte des Profils werden aktualisiert.",
+        schema: || obj(props! { "profile": any_obj("Profil wie bei get_profile bzw. describe_profile_format") }, &["profile"]),
+        read_only: false,
+    },
+    Tool {
+        name: "delete_profile",
+        title: "Geräteprofil entfernen",
+        description: "Entfernt ein eigenes Geräteprofil aus der Bibliothek (die Datei kommt in den Ordner „geloescht“). Gepatchte Geräte behalten ihren Gerätetyp.",
+        schema: || obj(props! { "key": string("Schlüssel aus list_profiles") }, &["key"]),
+        read_only: false,
+    },
+    Tool {
         name: "save_show",
         title: "Show speichern",
         description: "Speichert die Show (ohne `path` unter dem aktuellen Pfad).",
@@ -469,6 +548,27 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
     if !read_only && host.locked.load(std::sync::atomic::Ordering::Relaxed) {
         return Err("DMXCraft ist gesperrt (Schloss in der Titelleiste) – nur lesende Werkzeuge sind erlaubt".into());
     }
+    // 3D-Visualisierer: läuft in der Oberfläche, die dafür die Engine braucht –
+    // also ohne Sperre der Engine aufrufen
+    match name {
+        "get_visualizer" => return (host.viz)("get", a).map(|r| r.0),
+        "set_visualizer" => return (host.viz)("set", a).map(|r| r.0),
+        "visualizer_screenshot" => {
+            let (mut info, png) = (host.viz)("screenshot", a)?;
+            let png = png.ok_or("Kein Bild erhalten")?;
+            info["__image_png"] = Value::String(base64(&png));
+            return Ok(info);
+        }
+        "list_profiles" => return crate::profiles::list(host.profiles.as_ref()),
+        "get_profile" => return crate::profiles::get(host.profiles.as_ref(), &req_str(a, "key")?),
+        "describe_profile_format" => return crate::profiles::format(),
+        _ => {}
+    }
+    let user_types = if matches!(name, "search_fixture_library" | "add_fixtures") {
+        crate::profiles::user_types(host.profiles.as_ref())
+    } else {
+        Vec::new()
+    };
     let mut guard = host
         .engine
         .lock()
@@ -479,8 +579,22 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
         "list_fixtures" => Ok(
             json!({ "fixtures": e.show().fixtures.iter().map(|f| fixture_json(e.show(), f.id)).collect::<Vec<_>>() }),
         ),
-        "search_fixture_library" => search_library(a),
-        "add_fixtures" => add_fixtures(e, a),
+        "search_fixture_library" => search_library(a, &user_types),
+        "add_fixtures" => add_fixtures(e, a, &user_types),
+        "save_profile" => {
+            let r = crate::profiles::save(host.profiles.as_ref(), e, a);
+            if r.is_ok() {
+                (host.notify)(AppEvent::ProfilesChanged);
+            }
+            r
+        }
+        "delete_profile" => {
+            let r = crate::profiles::delete(host.profiles.as_ref(), e, &req_str(a, "key")?);
+            if r.is_ok() {
+                (host.notify)(AppEvent::ProfilesChanged);
+            }
+            r
+        }
         "update_fixture" => update_fixture(e, a),
         "delete_fixtures" => {
             let list = id_list(a, "ids")?;
@@ -1087,8 +1201,11 @@ fn dmx_output(e: &Engine, a: &Value) -> R {
 // ---------- Geräte ----------
 
 /// Gerätetyp aus Show, eingebauten Typen oder Bibliothek.
-fn find_type(show: &Show, key: &str) -> Option<FixtureType> {
+fn find_type(show: &Show, key: &str, user: &[FixtureType]) -> Option<FixtureType> {
     if let Some(t) = show.fixture_type(key) {
+        return Some(t.clone());
+    }
+    if let Some(t) = user.iter().find(|t| t.key == key) {
         return Some(t.clone());
     }
     if let Some(t) = dmxcraft_core::library::builtin_fixture_types()
@@ -1105,7 +1222,7 @@ fn find_type(show: &Show, key: &str) -> Option<FixtureType> {
         .cloned()
 }
 
-fn search_library(a: &Value) -> R {
+fn search_library(a: &Value, user: &[FixtureType]) -> R {
     let q = req_str(a, "query")?;
     let limit = opt_u64(a, "limit").unwrap_or(15).clamp(1, 50) as usize;
     let words: Vec<String> = q.split_whitespace().map(str::to_lowercase).collect();
@@ -1118,6 +1235,16 @@ fn search_library(a: &Value) -> R {
         })
         .map(|t| json!({ "manufacturer": t.manufacturer, "model": t.model, "modes": [mode_json(t)] }))
         .collect();
+    // eigene Profile (Profile Builder) zuerst
+    let mut own: Vec<Value> = Vec::new();
+    for t in user {
+        let hay = format!("{} {} {} eigene own", t.manufacturer, t.model, t.mode).to_lowercase();
+        if words.iter().all(|w| hay.contains(w)) {
+            own.push(json!({ "manufacturer": t.manufacturer, "model": t.model, "own_profile": true, "modes": [mode_json(t)] }));
+        }
+    }
+    own.append(&mut hits);
+    let mut hits = own;
     for f in dmxcraft_ofl::Library::embedded().search(&q, limit) {
         hits.push(json!({
             "manufacturer": f.manufacturer,
@@ -1130,9 +1257,9 @@ fn search_library(a: &Value) -> R {
     Ok(json!({ "results": hits }))
 }
 
-fn add_fixtures(e: &mut Engine, a: &Value) -> R {
+fn add_fixtures(e: &mut Engine, a: &Value, user: &[FixtureType]) -> R {
     let key = req_str(a, "type_key")?;
-    let ty = find_type(e.show(), &key).ok_or(format!(
+    let ty = find_type(e.show(), &key, user).ok_or(format!(
         "Gerätetyp „{key}“ nicht gefunden – erst search_fixture_library nutzen"
     ))?;
     let count = opt_u64(a, "count").unwrap_or(1).clamp(1, 512) as usize;
@@ -1447,8 +1574,36 @@ fn add_clips(
     Ok(ids)
 }
 
+/// Base64 (Standard-Alphabet, mit Auffüllung) für Bilder im MCP-Ergebnis.
+pub(crate) fn base64(data: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let b = [c[0], *c.get(1).unwrap_or(&0), *c.get(2).unwrap_or(&0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for i in 0..4 {
+            if i <= c.len() {
+                out.push(T[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn base64_matches() {
+        assert_eq!(super::base64(b""), "");
+        assert_eq!(super::base64(b"f"), "Zg==");
+        assert_eq!(super::base64(b"fo"), "Zm8=");
+        assert_eq!(super::base64(b"foo"), "Zm9v");
+        assert_eq!(super::base64(b"foobar"), "Zm9vYmFy");
+    }
+
     use super::*;
 
     fn host() -> Host {

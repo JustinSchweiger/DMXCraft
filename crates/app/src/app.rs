@@ -739,6 +739,9 @@ impl eframe::App for DmxCraftApp {
                     self.state.focus = crate::state::Focus::Scenes;
                     self.state.mode = Mode::Control;
                 }
+                dmxcraft_mcp::AppEvent::ProfilesChanged => {
+                    self.state.user_profiles = crate::profiles::load_user();
+                }
             }
         }
 
@@ -918,6 +921,20 @@ impl eframe::App for DmxCraftApp {
             }
         }
         self.state.viewport_busy = false;
+        // Aufträge des KI-Assistenten an den Visualisierer (Kamera, Bild)
+        let jobs = self.mcp.take_viz_jobs();
+        if !jobs.is_empty() {
+            let mut e = Self::lock(&self.engine);
+            let mut cx = ViewCtx {
+                engine: &mut e,
+                state: &mut self.state,
+                frame: &frame,
+            };
+            for job in jobs {
+                let r = self.viz.mcp(&job.action, &job.args, &mut cx, rs.as_ref());
+                let _ = job.reply.send(r);
+            }
+        }
         // 3D-Visualisierer im eigenen Fenster (z. B. auf dem zweiten Bildschirm)
         if self.state.viz_window {
             let engine = self.engine.clone();

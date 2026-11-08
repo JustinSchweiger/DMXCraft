@@ -15,6 +15,8 @@ Begriffe: Geräte (fixtures) sind gepatcht (Universum, Startadresse) und haben K
 Effekte (ColorFx, ChaserFx, MoveFx, ValueFx, CurveFx, Mappings, ColorMappings). \
 Eine SUPER SCENE ist eine Zeitleiste mit Spuren, auf denen Szenen- und Audioblöcke liegen. \
 Tipp: erst get_overview bzw. list_fixtures aufrufen, um IDs und Kanäle zu kennen. \
+Mit visualizer_screenshot lässt sich das Ergebnis im 3D-Visualisierer ansehen; eigene \
+Geräteprofile (Profile Builder) gehen über list_profiles, get_profile und save_profile. \
 Änderungen sind sofort in der Oberfläche sichtbar und lassen sich dort mit Strg+Z \
 rückgängig machen; gespeichert wird erst mit save_show.";
 
@@ -87,7 +89,12 @@ fn call_tool(host: &Host, params: &Value) -> Value {
         .get("arguments")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let out = tools::call(host, name, &args);
+    let mut out = tools::call(host, name, &args);
+    // Bild (z. B. visualizer_screenshot) als eigener Inhalt
+    let image = match &mut out {
+        Ok(Value::Object(m)) => m.remove("__image_png"),
+        _ => None,
+    };
     let (text, is_error) = match &out {
         Ok(v) => (
             serde_json::to_string_pretty(v).unwrap_or_else(|_| v.to_string()),
@@ -98,8 +105,12 @@ fn call_tool(host: &Host, params: &Value) -> Value {
     if !is_error {
         (host.notify)(AppEvent::ToolCalled(name.to_string()));
     }
+    let mut content = vec![json!({ "type": "text", "text": text })];
+    if let Some(Value::String(data)) = image {
+        content.push(json!({ "type": "image", "data": data, "mimeType": "image/png" }));
+    }
     let mut res = json!({
-        "content": [{ "type": "text", "text": text }],
+        "content": content,
         "isError": is_error,
     });
     if let Ok(v @ Value::Object(_)) = out {

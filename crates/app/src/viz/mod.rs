@@ -4,6 +4,7 @@
 //! in eine Textur, die egui anzeigt – in einem eigenen
 //! Fenster (z. B. auf einem zweiten Bildschirm).
 
+mod assist;
 pub mod camera;
 pub mod gltf_import;
 pub mod library;
@@ -192,6 +193,48 @@ fn propose_type(library_name: &str) -> (FixtureType, bool) {
         .cloned()
         .expect("eingebaute Gerätetypen");
     (t, false)
+}
+
+/// Modelle und Bilder des Orts auf die Grafikkarte laden (nur fehlende).
+fn upload_assets(gpu: &mut Gpu, rs: &egui_wgpu::RenderState, show: &dmxcraft_core::Show) {
+    for (key, model) in &show.venue.models {
+        for (i, part) in model.parts.iter().enumerate() {
+            let k = MeshKey::model(key, i);
+            if !gpu.has_mesh(k) {
+                let m = mesh::Mesh {
+                    vertices: part
+                        .vertices()
+                        .into_iter()
+                        .zip(
+                            part.uvs()
+                                .into_iter()
+                                .flatten()
+                                .map(Some)
+                                .chain(std::iter::repeat(None)),
+                        )
+                        .map(|(v, uv)| mesh::Vertex {
+                            pos: [v[0], v[1], v[2]],
+                            normal: [v[3], v[4], v[5]],
+                            uv: uv.unwrap_or([0.0; 2]),
+                        })
+                        .collect(),
+                    indices: part.indices(),
+                };
+                gpu.add_mesh(&rs.device, k, &m);
+            }
+        }
+        for (i, img) in model.images.iter().enumerate() {
+            let id = model_tex_id(key, i);
+            if !gpu.has_texture(id) {
+                gpu.add_texture(rs, id, decode_texture(&img.data.0).as_ref());
+            }
+        }
+    }
+    for (id, img) in &show.venue.textures {
+        if !gpu.has_texture(*id) {
+            gpu.add_texture(rs, *id, decode_texture(&img.data.0).as_ref());
+        }
+    }
 }
 
 /// Achsenfarben der Griffe (x rot, y grün, z blau).
@@ -594,7 +637,7 @@ impl VizView {
         let rect = ui.available_rect_before_wrap();
         let resp = ui.allocate_rect(rect, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
-        let Some(rs) = rs else {
+        let Some(rs) = rs.filter(|rs| Gpu::supported(rs)) else {
             painter.rect_filled(rect, 0.0, Color32::BLACK);
             painter.text(
                 rect.center(),
@@ -804,44 +847,7 @@ impl VizView {
         let time = self.start.elapsed().as_secs_f32();
         let frame = self.frame3d(cx, &cam, aspect, time, q, building);
         let gpu = self.gpu.get_or_insert_with(|| Gpu::new(rs));
-        for (key, model) in &cx.engine.show().venue.models {
-            for (i, part) in model.parts.iter().enumerate() {
-                let k = MeshKey::model(key, i);
-                if !gpu.has_mesh(k) {
-                    let m = mesh::Mesh {
-                        vertices: part
-                            .vertices()
-                            .into_iter()
-                            .zip(
-                                part.uvs()
-                                    .into_iter()
-                                    .flatten()
-                                    .map(Some)
-                                    .chain(std::iter::repeat(None)),
-                            )
-                            .map(|(v, uv)| mesh::Vertex {
-                                pos: [v[0], v[1], v[2]],
-                                normal: [v[3], v[4], v[5]],
-                                uv: uv.unwrap_or([0.0; 2]),
-                            })
-                            .collect(),
-                        indices: part.indices(),
-                    };
-                    gpu.add_mesh(&rs.device, k, &m);
-                }
-            }
-            for (i, img) in model.images.iter().enumerate() {
-                let id = model_tex_id(key, i);
-                if !gpu.has_texture(id) {
-                    gpu.add_texture(rs, id, decode_texture(&img.data.0).as_ref());
-                }
-            }
-        }
-        for (id, img) in &cx.engine.show().venue.textures {
-            if !gpu.has_texture(*id) {
-                gpu.add_texture(rs, *id, decode_texture(&img.data.0).as_ref());
-            }
-        }
+        upload_assets(gpu, rs, cx.engine.show());
         gpu.render(rs, px, msaa, &frame);
         if let Some(tex) = gpu.texture {
             painter.image(

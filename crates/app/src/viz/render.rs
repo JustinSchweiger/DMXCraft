@@ -891,7 +891,15 @@ impl Gpu {
         let color = tex("viz color", HDR, msaa, att, w, h);
         let depth = tex("viz depth", DEPTH, msaa, att, w, h);
         let resolve = tex("viz resolve", HDR, 1, att | bind, w, h);
-        let out = tex("viz out", OUT, 1, att | bind, w, h);
+        // auslesbar für Bilder des KI-Assistenten (MCP)
+        let out = tex(
+            "viz out",
+            OUT,
+            1,
+            att | bind | wgpu::TextureUsages::COPY_SRC,
+            w,
+            h,
+        );
         // Bloom-Ebenen und ihre Bindungen
         let views: Vec<wgpu::TextureView> = (0..BLOOM_LEVELS)
             .map(|k| tex("viz bloom", HDR, 1, att | bind, w >> (k + 1), h >> (k + 1)))
@@ -987,6 +995,67 @@ impl Gpu {
             tone_bind,
             bloom,
         });
+    }
+
+    /// Kann die Grafikkarte den Visualisierer zeichnen? (Ältere bzw.
+    /// OpenGL-Treiber haben keine Speicherpuffer im Fragment-Shader.)
+    pub fn supported(rs: &egui_wgpu::RenderState) -> bool {
+        rs.device.limits().max_storage_buffers_per_shader_stage >= 2
+    }
+
+    /// Das zuletzt gezeichnete Bild auslesen (RGBA, sRGB).
+    pub fn read_image(&self, rs: &egui_wgpu::RenderState) -> Option<image::RgbaImage> {
+        let t = self.targets.as_ref()?;
+        let [w, h] = t.size;
+        let row = w * 4;
+        let padded =
+            row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let device = &rs.device;
+        let buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("viz readback"),
+            size: u64::from(padded * h),
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut enc = device.create_command_encoder(&Default::default());
+        enc.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: t.out.texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buf,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(h),
+                },
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
+        rs.queue.submit([enc.finish()]);
+        let slice = buf.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r);
+        });
+        device.poll(wgpu::PollType::wait_indefinitely()).ok()?;
+        rx.recv().ok()?.ok()?;
+        let data = slice.get_mapped_range().ok()?;
+        let mut px = Vec::with_capacity((row * h) as usize);
+        for y in 0..h {
+            let start = (y * padded) as usize;
+            px.extend_from_slice(&data[start..start + row as usize]);
+        }
+        drop(data);
+        buf.unmap();
+        image::RgbaImage::from_raw(w, h, px)
     }
 
     /// Zeichnet ein Bild in die egui-Textur.
