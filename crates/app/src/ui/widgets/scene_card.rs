@@ -15,6 +15,8 @@ use crate::ui::widgets::Icon;
 
 /// Höhe einer Karte.
 pub const CARD_H: f32 = 54.0;
+/// Höhe einer Karte in der Kompaktansicht (nur Name).
+pub const COMPACT_H: f32 = 32.0;
 /// Breite des Markier-Streifens rechts.
 const STRIP_W: f32 = 22.0;
 
@@ -37,6 +39,8 @@ pub struct SceneCard<'a> {
     pub flash: bool,
     /// SUPER SCENE: Notensymbol.
     pub super_scene: bool,
+    /// Kompaktansicht: niedrig, nur der Name (ohne Typ).
+    pub compact: bool,
 }
 
 /// Antworten der beiden Bereiche einer Karte.
@@ -58,7 +62,8 @@ impl SceneCardResponse {
 
 impl SceneCard<'_> {
     pub fn show(self, ui: &mut Ui) -> SceneCardResponse {
-        let (rect, _) = ui.allocate_exact_size(Vec2::new(self.width, CARD_H), Sense::hover());
+        let h = if self.compact { COMPACT_H } else { CARD_H };
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(self.width, h), Sense::hover());
         let main_rect = Rect::from_min_max(rect.min, pos2(rect.right() - STRIP_W, rect.bottom()));
         let strip = Rect::from_min_max(pos2(main_rect.right(), rect.top()), rect.max);
         let id = ui.next_auto_id();
@@ -111,29 +116,45 @@ impl SceneCard<'_> {
         p.rect_stroke(rect, r, outline, StrokeKind::Inside);
 
         let inner = main_rect.shrink2(Vec2::new(10.0, 8.0));
-        p.text(
-            inner.left_top(),
-            egui::Align2::LEFT_TOP,
-            clip(self.name, ((main_rect.width() - 30.0) / 7.2) as usize),
-            theme::body(),
-            self.color,
-        );
-        p.text(
-            inner.left_top() + Vec2::new(0.0, 20.0),
-            egui::Align2::LEFT_TOP,
-            self.kind.to_uppercase(),
-            theme::heading_font(),
-            if self.active {
-                theme::text()
-            } else {
-                theme::text_dim()
-            },
-        );
-        // Zustand rechts unten im Hauptbereich: läuft / Pause / Ablauf
-        let icon_rect = Rect::from_center_size(
-            pos2(main_rect.right() - 13.0, main_rect.top() + 13.0),
-            Vec2::splat(14.0),
-        );
+        // rechts Platz für die Symbole (Zustand, Flash, Note)
+        let icons = 1 + usize::from(self.flash) + usize::from(self.super_scene);
+        let name_room = main_rect.width() - 12.0 - 18.0 * icons as f32;
+        if self.compact {
+            p.text(
+                pos2(inner.left(), main_rect.center().y - 1.0),
+                egui::Align2::LEFT_CENTER,
+                clip(self.name, (name_room / 7.2) as usize),
+                theme::body(),
+                self.color,
+            );
+        } else {
+            p.text(
+                inner.left_top(),
+                egui::Align2::LEFT_TOP,
+                clip(self.name, ((main_rect.width() - 30.0) / 7.2) as usize),
+                theme::body(),
+                self.color,
+            );
+            p.text(
+                inner.left_top() + Vec2::new(0.0, 20.0),
+                egui::Align2::LEFT_TOP,
+                self.kind.to_uppercase(),
+                theme::heading_font(),
+                if self.active {
+                    theme::text()
+                } else {
+                    theme::text_dim()
+                },
+            );
+        }
+        // Zustand rechts oben im Hauptbereich (kompakt: mittig): läuft / Pause / Ablauf
+        let icon_y = if self.compact {
+            main_rect.center().y - 1.0
+        } else {
+            main_rect.top() + 13.0
+        };
+        let icon_rect =
+            Rect::from_center_size(pos2(main_rect.right() - 13.0, icon_y), Vec2::splat(14.0));
         let icon = match (self.active, self.paused, self.sequence) {
             (true, true, _) => Some(Icon::Pause),
             (true, false, _) => Some(Icon::Play),
@@ -153,19 +174,14 @@ impl SceneCard<'_> {
         }
         // Flash: kleiner Blitz links neben dem Zustandssymbol
         if self.flash {
-            let r = Rect::from_center_size(
-                pos2(main_rect.right() - 32.0, main_rect.top() + 13.0),
-                Vec2::splat(13.0),
-            );
+            let r =
+                Rect::from_center_size(pos2(main_rect.right() - 32.0, icon_y), Vec2::splat(13.0));
             Icon::Lightning.paint(p, r, if self.active { self.color } else { theme::WARN });
         }
         // SUPER SCENE: Musiknote (enthält Audio und Szenen)
         if self.super_scene {
             let x = if self.flash { 50.0 } else { 32.0 };
-            let r = Rect::from_center_size(
-                pos2(main_rect.right() - x, main_rect.top() + 13.0),
-                Vec2::splat(13.0),
-            );
+            let r = Rect::from_center_size(pos2(main_rect.right() - x, icon_y), Vec2::splat(13.0));
             Icon::Music.paint(p, r, self.color);
         }
         // Ein-/Ausblenden: Rampe in der Leiste (steigt beim Ein-, fällt beim

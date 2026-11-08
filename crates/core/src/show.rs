@@ -653,6 +653,9 @@ pub struct Zone {
     /// In STEUERN ausgeblendet (Szenen laufen trotzdem weiter).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
+    /// Kompaktansicht in STEUERN: niedrige Szenenkarten nur mit Namen.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub compact: bool,
 }
 
 /// Eine benannte Geräteauswahl (z. B. „Moving Heads“, „PARs Traverse“).
@@ -1130,6 +1133,7 @@ impl Show {
             name: name.into(),
             color: None,
             hidden: false,
+            compact: false,
         });
         id
     }

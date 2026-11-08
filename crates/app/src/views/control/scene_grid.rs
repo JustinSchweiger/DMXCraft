@@ -22,7 +22,7 @@ use crate::ui::theme;
 use crate::ui::widgets::color_picker::color_swatches;
 use crate::ui::widgets::dialog::select_all;
 use crate::ui::widgets::menu::{self, MenuItem};
-use crate::ui::widgets::scene_card::CARD_H;
+use crate::ui::widgets::scene_card::{CARD_H, COMPACT_H};
 use crate::ui::widgets::{text_field, Icon, IconButton, SceneCard};
 use crate::views::control::programmer::programmer_values;
 use crate::views::{View, ViewCtx};
@@ -69,6 +69,8 @@ enum Action {
     Bank(BankAction),
     /// Umbenennung im Chip abgeschlossen.
     RenameBank(ZoneId, String),
+    /// Kompaktansicht der Bank umschalten.
+    Compact(ZoneId),
 }
 
 /// Aktionen aus dem Bank-Menü.
@@ -606,6 +608,8 @@ fn column(
     actions: &mut Vec<Action>,
 ) {
     let color = theme::zone_color(e.show(), Some(zone));
+    let compact = e.show().zones.iter().any(|z| z.id == zone && z.compact);
+    let card_h = if compact { COMPACT_H } else { CARD_H };
     let scenes: Vec<SceneId> = e
         .show()
         .scenes
@@ -674,6 +678,17 @@ fn column(
                             {
                                 actions.push(Action::NewScene(zone));
                             }
+                            if ui
+                                .add(IconButton::new(Icon::ChevronDown).active(compact))
+                                .on_hover_text(if compact {
+                                    t("Normale Ansicht")
+                                } else {
+                                    t("Kompaktansicht (nur Namen)")
+                                })
+                                .clicked()
+                            {
+                                actions.push(Action::Compact(zone));
+                            }
                         });
                     });
                 });
@@ -694,11 +709,11 @@ fn column(
         // Zeilenhöhe wie tatsächlich belegt: Karte + Abstand + egui-Abstände
         // zwischen den Elementen (sonst passt eine Karte zu viel und es scrollt)
         let gap_y = ui.spacing().item_spacing.y;
-        let row_h = CARD_H + theme::SP_XS + 2.0 * gap_y;
+        let row_h = card_h + theme::SP_XS + 2.0 * gap_y;
         let per_col = if wrap {
             // n Karten brauchen n · Zeile − (Zeile − Karte), kleiner Rand unten
             let room = ui.clip_rect().bottom() - ui.cursor().top() - 4.0;
-            (((room + row_h - CARD_H) / row_h).floor() as usize).max(1)
+            (((room + row_h - card_h) / row_h).floor() as usize).max(1)
         } else {
             usize::MAX
         };
@@ -710,12 +725,13 @@ fn column(
                     ui.set_width(COLUMN_W);
                     for &id in chunk {
                         let top = ui.cursor().top();
-                        cards.push((id, egui::pos2(ui.cursor().left(), top + CARD_H * 0.5)));
+                        cards.push((id, egui::pos2(ui.cursor().left(), top + card_h * 0.5)));
                         scene_card(
                             ui,
                             e,
                             id,
                             color,
+                            compact,
                             locked,
                             marked,
                             rename,
@@ -728,7 +744,7 @@ fn column(
             }
         });
         if !locked {
-            drop_target(ui, zone, color, &cards, actions);
+            drop_target(ui, zone, color, card_h, &cards, actions);
         }
     });
 }
@@ -775,6 +791,7 @@ fn drop_target(
     ui: &mut egui::Ui,
     zone: ZoneId,
     color: Color32,
+    card_h: f32,
     cards: &[(SceneId, egui::Pos2)],
     actions: &mut Vec<Action>,
 ) {
@@ -787,7 +804,7 @@ fn drop_target(
         col.min,
         egui::pos2(
             col.right().max(col.left() + COLUMN_W),
-            ui.clip_rect().bottom().max(col.bottom() + CARD_H),
+            ui.clip_rect().bottom().max(col.bottom() + card_h),
         ),
     );
     let Some(pos) = ui
@@ -814,7 +831,7 @@ fn drop_target(
     // vor der getroffenen Karte; unter der letzten Karte einer Spalte: vor der
     // ersten Karte der nächsten Spalte
     let (before, y) = match hit {
-        Some((id, c)) => (Some(*id), c.y - CARD_H * 0.5 - gap),
+        Some((id, c)) => (Some(*id), c.y - card_h * 0.5 - gap),
         None => {
             let last = in_col.last().map(|(id, _)| *id);
             let next = last
@@ -823,7 +840,7 @@ fn drop_target(
                 .map(|(id, _)| *id);
             let y = in_col
                 .last()
-                .map_or(col.bottom() + gap, |(_, c)| c.y + CARD_H * 0.5 + gap);
+                .map_or(col.bottom() + gap, |(_, c)| c.y + card_h * 0.5 + gap);
             (next, y)
         }
     };
@@ -845,6 +862,7 @@ fn scene_card(
     e: &Engine,
     id: SceneId,
     bank_color: Color32,
+    compact: bool,
     locked: bool,
     marked: &BTreeSet<SceneId>,
     rename: &mut Option<(SceneId, String)>,
@@ -883,6 +901,7 @@ fn scene_card(
         fade: e.fade_state(id),
         flash: scene.settings.flash,
         super_scene: is_super,
+        compact,
     }
     .show(ui);
     if e.fade_state(id).is_some() {
@@ -1186,6 +1205,11 @@ fn apply(
                 ) {
                     let (lo, hi) = (a.min(b), a.max(b));
                     st.selected_scenes = order[lo..=hi].iter().copied().collect();
+                }
+            }
+            Action::Compact(id) => {
+                if let Some(z) = e.show_mut().zone_mut(id) {
+                    z.compact = !z.compact;
                 }
             }
             Action::RenameBank(id, name) => {

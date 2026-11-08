@@ -1087,4 +1087,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Punkt löschen (Entf)", "Delete point (Del)"),
     ("Rundung", "Rounding"),
     ("Doppelklick: Punkt hinzufügen", "Double-click: add point"),
+    ("Normale Ansicht", "Normal view"),
+    ("Kompaktansicht (nur Namen)", "Compact view (names only)"),
 ];
