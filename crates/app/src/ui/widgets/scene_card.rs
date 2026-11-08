@@ -41,6 +41,8 @@ pub struct SceneCard<'a> {
     pub super_scene: bool,
     /// Kompaktansicht: niedrig, nur der Name (ohne Typ).
     pub compact: bool,
+    /// SUPER SCENE mit fehlender Audiodatei: rotes Ausrufezeichen.
+    pub missing: bool,
 }
 
 /// Antworten der beiden Bereiche einer Karte.
@@ -182,7 +184,11 @@ impl SceneCard<'_> {
         if self.super_scene {
             let x = if self.flash { 50.0 } else { 32.0 };
             let r = Rect::from_center_size(pos2(main_rect.right() - x, icon_y), Vec2::splat(13.0));
-            Icon::Music.paint(p, r, self.color);
+            if self.missing {
+                crate::ui::widgets::icons::paint_alert(p, r.expand(1.0), theme::DANGER);
+            } else {
+                Icon::Music.paint(p, r, self.color);
+            }
         }
         // Ein-/Ausblenden: Rampe in der Leiste (steigt beim Ein-, fällt beim
         // Ausblenden), gefüllt bis zum aktuellen Stand

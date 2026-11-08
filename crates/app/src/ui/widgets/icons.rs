@@ -335,3 +335,19 @@ impl Widget for IconButton {
         resp
     }
 }
+
+/// Warnzeichen: gefüllter Kreis mit Ausrufezeichen (Strich und Punkt).
+pub fn paint_alert(p: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
+    let c = rect.center();
+    let r = rect.width().min(rect.height()) / 2.0;
+    p.circle_filled(c, r, color);
+    let ink = egui::Color32::WHITE;
+    p.line_segment(
+        [
+            egui::pos2(c.x, c.y - r * 0.55),
+            egui::pos2(c.x, c.y + r * 0.15),
+        ],
+        egui::Stroke::new((r * 0.24).max(1.5), ink),
+    );
+    p.circle_filled(egui::pos2(c.x, c.y + r * 0.5), (r * 0.14).max(1.0), ink);
+}

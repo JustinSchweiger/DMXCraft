@@ -35,6 +35,8 @@ pub struct TitleInfo<'a> {
     pub mapping: Option<dmxcraft_core::mapping::MapKind>,
     /// Ton-Master (Lautstärke der Audioblöcke).
     pub audio: AudioInfo,
+    /// Anzahl fehlender Audiodateien (rotes Ausrufezeichen).
+    pub missing_audio: usize,
 }
 
 /// Zustand des Ton-Masters für die Titelleiste.
@@ -86,6 +88,8 @@ pub enum MenuAction {
     AudioMaster(f32),
     AudioMute,
     AudioFade,
+    /// Fenster „Fehlende Audiodateien“.
+    MissingAudio,
     /// Tastatur- bzw. MIDI-Zuordnung ein/aus.
     Mapping(dmxcraft_core::mapping::MapKind),
     About,
@@ -256,6 +260,9 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             load_meter(ui, info);
             ui.add_space(theme::SP_M);
             audio_control(ui, info.audio, &mut actions);
+            if info.missing_audio > 0 {
+                missing_alert(ui, info.missing_audio, &mut actions);
+            }
             if let Some((msg, err)) = info.message {
                 ui.separator();
                 let color = if err { theme::DANGER } else { theme::text() };
@@ -264,6 +271,34 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
         });
     });
     actions
+}
+
+/// Rot blinkendes Ausrufezeichen: Audiodateien fehlen; Klick öffnet die Liste.
+fn missing_alert(ui: &mut egui::Ui, n: usize, actions: &mut Vec<MenuAction>) {
+    ui.add_space(theme::SP_S);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(24.0, 24.0), Sense::click());
+    let t_s = ui.input(|i| i.time);
+    let on = (t_s * 2.0).fract() < 0.6;
+    ui.ctx()
+        .request_repaint_after(std::time::Duration::from_millis(100));
+    crate::ui::widgets::icons::paint_alert(
+        ui.painter(),
+        rect.shrink(3.0),
+        if on || resp.hovered() {
+            theme::DANGER
+        } else {
+            theme::DANGER.gamma_multiply(0.35)
+        },
+    );
+    let tip = if n == 1 {
+        t("1 Audiodatei fehlt").to_string()
+    } else {
+        crate::tr!("{n} Audiodateien fehlen", n = n)
+    };
+    let resp = resp.on_hover_text(tip);
+    if resp.clicked() {
+        actions.push(MenuAction::MissingAudio);
+    }
 }
 
 /// Ton-Master: Lautsprecher (stumm), Schieber, Prozent. Nur die Wiedergabe

@@ -923,6 +923,7 @@ fn scene_card(
         flash: scene.settings.flash,
         super_scene: is_super,
         compact,
+        missing: is_super && crate::missing_audio::scene_missing(ui.ctx(), id),
     }
     .show(ui);
     if e.fade_state(id).is_some() {

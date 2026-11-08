@@ -98,6 +98,8 @@ pub struct AppState {
     /// Ziel eines Audio-Triggers wird gewählt (Szene, Block, Trigger):
     /// das nächste Alt + Klick geht an ihn statt an die Touch-Oberfläche.
     pub trigger_pick: Option<(dmxcraft_core::SceneId, u32, u32)>,
+    /// Fehlende Audiodateien der SUPER SCENES (Prüfung und Fenster).
+    pub missing: crate::missing_audio::MissingAudio,
     /// Worauf die Entf-Taste unter STEUERN wirkt (zuletzt angeklickt).
     pub focus: Focus,
     /// Betriebsmodus des Programmers.
@@ -195,6 +197,7 @@ impl AppState {
             audio: Default::default(),
             triggers: Default::default(),
             trigger_pick: None,
+            missing: Default::default(),
             patch: PatchForm {
                 name: String::new(),
                 count: 1,
