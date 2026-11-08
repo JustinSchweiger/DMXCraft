@@ -23,7 +23,7 @@ Programmdatei steht in den Einstellungen zum Kopieren bereit):
 ```json
 {
   "mcpServers": {
-    "dmxcraft": { "command": "C:\\Users\\…\\AppData\\Roaming\\dmxcraft\\dmxcraft-mcp.exe", "args": [] }
+    "dmxcraft": { "command": "C:\\Users\\…\\AppData\\Roaming\\DmxCraft\\dmxcraft-mcp.exe", "args": [] }
   }
 }
 ```
