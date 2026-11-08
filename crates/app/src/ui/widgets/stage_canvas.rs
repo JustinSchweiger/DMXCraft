@@ -245,11 +245,18 @@ impl StageCanvas<'_> {
                 )
             })
             .collect();
+        // Treffer im gedrehten Umriss (Drehung um die Mitte)
         let hit = |p: Pos2| {
             boxes
                 .iter()
                 .rev()
-                .find(|(_, b)| b.expand(3.0).contains(p))
+                .find(|(id, b)| {
+                    let c = b.center();
+                    let (sin, cos) = (-self.show.plan_rotation(*id)).to_radians().sin_cos();
+                    let d = p - c;
+                    let local = c + Vec2::new(d.x * cos - d.y * sin, d.x * sin + d.y * cos);
+                    b.expand(3.0).contains(local)
+                })
                 .map(|(id, _)| *id)
         };
         let (mods, press_origin) = ui.input(|i| (i.modifiers, i.pointer.press_origin()));

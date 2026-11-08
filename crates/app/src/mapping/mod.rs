@@ -146,10 +146,53 @@ pub fn target(ui: &egui::Ui, rect: Rect, control: Control) -> bool {
     target_with(ui, rect, control, || (String::new(), String::new()))
 }
 
+/// Wie [`target`] für eine gedrehte Fläche (Grad um die Mitte), z. B. ein
+/// gedrehtes Gerät im Bühnenplan.
+pub fn target_rotated(ui: &egui::Ui, rect: Rect, rotation: f32, control: Control) -> bool {
+    target_shape(ui, rect, rotation, control, || {
+        (String::new(), String::new())
+    })
+}
+
 /// Wie [`target`], mit Anzeigename für Bedienelemente der Oberfläche.
 fn target_with(
     ui: &egui::Ui,
     rect: Rect,
+    control: Control,
+    name: impl FnOnce() -> (String, String),
+) -> bool {
+    target_shape(ui, rect, 0.0, control, name)
+}
+
+/// Ecken eines um seine Mitte gedrehten Rechtecks.
+fn rotated_quad(rect: Rect, rotation: f32) -> [egui::Pos2; 4] {
+    let c = rect.center();
+    let (sin, cos) = rotation.to_radians().sin_cos();
+    [
+        rect.left_top(),
+        rect.right_top(),
+        rect.right_bottom(),
+        rect.left_bottom(),
+    ]
+    .map(|q| {
+        let d = q - c;
+        c + egui::vec2(d.x * cos - d.y * sin, d.x * sin + d.y * cos)
+    })
+}
+
+/// Liegt ein Punkt im gedrehten Rechteck?
+fn in_rotated(rect: Rect, rotation: f32, p: egui::Pos2) -> bool {
+    let c = rect.center();
+    let (sin, cos) = (-rotation).to_radians().sin_cos();
+    let d = p - c;
+    let local = c + egui::vec2(d.x * cos - d.y * sin, d.x * sin + d.y * cos);
+    rect.contains(local)
+}
+
+fn target_shape(
+    ui: &egui::Ui,
+    rect: Rect,
+    rotation: f32,
     control: Control,
     name: impl FnOnce() -> (String, String),
 ) -> bool {
@@ -159,10 +202,22 @@ fn target_with(
     let Some(kind) = o.kind else {
         return false;
     };
+    let rotated = rotation.rem_euclid(360.0) != 0.0;
+    let quad = rotated_quad(rect, rotation);
+    let hit_rect = if rotated {
+        Rect::from_points(&quad)
+    } else {
+        rect
+    };
     let id = ui
         .scope_id()
         .with(("mapping_target", format!("{control:?}")));
-    let resp = ui.interact(rect, id, Sense::click());
+    let resp = ui.interact(hit_rect, id, Sense::click());
+    let inside = !rotated
+        || resp
+            .hover_pos()
+            .or(resp.interact_pointer_pos())
+            .is_some_and(|p| in_rotated(rect, rotation, p));
     let base = color(kind);
     let label = o.labels.iter().find(|(c, _)| *c == control).map(|l| &l.1);
     let selected = o.selected == Some(control);
@@ -170,29 +225,38 @@ fn target_with(
         0.75
     } else if label.is_some() {
         0.55
-    } else if resp.hovered() {
+    } else if resp.hovered() && inside {
         0.45
     } else {
         0.3
     };
     let p = ui.painter();
-    p.rect_filled(rect, theme::R_S, base.gamma_multiply(alpha));
-    p.rect_stroke(
-        rect,
-        theme::R_S,
-        Stroke::new(if selected { 2.0 } else { 1.0 }, base),
-        StrokeKind::Inside,
-    );
+    let stroke = Stroke::new(if selected { 2.0 } else { 1.0 }, base);
+    if rotated {
+        p.add(egui::Shape::convex_polygon(
+            quad.to_vec(),
+            base.gamma_multiply(alpha),
+            stroke,
+        ));
+    } else {
+        p.rect_filled(rect, theme::R_S, base.gamma_multiply(alpha));
+        p.rect_stroke(rect, theme::R_S, stroke, StrokeKind::Inside);
+    }
     if let Some(l) = label {
         let g = p.layout_no_wrap(
             l.clone(),
             egui::FontId::proportional(theme::FS_CAPTION),
             Color32::WHITE,
         );
-        let pos = rect.right_top() + egui::vec2(-g.size().x - 4.0, 2.0);
+        // gedreht: mittig (die Ecke liegt sonst neben der Form)
+        let pos = if rotated {
+            rect.center() - g.size() * 0.5
+        } else {
+            rect.right_top() + egui::vec2(-g.size().x - 4.0, 2.0)
+        };
         p.galley(pos, g, Color32::WHITE);
     }
-    if resp.clicked() {
+    if resp.clicked() && inside {
         let name = matches!(control, Control::Ui { .. }).then(name);
         pick(ui.ctx(), (control, name));
     }

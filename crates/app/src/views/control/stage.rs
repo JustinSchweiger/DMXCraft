@@ -126,9 +126,10 @@ impl View for StageView {
                     cam.zoom(),
                 );
                 if rect.contains_rect(r) {
-                    crate::mapping::target(
+                    crate::mapping::target_rotated(
                         ui,
                         r,
+                        show.plan_rotation(f.id),
                         dmxcraft_core::mapping::Control::Fixture { id: f.id },
                     );
                 }
