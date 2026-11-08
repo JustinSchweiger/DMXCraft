@@ -187,7 +187,8 @@ fn spot(l: Light, p: vec3<f32>, n: vec3<f32>, view: vec3<f32>, gloss: f32) -> ve
         let w = cross(ax, u);
         let q = -ld;
         let r = acos(clamp(cosang, -1.0, 1.0)) / max(acos(clamp(l.dir.w, -1.0, 1.0)), 1e-3);
-        pattern = gobo(l.extra.z, atan2(dot(q, w), dot(q, u)), r);
+        // unscharf (Fokus): Muster verwischt zum Mittelwert
+        pattern = mix(0.6, gobo(l.extra.z, atan2(dot(q, w), dot(q, u)), r), clamp(l.extra.w, 0.0, 1.0));
     }
     return l.color.rgb * cone * fall * edge * (diff + spec) * sh * pattern;
 }
@@ -230,7 +231,8 @@ fn fs_beam(i: VOut) -> @location(0) vec4<f32> {
     var a = rim * along * air * i.color.a;
     if (i.params.z > 0.5) {
         // Gobo im Strahl: Schächte um die Achse
-        a = a * mix(0.15, 1.0, gobo(i.params.z, atan2(i.local.z, i.local.x), 0.9));
+        let gb = mix(0.6, gobo(i.params.z, atan2(i.local.z, i.local.x), 0.9), clamp(i.params.w, 0.0, 1.0));
+        a = a * mix(0.15, 1.0, gb);
     }
     return vec4<f32>(i.color.rgb * a, 0.0);
 }

@@ -47,6 +47,17 @@ pub struct Fader {
     width: f32,
     /// FX-Symbol zeigen: `Some(zugeordnet)`.
     fx: Option<bool>,
+    /// Wertebereiche aus der Gerätedatei.
+    ranges: Vec<FaderRange>,
+}
+
+/// Wertebereich am Fader: Anfang, Ende, Bezeichnung, Farbe (Farbrad).
+#[derive(Clone, Debug)]
+pub struct FaderRange {
+    pub from: u8,
+    pub to: u8,
+    pub label: String,
+    pub color: Option<Color32>,
 }
 
 impl Fader {
@@ -62,7 +73,14 @@ impl Fader {
             height: None,
             width: FADER_W,
             fx: None,
+            ranges: Vec::new(),
         }
+    }
+
+    /// Wertebereiche zeigen (Leiste am Fader, Bezeichnung, Menü zum Anspringen).
+    pub fn ranges(mut self, r: Vec<FaderRange>) -> Self {
+        self.ranges = r;
+        self
     }
 
     /// Wert liegt im Programmer (Punkt leuchtet, Griff hell).
@@ -345,6 +363,18 @@ impl Fader {
             // nicht zusätzlich die Fader-Leiste scrollen
             ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
         }
+        // Bereich unter dem Zeiger bzw. am aktuellen Wert
+        let range_at = |v: u8| self.ranges.iter().find(|r| (r.from..=r.to).contains(&v));
+        if !self.ranges.is_empty() {
+            if let Some(pos) = resp.hover_pos() {
+                let tv = 1.0 - ((pos.y - travel.top()) / travel.height()).clamp(0.0, 1.0);
+                let v = (tv * 255.0).round() as u8;
+                if let Some(r) = range_at(v) {
+                    resp.clone()
+                        .on_hover_text(format!("{} – {}  {}", r.from, r.to, r.label));
+                }
+            }
+        }
         crate::ui::widgets::menu::context(&resp, |ui| {
             use crate::ui::widgets::menu::{self, MenuItem};
             menu::begin(ui);
@@ -352,6 +382,24 @@ impl Fader {
                 event = FaderEvent::Release;
             }
             menu::separator(ui);
+            if !self.ranges.is_empty() {
+                // Bereiche der Gerätedatei anspringen (Anfang des Bereichs)
+                egui::ScrollArea::vertical()
+                    .max_height(320.0)
+                    .show(ui, |ui| {
+                        for r in &self.ranges {
+                            let text = format!("{}–{}  {}", r.from, r.to, r.label);
+                            if menu::item(
+                                ui,
+                                MenuItem::new(&text)
+                                    .checked(range_at(value).is_some_and(|x| x.from == r.from)),
+                            ) {
+                                event = FaderEvent::Changed(r.from);
+                            }
+                        }
+                    });
+                menu::separator(ui);
+            }
             if menu::item(ui, MenuItem::new(t("Aus (0)")).icon(super::Icon::LightOff)) {
                 event = FaderEvent::Changed(0);
             }
@@ -374,6 +422,38 @@ impl Fader {
             Vec2::new(6.0, track_area.height() - 6.0),
         );
         p.rect_filled(slot, 3.0, theme::bg());
+        if !self.ranges.is_empty() {
+            // Bereiche als Leiste rechts der Schiene, Farbfelder in ihrer Farbe
+            let x0 = outer.right() - 6.0;
+            let y_of = |v: f32| travel.bottom() - travel.height() * (v / 255.0);
+            for (k, r) in self.ranges.iter().enumerate() {
+                let seg = Rect::from_min_max(
+                    pos2(x0, y_of(f32::from(r.to) + 0.5)),
+                    pos2(x0 + 3.0, y_of(f32::from(r.from) - 0.5)),
+                );
+                let c = r.color.unwrap_or(if k % 2 == 0 {
+                    theme::text_faint()
+                } else {
+                    theme::border()
+                });
+                p.rect_filled(seg.shrink2(Vec2::new(0.0, 0.5)), 0.0, c);
+            }
+            // aktueller Bereich senkrecht neben der Schiene
+            if let Some(r) = range_at(value).filter(|r| !r.label.is_empty()) {
+                let font = egui::FontId::proportional(9.5);
+                let color = if self.active {
+                    theme::text_dim()
+                } else {
+                    theme::text_faint()
+                };
+                let galley = p.layout_no_wrap(r.label.clone(), font, color);
+                let pos = pos2(outer.left() + 3.0, travel.bottom() - 2.0);
+                p.with_clip_rect(track_area).add(
+                    egui::epaint::TextShape::new(pos, galley, color)
+                        .with_angle(-std::f32::consts::FRAC_PI_2),
+                );
+            }
+        }
         // Griff
         let tv = f32::from(value) / 255.0;
         let hy = travel.bottom() - travel.height() * tv;

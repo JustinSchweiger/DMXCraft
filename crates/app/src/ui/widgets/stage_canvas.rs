@@ -363,7 +363,8 @@ impl StageCanvas<'_> {
             // Strobe: in der Dunkelphase aus
             if let Some(hz) = strobe_hz(self.show, *id, self.frame) {
                 let time = ui.input(|i| i.time);
-                if (time * f64::from(hz)).fract() > 0.35 {
+                // 0 Hz = Shutter zu
+                if hz <= 0.0 || (time * f64::from(hz)).fract() > 0.35 {
                     for c in &mut colors {
                         *c = (c.0, 0.0);
                     }
@@ -505,8 +506,9 @@ pub fn fixture_rect(show: &Show, id: FixtureId, center: Pos2, zoom: f32) -> Rect
     Rect::from_center_size(center, size)
 }
 
-/// Blitzfrequenz eines Geräts, wenn sein Strobe-Kanal aktiv ist (Werte unter
-/// 10 gelten als „offen“, darüber 1 bis 20 Hz).
+/// Blitzfrequenz eines Geräts, wenn sein Strobe-Kanal blitzt (`Some(0.0)`:
+/// Shutter zu, `None`: offen). Nutzt die Wertebereiche der Gerätedatei; ohne
+/// sie gelten Werte unter 10 als offen, darüber 1 bis 20 Hz.
 pub fn strobe_hz(show: &Show, id: FixtureId, frame: &DmxFrame) -> Option<f32> {
     let f = show.fixture(id)?;
     let ty = show.type_of(f)?;
@@ -515,7 +517,7 @@ pub fn strobe_hz(show: &Show, id: FixtureId, frame: &DmxFrame) -> Option<f32> {
         .iter()
         .position(|c| c.kind == ChannelKind::Strobe)?;
     let v = frame.get(usize::from(f.universe), f.address + i as u16)?;
-    (v >= 10).then(|| 1.0 + f32::from(v - 10) / 245.0 * 19.0)
+    ty.channels[i].strobe(v)
 }
 
 /// Anzeigefarben der einzelnen Lichtarten (linear 0–1).
@@ -557,7 +559,8 @@ pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32
         all(ChannelKind::Uv),
     );
     let dimmers = all(ChannelKind::Dimmer);
-    let wheel = all(ChannelKind::ColorWheel).first().map(|i| value(*i));
+    let wheel_ch = all(ChannelKind::ColorWheel).first().copied();
+    let wheel = wheel_ch.map(value);
     let pixels = [&reds, &greens, &blues, &whites, &uvs]
         .iter()
         .map(|v| v.len())
@@ -588,7 +591,11 @@ pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32
             if !has_color || !mixed {
                 // Farbrad bzw. Farbmakro, sonst Halogen-Weiß
                 if let Some(w) = wheel.filter(|w| *w > 0.03 || !has_color) {
-                    let c = crate::viz::rig::color_wheel(w);
+                    let raw = (w * 255.0).round() as u8;
+                    let c = wheel_ch.map_or_else(
+                        || crate::viz::rig::color_wheel(w),
+                        |i| crate::viz::rig::wheel_color(&ty.channels[i], raw),
+                    );
                     base = [c.x, c.y, c.z];
                 } else if !has_color {
                     base = WHITE;

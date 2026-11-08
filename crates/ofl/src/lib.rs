@@ -72,23 +72,48 @@ static EMBEDDED_QLC: &[u8] = include_bytes!("../data/qlc-library.json.gz");
 /// Pan/Tilt-Bereich) aus der eingebauten Bibliothek, falls sie fehlen
 /// (ältere Shows wurden ohne diese Angaben gepatcht).
 pub fn fill_physical(show: &mut dmxcraft_core::Show) {
-    if show.fixture_types.iter().all(|t| t.physical.is_some()) {
+    fill_details(show, &[]);
+}
+
+/// Ergänzt in einer Show fehlende Angaben der Gerätetypen aus der
+/// Bibliothek bzw. `extra` (eigene Profile), gefunden über den Schlüssel:
+/// physische Daten und Wertebereiche der Kanäle (ältere Shows haben sie nicht).
+pub fn fill_details(show: &mut dmxcraft_core::Show, extra: &[FixtureType]) {
+    let needs =
+        |t: &FixtureType| t.physical.is_none() || t.channels.iter().all(|c| c.ranges.is_empty());
+    if !show.fixture_types.iter().any(needs) {
         return;
     }
     let lib = Library::embedded();
-    for t in show
-        .fixture_types
-        .iter_mut()
-        .filter(|t| t.physical.is_none())
-    {
-        if let Some(p) = lib
-            .fixtures
+    let builtin = dmxcraft_core::library::builtin_fixture_types();
+    for t in show.fixture_types.iter_mut().filter(|t| needs(t)) {
+        let Some(src) = extra
             .iter()
-            .flat_map(|f| f.modes.iter())
+            .chain(&builtin)
             .find(|m| m.key == t.key)
-            .and_then(|m| m.physical)
+            .or_else(|| {
+                lib.fixtures
+                    .iter()
+                    .flat_map(|f| f.modes.iter())
+                    .find(|m| m.key == t.key)
+            })
+        else {
+            continue;
+        };
+        if t.physical.is_none() {
+            t.physical = src.physical;
+        }
+        // Bereiche nur übernehmen, wenn die Kanäle zusammenpassen
+        if t.channels.iter().all(|c| c.ranges.is_empty())
+            && t.channels.len() == src.channels.len()
+            && t.channels
+                .iter()
+                .zip(&src.channels)
+                .all(|(a, b)| a.name == b.name)
         {
-            t.physical = Some(p);
+            for (a, b) in t.channels.iter_mut().zip(&src.channels) {
+                a.ranges = b.ranges.clone();
+            }
         }
     }
 }

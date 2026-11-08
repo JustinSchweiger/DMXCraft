@@ -429,7 +429,16 @@ fn fader(
     // FX-Symbol, solange ein Feature-Effekt angeklickt ist
     let target: Option<FxTarget> = ui.data(|d| d.get_temp(fx_target_id()));
     let assigned = target.as_ref().map(|t| t.kinds.contains(&grp.kind));
+    // Wertebereiche aus der Gerätedatei des ersten Geräts
+    let ranges = e
+        .show()
+        .fixture(first.fixture)
+        .and_then(|f| e.show().type_of(f))
+        .and_then(|t| t.channels.get(usize::from(first.channel)))
+        .map(fader_ranges)
+        .unwrap_or_default();
     let ev = Fader::new(value, grp.number, grp.kind)
+        .ranges(ranges)
         .active(active)
         .dot(dot)
         .color(kind_color(grp.kind))
@@ -453,6 +462,42 @@ fn fader(
         }
         FaderEvent::None | FaderEvent::ToggleFx => {}
     }
+}
+
+/// Bereiche eines Kanals für den Fader; ohne Bezeichnung aus der Wirkung.
+pub fn fader_ranges(c: &dmxcraft_core::ChannelDef) -> Vec<crate::ui::widgets::fader::FaderRange> {
+    use dmxcraft_core::RangeEffect as E;
+    c.ranges
+        .iter()
+        .map(|r| {
+            let label = if !r.label.is_empty() {
+                r.label.clone()
+            } else {
+                match r.effect {
+                    E::Open | E::WheelOpen => t("Offen").to_string(),
+                    E::Closed => t("Zu").to_string(),
+                    E::Strobe { from_hz, to_hz } => tr!(
+                        "Strobe {a}–{b} Hz",
+                        a = format!("{from_hz:.0}"),
+                        b = format!("{to_hz:.0}")
+                    ),
+                    E::Color { .. } => t("Farbe").to_string(),
+                    E::Gobo { slot } => tr!("Gobo {n}", n = slot),
+                    E::Other => String::new(),
+                }
+            };
+            let color = match r.effect {
+                E::Color { rgb } => Some(Color32::from_rgb(rgb[0], rgb[1], rgb[2])),
+                _ => None,
+            };
+            crate::ui::widgets::fader::FaderRange {
+                from: r.from,
+                to: r.to,
+                label,
+                color,
+            }
+        })
+        .collect()
 }
 
 /// Feature-Effekt, dem Fader zugeordnet werden können (für diesen Frame).

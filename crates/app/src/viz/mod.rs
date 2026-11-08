@@ -1087,8 +1087,12 @@ impl VizView {
                 let r = b.lens + len * b.half_angle.to_radians().tan();
                 let rot = glam::Quat::from_rotation_arc(Vec3::NEG_Y, b.dir);
                 let m = Mat4::from_scale_rotation_translation(Vec3::new(r, len, r), rot, b.origin);
+                // Fokus: Schärfe dort, wo der Strahl auftrifft
+                let sharp = b.sharpness(len);
+                let gobo_sharp = if b.focus.is_some() { sharp } else { 1.0 };
                 let mut inst = Instance::new(m, b.color, 1.0, 0.0, 0.0);
                 inst.params[2] = b.gobo;
+                inst.params[3] = gobo_sharp;
                 f.beams.push(inst);
                 let power = b.color.max_element();
                 lights.push((
@@ -1101,9 +1105,9 @@ impl VizView {
                             .extend((b.half_angle * 1.25).to_radians().cos())
                             .into(),
                         color: (b.color * 2.5)
-                            .extend((b.half_angle * 0.6).to_radians().cos())
+                            .extend((b.half_angle * (0.3 + 0.65 * sharp)).to_radians().cos())
                             .into(),
-                        extra: [-1.0, b.half_angle * 1.25, b.gobo, 0.0],
+                        extra: [-1.0, b.half_angle * 1.25, b.gobo, gobo_sharp],
                     },
                 ));
             }

@@ -4,7 +4,22 @@
 
 use crate::fixture::{ChannelDef, ChannelKind as K, FixtureType};
 
-fn ft(key: &str, model: &str, mode: &str, channels: Vec<ChannelDef>) -> FixtureType {
+fn ft(key: &str, model: &str, mode: &str, mut channels: Vec<ChannelDef>) -> FixtureType {
+    use crate::fixture::{ChannelRange, RangeEffect};
+    // generischer Strobe: unten offen, darüber langsam → schnell
+    for c in channels.iter_mut().filter(|c| c.kind == K::Strobe) {
+        c.ranges = vec![
+            ChannelRange::new(0, 9, RangeEffect::Open),
+            ChannelRange::new(
+                10,
+                255,
+                RangeEffect::Strobe {
+                    from_hz: 1.0,
+                    to_hz: 20.0,
+                },
+            ),
+        ];
+    }
     FixtureType {
         physical: None,
         key: key.into(),

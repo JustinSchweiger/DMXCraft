@@ -113,6 +113,85 @@ fn kind_from_group(ch: Node<'_, '_>, name: &str) -> ChannelKind {
     }
 }
 
+fn qlc_hex(s: &str) -> Option<[u8; 3]> {
+    let h = s.trim().trim_start_matches('#');
+    if h.len() < 6 {
+        return None;
+    }
+    let p = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
+    Some([p(0)?, p(2)?, p(4)?])
+}
+
+/// Wertebereiche aus den `<Capability>`-Einträgen.
+fn qlc_ranges(ch: Node<'_, '_>) -> Vec<dmxcraft_core::ChannelRange> {
+    use dmxcraft_core::{ChannelRange, RangeEffect};
+    let mut gobo = 0u8;
+    ch.children()
+        .filter(|c| c.has_tag_name("Capability"))
+        .filter_map(|c| {
+            let n = |a: &str| c.attribute(a).and_then(|v| v.trim().parse::<u16>().ok());
+            let (from, to) = (n("Min")?.min(255) as u8, n("Max")?.min(255) as u8);
+            let label = c.text().unwrap_or("").trim().to_string();
+            let preset = c.attribute("Preset").unwrap_or("");
+            let res = |a: &str| c.attribute(a).and_then(|v| v.trim().parse::<f32>().ok());
+            let strobe = |a: f32, b: f32| RangeEffect::Strobe {
+                from_hz: a,
+                to_hz: b,
+            };
+            let effect = match preset {
+                "ShutterOpen" => RangeEffect::Open,
+                "ShutterClose" | "LampOff" => RangeEffect::Closed,
+                "StrobeSlowToFast"
+                | "StrobeRandomSlowToFast"
+                | "PulseSlowToFast"
+                | "RampUpSlowToFast"
+                | "RampDownSlowToFast"
+                | "ShutterStrobeSlowFast" => strobe(1.0, 20.0),
+                "StrobeFastToSlow"
+                | "StrobeRandomFastToSlow"
+                | "PulseFastToSlow"
+                | "RampUpFastToSlow"
+                | "RampDownFastToSlow"
+                | "ShutterStrobeFastSlow" => strobe(20.0, 1.0),
+                "StrobeRandom" => strobe(8.0, 8.0),
+                "StrobeFrequency" | "PulseFrequency" => {
+                    let hz = res("Res1").unwrap_or(5.0);
+                    strobe(hz, hz)
+                }
+                "StrobeFreqRange" | "PulseFreqRange" => {
+                    strobe(res("Res1").unwrap_or(1.0), res("Res2").unwrap_or(20.0))
+                }
+                "ColorMacro" | "ColorDoubleMacro" => c
+                    .attribute("Res1")
+                    .or(c.attribute("Res"))
+                    .or(c.attribute("Color"))
+                    .and_then(qlc_hex)
+                    .map_or(RangeEffect::Other, |rgb| RangeEffect::Color { rgb }),
+                "GoboMacro" | "GoboShakeMacro" => {
+                    gobo = gobo.saturating_add(1);
+                    RangeEffect::Gobo { slot: gobo }
+                }
+                _ => {
+                    // ältere Dateien: Farbe im Attribut, „open“ im Text
+                    let l = label.to_lowercase();
+                    if let Some(rgb) = c.attribute("Color").and_then(qlc_hex) {
+                        RangeEffect::Color { rgb }
+                    } else if l == "open" || l.starts_with("open ") || l.contains("shutter open") {
+                        RangeEffect::Open
+                    } else if l.contains("closed") || l == "close" || l.contains("blackout") {
+                        RangeEffect::Closed
+                    } else if l.contains("strob") {
+                        strobe(1.0, 20.0)
+                    } else {
+                        RangeEffect::Other
+                    }
+                }
+            };
+            Some(ChannelRange::new(from, to, effect).label(label))
+        })
+        .collect()
+}
+
 /// Feinkanäle von Farben/Dimmer laufen als „Generic“ (die Engine kennt nur
 /// 8 Bit dafür); Presets mit `Fine` am Ende sind also immer Generic.
 fn channel_def(ch: Node<'_, '_>) -> Option<(String, ChannelDef)> {
@@ -134,6 +213,7 @@ fn channel_def(ch: Node<'_, '_>) -> Option<(String, ChannelDef)> {
             name,
             kind,
             default,
+            ranges: qlc_ranges(ch),
         },
     ))
 }

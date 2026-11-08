@@ -88,6 +88,15 @@ pub struct DmxCraftApp {
     request_close: bool,
 }
 
+/// Fehlende Angaben der Gerätetypen ergänzen (Bibliothek und eigene Profile).
+fn fill_types(s: &mut Show) {
+    let own: Vec<dmxcraft_core::FixtureType> = crate::profiles::load_user()
+        .into_iter()
+        .flat_map(|u| u.types)
+        .collect();
+    dmxcraft_ofl::fill_details(s, &own);
+}
+
 impl DmxCraftApp {
     pub fn new(show_path: Option<String>, settings: Settings) -> Self {
         let mut message = None;
@@ -95,7 +104,7 @@ impl DmxCraftApp {
             Some(p) => match Show::load(p) {
                 Ok(mut s) => {
                     demo::ensure_builtin_types(&mut s);
-                    dmxcraft_ofl::fill_physical(&mut s);
+                    fill_types(&mut s);
                     message = Some((tr!("Show „{v}“ geladen", v = s.name), false));
                     s
                 }
@@ -199,7 +208,7 @@ impl DmxCraftApp {
         match Show::load(path) {
             Ok(mut s) => {
                 demo::ensure_builtin_types(&mut s);
-                dmxcraft_ofl::fill_physical(&mut s);
+                fill_types(&mut s);
                 let name = s.name.clone();
                 Self::lock(&self.engine).replace_show(s);
                 self.history.reset(&Snapshot::of(&Self::lock(&self.engine)));

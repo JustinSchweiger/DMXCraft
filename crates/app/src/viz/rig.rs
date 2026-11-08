@@ -36,6 +36,22 @@ pub struct Beam {
     pub lens: f32,
     /// Gobo-Muster (0 = offen, 1–6 angenähert)
     pub gobo: f32,
+    /// Fokuskanal 0–1 (nah → fern), falls vorhanden
+    pub focus: Option<f32>,
+}
+
+impl Beam {
+    /// Schärfe des Lichtflecks in `dist` Metern (1 = scharf). Ohne Fokuskanal
+    /// mittlere Schärfe; sonst scharf, wo die Fokusweite (1,5–20 m) trifft.
+    pub fn sharpness(&self, dist: f32) -> f32 {
+        match self.focus {
+            None => 0.55,
+            Some(f) => {
+                let d_focus = 1.5 + f * 18.5;
+                (-(dist.max(0.1) / d_focus).ln().abs() * 2.2).exp()
+            }
+        }
+    }
 }
 
 /// Farbe eines Farbrads (angenähert, ohne Herstellerangaben):
@@ -56,6 +72,29 @@ pub fn color_wheel(v: f32) -> Vec3 {
     }
     let k = (((v - 0.06) / 0.94) * SLOTS.len() as f32) as usize;
     Vec3::from(SLOTS[k.min(SLOTS.len() - 1)])
+}
+
+/// Farbe eines Farbrad-Kanals: aus den Wertebereichen der Gerätedatei,
+/// sonst angenähert.
+pub fn wheel_color(def: &dmxcraft_core::ChannelDef, v: u8) -> Vec3 {
+    use dmxcraft_core::RangeEffect as E;
+    match def.range_at(v).map(|r| r.effect) {
+        Some(E::Color { rgb }) => linear(rgb),
+        Some(E::WheelOpen | E::Open) => Vec3::new(1.0, 0.95, 0.9),
+        _ if !def.ranges.is_empty() => Vec3::new(1.0, 0.95, 0.9),
+        _ => color_wheel(f32::from(v) / 255.0),
+    }
+}
+
+/// Gobo-Muster eines Gobo-Kanals: aus den Wertebereichen, sonst angenähert.
+pub fn gobo_of(def: &dmxcraft_core::ChannelDef, v: u8) -> f32 {
+    use dmxcraft_core::RangeEffect as E;
+    match def.range_at(v).map(|r| r.effect) {
+        Some(E::Gobo { slot }) => f32::from((slot.max(1) - 1) % 6 + 1),
+        Some(_) => 0.0,
+        None if !def.ranges.is_empty() => 0.0,
+        None => gobo(f32::from(v) / 255.0),
+    }
 }
 
 /// Gobo-Nummer aus dem Kanalwert (angenähert: unten offen, dann sechs Muster).
@@ -126,7 +165,12 @@ fn srgb_to_linear(c: [u8; 3]) -> Vec3 {
 }
 
 /// Farbe und Helligkeit einer Zelle aus den Kanalwerten (0–1).
-fn cell_light(get: &dyn Fn(K, usize) -> Option<f32>, cell: usize, cells: usize) -> Vec3 {
+fn cell_light(
+    get: &dyn Fn(K, usize) -> Option<f32>,
+    wheel: Option<Vec3>,
+    cell: usize,
+    cells: usize,
+) -> Vec3 {
     let r = get(K::Red, cell);
     let g = get(K::Green, cell);
     let b = get(K::Blue, cell);
@@ -135,14 +179,13 @@ fn cell_light(get: &dyn Fn(K, usize) -> Option<f32>, cell: usize, cells: usize) 
     let uv = get(K::Uv, cell);
     let any_color =
         r.is_some() || g.is_some() || b.is_some() || w.is_some() || a.is_some() || uv.is_some();
-    let wheel = get(K::ColorWheel, 0);
     let mut c = if any_color {
         Vec3::new(r.unwrap_or(0.0), g.unwrap_or(0.0), b.unwrap_or(0.0))
             + Vec3::new(1.0, 0.92, 0.82) * w.unwrap_or(0.0)
             + Vec3::new(1.0, 0.5, 0.05) * a.unwrap_or(0.0)
             + Vec3::new(0.32, 0.04, 1.0) * uv.unwrap_or(0.0) * 0.8
-    } else if let Some(v) = wheel {
-        color_wheel(v)
+    } else if let Some(w) = wheel {
+        w
     } else {
         // Halogen/Dimmer: warmweiß
         Vec3::new(1.0, 0.78, 0.5)
@@ -210,25 +253,34 @@ pub fn build(
             }
             Some(value(list[cell % list.len()]))
         };
-        // Strobe: oberhalb der „offen“-Werte blitzen
-        let strobe = by_kind(K::Strobe).first().map(|i| value(*i)).unwrap_or(0.0);
-        let shutter_on = if strobe > 0.08 {
-            let hz = 1.0 + (strobe - 0.08) / 0.92 * 19.0;
-            (t * hz).fract() < 0.25
-        } else {
-            true
+        let raw = |i: usize| (value(i) * 255.0).round() as u8;
+        // Shutter/Strobe nach den Wertebereichen der Gerätedatei
+        let shutter_on = match by_kind(K::Strobe)
+            .first()
+            .and_then(|i| ty.channels[*i].strobe(raw(*i)))
+        {
+            None => true,
+            Some(hz) if hz <= 0.0 => false,
+            Some(hz) => (t * hz).fract() < 0.25,
         };
+        // Farbrad, Gobo und Fokus
+        let wheel_c = by_kind(K::ColorWheel)
+            .first()
+            .map(|i| wheel_color(&ty.channels[*i], raw(*i)));
+        let focus = by_kind(K::Focus).first().map(|i| value(*i));
         // Abstrahlwinkel aus den Gerätedaten (mit Zoomkanal zwischen min und max)
         let zoom = ty
             .channels
             .iter()
-            .position(|c| c.name.to_lowercase().contains("zoom"))
+            .position(|c| c.kind == K::Zoom || c.name.to_lowercase().contains("zoom"))
             .map(value);
         let phys_half = ty.physical.map(|p| {
             let [a, b] = p.beam_angle;
             (a + (b - a) * zoom.unwrap_or(0.0)) * 0.5
         });
-        let gobo_v = by_kind(K::Gobo).first().map_or(0.0, |i| gobo(value(*i)));
+        let gobo_v = by_kind(K::Gobo)
+            .first()
+            .map_or(0.0, |i| gobo_of(&ty.channels[*i], raw(*i)));
         let sel = selected.contains(&f.id);
         let body = if sel {
             Vec3::new(0.0, 0.45, 0.5)
@@ -257,6 +309,7 @@ pub fn build(
                         color: on * power,
                         lens,
                         gobo: gobo_v,
+                        focus,
                     });
                 }
             };
@@ -298,7 +351,7 @@ pub fn build(
                     ),
                     body,
                 );
-                let light = cell_light(&get, 0, 1);
+                let light = cell_light(&get, wheel_c, 0, 1);
                 let o = base.transform_point3(Vec3::new(0.0, -len - 0.003, 0.0));
                 let d = base.transform_vector3(down).normalize();
                 add_lens(
@@ -328,7 +381,7 @@ pub fn build(
                 );
                 for c in 0..cells {
                     let x = -width * 0.5 + width * (c as f32 + 0.5) / cells as f32;
-                    let light = cell_light(&get, c, cells);
+                    let light = cell_light(&get, wheel_c, c, cells);
                     let o = base.transform_point3(Vec3::new(x, -0.072, 0.0));
                     let d = base.transform_vector3(down).normalize();
                     add_lens(
@@ -390,7 +443,7 @@ pub fn build(
                     gloss: 0.5,
                     emissive: 0.0,
                 });
-                let light = cell_light(&get, 0, cells.max(1));
+                let light = cell_light(&get, wheel_c, 0, cells.max(1));
                 let o = head.transform_point3(Vec3::new(0.0, -0.135, 0.0));
                 let d = head.transform_vector3(down).normalize();
                 add_lens(
@@ -435,7 +488,7 @@ pub fn build(
                     ),
                     body,
                 );
-                let light = cell_light(&get, 0, 1);
+                let light = cell_light(&get, wheel_c, 0, 1);
                 let light = if light.max_element() < 0.01 {
                     // Laser ohne Farbkanal: grün, wenn irgendein Kanal aktiv ist
                     let any = (0..ty.channels.len()).any(|i| value(i) > 0.05);

@@ -22,10 +22,16 @@
   32 Schatten).
 * Die Werte kommen direkt aus dem DMX-Ausgang: Dimmer, RGB/W/Amber/UV (auch je
   Zelle bei Bars), Strobe, Pan/Tilt (mit Feinkanal) bei Moving Heads.
-* Farbrad und Gobos werden angenähert, weil die Gerätedaten keine
-  Farbfelder/Gobo-Bilder enthalten: Farbrad unten offen, dann acht typische
-  Farben; Gobo unten offen, dann sechs Muster (Stern, Punkte, Ringe, Breakup,
-  Balken, Spirale) im Lichtfleck und als Schächte im Strahl.
+* **Wertebereiche** der Kanäle (aus OFL, QLC+ und dem Profile Builder):
+  Shutter offen/zu und Strobe-Frequenz, Farbrad-Felder mit ihrer Farbe,
+  Gobo-Felder. Ohne Bereiche wird angenähert (Strobe unter 10 offen,
+  Farbrad mit acht typischen Farben, Gobo mit sechs Mustern: Stern, Punkte,
+  Ringe, Breakup, Balken, Spirale – im Lichtfleck und als Schächte im Strahl).
+  Ältere Shows bekommen die Bereiche beim Öffnen aus der Bibliothek bzw. den
+  eigenen Profilen (gleicher Schlüssel und gleiche Kanalnamen).
+* **Fokus**: Der Fokuskanal stellt eine Schärfeweite von 1,5 bis 20 m ein;
+  Lichtfleck und Gobo sind dort scharf, wo der Strahl in dieser Entfernung
+  auftrifft, sonst weich.
 
 ## Veranstaltungsort
 

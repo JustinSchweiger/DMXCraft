@@ -285,6 +285,159 @@ impl<'a> Lookup<'a> {
     }
 }
 
+/// OFL-Geschwindigkeit („fast“, „5Hz“, „120bpm“, „50%“) in Hz.
+fn speed_hz(v: Option<&Value>) -> Option<f32> {
+    let s = v?.as_str()?.trim().to_lowercase();
+    let num = |suffix: &str| {
+        s.strip_suffix(suffix)
+            .and_then(|n| n.trim().parse::<f32>().ok())
+    };
+    if s.starts_with("fast") {
+        Some(20.0)
+    } else if s.starts_with("slow") {
+        Some(1.0)
+    } else if s == "stop" {
+        Some(0.0)
+    } else if let Some(hz) = num("hz") {
+        Some(hz)
+    } else if let Some(bpm) = num("bpm") {
+        Some(bpm / 60.0)
+    } else {
+        num("%").map(|p| 1.0 + p / 100.0 * 19.0)
+    }
+}
+
+fn hex_rgb(s: &str) -> Option<[u8; 3]> {
+    let h = s.trim().trim_start_matches('#');
+    if h.len() != 6 {
+        return None;
+    }
+    let p = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
+    Some([p(0)?, p(2)?, p(4)?])
+}
+
+/// Wertebereiche eines (groben) Kanals aus den OFL-Fähigkeiten.
+fn ofl_ranges(
+    fixture: &Value,
+    ch_name: &str,
+    r: &Resolved<'_>,
+) -> Vec<dmxcraft_core::ChannelRange> {
+    use dmxcraft_core::{ChannelRange, RangeEffect};
+    // Bereichsangaben in höherer Auflösung auf 8 Bit
+    let shift = match r.def.get("dmxValueResolution").and_then(Value::as_str) {
+        Some("8bit") => 0,
+        Some("16bit") => 8,
+        Some("24bit") => 16,
+        _ => 8 * r.fine_count as u32,
+    };
+    let caps = capabilities(r.def);
+    if caps.len() < 2 && caps.first().is_none_or(|c| c.get("dmxRange").is_none()) {
+        // eine Fähigkeit für den ganzen Kanal: nur Strobe/Shutter ist interessant
+        let Some(c) = caps.first() else {
+            return Vec::new();
+        };
+        if c.get("type").and_then(Value::as_str) != Some("ShutterStrobe") {
+            return Vec::new();
+        }
+    }
+    let mut out = Vec::new();
+    for c in caps {
+        let (from, to) = match c.get("dmxRange").and_then(Value::as_array) {
+            Some(a) => {
+                let n = |i: usize| {
+                    (a.get(i).and_then(Value::as_u64).unwrap_or(0) >> shift).min(255) as u8
+                };
+                (n(0), n(1))
+            }
+            None => (0, 255),
+        };
+        let ty = c.get("type").and_then(Value::as_str).unwrap_or("");
+        let comment = c
+            .get("comment")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let mut label = comment;
+        let effect = match ty {
+            "ShutterStrobe" => match c.get("shutterEffect").and_then(Value::as_str) {
+                Some("Open") => RangeEffect::Open,
+                Some("Closed") => RangeEffect::Closed,
+                _ => {
+                    let a = speed_hz(c.get("speedStart")).or(speed_hz(c.get("speed")));
+                    let b = speed_hz(c.get("speedEnd")).or(a);
+                    RangeEffect::Strobe {
+                        from_hz: a.unwrap_or(1.0).max(0.2),
+                        to_hz: b.unwrap_or(20.0).max(0.2),
+                    }
+                }
+            },
+            "WheelSlot" => {
+                let wheel = c.get("wheel").and_then(Value::as_str).unwrap_or(ch_name);
+                let n = c
+                    .get("slotNumber")
+                    .or_else(|| c.get("slotNumberStart"))
+                    .and_then(Value::as_f64)
+                    .unwrap_or(1.0)
+                    .floor()
+                    .max(1.0) as usize;
+                let slot = fixture
+                    .get("wheels")
+                    .and_then(|w| w.get(wheel))
+                    .and_then(|w| w.get("slots"))
+                    .and_then(Value::as_array)
+                    .and_then(|s| s.get(n - 1));
+                let slot_ty = slot
+                    .and_then(|s| s.get("type"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                if label.is_empty() {
+                    label = slot
+                        .and_then(|s| s.get("name"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                }
+                match slot_ty {
+                    "Open" => RangeEffect::WheelOpen,
+                    "Closed" => RangeEffect::Closed,
+                    "Color" => slot
+                        .and_then(|s| s.get("colors"))
+                        .and_then(Value::as_array)
+                        .and_then(|c| c.first())
+                        .and_then(Value::as_str)
+                        .and_then(hex_rgb)
+                        .map_or(RangeEffect::Other, |rgb| RangeEffect::Color { rgb }),
+                    "Gobo" | "GoboShake" => RangeEffect::Gobo {
+                        slot: n.min(255) as u8,
+                    },
+                    _ => RangeEffect::Other,
+                }
+            }
+            "ColorPreset" => c
+                .get("colors")
+                .and_then(Value::as_array)
+                .and_then(|c| c.first())
+                .and_then(Value::as_str)
+                .and_then(hex_rgb)
+                .map_or(RangeEffect::Other, |rgb| RangeEffect::Color { rgb }),
+            _ => RangeEffect::Other,
+        };
+        if label.is_empty() && matches!(effect, RangeEffect::Other) {
+            // „PanTiltSpeed“ → „Pan Tilt Speed“
+            let mut l = String::new();
+            for (i, ch) in ty.chars().enumerate() {
+                if i > 0 && ch.is_uppercase() {
+                    l.push(' ');
+                }
+                l.push(ch);
+            }
+            label = l;
+        }
+        out.push(ChannelRange::new(from, to, effect).label(label));
+    }
+    out
+}
+
 fn wheel_kind(fixture: &Value, wheel: &str) -> ChannelKind {
     let slots = fixture
         .get("wheels")
@@ -452,6 +605,11 @@ pub fn convert_fixture(
                     channel_kind(&fixture, ch_name, &r).refine(ch_name)
                 },
                 default: default_value(&r),
+                ranges: if r.fine > 0 {
+                    Vec::new()
+                } else {
+                    ofl_ranges(&fixture, ch_name, &r)
+                },
             },
             None => ChannelDef::new(ch_name, ChannelKind::Generic),
         }
@@ -714,6 +872,38 @@ mod tests {
             r#"{"name": "R", "redirectTo": "y/z", "reason": "SameAsDifferentBrand"}"#,
         );
         assert!(matches!(r, Err(OflError::Skip(_))));
+    }
+
+    #[test]
+    fn shutter_and_wheel_ranges() {
+        use dmxcraft_core::RangeEffect;
+        let fx = r##"{
+            "name": "Spot", "categories": ["Moving Head"],
+            "wheels": {"Color Wheel": {"slots": [{"type":"Open"},{"type":"Color","name":"Red","colors":["#ff0000"]}]}},
+            "availableChannels": {
+                "Shutter": {"capabilities": [
+                    {"dmxRange":[0,7],"type":"ShutterStrobe","shutterEffect":"Closed"},
+                    {"dmxRange":[8,15],"type":"ShutterStrobe","shutterEffect":"Open"},
+                    {"dmxRange":[16,255],"type":"ShutterStrobe","shutterEffect":"Strobe","speedStart":"1Hz","speedEnd":"25Hz"}
+                ]},
+                "Color Wheel": {"capabilities": [
+                    {"dmxRange":[0,9],"type":"WheelSlot","slotNumber":1},
+                    {"dmxRange":[10,19],"type":"WheelSlot","slotNumber":2}
+                ]}
+            },
+            "modes": [{"name":"2ch","channels":["Shutter","Color Wheel"]}]
+        }"##;
+        let lib = convert_fixture("x", "X", "spot", fx).unwrap();
+        let t = &lib.modes[0];
+        let sh = &t.channels[0];
+        assert_eq!(sh.ranges.len(), 3);
+        assert_eq!(sh.strobe(10), None);
+        assert_eq!(sh.strobe(3), Some(0.0));
+        assert_eq!(sh.strobe(255), Some(25.0));
+        let cw = &t.channels[1];
+        assert_eq!(cw.ranges[0].effect, RangeEffect::WheelOpen);
+        assert_eq!(cw.ranges[1].effect, RangeEffect::Color { rgb: [255, 0, 0] });
+        assert_eq!(cw.ranges[1].label, "Red");
     }
 
     #[test]

@@ -228,13 +228,88 @@ impl ChannelKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChannelDef {
     pub name: String,
     pub kind: ChannelKind,
     /// Wert, wenn keine Szene und kein Programmer den Kanal setzt.
     #[serde(default)]
     pub default: u8,
+    /// Wertebereiche mit Bedeutung (aus OFL/QLC+ bzw. dem Profile Builder).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ranges: Vec<ChannelRange>,
+}
+
+/// Wertebereich eines Kanals, z. B. 0–7 „Shutter offen“, 8–250 Strobe.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChannelRange {
+    pub from: u8,
+    pub to: u8,
+    /// Bezeichnung aus der Gerätedatei (leer: aus `effect` abgeleitet).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+    #[serde(default)]
+    pub effect: RangeEffect,
+}
+
+/// Was ein Bereich bewirkt – soweit der Visualisierer es darstellen kann.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RangeEffect {
+    #[default]
+    Other,
+    /// Shutter offen (Licht an, kein Strobe).
+    Open,
+    /// Shutter zu (kein Licht).
+    Closed,
+    /// Blitzen; Frequenz von `from_hz` (Bereichsanfang) bis `to_hz` (Ende).
+    Strobe { from_hz: f32, to_hz: f32 },
+    /// Farbe (Farbrad-Feld oder Farbvorgabe), sRGB.
+    Color { rgb: [u8; 3] },
+    /// Gobo-Feld (1-basiert).
+    Gobo { slot: u8 },
+    /// Offenes Feld eines Rads (weiß bzw. ohne Gobo).
+    WheelOpen,
+}
+
+impl ChannelRange {
+    pub fn new(from: u8, to: u8, effect: RangeEffect) -> Self {
+        Self {
+            from: from.min(to),
+            to: to.max(from),
+            label: String::new(),
+            effect,
+        }
+    }
+
+    pub fn label(mut self, l: impl Into<String>) -> Self {
+        self.label = l.into();
+        self
+    }
+
+    /// Lage des Werts im Bereich, 0–1.
+    pub fn fraction(&self, v: u8) -> f32 {
+        if self.to <= self.from {
+            0.0
+        } else {
+            f32::from(v.saturating_sub(self.from)) / f32::from(self.to - self.from)
+        }
+    }
+}
+
+impl RangeEffect {
+    /// Strobe-Frequenz bzw. Shutter-Zustand für `v` in `r`:
+    /// `Some(None)` offen, `Some(Some(0.0))` zu, `Some(Some(hz))` blitzt.
+    pub fn shutter(&self, r: &ChannelRange, v: u8) -> Option<Option<f32>> {
+        match *self {
+            RangeEffect::Open | RangeEffect::WheelOpen => Some(None),
+            RangeEffect::Closed => Some(Some(0.0)),
+            RangeEffect::Strobe { from_hz, to_hz } => {
+                Some(Some((from_hz + (to_hz - from_hz) * r.fraction(v)).max(0.1)))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl ChannelDef {
@@ -243,7 +318,25 @@ impl ChannelDef {
             name: name.into(),
             kind,
             default: 0,
+            ranges: Vec::new(),
         }
+    }
+
+    /// Bereich, in dem `v` liegt.
+    pub fn range_at(&self, v: u8) -> Option<&ChannelRange> {
+        self.ranges.iter().find(|r| (r.from..=r.to).contains(&v))
+    }
+
+    /// Shutter/Strobe für den Wert `v`: `None` offen, `Some(0.0)` zu,
+    /// `Some(hz)` blitzt. Ohne Bereiche: unter 10 offen, darüber 1–20 Hz.
+    pub fn strobe(&self, v: u8) -> Option<f32> {
+        if !self.ranges.is_empty() {
+            return self
+                .range_at(v)
+                .and_then(|r| r.effect.shutter(r, v))
+                .unwrap_or(None);
+        }
+        (v >= 10).then(|| 1.0 + f32::from(v - 10) / 245.0 * 19.0)
     }
 
     pub fn with_default(mut self, default: u8) -> Self {
@@ -365,6 +458,32 @@ impl FixtureType {
 #[cfg(test)]
 mod refine_tests {
     use super::ChannelKind as K;
+
+    #[test]
+    fn strobe_ranges() {
+        use crate::{ChannelDef, ChannelKind, ChannelRange, RangeEffect};
+        let mut c = ChannelDef::new("Shutter", ChannelKind::Strobe);
+        assert_eq!(c.strobe(0), None);
+        assert!(c.strobe(200).is_some());
+        c.ranges = vec![
+            ChannelRange::new(0, 7, RangeEffect::Closed),
+            ChannelRange::new(8, 15, RangeEffect::Open),
+            ChannelRange::new(
+                16,
+                131,
+                RangeEffect::Strobe {
+                    from_hz: 1.0,
+                    to_hz: 20.0,
+                },
+            ),
+            ChannelRange::new(132, 255, RangeEffect::Open),
+        ];
+        assert_eq!(c.strobe(3), Some(0.0));
+        assert_eq!(c.strobe(10), None);
+        assert_eq!(c.strobe(16), Some(1.0));
+        assert_eq!(c.strobe(131), Some(20.0));
+        assert_eq!(c.strobe(255), None);
+    }
 
     #[test]
     fn refine_by_name() {
