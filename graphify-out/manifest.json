@@ -732,9 +732,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/mapping/mod.rs": {
-    "mtime": 1794152349.2828214,
-    "seen": 1794152401.7184477,
-    "ast_hash": "e161ef870e45853b2c8cd380b651bb01",
+    "mtime": 1794153443.9343152,
+    "seen": 1794153501.2885332,
+    "ast_hash": "d63066cb02bd06831e1e609e3452660b",
     "semantic_hash": ""
   },
   "crates/app/src/mapping/window.rs": {

@@ -127,9 +127,8 @@ pub fn button_rect(
     let key = dmxcraft_core::mapping::ui_key(key);
     let control = Control::Ui { key, fader: false };
     report(ui.ctx(), key, on);
-    if target_with(ui, rect, control, name) {
-        return false;
-    }
+    // Eingaben wirken auch bei offenem Zuordnungsfenster (zum Ausprobieren)
+    target_with(ui, rect, control, name);
     take_fire(ui.ctx(), key).is_some_and(|f| f.press || f.value.is_some_and(|v| v > 0.0))
 }
 
@@ -166,7 +165,8 @@ pub fn fader_channels(
         key ^ dmxcraft_core::mapping::channels_key(channels)
     };
     report(ui.ctx(), key, value > 0.0);
-    if target_shape(
+    // Eingaben wirken auch bei offenem Zuordnungsfenster (zum Ausprobieren)
+    target_shape(
         ui,
         rect,
         0.0,
@@ -176,9 +176,7 @@ pub fn fader_channels(
         },
         name,
         channels,
-    ) {
-        return None;
-    }
+    );
     let f = take_fire(ui.ctx(), key)?;
     match f.value {
         Some(v) => Some(v),
