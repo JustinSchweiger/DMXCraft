@@ -80,7 +80,8 @@ impl AudioPlayer {
 
     /// Wiedergabe an die laufenden SUPER SCENES anpassen.
     pub fn update(&mut self, e: &Engine) {
-        let mut wanted: HashMap<(SceneId, u32), (String, Duration, f32, bool)> = HashMap::new();
+        // je Block: Datei, Stelle, Lautstärke, Tempo (Szenen- × Hauptgeschwindigkeit)
+        let mut wanted: HashMap<(SceneId, u32), (String, Duration, f32, f32)> = HashMap::new();
         for scene in &e.show().scenes {
             let Some(tl) = scene.timeline() else {
                 continue;
@@ -88,7 +89,11 @@ impl AudioPlayer {
             let Some(t) = e.timeline_time(scene.id) else {
                 continue;
             };
-            let running = e.timeline_running(scene.id);
+            let rate = if e.timeline_running(scene.id) {
+                e.speed() * f32::from(scene.settings.speed_pct) / 100.0
+            } else {
+                0.0
+            };
             let now = t as u64;
             for (_, clip) in tl.active_at(now) {
                 if let ClipContent::Audio {
@@ -99,7 +104,7 @@ impl AudioPlayer {
                     let vol = clip.level * clip.fade_at(now) * e.master();
                     wanted.insert(
                         (scene.id, clip.id),
-                        (path.clone(), Duration::from_millis(pos), vol, running),
+                        (path.clone(), Duration::from_millis(pos), vol, rate),
                     );
                 }
             }
@@ -120,8 +125,11 @@ impl AudioPlayer {
         let Some(stream) = &self.stream else {
             return;
         };
-        for (key, (path, pos, vol, running)) in wanted {
+        for (key, (path, pos, vol, rate)) in wanted {
             let vol = vol.clamp(0.0, 1.0);
+            // langsamer/schneller abspielen wie ein Plattenspieler (Tonhöhe
+            // ändert sich mit), damit der Ton synchron zur Szene bleibt
+            let running = rate > 0.01;
             if let std::collections::hash_map::Entry::Vacant(slot) = self.sinks.entry(key) {
                 let Some(p) = start_player(stream, &path, pos) else {
                     continue;
@@ -132,6 +140,9 @@ impl AudioPlayer {
                 continue;
             };
             p.sink.set_volume(vol);
+            if running {
+                p.sink.set_speed(rate.clamp(0.05, 8.0));
+            }
             if !running {
                 p.sink.pause();
                 continue;
@@ -147,6 +158,7 @@ impl AudioPlayer {
                         continue;
                     };
                     n.sink.set_volume(vol);
+                    n.sink.set_speed(rate.clamp(0.05, 8.0));
                     self.sinks.insert(key, n);
                     continue;
                 }

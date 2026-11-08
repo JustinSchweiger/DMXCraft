@@ -1,7 +1,7 @@
 # Graph Report - dmxcraft-src  (2026-11-08)
 
 ## Corpus Check
-- 131 files · ~187,433 words
+- 131 files · ~187,487 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .ttf 3, .ico 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1e480559`
+- Built from commit: `ed63b42f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -207,15 +207,15 @@
 ## Import Cycles
 - 1-file cycle: `crates/core/src/fixture.rs -> crates/core/src/fixture.rs`
 - 1-file cycle: `crates/app/src/views/fixture_menu.rs -> crates/app/src/views/fixture_menu.rs`
-- 2-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/convert.rs`
-- 2-file cycle: `crates/ofl/src/lib.rs -> crates/ofl/src/qxf.rs -> crates/ofl/src/lib.rs`
 - 2-file cycle: `crates/output/src/backends.rs -> crates/output/src/lib.rs -> crates/output/src/backends.rs`
 - 2-file cycle: `crates/output/src/dvc_gold.rs -> crates/output/src/lib.rs -> crates/output/src/dvc_gold.rs`
 - 2-file cycle: `crates/output/src/lib.rs -> crates/output/src/runtime.rs -> crates/output/src/lib.rs`
 - 2-file cycle: `crates/output/src/lib.rs -> crates/output/src/open_dmx.rs -> crates/output/src/lib.rs`
+- 2-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/convert.rs`
+- 2-file cycle: `crates/ofl/src/lib.rs -> crates/ofl/src/qxf.rs -> crates/ofl/src/lib.rs`
+- 3-file cycle: `crates/output/src/backends.rs -> crates/output/src/lib.rs -> crates/output/src/runtime.rs -> crates/output/src/backends.rs`
 - 3-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/profile.rs -> crates/ofl/src/convert.rs`
 - 3-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/qxf.rs -> crates/ofl/src/convert.rs`
-- 3-file cycle: `crates/output/src/backends.rs -> crates/output/src/lib.rs -> crates/output/src/runtime.rs -> crates/output/src/backends.rs`
 
 ## Communities (253 total, 102 thin omitted)
 
@@ -824,7 +824,7 @@ Cohesion: 0.29
 Nodes (6): Fenster, MIDI-Controller einrichten (Einstellungen → MIDI), Neue Elemente zuordenbar machen, Tastatur- und MIDI-Zuordnung, Zuordenbare Elemente, Zuordnung einschalten
 
 ## Knowledge Gaps
-- **510 isolated node(s):** `Loading`, `Move`, `Resize`, `ApcMiniMk2`, `Generic` (+505 more)
+- **510 isolated node(s):** `Loading`, `OpenShow`, `SaveShowAs`, `ImportEv2`, `ImportModel` (+505 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1178 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **102 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -832,15 +832,15 @@ Nodes (6): Fenster, MIDI-Controller einrichten (Einstellungen → MIDI), Neue El
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Engine` connect `Engine` to `paint_item`, `library_panel.rs`, `runtime.rs`, `programmer.rs`, `control/timeline.rs`, `core/src/lib.rs`, `rig.rs`, `scene_props.rs`, `mcp/src/venue.rs`, `core/src/audio.rs`, `t`, `Layer`, `fixture_menu.rs`, `TouchKind`, `DmxCraftApp`, `settings_window.rs`, `tools.rs`, `remote/mod.rs`, `midi.rs`, `views/touch.rs`, `mapping/mod.rs`, `ViewCtx`, `window.rs`, `stage.rs`, `Host`, `Show`, `View`, `engine.rs`, `.end_frame`, `app.rs`, `scene_grid.rs`, `ProfileBuilder`, `Rect`, `super`, `call`, `Snapshot`?**
-  _High betweenness centrality (0.128) - this node is a cross-community bridge._
+  _High betweenness centrality (0.124) - this node is a cross-community bridge._
 - **Are the 159 inferred relationships involving `t()` (e.g. with `.apply_menu()` and `.dialogs()`) actually correct?**
   _`t()` has 159 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Loading`, `Move`, `Resize` to the rest of the system?**
+- **What connects `Loading`, `OpenShow`, `SaveShowAs` to the rest of the system?**
   _510 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `paint_item` be split into smaller, more focused modules?**
   _Cohesion score 0.14393939393939395 - nodes in this community are weakly interconnected._
 - **Why does `Show` connect `Show` to `paint_item`, `library_panel.rs`, `runtime.rs`, `fx.rs`, `Engine`, `theme.rs`, `stage_canvas.rs`, `bank_menu`, `core/src/lib.rs`, `Venue`, `panels.rs`, `rig.rs`, `.show`, `Scene`, `FixtureAction`, `Scene`, `fixture_menu.rs`, `src/mapping.rs`, `TouchKind`, `DmxCraftApp`, `tools.rs`, `demo.rs`, `TouchLayout`, `views/touch.rs`, `mapping/mod.rs`, `window.rs`, `feature.rs`, `ShowError`, `motion.rs`, `engine.rs`, `stage_editor.rs`, `show.rs`, `.end_frame`, `app.rs`, `viz/mod.rs`, `scene_grid.rs`, `call`, `Snapshot`?**
-  _High betweenness centrality (0.122) - this node is a cross-community bridge._
+  _High betweenness centrality (0.124) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `Show` (e.g. with `Mappings` and `TouchLayout`) actually correct?**
   _`Show` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **Should `runtime.rs` be split into smaller, more focused modules?**
