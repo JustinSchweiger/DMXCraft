@@ -150,6 +150,7 @@ impl View for StageEditorView {
                     auto_fit: false,
                     order: &[],
                     underlay: None,
+                    live: None,
                 }
                 .show(
                     ui,

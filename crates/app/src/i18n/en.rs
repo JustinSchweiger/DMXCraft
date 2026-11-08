@@ -617,6 +617,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Fest: {devices}", "Fixed: {devices}"),
     ("Feste Kanäle", "Fixed channels"),
     ("{n} Geräte: {chan}", "{n} devices: {chan}"),
+    ("Live-Werte zurücksetzen", "Reset live values"),
+    ("Live: {channels}", "Live: {channels}"),
     ("Zielpunkt auf dem Boden anklicken", "Click the target point on the floor"),
     ("Ausrichten ({n} Geräte)", "Aim ({n} fixtures)"),
     ("Ausrichten", "Aim"),

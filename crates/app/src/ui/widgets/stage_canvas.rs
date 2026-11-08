@@ -150,6 +150,8 @@ pub struct StageCanvas<'a> {
     pub order: &'a [FixtureId],
     /// Unter den Geräten zeichnen (z. B. das Bild eines Mappings).
     pub underlay: Option<&'a Underlay>,
+    /// Live-Werte: betroffene Geräte bekommen eine Ecke in der Live-Farbe.
+    pub live: Option<&'a std::collections::HashMap<dmxcraft_core::ChannelRef, u8>>,
 }
 
 /// Position eines Geräts (gespeichert oder Standard nach Patch-Reihenfolge).
@@ -390,6 +392,17 @@ impl StageCanvas<'_> {
                 sel,
                 Some(*id) == hovered,
             );
+            if self
+                .live
+                .is_some_and(|l| l.keys().any(|c| c.fixture == *id))
+            {
+                paint_live_corner(
+                    &painter,
+                    self.show.plan_shape(*id),
+                    b,
+                    self.show.plan_rotation(*id),
+                );
+            }
             let time = ui.input(|i| i.time);
             if paint_effects(&painter, self.show, *id, self.frame, b, time) {
                 ui.ctx().request_repaint();
@@ -426,6 +439,31 @@ impl StageCanvas<'_> {
                 b = f.address + ch.max(1) - 1
             );
             let name = f.name.clone();
+            // betroffene Kanäle der Live-Bearbeitung
+            let live: Vec<String> = self.live.map_or_else(Vec::new, |l| {
+                let mut chans: Vec<u16> = l
+                    .keys()
+                    .filter(|c| c.fixture == f.id)
+                    .map(|c| c.channel)
+                    .collect();
+                chans.sort_unstable();
+                chans
+                    .into_iter()
+                    .map(|c| {
+                        let ch = dmxcraft_core::ChannelRef {
+                            fixture: f.id,
+                            channel: c,
+                        };
+                        if ch.is_virtual() {
+                            crate::i18n::t("Dimmer (virtuell)").to_string()
+                        } else {
+                            self.show
+                                .channel_def(ch)
+                                .map_or_else(|| (c + 1).to_string(), |d| d.name.clone())
+                        }
+                    })
+                    .collect()
+            });
             // Einrichten: alles inkl. DIP-Schalter; Steuern: nur Name und Adresse
             let full = self.mode == CanvasMode::Edit;
             let address = f.address;
@@ -435,6 +473,12 @@ impl StageCanvas<'_> {
                     ui.label(egui::RichText::new(ty).color(theme::text_dim()));
                 }
                 ui.label(egui::RichText::new(addr).color(theme::text_dim()));
+                if !live.is_empty() {
+                    ui.label(
+                        egui::RichText::new(tr!("Live: {channels}", channels = live.join(", ")))
+                            .color(theme::WARN),
+                    );
+                }
                 if full {
                     ui.add_space(theme::SP_XS);
                     crate::ui::widgets::DipSwitch {
@@ -748,6 +792,57 @@ pub fn paint_effects(
 /// Zeichnet ein Gerät in seiner Form – vollflächig in der aktuellen Farbe,
 /// mit dünner Kontur, um `rot` Grad gedreht. Pixel-Geräte (Leisten, Matrix)
 /// zeigen ihre Pixel als Segmente, alle anderen eine Farbe.
+/// Markierung „Live-Werte gesetzt“: kleines Dreieck in der Ecke oben rechts
+/// (bei gedrehten Formen an der Ecke, die gerade oben rechts liegt). Liegt
+/// innerhalb des Geräts, damit eng stehende Nachbarn frei bleiben.
+fn paint_live_corner(p: &egui::Painter, shape: PlanShape, r: Rect, rot: f32) {
+    let len = (r.width().min(r.height()) * 0.45).clamp(5.0, 10.0);
+    let color = theme::WARN;
+    let rotated = rot.rem_euclid(360.0) != 0.0 && shape != PlanShape::Round;
+    if !rotated {
+        // runde Geräte: Ecke des umgebenden Quadrats (liegt neben dem Kreis)
+        let c = r.right_top();
+        p.add(egui::Shape::convex_polygon(
+            vec![c, c - Vec2::new(len, 0.0), c + Vec2::new(0.0, len)],
+            color,
+            Stroke::NONE,
+        ));
+        return;
+    }
+    let center = r.center();
+    let (sin, cos) = rot.to_radians().sin_cos();
+    let turn = |q: Pos2| {
+        let d = q - center;
+        center + Vec2::new(d.x * cos - d.y * sin, d.x * sin + d.y * cos)
+    };
+    let quad = [
+        r.left_top(),
+        r.right_top(),
+        r.right_bottom(),
+        r.left_bottom(),
+    ]
+    .map(turn);
+    // Ecke, die am weitesten oben rechts liegt
+    let i = (0..4)
+        .max_by(|a, b| {
+            let s = |q: Pos2| q.x - q.y;
+            s(quad[*a]).total_cmp(&s(quad[*b]))
+        })
+        .unwrap_or(1);
+    let c = quad[i];
+    let a = quad[(i + 1) % 4];
+    let b = quad[(i + 3) % 4];
+    let leg = |to: Pos2| {
+        let d = to - c;
+        c + d / d.length().max(1.0) * len
+    };
+    p.add(egui::Shape::convex_polygon(
+        vec![c, leg(a), leg(b)],
+        color,
+        Stroke::NONE,
+    ));
+}
+
 fn paint_fixture(
     p: &egui::Painter,
     shape: PlanShape,

@@ -81,6 +81,7 @@ impl View for StageView {
             underlay: underlay
                 .as_ref()
                 .map(|f| f as &dyn Fn(&egui::Painter, crate::ui::widgets::stage_canvas::Camera)),
+            live: Some(cx.engine.live()),
         };
         let mut action = None;
         let clip = cx.state.layout_clipboard.is_some();
@@ -88,12 +89,33 @@ impl View for StageView {
         let locked = cx.state.locked;
         let area = ui.available_rect_before_wrap();
         let blind = cx.state.programmer_mode == crate::state::ProgrammerMode::Blind;
+        // Geräte mit Live-Werten (für „Live-Werte zurücksetzen“)
+        let live_fixtures: BTreeSet<FixtureId> =
+            cx.engine.live().keys().map(|c| c.fixture).collect();
+        let mut clear_live: Option<BTreeSet<FixtureId>> = None;
         // Im Auswahlmodus entstehen keine Verschiebungen.
         let _ = canvas.show(
             ui,
             &mut self.interaction,
             &mut cx.state.selected,
             &mut |ui, target, sel| {
+                // Ziel: Auswahl, wenn das Gerät dazugehört, sonst nur das Gerät
+                let ids: BTreeSet<FixtureId> = match target {
+                    Some(t) if !sel.contains(&t) => [t].into(),
+                    _ => sel.clone(),
+                };
+                let affected: BTreeSet<FixtureId> =
+                    ids.intersection(&live_fixtures).copied().collect();
+                if !affected.is_empty() {
+                    menu::begin(ui);
+                    if menu::item(
+                        ui,
+                        MenuItem::new(t("Live-Werte zurücksetzen")).icon(Icon::Undo),
+                    ) {
+                        clear_live = Some(affected);
+                    }
+                    menu::separator(ui);
+                }
                 if locked {
                     ui.label(t("Oberfläche ist gesperrt"));
                     return;
@@ -133,6 +155,18 @@ impl View for StageView {
                         dmxcraft_core::mapping::Control::Fixture { id: f.id },
                     );
                 }
+            }
+        }
+        if let Some(ids) = clear_live {
+            let chans: Vec<_> = cx
+                .engine
+                .live()
+                .keys()
+                .filter(|c| ids.contains(&c.fixture))
+                .copied()
+                .collect();
+            for c in chans {
+                cx.engine.clear_live_channel(c);
             }
         }
         if let Some(a) = action {
