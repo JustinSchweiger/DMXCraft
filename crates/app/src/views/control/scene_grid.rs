@@ -659,7 +659,7 @@ fn column(
                     let (bar, _) = ui
                         .allocate_exact_size(Vec2::new(ui.available_width(), 3.0), Sense::hover());
                     ui.painter().rect_filled(bar, 1.5, color);
-                    ui.label(egui::RichText::new(name).strong().color(color));
+                    ui.label(egui::RichText::new(name).strong().color(theme::ink(color)));
                     ui.horizontal(|ui| {
                         let on = target.is_some();
                         let sid = target.unwrap_or(SceneId(0));

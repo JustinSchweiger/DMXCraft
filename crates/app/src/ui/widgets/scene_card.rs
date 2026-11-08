@@ -125,7 +125,7 @@ impl SceneCard<'_> {
                 egui::Align2::LEFT_CENTER,
                 clip(self.name, (name_room / 7.2) as usize),
                 theme::body(),
-                self.color,
+                theme::ink(self.color),
             );
         } else {
             p.text(
@@ -133,7 +133,7 @@ impl SceneCard<'_> {
                 egui::Align2::LEFT_TOP,
                 clip(self.name, ((main_rect.width() - 30.0) / 7.2) as usize),
                 theme::body(),
-                self.color,
+                theme::ink(self.color),
             );
             p.text(
                 inner.left_top() + Vec2::new(0.0, 20.0),

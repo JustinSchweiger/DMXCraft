@@ -173,7 +173,7 @@ impl StageCanvas<'_> {
         let size = ui.available_size().max(Vec2::new(120.0, 120.0));
         let (rect, resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, theme::bg());
+        painter.rect_filled(rect, 0.0, theme::canvas());
 
         // ----- Kamera -----
         if state.fit_request || self.auto_fit {
@@ -527,7 +527,7 @@ impl StageCanvas<'_> {
         let unit = every / cells;
         let tl = cam.to_world(rect.min);
         let br = cam.to_world(rect.max);
-        let line = Stroke::new(1.0, theme::border().gamma_multiply(0.6));
+        let line = Stroke::new(1.0, theme::canvas_line().gamma_multiply(0.6));
         let mut x = (tl[0] / unit).floor() * unit;
         while x <= br[0] {
             let sx = cam.to_screen([x, 0.0]).x;
@@ -855,9 +855,9 @@ fn paint_fixture(
     let stroke = if sel {
         Stroke::new(2.0, theme::accent())
     } else if hovered {
-        Stroke::new(1.0, theme::text_dim())
+        Stroke::new(1.0, theme::canvas_dim())
     } else {
-        Stroke::new(1.0, theme::border())
+        Stroke::new(1.0, theme::canvas_line())
     };
     let c = r.center();
     let (sin, cos) = rot.to_radians().sin_cos();

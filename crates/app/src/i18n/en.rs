@@ -1170,4 +1170,11 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Doppelklick: Punkt hinzufügen", "Double-click: add point"),
     ("Normale Ansicht", "Normal view"),
     ("Kompaktansicht (nur Namen)", "Compact view (names only)"),
+    ("Graphit", "Graphite"),
+    ("Schwarz (OLED)", "Black (OLED)"),
+    ("Violett", "Violet"),
+    ("Nachtmodus (rot)", "Night mode (red)"),
+    ("Hoher Kontrast", "High contrast"),
+    ("Hell", "Light"),
+    ("Daslight (hell)", "Daslight (light)"),
 ];

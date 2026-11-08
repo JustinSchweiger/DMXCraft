@@ -438,7 +438,7 @@ fn curve_graph(
     let w = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 110.0), Sense::click());
     let p = ui.painter_at(rect);
-    p.rect_filled(rect, theme::R_S, theme::bg());
+    p.rect_filled(rect, theme::R_S, theme::canvas());
     grid(&p, rect, 4, 2);
     let inner = rect.shrink(6.0);
     let to = |x: f32, y: f32| {
@@ -453,7 +453,7 @@ fn curve_graph(
             to(x, c.level(x.min(0.9999), 0))
         })
         .collect();
-    p.add(Shape::line(pts, Stroke::new(1.5, theme::text_dim())));
+    p.add(Shape::line(pts, Stroke::new(1.5, theme::canvas_dim())));
     // aktueller Wert des ersten Beams
     let x = (cycles * f64::from(c.repeat) + f64::from(c.phase)).rem_euclid(1.0) as f32;
     p.circle_filled(to(x, c.level(x, 0)), 4.0, Color32::WHITE);
@@ -500,7 +500,7 @@ fn curve_graph(
 }
 
 fn grid(p: &egui::Painter, r: Rect, cols: usize, rows: usize) {
-    let s = Stroke::new(1.0, theme::border().gamma_multiply(0.6));
+    let s = Stroke::new(1.0, theme::canvas_line().gamma_multiply(0.6));
     for i in 1..cols {
         let x = r.left() + r.width() * i as f32 / cols as f32;
         p.line_segment([pos2(x, r.top()), pos2(x, r.bottom())], s);
@@ -590,7 +590,7 @@ fn move_editor(
     );
     let mut sel = selected_point(ui, id).filter(|i| *i < m.points.len());
     let p = ui.painter_at(rect);
-    p.rect_filled(rect, theme::R_S, theme::bg());
+    p.rect_filled(rect, theme::R_S, theme::canvas());
     grid(&p, rect, 4, 4);
     let to = |q: [f32; 2]| {
         pos2(
@@ -608,20 +608,23 @@ fn move_editor(
     let path: Vec<Pos2> = (0..=160)
         .map(|i| to(m.to_field(m.local_at(i as f32 / 160.0))))
         .collect();
-    p.add(Shape::line(path, Stroke::new(1.5, theme::text_dim())));
+    p.add(Shape::line(path, Stroke::new(1.5, theme::canvas_dim())));
     // Rahmen
     let corners = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]].map(|c| to(m.to_field(c)));
     for i in 0..4 {
         p.add(Shape::dashed_line(
             &[corners[i], corners[(i + 1) % 4]],
-            Stroke::new(1.0, theme::text_faint()),
+            Stroke::new(1.0, theme::canvas_faint()),
             4.0,
             3.0,
         ));
     }
     let rot_handle = to(m.to_field([0.0, -1.0 - 0.25 / m.size[1].max(0.05) * 0.1]));
     let top_mid = to(m.to_field([0.0, -1.0]));
-    p.line_segment([top_mid, rot_handle], Stroke::new(1.0, theme::text_faint()));
+    p.line_segment(
+        [top_mid, rot_handle],
+        Stroke::new(1.0, theme::canvas_faint()),
+    );
 
     let mut ids = 0usize;
     let mut handle = |ui: &mut egui::Ui, at: Pos2, size: f32| {
@@ -686,7 +689,7 @@ fn move_editor(
         p.rect_filled(
             Rect::from_center_size(c, Vec2::splat(7.0)),
             1.0,
-            if hot { accent } else { theme::text_dim() },
+            if hot { accent } else { theme::canvas_dim() },
         );
     }
     // Drehen
@@ -702,7 +705,7 @@ fn move_editor(
     p.circle_filled(
         rot_handle,
         4.0,
-        if hot { accent } else { theme::text_dim() },
+        if hot { accent } else { theme::canvas_dim() },
     );
     // Stützpunkte
     if m.shape != MoveShape::Circle {
@@ -715,7 +718,7 @@ fn move_editor(
             }
             p.add(Shape::dashed_line(
                 &guide,
-                Stroke::new(1.0, theme::text_faint()),
+                Stroke::new(1.0, theme::canvas_faint()),
                 3.0,
                 3.0,
             ));
@@ -758,7 +761,7 @@ fn move_editor(
                 egui::Align2::LEFT_BOTTOM,
                 (i + 1).to_string(),
                 egui::FontId::proportional(10.0),
-                theme::text_faint(),
+                theme::canvas_faint(),
             );
         }
         // Entf löscht den gewählten Punkt, solange die Maus über dem Feld ist

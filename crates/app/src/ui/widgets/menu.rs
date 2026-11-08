@@ -286,6 +286,7 @@ pub fn style(style: &mut egui::Style) {
         offset: [0, 6],
         blur: 18,
         spread: 0,
-        color: Color32::from_black_alpha(140),
+        // auf hellem Grund wirkt derselbe Schatten viel schwerer
+        color: Color32::from_black_alpha(if theme::is_light() { 45 } else { 140 }),
     };
 }

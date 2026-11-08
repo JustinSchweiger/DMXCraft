@@ -26,6 +26,11 @@ pub struct Palette {
     pub text_faint: Color32,
     /// Geräte-Balken im DMX-Patch.
     pub fixture_bar: Color32,
+    /// Helles Theme (egui-Grundstil hell, farbige Schrift wird abgedunkelt).
+    pub light: bool,
+    /// Hintergrund der Arbeitsflächen (Bühnenansicht, Effekt-Felder). Bei
+    /// hellen Themes dunkel – Licht sieht man auf einer dunklen Bühne.
+    pub canvas: Color32,
 }
 
 const fn c(r: u8, g: u8, b: u8) -> Color32 {
@@ -46,6 +51,8 @@ pub const NAVY: Palette = Palette {
     text_dim: c(0x95, 0xa2, 0xb0),
     text_faint: c(0x55, 0x60, 0x6c),
     fixture_bar: c(0x2b, 0x35, 0x42),
+    light: false,
+    canvas: c(0x0b, 0x0e, 0x12),
 };
 
 /// Neutrales Grau ohne Farbstich, Akzent bleibt Cyan.
@@ -62,6 +69,136 @@ pub const GRAY: Palette = Palette {
     text_dim: c(0xa8, 0xa8, 0xaa),
     text_faint: c(0x6c, 0x6c, 0x70),
     fixture_bar: c(0x42, 0x42, 0x45),
+    light: false,
+    canvas: c(0x17, 0x17, 0x18),
+};
+
+/// Graphit mit kräftigem Blau als Akzent.
+pub const GRAPHITE: Palette = Palette {
+    bg: c(0x1b, 0x1d, 0x20),
+    surface: c(0x23, 0x26, 0x2a),
+    raised: c(0x2d, 0x31, 0x36),
+    raised_hover: c(0x38, 0x3d, 0x43),
+    border: c(0x40, 0x45, 0x4c),
+    accent: c(0x3d, 0xa5, 0xf0),
+    accent_hover: c(0x7c, 0xc2, 0xf5),
+    accent_dim: c(0x15, 0x4a, 0x73),
+    text: c(0xea, 0xec, 0xee),
+    text_dim: c(0xa4, 0xaa, 0xb2),
+    text_faint: c(0x6a, 0x71, 0x7a),
+    fixture_bar: c(0x45, 0x4b, 0x53),
+    light: false,
+    canvas: c(0x1b, 0x1d, 0x20),
+};
+
+/// Tiefschwarz (OLED-Bildschirme, dunkle Säle).
+pub const BLACK: Palette = Palette {
+    bg: c(0x00, 0x00, 0x00),
+    surface: c(0x08, 0x08, 0x09),
+    raised: c(0x13, 0x14, 0x16),
+    raised_hover: c(0x1e, 0x20, 0x23),
+    border: c(0x24, 0x26, 0x2a),
+    accent: c(0x19, 0xe3, 0xf0),
+    accent_hover: c(0x6c, 0xee, 0xf6),
+    accent_dim: c(0x0a, 0x4d, 0x53),
+    text: c(0xe8, 0xea, 0xec),
+    text_dim: c(0x92, 0x97, 0x9e),
+    text_faint: c(0x50, 0x54, 0x5a),
+    fixture_bar: c(0x22, 0x25, 0x2a),
+    light: false,
+    canvas: c(0x00, 0x00, 0x00),
+};
+
+/// Nachtmodus: gedämpftes Rot statt Weiß – blendet am dunklen Pult nicht und
+/// schont die Nachtsicht.
+pub const NIGHT: Palette = Palette {
+    bg: c(0x0a, 0x05, 0x05),
+    surface: c(0x12, 0x09, 0x09),
+    raised: c(0x1c, 0x0f, 0x0f),
+    raised_hover: c(0x28, 0x14, 0x14),
+    border: c(0x33, 0x18, 0x18),
+    accent: c(0xe0, 0x3a, 0x2e),
+    accent_hover: c(0xf0, 0x60, 0x55),
+    accent_dim: c(0x5a, 0x16, 0x12),
+    text: c(0xe8, 0x9a, 0x90),
+    text_dim: c(0xa8, 0x62, 0x5a),
+    text_faint: c(0x66, 0x36, 0x32),
+    fixture_bar: c(0x30, 0x16, 0x16),
+    light: false,
+    canvas: c(0x0a, 0x05, 0x05),
+};
+
+/// Violett mit Magenta-Akzent.
+pub const VIOLET: Palette = Palette {
+    bg: c(0x0f, 0x0b, 0x16),
+    surface: c(0x16, 0x11, 0x20),
+    raised: c(0x20, 0x19, 0x2d),
+    raised_hover: c(0x2b, 0x22, 0x3b),
+    border: c(0x33, 0x29, 0x45),
+    accent: c(0xd0, 0x6b, 0xff),
+    accent_hover: c(0xe0, 0x9c, 0xff),
+    accent_dim: c(0x52, 0x26, 0x6e),
+    text: c(0xec, 0xe6, 0xf4),
+    text_dim: c(0xa8, 0x9c, 0xbb),
+    text_faint: c(0x65, 0x5a, 0x78),
+    fixture_bar: c(0x31, 0x27, 0x44),
+    light: false,
+    canvas: c(0x0f, 0x0b, 0x16),
+};
+
+/// Hoher Kontrast: Schwarz, Weiß und Gelb, kräftige Ränder.
+pub const CONTRAST: Palette = Palette {
+    bg: c(0x00, 0x00, 0x00),
+    surface: c(0x00, 0x00, 0x00),
+    raised: c(0x14, 0x14, 0x14),
+    raised_hover: c(0x26, 0x26, 0x26),
+    border: c(0x9a, 0x9a, 0x9a),
+    accent: c(0xff, 0xd8, 0x00),
+    accent_hover: c(0xff, 0xe8, 0x66),
+    accent_dim: c(0x5c, 0x4e, 0x00),
+    text: c(0xff, 0xff, 0xff),
+    text_dim: c(0xdc, 0xdc, 0xdc),
+    text_faint: c(0xa0, 0xa0, 0xa0),
+    fixture_bar: c(0x30, 0x30, 0x30),
+    light: false,
+    canvas: c(0x00, 0x00, 0x00),
+};
+
+/// Hell (neutral), Akzent Petrol (Cyan wäre auf Weiß zu blass).
+pub const LIGHT: Palette = Palette {
+    bg: c(0xe9, 0xec, 0xef),
+    surface: c(0xf4, 0xf6, 0xf8),
+    raised: c(0xff, 0xff, 0xff),
+    raised_hover: c(0xe6, 0xf2, 0xf4),
+    border: c(0xcf, 0xd5, 0xdb),
+    accent: c(0x0a, 0x93, 0xa3),
+    accent_hover: c(0x06, 0x7a, 0x88),
+    accent_dim: c(0xc6, 0xeb, 0xef),
+    text: c(0x1c, 0x22, 0x28),
+    text_dim: c(0x55, 0x5f, 0x69),
+    text_faint: c(0x93, 0x9b, 0xa3),
+    fixture_bar: c(0xd6, 0xdc, 0xe2),
+    light: true,
+    canvas: c(0x1d, 0x22, 0x28),
+};
+
+/// Daslight: Farben der Daslight-Oberfläche (aus dem Profile Builder
+/// gemessen): Hellgrau, weiße Karten, Blau als Akzent.
+pub const DASLIGHT: Palette = Palette {
+    bg: c(0xf6, 0xf6, 0xf6),
+    surface: c(0xf6, 0xf6, 0xf6),
+    raised: c(0xff, 0xff, 0xff),
+    raised_hover: c(0xea, 0xf4, 0xfc),
+    border: c(0xd0, 0xd0, 0xd0),
+    accent: c(0x15, 0x92, 0xe6),
+    accent_hover: c(0x0f, 0x7c, 0xc6),
+    accent_dim: c(0xc9, 0xe5, 0xf9),
+    text: c(0x22, 0x22, 0x22),
+    text_dim: c(0x55, 0x55, 0x55),
+    text_faint: c(0x96, 0x96, 0x96),
+    fixture_bar: c(0xde, 0xde, 0xde),
+    light: true,
+    canvas: c(0x26, 0x28, 0x2b),
 };
 
 /// Wählbare Themes.
@@ -69,16 +206,40 @@ pub const GRAY: Palette = Palette {
 pub enum Theme {
     Navy,
     Gray,
+    Graphite,
+    Black,
+    Violet,
+    Night,
+    Contrast,
+    Light,
+    Daslight,
 }
 
 impl Theme {
-    pub const ALL: [Theme; 2] = [Theme::Navy, Theme::Gray];
+    pub const ALL: [Theme; 9] = [
+        Theme::Navy,
+        Theme::Gray,
+        Theme::Graphite,
+        Theme::Black,
+        Theme::Violet,
+        Theme::Night,
+        Theme::Contrast,
+        Theme::Light,
+        Theme::Daslight,
+    ];
 
     /// Schlüssel für die Einstellungen.
     pub fn key(self) -> &'static str {
         match self {
             Theme::Navy => "navy",
             Theme::Gray => "gray",
+            Theme::Graphite => "graphite",
+            Theme::Black => "black",
+            Theme::Violet => "violet",
+            Theme::Night => "night",
+            Theme::Contrast => "contrast",
+            Theme::Light => "light",
+            Theme::Daslight => "daslight",
         }
     }
 
@@ -94,6 +255,13 @@ impl Theme {
         match self {
             Theme::Navy => "Dunkelblau",
             Theme::Gray => "Grau",
+            Theme::Graphite => "Graphit",
+            Theme::Black => "Schwarz (OLED)",
+            Theme::Violet => "Violett",
+            Theme::Night => "Nachtmodus (rot)",
+            Theme::Contrast => "Hoher Kontrast",
+            Theme::Light => "Hell",
+            Theme::Daslight => "Daslight (hell)",
         }
     }
 
@@ -101,6 +269,13 @@ impl Theme {
         match self {
             Theme::Navy => &NAVY,
             Theme::Gray => &GRAY,
+            Theme::Graphite => &GRAPHITE,
+            Theme::Black => &BLACK,
+            Theme::Violet => &VIOLET,
+            Theme::Night => &NIGHT,
+            Theme::Contrast => &CONTRAST,
+            Theme::Light => &LIGHT,
+            Theme::Daslight => &DASLIGHT,
         }
     }
 }
@@ -156,6 +331,54 @@ pub fn text_faint() -> Color32 {
 }
 pub fn fixture_bar() -> Color32 {
     pal().fixture_bar
+}
+/// Ist das aktive Theme hell?
+pub fn is_light() -> bool {
+    pal().light
+}
+/// Hintergrund der Arbeitsflächen (Bühnenansicht, Effekt-Felder).
+pub fn canvas() -> Color32 {
+    pal().canvas
+}
+/// Rasterlinien auf der Arbeitsfläche.
+pub fn canvas_line() -> Color32 {
+    if is_light() {
+        c(0x3a, 0x40, 0x48)
+    } else {
+        border()
+    }
+}
+/// Linien/Bahnen auf der Arbeitsfläche.
+pub fn canvas_dim() -> Color32 {
+    if is_light() {
+        c(0xa6, 0xad, 0xb5)
+    } else {
+        text_dim()
+    }
+}
+/// Hilfslinien auf der Arbeitsfläche.
+pub fn canvas_faint() -> Color32 {
+    if is_light() {
+        c(0x6c, 0x73, 0x7b)
+    } else {
+        text_faint()
+    }
+}
+/// Farbige Schrift (Zonen-/Szenenfarbe) lesbar machen: auf hellen Themes
+/// abgedunkelt, sonst unverändert.
+pub fn ink(c: Color32) -> Color32 {
+    if !is_light() {
+        return c;
+    }
+    // so weit abdunkeln, dass die Helligkeit für dunkle Schrift reicht
+    let lum = 0.2126 * f32::from(c.r()) + 0.7152 * f32::from(c.g()) + 0.0722 * f32::from(c.b());
+    let target = 105.0;
+    let k = if lum > target { target / lum } else { 1.0 };
+    Color32::from_rgb(
+        (f32::from(c.r()) * k) as u8,
+        (f32::from(c.g()) * k) as u8,
+        (f32::from(c.b()) * k) as u8,
+    )
 }
 
 pub const DANGER: Color32 = Color32::from_rgb(0xef, 0x44, 0x55);
@@ -255,9 +478,18 @@ fn install_fonts(ctx: &egui::Context) {
 }
 
 pub fn apply(ctx: &egui::Context) {
-    ctx.set_theme(egui::Theme::Dark);
+    let light = is_light();
+    ctx.set_theme(if light {
+        egui::Theme::Light
+    } else {
+        egui::Theme::Dark
+    });
     install_fonts(ctx);
-    let mut v = Visuals::dark();
+    let mut v = if light {
+        Visuals::light()
+    } else {
+        Visuals::dark()
+    };
     v.panel_fill = surface();
     // Menüs, Aufklapplisten und Tooltips schweben eine Stufe heller;
     // Dialoge setzen ihren Rahmen selbst (surface()).
@@ -287,6 +519,21 @@ pub fn apply(ctx: &egui::Context) {
     v.widgets.hovered.bg_stroke = Stroke::new(1.0, accent_dim());
     v.widgets.active.weak_bg_fill = accent_dim();
     v.widgets.active.bg_fill = accent_dim();
+    for w in [
+        &mut v.widgets.noninteractive,
+        &mut v.widgets.inactive,
+        &mut v.widgets.hovered,
+        &mut v.widgets.active,
+        &mut v.widgets.open,
+    ] {
+        w.fg_stroke.color = text();
+    }
+    v.widgets.noninteractive.fg_stroke.color = text_dim();
+    if light {
+        // weichere Schatten auf hellem Grund
+        v.window_shadow.color = Color32::from_black_alpha(40);
+        v.popup_shadow.color = Color32::from_black_alpha(40);
+    }
     ctx.set_visuals(v);
 
     ctx.global_style_mut(|s| {
