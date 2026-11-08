@@ -1,14 +1,21 @@
-//! TOUCH: frei angeordnete Bedienelemente auf Seiten (Raster). Im
-//! Bearbeiten-Modus lassen sich Elemente anlegen, verschieben, in der Größe
-//! ändern, beschriften und einfärben; sonst werden sie bedient.
+//! TOUCH: frei angeordnete Bedienelemente auf Seiten. Im Bearbeiten-Modus
+//! lassen sich Elemente anlegen, verschieben, in der Größe ändern,
+//! beschriften, einfärben und mit Symbol oder Bild versehen; sonst werden sie
+//! bedient.
+//!
+//! Positionen und Größen sind in Einheiten zu [`UNIT`] Bildpunkten (bei
+//! 100 %) gespeichert. Das Raster (Schrittweite, Einrasten, Anzeige) ist
+//! einstellbar.
 //!
 //! Elemente kommen per Alt + Klick auf ein Bedienelement (Szene, Bank,
-//! Fader, Gerät …) oder über die Liste „Bedienelemente hinzufügen“.
+//! Fader, Gerät …), über das Kontextmenü oder die Leiste „Hinzufügen“.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::mpsc::Receiver;
 
 use dmxcraft_core::mapping::{ButtonMode, Control, Mapping};
-use dmxcraft_core::touch::{TouchItem, TouchKind, TouchPage};
+use dmxcraft_core::touch::{TouchItem, TouchKind};
 use dmxcraft_core::{ChannelKind, ChannelRef, Engine, FixtureId, Show};
 use eframe::egui::{
     self, pos2, vec2, Align, Align2, Color32, Layout, Mesh, Pos2, Rect, Sense, Shape, Stroke,
@@ -19,17 +26,22 @@ use crate::i18n::t;
 use crate::state::AppState;
 use crate::ui::theme;
 use crate::ui::widgets::dialog::{form, select_all};
+use crate::ui::widgets::icon_library;
 use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::{section_header, text_field, Icon, IconButton, Toggle};
 use crate::views::{View, ViewCtx};
 
+/// Bildpunkte einer Einheit bei 100 %.
+pub const UNIT: f32 = 72.0;
 /// Abstand zwischen Elementen.
 const GAP: f32 = 6.0;
 /// Breite der Bearbeiten-Leiste rechts.
-const PANEL_W: f32 = 280.0;
+const PANEL_W: f32 = 300.0;
+/// Rasterschritte (Bildpunkte bei 100 %).
+const GRID_STEPS: [f32; 6] = [12.0, 18.0, 24.0, 36.0, 48.0, 72.0];
 
-/// Farben zum Einfärben von Schaltflächen.
-const COLORS: [[u8; 3]; 12] = [
+/// Farben für Flächen und Text.
+const COLORS: [[u8; 3]; 14] = [
     [239, 68, 68],
     [249, 115, 22],
     [234, 179, 8],
@@ -41,7 +53,9 @@ const COLORS: [[u8; 3]; 12] = [
     [139, 92, 246],
     [217, 70, 239],
     [244, 114, 182],
-    [229, 231, 235],
+    [255, 255, 255],
+    [120, 120, 130],
+    [20, 20, 24],
 ];
 
 /// Ziehen im Bearbeiten-Modus.
@@ -51,9 +65,16 @@ enum Drag {
     Resize { id: u32 },
 }
 
+/// Wofür ein Bild geladen wird.
+#[derive(Clone, Copy)]
+enum ImageTarget {
+    Page(u32),
+    Item(u32, u32),
+}
+
 pub struct TouchView {
-    /// Kantenlänge einer Rasterzelle.
-    cell: f32,
+    /// Ansichtsgröße (1.0 = 100 %).
+    zoom: f32,
     drag: Option<Drag>,
     rename_page: Option<(u32, String)>,
     rename_focus: bool,
@@ -61,17 +82,21 @@ pub struct TouchView {
     values: HashMap<u32, f32>,
     /// Gedrückte Schaltflächen (für Loslassen).
     held: Vec<u32>,
+    textures: HashMap<u32, egui::TextureHandle>,
+    image_dialog: Option<(ImageTarget, Receiver<Option<PathBuf>>)>,
 }
 
 impl Default for TouchView {
     fn default() -> Self {
         Self {
-            cell: 72.0,
+            zoom: 1.0,
             drag: None,
             rename_page: None,
             rename_focus: false,
             values: HashMap::new(),
             held: Vec::new(),
+            textures: HashMap::new(),
+            image_dialog: None,
         }
     }
 }
@@ -99,8 +124,8 @@ fn mapping_of(item: &TouchItem) -> Option<Mapping> {
 
 impl View for TouchView {
     fn ui(&mut self, ui: &mut Ui, cx: &mut ViewCtx<'_>) {
+        self.poll_image(ui.ctx(), cx);
         let editing = cx.state.touch_edit && !cx.state.locked;
-        // gültige Seite
         let pages: Vec<(u32, String)> = cx
             .engine
             .show()
@@ -119,9 +144,8 @@ impl View for TouchView {
             self.page_tabs(ui, cx, &pages, editing);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if !cx.state.locked {
-                    let r = ui
-                        .add(egui::Button::new(t("Bearbeiten")).selected(cx.state.touch_edit))
-                        .on_hover_text(t("Touch-Oberfläche bearbeiten"));
+                    let r =
+                        ui.add(egui::Button::new(t("Bearbeiten")).selected(cx.state.touch_edit));
                     if r.clicked() {
                         cx.state.touch_edit = !cx.state.touch_edit;
                         cx.state.touch_sel = None;
@@ -133,14 +157,26 @@ impl View for TouchView {
                     .on_hover_text(t("Vergrößern"))
                     .clicked()
                 {
-                    self.cell = (self.cell + 8.0).min(160.0);
+                    self.zoom = (self.zoom + 0.1).min(2.5);
+                }
+                let r = ui
+                    .add(
+                        egui::Label::new(
+                            egui::RichText::new(format!("{:.0} %", self.zoom * 100.0))
+                                .color(theme::text_dim()),
+                        )
+                        .sense(Sense::click()),
+                    )
+                    .on_hover_text(t("Zurücksetzen"));
+                if r.clicked() {
+                    self.zoom = 1.0;
                 }
                 if ui
                     .add(IconButton::new(Icon::ZoomOut).flat())
                     .on_hover_text(t("Verkleinern"))
                     .clicked()
                 {
-                    self.cell = (self.cell - 8.0).max(40.0);
+                    self.zoom = (self.zoom - 0.1).max(0.4);
                 }
             });
         });
@@ -150,7 +186,7 @@ impl View for TouchView {
         let (grid_rect, panel_rect) = if editing {
             let split = full.right() - PANEL_W;
             (
-                Rect::from_min_max(full.min, pos2(split - theme::SP_S, full.bottom())),
+                Rect::from_min_max(full.min, pos2(split - theme::SP_M, full.bottom())),
                 Some(Rect::from_min_max(pos2(split, full.top()), full.max)),
             )
         } else {
@@ -158,21 +194,19 @@ impl View for TouchView {
         };
         ui.allocate_rect(full, Sense::hover());
 
-        let Some(page_id) = cx.state.touch_page else {
-            self.empty(ui, grid_rect, cx);
-            if let Some(r) = panel_rect {
-                self.panel(ui, r, cx, None);
+        match cx.state.touch_page {
+            None => self.empty(ui, grid_rect, cx),
+            Some(page_id) => {
+                let mut grid_ui = ui.new_child(egui::UiBuilder::new().max_rect(grid_rect));
+                grid_ui.set_clip_rect(grid_rect);
+                egui::ScrollArea::both()
+                    .id_salt("touch_grid")
+                    .auto_shrink([false, false])
+                    .show(&mut grid_ui, |ui| self.grid(ui, cx, page_id, editing));
             }
-            return;
-        };
-
-        let mut grid_ui = ui.new_child(egui::UiBuilder::new().max_rect(grid_rect));
-        egui::ScrollArea::both()
-            .id_salt("touch_grid")
-            .auto_shrink([false, false])
-            .show(&mut grid_ui, |ui| self.grid(ui, cx, page_id, editing));
+        }
         if let Some(r) = panel_rect {
-            self.panel(ui, r, cx, Some(page_id));
+            self.panel(ui, r, cx, cx.state.touch_page);
         }
     }
 }
@@ -245,7 +279,9 @@ impl TouchView {
             add_page(cx);
         }
         if let Some(id) = delete {
-            cx.engine.show_mut().touch.pages.retain(|p| p.id != id);
+            let touch = &mut cx.engine.show_mut().touch;
+            touch.pages.retain(|p| p.id != id);
+            touch.prune_images();
             if cx.state.touch_page == Some(id) {
                 cx.state.touch_page = None;
             }
@@ -259,18 +295,11 @@ impl TouchView {
                 .max_rect(rect)
                 .layout(Layout::top_down(Align::Center)),
         );
-        child.add_space(rect.height() * 0.3);
+        child.add_space(rect.height() * 0.35);
         child.label(
             egui::RichText::new(t("Noch keine Touch-Oberfläche"))
                 .color(theme::text_dim())
                 .size(theme::FS_TITLE),
-        );
-        child.add_space(theme::SP_S);
-        child.label(
-            egui::RichText::new(t(
-                "Alt + Klick auf eine Szene, einen Fader oder ein anderes Bedienelement fügt es hier hinzu.",
-            ))
-            .color(theme::text_faint()),
         );
         child.add_space(theme::SP_M);
         if !cx.state.locked && child.button(t("Seite hinzufügen")).clicked() {
@@ -279,59 +308,89 @@ impl TouchView {
         }
     }
 
+    /// Bildpunkte je Einheit (mit Zoom).
+    fn unit(&self) -> f32 {
+        UNIT * self.zoom
+    }
+
+    fn texture(
+        &mut self,
+        ctx: &egui::Context,
+        show: &Show,
+        id: u32,
+    ) -> Option<egui::TextureHandle> {
+        if let Some(t) = self.textures.get(&id) {
+            return Some(t.clone());
+        }
+        let img = show.touch.image(id)?;
+        let rgba = image::load_from_memory(&img.data.0).ok()?.to_rgba8();
+        let size = [rgba.width() as usize, rgba.height() as usize];
+        let tex = ctx.load_texture(
+            format!("touch_image_{id}"),
+            egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()),
+            egui::TextureOptions::LINEAR,
+        );
+        self.textures.insert(id, tex.clone());
+        Some(tex)
+    }
+
     /// Raster mit den Elementen einer Seite.
     fn grid(&mut self, ui: &mut Ui, cx: &mut ViewCtx<'_>, page_id: u32, editing: bool) {
         let Some(page) = cx.engine.show().touch.page(page_id).cloned() else {
             return;
         };
-        let c = self.cell;
-        // Fläche: mindestens sichtbarer Bereich, sonst bis zum letzten Element
-        let cols = page
-            .items
-            .iter()
-            .map(|i| i.x + i.w)
-            .max()
-            .unwrap_or(0)
-            .max(1)
-            + 2;
-        let rows = page
-            .items
-            .iter()
-            .map(|i| i.y + i.h)
-            .max()
-            .unwrap_or(0)
-            .max(1)
-            + 2;
+        let (step_px, snap, show_grid) = {
+            let t = &cx.engine.show().touch;
+            (t.cell.max(6.0), t.snap, t.show_grid)
+        };
+        let u = self.unit();
+        let step = step_px * self.zoom;
+        // Fläche: sichtbarer Bereich oder bis hinter das letzte Element
+        let right = page.items.iter().map(|i| i.x + i.w).fold(0.0, f32::max) + 2.0;
+        let bottom = page.items.iter().map(|i| i.y + i.h).fold(0.0, f32::max) + 2.0;
         let avail = ui.available_size();
-        let size = vec2(
-            (cols as f32 * c).max(avail.x),
-            (rows as f32 * c).max(avail.y),
-        );
+        let size = vec2((right * u).max(avail.x), (bottom * u).max(avail.y));
         let (area, bg) = ui.allocate_exact_size(size, Sense::click());
         let origin = area.min;
         let p = ui.painter().clone();
-        // Rasterzellen
-        let vis = ui.clip_rect();
-        let (x0, y0) = (
-            ((vis.left() - origin.x) / c).floor().max(0.0) as i32,
-            ((vis.top() - origin.y) / c).floor().max(0.0) as i32,
-        );
-        let (x1, y1) = (
-            ((vis.right() - origin.x) / c).ceil() as i32,
-            ((vis.bottom() - origin.y) / c).ceil() as i32,
-        );
-        let cell_fill = if editing {
-            theme::raised()
-        } else {
-            theme::raised().gamma_multiply(0.45)
-        };
-        for y in y0..y1 {
-            for x in x0..x1 {
-                let r = Rect::from_min_size(
-                    origin + vec2(x as f32 * c, y as f32 * c),
-                    vec2(c - GAP, c - GAP),
-                );
-                p.rect_filled(r, theme::R_S, cell_fill);
+
+        // Hintergrund der Seite
+        if let Some(c) = page.background_color {
+            p.rect_filled(area, 0.0, theme::rgb(c));
+        }
+        if let Some(tex) = page
+            .background
+            .and_then(|id| self.texture(ui.ctx(), cx.engine.show(), id))
+        {
+            paint_cover(&p, ui.clip_rect().intersect(area), &tex, 1.0);
+        }
+        // Raster
+        if show_grid || editing {
+            let vis = ui.clip_rect().intersect(area);
+            let alpha = if editing { 1.0 } else { 0.5 };
+            let first_x = ((vis.left() - origin.x) / step).floor().max(0.0) as i32;
+            let first_y = ((vis.top() - origin.y) / step).floor().max(0.0) as i32;
+            let nx = (vis.width() / step).ceil() as i32 + 1;
+            let ny = (vis.height() / step).ceil() as i32 + 1;
+            if step >= 30.0 && show_grid {
+                let gap = (step * 0.08).clamp(2.0, GAP);
+                for y in first_y..first_y + ny {
+                    for x in first_x..first_x + nx {
+                        let r = Rect::from_min_size(
+                            origin + vec2(x as f32 * step, y as f32 * step),
+                            vec2(step - gap, step - gap),
+                        );
+                        p.rect_filled(r, theme::R_S, theme::raised().gamma_multiply(0.55 * alpha));
+                    }
+                }
+            } else {
+                // feines Raster: Punkte an den Schnittpunkten
+                for y in first_y..first_y + ny {
+                    for x in first_x..first_x + nx {
+                        let c = origin + vec2(x as f32 * step, y as f32 * step);
+                        p.circle_filled(c, 1.2, theme::border().gamma_multiply(alpha));
+                    }
+                }
             }
         }
         if editing && bg.clicked() {
@@ -340,8 +399,8 @@ impl TouchView {
 
         let item_rect = |i: &TouchItem| {
             Rect::from_min_size(
-                origin + vec2(i.x as f32 * c, i.y as f32 * c),
-                vec2(i.w as f32 * c - GAP, i.h as f32 * c - GAP),
+                origin + vec2(i.x * u, i.y * u),
+                vec2((i.w * u - GAP).max(8.0), (i.h * u - GAP).max(8.0)),
             )
         };
         let states: HashMap<u64, bool> = crate::mapping::ui_states(ui.ctx());
@@ -350,7 +409,11 @@ impl TouchView {
         let mut duplicate = None;
         for item in &page.items {
             let rect = item_rect(item);
+            let tex = item
+                .image
+                .and_then(|id| self.texture(ui.ctx(), cx.engine.show(), id));
             let id = ui.make_persistent_id(("touch_item", item.id));
+            let value = self.value(cx.engine, item);
             if editing {
                 let resp = ui.interact(rect, id, Sense::click_and_drag());
                 paint_item(
@@ -360,32 +423,29 @@ impl TouchView {
                     &states,
                     item,
                     rect,
-                    self.value(cx.engine, item),
+                    value,
+                    false,
+                    tex.as_ref(),
                 );
                 let sel = cx.state.touch_sel == Some(item.id);
-                p.rect_stroke(
-                    rect,
-                    theme::R_S,
-                    Stroke::new(
-                        if sel { 2.0 } else { 1.0 },
-                        if sel {
-                            theme::accent()
-                        } else {
-                            theme::border()
-                        },
-                    ),
-                    StrokeKind::Inside,
-                );
+                if sel || resp.hovered() {
+                    p.rect_stroke(
+                        rect.expand(2.0),
+                        theme::R_M,
+                        Stroke::new(if sel { 2.0 } else { 1.0 }, theme::accent()),
+                        StrokeKind::Outside,
+                    );
+                }
                 // Griff zum Größe ändern
                 let handle =
-                    Rect::from_min_size(rect.right_bottom() - vec2(14.0, 14.0), vec2(14.0, 14.0));
+                    Rect::from_min_size(rect.right_bottom() - vec2(16.0, 16.0), vec2(16.0, 16.0));
                 let hresp = ui.interact(handle, id.with("resize"), Sense::drag());
                 if sel || hresp.hovered() {
                     p.add(Shape::convex_polygon(
                         vec![
-                            handle.right_top(),
+                            handle.right_top() + vec2(0.0, 4.0),
                             handle.right_bottom(),
-                            handle.left_bottom(),
+                            handle.left_bottom() + vec2(4.0, 0.0),
                         ],
                         theme::accent(),
                         Stroke::NONE,
@@ -409,7 +469,9 @@ impl TouchView {
                 }
                 menu::context(&resp, |ui| {
                     menu::begin(ui);
-                    menu::title(ui, &item_title(cx.engine.show(), item));
+                    menu::title(ui, &item_title(item));
+                    target_entry(ui, cx.engine.show(), item);
+                    menu::separator(ui);
                     if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
                         duplicate = Some(item.id);
                     }
@@ -417,80 +479,104 @@ impl TouchView {
                         remove = Some(item.id);
                     }
                     menu::separator(ui);
-                    ui.horizontal_wrapped(|ui| {
-                        ui.set_max_width(200.0);
-                        for col in COLORS {
-                            if ui
-                                .add(crate::ui::widgets::Swatch(theme::rgb(col)))
-                                .clicked()
-                            {
-                                let mut i = item.clone();
-                                i.color = Some(col);
-                                changes.push(i);
-                                ui.close();
-                            }
-                        }
-                    });
+                    let mut c = item.color;
+                    if swatch_row(ui, &mut c, true) {
+                        let mut i = item.clone();
+                        i.color = c;
+                        changes.push(i);
+                        ui.close();
+                    }
                 });
             } else {
-                self.play_item(ui, &p, cx, &states, item, rect, id);
+                self.play_item(ui, &p, cx, &states, item, rect, id, tex.as_ref());
             }
         }
 
-        // Ziehen anwenden (in Zellen)
+        // Ziehen anwenden
+        let snap_to = |v: f32| {
+            if snap {
+                let s = step_px / UNIT;
+                (v / s).round() * s
+            } else {
+                (v * 100.0).round() / 100.0
+            }
+        };
         if let Some(d) = self.drag {
             let pointer = ui.input(|i| i.pointer.interact_pos());
             let released = ui.input(|i| i.pointer.any_released());
-            let (id, preview) = match (d, pointer) {
+            let preview = match (d, pointer) {
                 (Drag::Move { id, grab }, Some(pos)) => {
-                    let Some(it) = page.items.iter().find(|i| i.id == id) else {
-                        self.drag = None;
-                        return;
-                    };
-                    let tl = pos - grab - origin;
-                    let mut n = it.clone();
-                    n.x = ((tl.x / c).round() as i32).max(0);
-                    n.y = ((tl.y / c).round() as i32).max(0);
-                    (id, n)
+                    page.items.iter().find(|i| i.id == id).map(|it| {
+                        let tl = (pos - grab - origin) / u;
+                        let mut n = it.clone();
+                        n.x = snap_to(tl.x).max(0.0);
+                        n.y = snap_to(tl.y).max(0.0);
+                        n
+                    })
                 }
                 (Drag::Resize { id }, Some(pos)) => {
-                    let Some(it) = page.items.iter().find(|i| i.id == id) else {
-                        self.drag = None;
-                        return;
-                    };
-                    let rel = pos - origin;
-                    let mut n = it.clone();
-                    n.w = ((rel.x / c).ceil() as i32 - it.x).max(1);
-                    n.h = ((rel.y / c).ceil() as i32 - it.y).max(1);
-                    (id, n)
+                    page.items.iter().find(|i| i.id == id).map(|it| {
+                        let rel = (pos - origin) / u;
+                        let min = if snap { step_px / UNIT } else { 0.25 };
+                        let mut n = it.clone();
+                        n.w = snap_to(rel.x - it.x).max(min);
+                        n.h = snap_to(rel.y - it.y).max(min);
+                        n
+                    })
                 }
-                _ => {
-                    self.drag = None;
-                    return;
-                }
+                _ => None,
             };
-            let free = page.is_free(preview.x, preview.y, preview.w, preview.h, Some(id));
-            let r = item_rect(&preview);
-            p.rect_stroke(
-                r,
-                theme::R_S,
-                Stroke::new(2.0, if free { theme::accent() } else { theme::DANGER }),
-                StrokeKind::Inside,
-            );
-            if released {
-                if free {
-                    changes.push(preview);
+            match preview {
+                Some(n) => {
+                    p.rect_stroke(
+                        item_rect(&n),
+                        theme::R_M,
+                        Stroke::new(2.0, theme::accent()),
+                        StrokeKind::Outside,
+                    );
+                    if released {
+                        changes.push(n);
+                        self.drag = None;
+                    }
                 }
-                self.drag = None;
+                None => self.drag = None,
             }
         }
 
-        // Entf löscht das gewählte Element
-        if editing
-            && !ui.ctx().egui_wants_keyboard_input()
-            && ui.input(|i| i.key_pressed(egui::Key::Delete))
-        {
-            remove = remove.or(cx.state.touch_sel);
+        // Entf löscht, Pfeiltasten verschieben das gewählte Element
+        if editing && !ui.ctx().egui_wants_keyboard_input() {
+            if ui.input(|i| i.key_pressed(egui::Key::Delete)) {
+                remove = remove.or(cx.state.touch_sel);
+            }
+            if let Some(sel) = cx
+                .state
+                .touch_sel
+                .and_then(|s| page.items.iter().find(|i| i.id == s))
+            {
+                let s = if snap { step_px / UNIT } else { 0.05 };
+                let (dx, dy) = ui.input(|i| {
+                    let mut d = (0.0, 0.0);
+                    if i.key_pressed(egui::Key::ArrowLeft) {
+                        d.0 -= s;
+                    }
+                    if i.key_pressed(egui::Key::ArrowRight) {
+                        d.0 += s;
+                    }
+                    if i.key_pressed(egui::Key::ArrowUp) {
+                        d.1 -= s;
+                    }
+                    if i.key_pressed(egui::Key::ArrowDown) {
+                        d.1 += s;
+                    }
+                    d
+                });
+                if dx != 0.0 || dy != 0.0 {
+                    let mut n = sel.clone();
+                    n.x = (n.x + dx).max(0.0);
+                    n.y = (n.y + dy).max(0.0);
+                    changes.push(n);
+                }
+            }
         }
         let touch = &mut cx.engine.show_mut().touch;
         if let Some(pg) = touch.page_mut(page_id) {
@@ -505,6 +591,9 @@ impl TouchView {
                     cx.state.touch_sel = None;
                 }
             }
+        }
+        if remove.is_some() {
+            touch.prune_images();
         }
         if let Some(id) = duplicate {
             cx.state.touch_sel = touch.duplicate(page_id, id);
@@ -539,10 +628,12 @@ impl TouchView {
         item: &TouchItem,
         rect: Rect,
         id: egui::Id,
+        tex: Option<&egui::TextureHandle>,
     ) {
+        let value = self.value(cx.engine, item);
         match item.kind {
             TouchKind::Label => {
-                paint_item(p, cx.engine, cx.state, states, item, rect, 0.0);
+                paint_item(p, cx.engine, cx.state, states, item, rect, 0.0, false, tex);
             }
             TouchKind::Button => {
                 let resp = ui.interact(rect, id, Sense::click_and_drag());
@@ -557,30 +648,24 @@ impl TouchView {
                         cx.state.touch_fire.push((m, false, 0, false));
                     }
                 }
-                paint_item(
-                    p,
-                    cx.engine,
-                    cx.state,
-                    states,
-                    item,
-                    rect,
-                    if down { 1.0 } else { 0.0 },
-                );
+                paint_item(p, cx.engine, cx.state, states, item, rect, 0.0, down, tex);
             }
             TouchKind::Fader | TouchKind::Knob => {
-                let value = self.value(cx.engine, item);
                 let resp = ui.interact(rect, id, Sense::click_and_drag());
                 let mut v = value;
-                if let Some(pos) = resp
-                    .interact_pointer_pos()
-                    .filter(|_| resp.dragged() || resp.clicked())
-                {
-                    if item.kind == TouchKind::Fader {
-                        let track = fader_track(rect);
-                        v = (1.0 - (pos.y - track.top()) / track.height()).clamp(0.0, 1.0);
-                    } else {
-                        v = (value - resp.drag_delta().y / 150.0).clamp(0.0, 1.0);
+                if item.kind == TouchKind::Fader {
+                    if let Some(pos) = resp
+                        .interact_pointer_pos()
+                        .filter(|_| resp.dragged() || resp.clicked())
+                    {
+                        let travel = fader_parts(rect).1;
+                        v = (1.0 - (pos.y - travel.top()) / travel.height()).clamp(0.0, 1.0);
                     }
+                } else if resp.dragged() {
+                    v = (value - resp.drag_delta().y / 160.0).clamp(0.0, 1.0);
+                }
+                if resp.double_clicked() {
+                    v = if value > 0.0 { 0.0 } else { 1.0 };
                 }
                 if (v - value).abs() > f32::EPSILON {
                     self.values.insert(item.id, v);
@@ -589,111 +674,159 @@ impl TouchView {
                         cx.state.touch_fire.push((m, raw > 0, raw, true));
                     }
                 }
-                paint_item(p, cx.engine, cx.state, states, item, rect, v);
+                let hot = resp.hovered() || resp.dragged();
+                paint_item(p, cx.engine, cx.state, states, item, rect, v, hot, tex);
             }
             TouchKind::Color => {
                 let resp = ui.interact(rect, id, Sense::click_and_drag());
                 let field = content_rect(rect, item);
-                if let Some(pos) = resp
-                    .interact_pointer_pos()
-                    .filter(|p| (resp.dragged() || resp.clicked()) && field.contains(*p))
-                {
+                if let Some(pos) = resp.interact_pointer_pos().filter(|p| {
+                    (resp.dragged() || resp.clicked()) && field.expand(4.0).contains(*p)
+                }) {
                     let h = ((pos.x - field.left()) / field.width()).clamp(0.0, 1.0);
                     let s = 1.0 - ((pos.y - field.top()) / field.height()).clamp(0.0, 1.0);
                     let rgb = egui::ecolor::Hsva::new(h, s, 1.0, 1.0).to_srgb();
                     set_color(cx.engine, &item.fixtures, [rgb[0], rgb[1], rgb[2]]);
                 }
-                paint_item(p, cx.engine, cx.state, states, item, rect, 0.0);
+                paint_item(p, cx.engine, cx.state, states, item, rect, 0.0, false, tex);
             }
             TouchKind::Xy => {
                 let resp = ui.interact(rect, id, Sense::click_and_drag());
                 let field = content_rect(rect, item);
-                if let Some(pos) = resp
-                    .interact_pointer_pos()
-                    .filter(|p| (resp.dragged() || resp.clicked()) && field.contains(*p))
-                {
+                if let Some(pos) = resp.interact_pointer_pos().filter(|p| {
+                    (resp.dragged() || resp.clicked()) && field.expand(4.0).contains(*p)
+                }) {
                     let x = ((pos.x - field.left()) / field.width()).clamp(0.0, 1.0);
                     let y = ((pos.y - field.top()) / field.height()).clamp(0.0, 1.0);
                     set_position(cx.engine, &item.fixtures, x, y);
                 }
-                paint_item(p, cx.engine, cx.state, states, item, rect, 0.0);
+                paint_item(p, cx.engine, cx.state, states, item, rect, 0.0, false, tex);
             }
         }
     }
 
-    /// Bearbeiten-Leiste: Seite, neue Elemente, Eigenschaften.
+    /// Bearbeiten-Leiste: Seite, Raster, neue Elemente, Eigenschaften.
     fn panel(&mut self, ui: &mut Ui, rect: Rect, cx: &mut ViewCtx<'_>, page: Option<u32>) {
         ui.painter().line_segment(
             [
-                rect.left_top() - vec2(theme::SP_S * 0.5, 0.0),
-                rect.left_bottom() - vec2(theme::SP_S * 0.5, 0.0),
+                rect.left_top() - vec2(theme::SP_M * 0.5, 0.0),
+                rect.left_bottom() - vec2(theme::SP_M * 0.5, 0.0),
             ],
             Stroke::new(1.0, theme::border()),
         );
         let mut child = ui.new_child(
             egui::UiBuilder::new()
-                .max_rect(rect.shrink2(vec2(theme::SP_S, 0.0)))
+                .max_rect(rect)
                 .layout(Layout::top_down(Align::Min)),
         );
         egui::ScrollArea::vertical()
             .id_salt("touch_panel")
             .auto_shrink([false, false])
             .show(&mut child, |ui| {
-                if ui
-                    .add_sized([ui.available_width(), 32.0], egui::Button::new(t("Seite hinzufügen")))
-                    .clicked()
-                {
-                    add_page(cx);
-                }
+                ui.set_width(rect.width() - theme::SP_S);
                 let Some(page) = page else {
                     return;
                 };
-                ui.add_space(theme::SP_M);
-                section_header(ui, t("Bedienelemente hinzufügen"), |_| {});
+                // ----- Hinzufügen -----
+                section_header(ui, t("Hinzufügen"), |_| {});
                 let kinds = [
-                    (TouchKind::Label, t("Beschriftung")),
-                    (TouchKind::Button, t("Schaltfläche")),
-                    (TouchKind::Fader, t("Fader")),
-                    (TouchKind::Knob, t("Drehregler")),
-                    (TouchKind::Color, t("Farbrad")),
-                    (TouchKind::Xy, t("XY-Feld")),
+                    (TouchKind::Button, "square", t("Schaltfläche")),
+                    (TouchKind::Fader, "sliders", t("Fader")),
+                    (TouchKind::Knob, "circle", t("Drehregler")),
+                    (TouchKind::Label, "x", t("Beschriftung")),
+                    (TouchKind::Color, "palette", t("Farbrad")),
+                    (TouchKind::Xy, "plus", t("XY-Feld")),
                 ];
-                egui::Grid::new("touch_add_kinds")
-                    .num_columns(2)
-                    .spacing(vec2(theme::SP_S, theme::SP_S))
-                    .show(ui, |ui| {
-                        let w = (ui.available_width() - theme::SP_S) / 2.0;
-                        for (i, (k, label)) in kinds.into_iter().enumerate() {
-                            if ui
-                                .add(egui::Button::new(label).min_size(vec2(w, 40.0)))
-                                .clicked()
-                            {
-                                let mut item = TouchItem::new(k);
-                                item.label = match k {
-                                    TouchKind::Label => t("Beschriftung").to_string(),
-                                    _ => String::new(),
-                                };
+                let w = (ui.available_width() - 2.0 * theme::SP_S) / 3.0;
+                for row in kinds.chunks(3) {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = theme::SP_S;
+                        for (k, icon, label) in row {
+                            if add_tile(ui, w, *k, icon, label) {
+                                let mut item = TouchItem::new(*k);
+                                if *k == TouchKind::Label {
+                                    item.label = t("Beschriftung").to_string();
+                                }
                                 if k.uses_fixtures() {
                                     item.fixtures = cx.state.selection_order.clone();
                                 }
-                                cx.state.touch_sel = cx.engine.show_mut().touch.add_item(page, item);
-                            }
-                            if i % 2 == 1 {
-                                ui.end_row();
+                                cx.state.touch_sel =
+                                    cx.engine.show_mut().touch.add_item(page, item);
                             }
                         }
                     });
-                ui.add_space(theme::SP_S);
-                ui.label(
-                    egui::RichText::new(t(
-                        "Tipp: Alt + Klick auf eine Szene, einen Fader, ein Gerät oder einen anderen Knopf legt ihn hier an – ist ein Element gewählt, bekommt es dieses Ziel.",
-                    ))
-                    .small()
-                    .color(theme::text_faint()),
-                );
+                    ui.add_space(theme::SP_S);
+                }
+
+                // ----- Eigenschaften des gewählten Elements -----
                 if let Some(sel) = cx.state.touch_sel {
-                    ui.add_space(theme::SP_M);
+                    ui.add_space(theme::SP_S);
                     self.properties(ui, cx, page, sel);
+                    return;
+                }
+
+                // ----- Seite -----
+                ui.add_space(theme::SP_S);
+                section_header(ui, t("Seite"), |_| {});
+                let (mut bg, mut img) = cx
+                    .engine
+                    .show()
+                    .touch
+                    .page(page)
+                    .map_or((None, None), |p| (p.background_color, p.background));
+                form(ui, "touch_page", |f| {
+                    f.row(t("Hintergrund"), |ui| {
+                        swatch_row(ui, &mut bg, true);
+                    });
+                    f.row(t("Bild"), |ui| {
+                        if ui.button(t("Laden …")).clicked() {
+                            self.image_dialog =
+                                Some((ImageTarget::Page(page), pick_image(ui.ctx())));
+                        }
+                        if img.is_some() && ui.button(t("Entfernen")).clicked() {
+                            img = None;
+                        }
+                    });
+                });
+                if let Some(p) = cx.engine.show().touch.page(page) {
+                    if p.background_color != bg || p.background != img {
+                        let touch = &mut cx.engine.show_mut().touch;
+                        if let Some(p) = touch.page_mut(page) {
+                            p.background_color = bg;
+                            p.background = img;
+                        }
+                        touch.prune_images();
+                    }
+                }
+
+                // ----- Raster -----
+                ui.add_space(theme::SP_M);
+                section_header(ui, t("Raster"), |_| {});
+                let tl = cx.engine.show().touch.clone();
+                let (mut show_grid, mut snap, mut cell) = (tl.show_grid, tl.snap, tl.cell);
+                form(ui, "touch_grid", |f| {
+                    f.row(t("Anzeigen"), |ui| {
+                        ui.add(Toggle::new(&mut show_grid, ""));
+                    });
+                    f.row(t("Einrasten"), |ui| {
+                        ui.add(Toggle::new(&mut snap, ""));
+                    });
+                    f.row(t("Schrittweite"), |ui| {
+                        egui::ComboBox::from_id_salt("touch_step")
+                            .selected_text(format!("{cell:.0} px"))
+                            .width(ui.available_width())
+                            .show_ui(ui, |ui| {
+                                for s in GRID_STEPS {
+                                    ui.selectable_value(&mut cell, s, format!("{s:.0} px"));
+                                }
+                            });
+                    });
+                });
+                if (show_grid, snap, cell) != (tl.show_grid, tl.snap, tl.cell) {
+                    let touch = &mut cx.engine.show_mut().touch;
+                    touch.show_grid = show_grid;
+                    touch.snap = snap;
+                    touch.cell = cell;
                 }
             });
     }
@@ -714,7 +847,7 @@ impl TouchView {
         let before = item.clone();
         let mut remove = false;
         let mut duplicate = false;
-        section_header(ui, t("Eigenschaften"), |ui| {
+        section_header(ui, kind_name(item.kind), |ui| {
             if ui
                 .add(IconButton::new(Icon::Trash).flat().danger())
                 .on_hover_text(t("Löschen"))
@@ -729,19 +862,39 @@ impl TouchView {
             {
                 duplicate = true;
             }
+            if ui
+                .add(IconButton::new(Icon::Close).flat())
+                .on_hover_text(t("Auswahl aufheben"))
+                .clicked()
+            {
+                cx.state.touch_sel = None;
+            }
         });
         let show = cx.engine.show();
+        if item.kind != TouchKind::Label {
+            let text = if item.kind.uses_fixtures() {
+                match item.fixtures.len() {
+                    0 => t("keine Geräte").to_string(),
+                    1 => show
+                        .fixture(item.fixtures[0])
+                        .map_or_else(String::new, |f| f.name.clone()),
+                    n => crate::tr!("{n} Geräte", n = n),
+                }
+            } else {
+                item_target(show, &item)
+            };
+            ui.label(egui::RichText::new(text).color(theme::text_dim()));
+            ui.add_space(theme::SP_XS);
+        }
+        let mut pick_img = false;
         form(ui, "touch_props", |f| {
-            f.row(t("Art"), |ui| {
-                ui.label(kind_name(item.kind));
-            });
             f.row(t("Beschriftung"), |ui| {
                 ui.add(text_field(&mut item.label).desired_width(ui.available_width()));
             });
             f.row(t("Textgröße"), |ui| {
                 ui.add(
                     egui::DragValue::new(&mut item.text_size)
-                        .range(0.0..=72.0)
+                        .range(0.0..=96.0)
                         .speed(0.5)
                         .custom_formatter(|v, _| {
                             if v <= 0.0 {
@@ -752,26 +905,40 @@ impl TouchView {
                         }),
                 );
             });
-            f.row(t("Größe"), |ui| {
-                ui.add(egui::DragValue::new(&mut item.w).range(1..=32).prefix("B "));
-                ui.add(egui::DragValue::new(&mut item.h).range(1..=32).prefix("H "));
+            f.row(t("Textfarbe"), |ui| {
+                swatch_row(ui, &mut item.text_color, true);
             });
-            if item.kind != TouchKind::Label {
-                f.row(t("Ziel"), |ui| {
-                    let text = if item.kind.uses_fixtures() {
-                        match item.fixtures.len() {
-                            0 => t("keine Geräte").to_string(),
-                            1 => show
-                                .fixture(item.fixtures[0])
-                                .map_or_else(String::new, |f| f.name.clone()),
-                            n => tr!("{n} Geräte", n = n),
-                        }
-                    } else {
-                        item_target(show, &item)
-                    };
-                    ui.label(egui::RichText::new(text).color(theme::text_dim()));
+            f.row(t("Farbe"), |ui| {
+                swatch_row(ui, &mut item.color, true);
+            });
+            if matches!(item.kind, TouchKind::Button | TouchKind::Label) {
+                f.row(t("Symbol"), |ui| {
+                    icon_picker(ui, ("touch_icon", sel), &mut item.icon);
+                });
+                f.row(t("Bild"), |ui| {
+                    if ui.button(t("Laden …")).clicked() {
+                        pick_img = true;
+                    }
+                    if item.image.is_some() && ui.button(t("Entfernen")).clicked() {
+                        item.image = None;
+                    }
                 });
             }
+            f.row(t("Größe"), |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut item.w)
+                        .range(0.25..=40.0)
+                        .speed(0.05)
+                        .max_decimals(2),
+                );
+                ui.label("×");
+                ui.add(
+                    egui::DragValue::new(&mut item.h)
+                        .range(0.25..=40.0)
+                        .speed(0.05)
+                        .max_decimals(2),
+                );
+            });
             if item.kind.uses_fixtures() {
                 f.row("", |ui| {
                     if ui
@@ -787,71 +954,386 @@ impl TouchView {
             }
             if item.kind == TouchKind::Button {
                 f.row(t("Flash-Taste"), |ui| {
-                    ui.add(Toggle::new(&mut item.flash, ""))
-                        .on_hover_text(t("Nur aktiv, solange die Taste gedrückt ist"));
+                    ui.add(Toggle::new(&mut item.flash, ""));
                 });
             }
         });
-        ui.add_space(theme::SP_S);
-        ui.label(egui::RichText::new(t("Farbe")).color(theme::text_dim()));
-        ui.horizontal_wrapped(|ui| {
-            if ui
-                .add(
-                    IconButton::new(Icon::Close)
-                        .flat()
-                        .active(item.color.is_none()),
-                )
-                .on_hover_text(t("Keine Farbe"))
-                .clicked()
-            {
-                item.color = None;
-            }
-            for col in COLORS {
-                let r = ui.add(crate::ui::widgets::Swatch(theme::rgb(col)));
-                if item.color == Some(col) {
-                    ui.painter().rect_stroke(
-                        r.rect.expand(2.0),
-                        theme::R_S,
-                        Stroke::new(2.0, theme::text()),
-                        StrokeKind::Outside,
-                    );
-                }
-                if r.clicked() {
-                    item.color = Some(col);
-                }
-            }
-        });
+        if pick_img {
+            self.image_dialog = Some((ImageTarget::Item(page, sel), pick_image(ui.ctx())));
+        }
 
         let touch = &mut cx.engine.show_mut().touch;
         if remove {
             if let Some(p) = touch.page_mut(page) {
                 p.items.retain(|i| i.id != sel);
             }
+            touch.prune_images();
             cx.state.touch_sel = None;
             return;
         }
         if item != before {
-            if let Some(p) = touch.page_mut(page) {
-                // Größe nur übernehmen, wenn der Platz frei ist
-                if !p.is_free(item.x, item.y, item.w, item.h, Some(item.id)) {
-                    item.w = before.w;
-                    item.h = before.h;
-                }
-                if let Some(slot) = p.items.iter_mut().find(|i| i.id == sel) {
-                    *slot = item;
-                }
+            let image_changed = item.image != before.image;
+            if let Some(slot) = touch
+                .page_mut(page)
+                .and_then(|p| p.items.iter_mut().find(|i| i.id == sel))
+            {
+                *slot = item;
+            }
+            if image_changed {
+                touch.prune_images();
             }
         }
         if duplicate {
             cx.state.touch_sel = touch.duplicate(page, sel);
         }
     }
+
+    /// Ergebnis des Bild-Dialogs übernehmen.
+    fn poll_image(&mut self, ctx: &egui::Context, cx: &mut ViewCtx<'_>) {
+        let Some((target, rx)) = &self.image_dialog else {
+            return;
+        };
+        let Ok(path) = rx.try_recv() else {
+            return;
+        };
+        let target = *target;
+        self.image_dialog = None;
+        let Some(path) = path else {
+            return;
+        };
+        match prepare_image(&path) {
+            Ok(bytes) => {
+                let name = path
+                    .file_name()
+                    .map_or_else(String::new, |n| n.to_string_lossy().to_string());
+                let touch = &mut cx.engine.show_mut().touch;
+                let id = touch.add_image(name, bytes);
+                match target {
+                    ImageTarget::Page(p) => {
+                        if let Some(p) = touch.page_mut(p) {
+                            p.background = Some(id);
+                        }
+                    }
+                    ImageTarget::Item(p, i) => {
+                        if let Some(it) = touch
+                            .page_mut(p)
+                            .and_then(|p| p.items.iter_mut().find(|x| x.id == i))
+                        {
+                            it.image = Some(id);
+                        }
+                    }
+                }
+                touch.prune_images();
+                ctx.request_repaint();
+            }
+            Err(e) => cx.state.message = Some((e, true)),
+        }
+    }
+}
+
+/// Kachel „Element hinzufügen“: Symbol und Name.
+fn add_tile(ui: &mut Ui, w: f32, kind: TouchKind, icon: &str, label: &str) -> bool {
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, 64.0), Sense::click());
+    let p = ui.painter();
+    let fill = if resp.hovered() {
+        theme::raised_hover()
+    } else {
+        theme::raised()
+    };
+    p.rect_filled(rect, theme::R_M, fill);
+    p.rect_stroke(
+        rect,
+        theme::R_M,
+        Stroke::new(1.0, theme::border()),
+        StrokeKind::Inside,
+    );
+    let icon_c = pos2(rect.center().x, rect.top() + 24.0);
+    let color = if resp.hovered() {
+        theme::accent()
+    } else {
+        theme::text_dim()
+    };
+    match kind {
+        TouchKind::Label => {
+            p.text(
+                icon_c,
+                Align2::CENTER_CENTER,
+                "Aa",
+                egui::FontId::proportional(18.0),
+                color,
+            );
+        }
+        _ => icon_library::paint(p, icon_c, icon, 22.0, color),
+    }
+    p.text(
+        pos2(rect.center().x, rect.bottom() - 13.0),
+        Align2::CENTER_CENTER,
+        label,
+        theme::caption(),
+        theme::text(),
+    );
+    resp.clicked()
+}
+
+/// Farbfelder (optional mit „keine“). Gibt `true` zurück, wenn geändert.
+fn swatch_row(ui: &mut Ui, value: &mut Option<[u8; 3]>, allow_none: bool) -> bool {
+    let mut changed = false;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
+        const S: f32 = 16.0;
+        if allow_none {
+            let (r, resp) = ui.allocate_exact_size(vec2(S, S), Sense::click());
+            let p = ui.painter();
+            p.rect_stroke(
+                r,
+                3.0,
+                Stroke::new(1.0, theme::border()),
+                StrokeKind::Inside,
+            );
+            p.line_segment(
+                [r.left_bottom(), r.right_top()],
+                Stroke::new(1.0, theme::DANGER),
+            );
+            if value.is_none() {
+                p.rect_stroke(
+                    r.expand(2.0),
+                    4.0,
+                    Stroke::new(1.5, theme::text()),
+                    StrokeKind::Outside,
+                );
+            }
+            if resp.clicked() && value.is_some() {
+                *value = None;
+                changed = true;
+            }
+        }
+        for c in COLORS {
+            let (r, resp) = ui.allocate_exact_size(vec2(S, S), Sense::click());
+            let p = ui.painter();
+            p.rect_filled(r, 3.0, theme::rgb(c));
+            if *value == Some(c) {
+                p.rect_stroke(
+                    r.expand(2.0),
+                    4.0,
+                    Stroke::new(1.5, theme::text()),
+                    StrokeKind::Outside,
+                );
+            }
+            if resp.clicked() && *value != Some(c) {
+                *value = Some(c);
+                changed = true;
+            }
+        }
+        // eigene Farbe
+        let mut rgb = value.unwrap_or([255, 255, 255]);
+        let custom = value.is_some_and(|v| !COLORS.contains(&v));
+        let (r, resp) = ui.allocate_exact_size(vec2(S, S), Sense::click());
+        {
+            let p = ui.painter();
+            if custom {
+                p.rect_filled(r, 3.0, theme::rgb(rgb));
+                p.rect_stroke(
+                    r.expand(2.0),
+                    4.0,
+                    Stroke::new(1.5, theme::text()),
+                    StrokeKind::Outside,
+                );
+            } else {
+                p.rect_stroke(
+                    r,
+                    3.0,
+                    Stroke::new(1.0, theme::border()),
+                    StrokeKind::Inside,
+                );
+                p.text(
+                    r.center(),
+                    Align2::CENTER_CENTER,
+                    "+",
+                    theme::caption(),
+                    theme::text_dim(),
+                );
+            }
+        }
+        if resp.clicked() {
+            egui::Popup::toggle_id(ui.ctx(), resp.id);
+        }
+        menu::dropdown(&resp, |ui| {
+            ui.set_min_width(212.0);
+            if crate::ui::widgets::color_picker::color_picker(ui, resp.id.with("picker"), &mut rgb)
+            {
+                *value = Some(rgb);
+                changed = true;
+            }
+        });
+    });
+    changed
+}
+
+/// Knopf mit dem gewählten Symbol; Klick öffnet die Symbolbibliothek.
+fn icon_picker(ui: &mut Ui, id: impl std::hash::Hash, icon: &mut Option<String>) {
+    let (rect, resp) = ui.allocate_exact_size(vec2(40.0, 28.0), Sense::click());
+    let p = ui.painter();
+    p.rect_filled(
+        rect,
+        theme::R_S,
+        if resp.hovered() {
+            theme::raised_hover()
+        } else {
+            theme::bg()
+        },
+    );
+    p.rect_stroke(
+        rect,
+        theme::R_S,
+        Stroke::new(1.0, theme::border()),
+        StrokeKind::Inside,
+    );
+    match icon {
+        Some(name) => icon_library::paint(p, rect.center(), name, 18.0, theme::text()),
+        None => {
+            p.text(
+                rect.center(),
+                Align2::CENTER_CENTER,
+                "–",
+                theme::body(),
+                theme::text_faint(),
+            );
+        }
+    }
+    let _ = id;
+    if resp.clicked() {
+        egui::Popup::toggle_id(ui.ctx(), resp.id);
+    }
+    menu::dropdown(&resp, |ui| {
+        ui.set_width(10.0 * 32.0);
+        if ui.button(t("Kein Symbol")).clicked() {
+            *icon = None;
+            ui.close();
+        }
+        egui::ScrollArea::vertical()
+            .max_height(280.0)
+            .show(ui, |ui| {
+                egui::Grid::new(resp.id.with("grid"))
+                    .spacing(vec2(2.0, 2.0))
+                    .show(ui, |ui| {
+                        for (i, (name, _)) in icon_library::LIBRARY.iter().enumerate() {
+                            let (r, cell) =
+                                ui.allocate_exact_size(vec2(30.0, 30.0), Sense::click());
+                            let on = icon.as_deref() == Some(*name);
+                            if on || cell.hovered() {
+                                ui.painter().rect_filled(r, 3.0, theme::raised_hover());
+                            }
+                            icon_library::paint(
+                                ui.painter(),
+                                r.center(),
+                                name,
+                                18.0,
+                                if on { theme::accent() } else { theme::text() },
+                            );
+                            if cell.clicked() {
+                                *icon = Some((*name).to_string());
+                                ui.close();
+                            }
+                            if i % 10 == 9 {
+                                ui.end_row();
+                            }
+                        }
+                    });
+            });
+    });
+}
+
+/// Menüeintrag mit dem Ziel des Elements (zur Fehlersuche).
+fn target_entry(ui: &mut Ui, show: &Show, item: &TouchItem) {
+    let text = if item.kind.uses_fixtures() {
+        let names: Vec<String> = item
+            .fixtures
+            .iter()
+            .filter_map(|f| show.fixture(*f).map(|f| f.name.clone()))
+            .collect();
+        if names.is_empty() {
+            t("keine Geräte").to_string()
+        } else {
+            names.join(", ")
+        }
+    } else if item.kind == TouchKind::Label {
+        return;
+    } else {
+        item_target(show, item)
+    };
+    ui.add(MenuItem::new(&crate::tr!("Ziel: {target}", target = text)).enabled(false));
+    if !item.channels.is_empty() {
+        let chans: Vec<String> = item
+            .channels
+            .iter()
+            .map(|c| crate::mapping::channel_name(show, *c))
+            .collect();
+        for c in chans.iter().take(8) {
+            ui.add(MenuItem::new(c).enabled(false));
+        }
+        if chans.len() > 8 {
+            ui.add(
+                MenuItem::new(&crate::tr!("… und {n} weitere", n = chans.len() - 8)).enabled(false),
+            );
+        }
+    }
+}
+
+fn pick_image(ctx: &egui::Context) -> Receiver<Option<PathBuf>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let ctx = ctx.clone();
+    std::thread::spawn(move || {
+        let path = rfd::FileDialog::new()
+            .set_title(t("Bild laden"))
+            .add_filter(t("Bilder"), &["png", "jpg", "jpeg"])
+            .pick_file();
+        let _ = tx.send(path);
+        ctx.request_repaint();
+    });
+    rx
+}
+
+/// Bild lesen und auf eine sinnvolle Größe bringen (max. 1600 px).
+fn prepare_image(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let img = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
+    if img.width().max(img.height()) <= 1600 && bytes.len() < 1_500_000 {
+        return Ok(bytes);
+    }
+    let img = img.resize(1600, 1600, image::imageops::FilterType::Triangle);
+    let mut out = std::io::Cursor::new(Vec::new());
+    if img.color().has_alpha() {
+        img.write_to(&mut out, image::ImageFormat::Png)
+    } else {
+        img.to_rgb8().write_to(&mut out, image::ImageFormat::Jpeg)
+    }
+    .map_err(|e| e.to_string())?;
+    Ok(out.into_inner())
+}
+
+/// Bild füllend (beschnitten) zeichnen.
+fn paint_cover(p: &egui::Painter, rect: Rect, tex: &egui::TextureHandle, alpha: f32) {
+    let [w, h] = tex.size();
+    let (iw, ih) = (w as f32, h as f32);
+    if iw <= 0.0 || ih <= 0.0 || rect.width() <= 0.0 || rect.height() <= 0.0 {
+        return;
+    }
+    let ra = rect.width() / rect.height();
+    let ia = iw / ih;
+    let uv = if ia > ra {
+        let f = ra / ia;
+        Rect::from_min_max(pos2((1.0 - f) * 0.5, 0.0), pos2((1.0 + f) * 0.5, 1.0))
+    } else {
+        let f = ia / ra;
+        Rect::from_min_max(pos2(0.0, (1.0 - f) * 0.5), pos2(1.0, (1.0 + f) * 0.5))
+    };
+    p.image(tex.id(), rect, uv, Color32::WHITE.gamma_multiply(alpha));
 }
 
 fn add_page(cx: &mut ViewCtx<'_>) {
     let touch = &mut cx.engine.show_mut().touch;
     let n = touch.pages.len() + 1;
-    let id = touch.add_page(tr!("Seite {n}", n = n));
+    let id = touch.add_page(crate::tr!("Seite {n}", n = n));
     cx.state.touch_page = Some(id);
 }
 
@@ -868,31 +1350,19 @@ fn kind_name(k: TouchKind) -> &'static str {
 
 /// Ziel eines Elements als Text.
 fn item_target(show: &Show, item: &TouchItem) -> String {
-    match item.control {
-        None => t("keins – Alt + Klick auf ein Bedienelement").to_string(),
-        Some(c) => {
-            let m = mapping_of(item).unwrap_or_else(|| Mapping {
-                id: 0,
-                control: c,
-                element: None,
-                input: None,
-                mode: ButtonMode::Toggle,
-                flash: false,
-                feedback: None,
-                name: None,
-                channels: item.channels.clone(),
-            });
+    match (mapping_of(item), item.control) {
+        (Some(m), Some(_)) => {
             let (cat, target) = crate::mapping::describe_mapping(show, &m);
             format!("{cat}: {target}")
         }
+        _ => t("kein Ziel").to_string(),
     }
 }
 
-fn item_title(show: &Show, item: &TouchItem) -> String {
+fn item_title(item: &TouchItem) -> String {
     if item.label.is_empty() {
         kind_name(item.kind).to_string()
     } else {
-        let _ = show;
         item.label.clone()
     }
 }
@@ -902,30 +1372,48 @@ fn display_label(show: &Show, item: &TouchItem) -> String {
     if !item.label.is_empty() {
         return item.label.clone();
     }
-    match item.control {
-        Some(_) => {
-            let full = item_target(show, item);
-            full.split_once(": ")
-                .map_or(full.clone(), |x| x.1.to_string())
-        }
-        None => String::new(),
+    if item.control.is_some() {
+        let full = item_target(show, item);
+        return full
+            .split_once(": ")
+            .map_or(full.clone(), |x| x.1.to_string());
     }
+    String::new()
 }
 
 /// Fläche unter der Beschriftung (Farbrad, XY-Feld).
 fn content_rect(rect: Rect, item: &TouchItem) -> Rect {
-    let top = if item.label.is_empty() { 6.0 } else { 24.0 };
-    Rect::from_min_max(rect.min + vec2(6.0, top), rect.max - vec2(6.0, 6.0))
+    let top = if item.label.is_empty() { 8.0 } else { 28.0 };
+    Rect::from_min_max(rect.min + vec2(8.0, top), rect.max - vec2(8.0, 8.0))
 }
 
-fn fader_track(rect: Rect) -> Rect {
-    Rect::from_min_max(
-        pos2(rect.center().x - 10.0, rect.top() + 28.0),
-        pos2(rect.center().x + 10.0, rect.bottom() - 10.0),
-    )
+/// Fader: (Schiene mit Griff, Weg des Griffmittelpunkts).
+fn fader_parts(rect: Rect) -> (Rect, Rect) {
+    const HANDLE_H: f32 = 34.0;
+    let track = Rect::from_min_max(
+        pos2(rect.left(), rect.top() + 30.0),
+        pos2(rect.right(), rect.bottom() - 26.0),
+    );
+    let travel = Rect::from_min_max(
+        pos2(track.left(), track.top() + HANDLE_H * 0.5),
+        pos2(track.right(), track.bottom() - HANDLE_H * 0.5),
+    );
+    (track, travel)
 }
 
-/// Element zeichnen. `value`: Fader/Drehregler 0–1, Schaltfläche 1 = gedrückt.
+/// Lesbare Textfarbe auf einem Hintergrund.
+fn text_on(bg: Color32) -> Color32 {
+    let l = 0.299 * f32::from(bg.r()) + 0.587 * f32::from(bg.g()) + 0.114 * f32::from(bg.b());
+    if l > 150.0 {
+        Color32::from_gray(20)
+    } else {
+        Color32::WHITE
+    }
+}
+
+/// Element zeichnen. `value`: Fader/Drehregler 0–1; `hot`: gedrückt bzw.
+/// unter dem Zeiger.
+#[allow(clippy::too_many_arguments)]
 fn paint_item(
     p: &egui::Painter,
     e: &Engine,
@@ -934,136 +1422,227 @@ fn paint_item(
     item: &TouchItem,
     rect: Rect,
     value: f32,
+    hot: bool,
+    tex: Option<&egui::TextureHandle>,
 ) {
     let show = e.show();
     let base = item.color.map(theme::rgb);
     let label = display_label(show, item);
-    let auto = (rect.height().min(rect.width()) * 0.16).clamp(11.0, 22.0);
+    let auto = if item.kind == TouchKind::Label {
+        (rect.height() * 0.42).clamp(13.0, 48.0)
+    } else {
+        (rect.height().min(rect.width()) * 0.16).clamp(11.0, 22.0)
+    };
     let size = if item.text_size > 0.0 {
         item.text_size
     } else {
         auto
     };
-    let text_color = |bg: Color32| {
-        let l = 0.299 * f32::from(bg.r()) + 0.587 * f32::from(bg.g()) + 0.114 * f32::from(bg.b());
-        if l > 150.0 {
-            Color32::from_gray(20)
-        } else {
-            Color32::WHITE
-        }
-    };
+    let accent = base.unwrap_or(theme::accent());
     match item.kind {
-        TouchKind::Label => {
-            if let Some(b) = base {
-                p.rect_filled(rect, theme::R_S, b.gamma_multiply(0.25));
-            }
-            p.text(
-                rect.center(),
-                Align2::CENTER_CENTER,
-                label,
-                egui::FontId::proportional(size.max(14.0)),
-                base.unwrap_or(theme::text()),
-            );
-        }
-        TouchKind::Button => {
-            let on = mapping_of(item).is_some_and(|m| crate::mapping::is_on(e, st, states, &m));
-            let fill = base.unwrap_or(theme::raised());
-            let fill = if value > 0.5 {
-                fill.gamma_multiply(0.7)
-            } else {
-                fill
+        TouchKind::Label | TouchKind::Button => {
+            let on = item.kind == TouchKind::Button
+                && mapping_of(item).is_some_and(|m| crate::mapping::is_on(e, st, states, &m));
+            let fill = match (item.kind, base) {
+                (_, Some(b)) => b,
+                (TouchKind::Button, None) => theme::raised(),
+                _ => Color32::TRANSPARENT,
             };
-            p.rect_filled(rect, theme::R_M, fill);
-            if on {
+            let fill = if hot { fill.gamma_multiply(0.7) } else { fill };
+            if fill != Color32::TRANSPARENT {
+                p.rect_filled(rect, theme::R_M, fill);
+            }
+            if let Some(tex) = tex {
+                paint_cover(p, rect.shrink(1.0), tex, if hot { 0.7 } else { 1.0 });
+            }
+            if item.kind == TouchKind::Button {
                 p.rect_stroke(
                     rect,
                     theme::R_M,
-                    Stroke::new(3.0, Color32::WHITE),
+                    if on {
+                        Stroke::new(3.0, Color32::WHITE)
+                    } else {
+                        Stroke::new(1.0, theme::border())
+                    },
                     StrokeKind::Inside,
                 );
+                if on {
+                    // leuchtender Streifen oben
+                    let bar = Rect::from_min_size(
+                        rect.min + vec2(8.0, 6.0),
+                        vec2(rect.width() - 16.0, 3.0),
+                    );
+                    p.rect_filled(bar, 1.5, Color32::WHITE);
+                }
             }
-            let galley = p.layout(
-                label,
-                egui::FontId::proportional(size),
-                text_color(fill),
-                rect.width() - 12.0,
-            );
-            p.galley(rect.center() - galley.size() * 0.5, galley, Color32::WHITE);
-            if item.control.is_none() {
-                p.circle_filled(rect.right_bottom() - vec2(9.0, 9.0), 3.0, theme::DANGER);
+            let text_color = item.text_color.map(theme::rgb).unwrap_or_else(|| {
+                if tex.is_some() {
+                    Color32::WHITE
+                } else if fill == Color32::TRANSPARENT {
+                    theme::text()
+                } else {
+                    text_on(fill)
+                }
+            });
+            // Symbol über der Beschriftung (allein: mittig und groß)
+            let mut text_center = rect.center();
+            if let Some(icon) = &item.icon {
+                let icon_size = if label.is_empty() {
+                    (rect.height().min(rect.width()) * 0.5).max(14.0)
+                } else {
+                    (rect.height().min(rect.width()) * 0.32).max(12.0)
+                };
+                let c = if label.is_empty() {
+                    rect.center()
+                } else {
+                    rect.center() - vec2(0.0, icon_size * 0.45)
+                };
+                icon_library::paint(p, c, icon, icon_size, text_color);
+                text_center = rect.center() + vec2(0.0, icon_size * 0.5);
+            }
+            if !label.is_empty() {
+                let galley = p.layout(
+                    label,
+                    egui::FontId::proportional(size),
+                    text_color,
+                    rect.width() - 12.0,
+                );
+                let pos = text_center - galley.size() * 0.5;
+                if tex.is_some() && item.text_color.is_none() {
+                    // Schatten für Lesbarkeit auf Bildern
+                    p.galley(
+                        pos + vec2(1.0, 1.0),
+                        galley.clone(),
+                        Color32::from_black_alpha(200),
+                    );
+                }
+                p.galley(pos, galley, text_color);
+            }
+            if item.kind == TouchKind::Button && item.control.is_none() {
+                p.circle_filled(rect.right_top() + vec2(-9.0, 9.0), 3.5, theme::DANGER);
             }
         }
         TouchKind::Fader => {
             p.rect_filled(rect, theme::R_M, theme::raised());
-            let track = fader_track(rect);
-            p.rect_filled(track, 4.0, theme::bg());
-            let fill_col = base.unwrap_or(theme::accent());
-            let filled = Rect::from_min_max(
-                pos2(track.left(), track.bottom() - track.height() * value),
-                track.max,
-            );
-            p.rect_filled(filled, 4.0, fill_col);
+            let (track, travel) = fader_parts(rect);
+            let text_color = item.text_color.map(theme::rgb).unwrap_or(theme::text());
             p.text(
-                pos2(rect.center().x, rect.top() + 14.0),
+                pos2(rect.center().x, rect.top() + 15.0),
                 Align2::CENTER_CENTER,
-                format!("{:.0} %", value * 100.0),
-                theme::caption(),
-                theme::text_dim(),
+                format!("{:.0}", value * 100.0),
+                theme::heading_font(),
+                text_color,
+            );
+            // Schlitz mit Pegel in der Elementfarbe
+            let slot = Rect::from_center_size(
+                pos2(track.center().x, track.center().y),
+                vec2(6.0, track.height() - 6.0),
+            );
+            p.rect_filled(slot, 3.0, theme::bg());
+            let hy = travel.bottom() - travel.height() * value;
+            let level = Rect::from_min_max(pos2(slot.left(), hy), slot.max);
+            p.rect_filled(level, 3.0, accent);
+            // Griff wie im Programmer
+            let handle = Rect::from_center_size(
+                pos2(track.center().x, hy),
+                vec2((rect.width() - 16.0).min(40.0), 34.0),
+            );
+            p.rect_filled(handle, theme::R_S, theme::raised_hover());
+            p.rect_stroke(
+                handle,
+                theme::R_S,
+                Stroke::new(
+                    1.5,
+                    if hot {
+                        theme::text()
+                    } else {
+                        theme::text_dim()
+                    },
+                ),
+                StrokeKind::Inside,
+            );
+            p.line_segment(
+                [
+                    pos2(handle.left() + 7.0, handle.center().y),
+                    pos2(handle.right() - 7.0, handle.center().y),
+                ],
+                Stroke::new(2.5, theme::text()),
             );
             if !label.is_empty() {
                 let g = p.layout(
                     label,
-                    egui::FontId::proportional(11.0),
-                    theme::text(),
-                    rect.width() - 4.0,
+                    egui::FontId::proportional(size.min(14.0)),
+                    text_color,
+                    rect.width() - 6.0,
                 );
-                let pos = pos2(
-                    rect.center().x - g.size().x * 0.5,
-                    track.top() - g.size().y - 2.0,
-                );
-                let _ = pos;
                 p.galley(
                     pos2(
                         rect.center().x - g.size().x * 0.5,
-                        rect.bottom() - g.size().y - 2.0,
+                        rect.bottom() - 6.0 - g.size().y,
                     ),
                     g,
-                    Color32::WHITE,
+                    text_color,
                 );
             }
         }
         TouchKind::Knob => {
             p.rect_filled(rect, theme::R_M, theme::raised());
-            let c = rect.center() - vec2(0.0, 6.0);
-            let r = (rect.width().min(rect.height()) * 0.32).max(10.0);
+            let text_color = item.text_color.map(theme::rgb).unwrap_or(theme::text());
+            let has_label = !label.is_empty();
+            let avail_h = rect.height() - if has_label { 22.0 } else { 8.0 };
+            let r = (avail_h.min(rect.width() - 12.0) * 0.5).max(12.0);
+            let c = pos2(rect.center().x, rect.top() + 4.0 + avail_h * 0.5);
             let start = std::f32::consts::PI * 0.75;
             let sweep = std::f32::consts::PI * 1.5;
-            let arc = |to: f32| -> Vec<Pos2> {
-                (0..=32)
-                    .map(|i| c + egui::Vec2::angled(start + to * i as f32 / 32.0) * r)
+            let arc = |from: f32, to: f32, radius: f32| -> Vec<Pos2> {
+                (0..=40)
+                    .map(|i| c + egui::Vec2::angled(from + (to - from) * i as f32 / 40.0) * radius)
                     .collect()
             };
-            p.add(Shape::line(arc(sweep), Stroke::new(5.0, theme::bg())));
+            let ring = (r * 0.14).clamp(3.0, 7.0);
+            p.add(Shape::line(
+                arc(start, start + sweep, r - ring),
+                Stroke::new(ring, theme::bg()),
+            ));
             if value > 0.001 {
                 p.add(Shape::line(
-                    arc(sweep * value),
-                    Stroke::new(5.0, base.unwrap_or(theme::accent())),
+                    arc(start, start + sweep * value, r - ring),
+                    Stroke::new(ring, accent),
                 ));
             }
-            p.text(
+            let body = r - ring * 2.2;
+            p.circle_filled(
                 c,
-                Align2::CENTER_CENTER,
+                body,
+                if hot {
+                    theme::raised_hover()
+                } else {
+                    theme::raised()
+                },
+            );
+            p.circle_stroke(c, body, Stroke::new(1.0, theme::border()));
+            let a = start + sweep * value;
+            p.line_segment(
+                [
+                    c + egui::Vec2::angled(a) * (body * 0.35),
+                    c + egui::Vec2::angled(a) * (body * 0.85),
+                ],
+                Stroke::new(2.5, theme::text()),
+            );
+            p.text(
+                c + vec2(0.0, body * 0.35 + 4.0),
+                Align2::CENTER_TOP,
                 format!("{:.0}", value * 100.0),
                 theme::caption(),
-                theme::text(),
+                theme::text_dim(),
             );
-            if !label.is_empty() {
+            if has_label {
                 p.text(
-                    pos2(rect.center().x, rect.bottom() - 10.0),
+                    pos2(rect.center().x, rect.bottom() - 11.0),
                     Align2::CENTER_CENTER,
                     label,
-                    egui::FontId::proportional(11.0),
-                    theme::text(),
+                    egui::FontId::proportional(size.min(14.0)),
+                    text_color,
                 );
             }
         }
@@ -1071,11 +1650,11 @@ fn paint_item(
             p.rect_filled(rect, theme::R_M, theme::raised());
             if !item.label.is_empty() {
                 p.text(
-                    rect.left_top() + vec2(8.0, 12.0),
+                    rect.left_top() + vec2(10.0, 15.0),
                     Align2::LEFT_CENTER,
                     &item.label,
                     theme::body(),
-                    theme::text(),
+                    item.text_color.map(theme::rgb).unwrap_or(theme::text()),
                 );
             }
             let field = content_rect(rect, item);
@@ -1099,26 +1678,25 @@ fn paint_item(
                 mesh.add_triangle(xi + 1, xi + N + 2, xi + N + 1);
             }
             p.add(Shape::mesh(mesh));
-            // aktuelle Farbe des ersten Geräts
             if let Some(rgb) = item.fixtures.iter().find_map(|f| current_color(e, *f)) {
                 let hsv = egui::ecolor::Hsva::from_srgb(rgb);
                 let m = pos2(
                     field.left() + hsv.h * field.width(),
                     field.top() + (1.0 - hsv.s) * field.height(),
                 );
-                p.circle_stroke(m, 7.0, Stroke::new(2.0, Color32::BLACK));
-                p.circle_stroke(m, 5.0, Stroke::new(2.0, Color32::WHITE));
+                p.circle_stroke(m, 8.0, Stroke::new(2.0, Color32::BLACK));
+                p.circle_stroke(m, 6.0, Stroke::new(2.0, Color32::WHITE));
             }
         }
         TouchKind::Xy => {
             p.rect_filled(rect, theme::R_M, theme::raised());
             if !item.label.is_empty() {
                 p.text(
-                    rect.left_top() + vec2(8.0, 12.0),
+                    rect.left_top() + vec2(10.0, 15.0),
                     Align2::LEFT_CENTER,
                     &item.label,
                     theme::body(),
-                    theme::text(),
+                    item.text_color.map(theme::rgb).unwrap_or(theme::text()),
                 );
             }
             let field = content_rect(rect, item);
@@ -1146,13 +1724,22 @@ fn paint_item(
                     field.left() + x * field.width(),
                     field.top() + y * field.height(),
                 );
-                p.circle_filled(m, 7.0, base.unwrap_or(theme::accent()));
+                p.line_segment(
+                    [pos2(m.x, field.top()), pos2(m.x, field.bottom())],
+                    Stroke::new(1.0, accent.gamma_multiply(0.5)),
+                );
+                p.line_segment(
+                    [pos2(field.left(), m.y), pos2(field.right(), m.y)],
+                    Stroke::new(1.0, accent.gamma_multiply(0.5)),
+                );
+                p.circle_filled(m, 8.0, accent);
+                p.circle_stroke(m, 8.0, Stroke::new(2.0, Color32::WHITE));
             }
         }
     }
 }
 
-/// Kanal einer Art eines Geräts.
+/// Kanäle einer Art eines Geräts.
 fn channels_of(show: &Show, f: FixtureId, kind: ChannelKind) -> Vec<ChannelRef> {
     show.fixture(f)
         .and_then(|fx| show.type_of(fx))
@@ -1232,14 +1819,8 @@ pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::Touch
     let show = e.show();
     let label = match (&pick.name, pick.control) {
         (Some(n), _) => n.1.clone(),
-        (None, Some(c)) if !pick.channels.is_empty() || matches!(c, Control::Channels) => {
-            crate::mapping::channel_name(
-                show,
-                pick.channels
-                    .first()
-                    .copied()
-                    .unwrap_or(ChannelRef::virtual_dimmer(FixtureId(0))),
-            )
+        (None, Some(_)) if !pick.channels.is_empty() => {
+            crate::mapping::channel_name(show, pick.channels[0])
         }
         (None, Some(c)) => crate::mapping::describe(show, &c).1,
         (None, None) => String::new(),
@@ -1275,7 +1856,7 @@ pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::Touch
             Some(p) => p.id,
             None => {
                 let n = touch.pages.len() + 1;
-                touch.add_page(tr!("Seite {n}", n = n))
+                touch.add_page(crate::tr!("Seite {n}", n = n))
             }
         },
     };
@@ -1301,17 +1882,18 @@ pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::Touch
             item.label = s.name.clone();
         }
     }
-    let name = touch_page_name(e.show(), page);
+    let name = e
+        .show()
+        .touch
+        .page(page)
+        .map_or_else(String::new, |p| p.name.clone());
     if let Some(id) = e.show_mut().touch.add_item(page, item) {
         st.touch_sel = Some(id);
-        st.info(tr!("Zur Touch-Seite „{page}“ hinzugefügt", page = name));
+        st.info(crate::tr!(
+            "Zur Touch-Seite „{page}“ hinzugefügt",
+            page = name
+        ));
     }
-}
-
-fn touch_page_name(show: &Show, page: u32) -> String {
-    show.touch
-        .page(page)
-        .map_or_else(String::new, |p: &TouchPage| p.name.clone())
 }
 
 #[cfg(test)]

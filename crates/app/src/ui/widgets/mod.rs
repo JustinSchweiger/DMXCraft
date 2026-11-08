@@ -6,6 +6,7 @@ pub mod dialog;
 pub mod dip_switch;
 pub mod drag;
 pub mod fader;
+pub mod icon_library;
 pub mod icons;
 pub mod knob;
 pub mod limit_pad;

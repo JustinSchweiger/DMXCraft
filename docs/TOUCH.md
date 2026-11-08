@@ -22,28 +22,46 @@ Im Reiter **Touch** (oben neben „Einrichten“ und „Steuern“) liegt eine f
 
 ## Bearbeiten
 
-**Bearbeiten** oben rechts schaltet den Bearbeiten-Modus um:
+**Bearbeiten** oben rechts zeigt rechts die Leiste:
 
-* **Seiten:**
-  * hinzufügen mit „+“,
-  * umbenennen per Doppelklick,
-  * löschen per Rechtsklick.
-* **Elemente:**
-  * auf freie Zellen ziehen,
-  * mit dem Griff unten rechts die Größe ändern,
-  * Rechtsklick: Duplizieren, Löschen, Farbe,
-  * Entf löscht das gewählte Element.
-* **Eigenschaften:**
-  * Beschriftung, Textgröße, Größe, Farbe,
-  * Flash-Taste bei Schaltflächen,
-  * „Auswahl übernehmen“ bei Farbrad und XY-Feld.
+* **Hinzufügen:** Schaltfläche, Fader, Drehregler, Beschriftung, Farbrad, XY-Feld.
+* **Seite** (wenn kein Element gewählt ist):
+  * Hintergrundfarbe,
+  * Hintergrundbild (PNG/JPEG, wird in der Show gespeichert).
+* **Raster:**
+  * anzeigen,
+  * einrasten,
+  * Schrittweite 12–72 px.
 
-Die Lupen ändern die Zellgröße.
+  Ohne Einrasten lassen sich Elemente frei platzieren und auch überlappen.
+* **Element:**
+  * Beschriftung, Textgröße, Textfarbe,
+  * Farbe (Vorgaben oder eigene Farbe),
+  * Symbol aus der Symbolbibliothek,
+  * Bild,
+  * Größe, Flash-Taste, „Auswahl übernehmen“ (Farbrad/XY).
+
+Elemente lassen sich so bearbeiten:
+
+* ziehen,
+* mit dem Griff unten rechts die Größe ändern,
+* mit den Pfeiltasten verschieben,
+* mit Entf löschen.
+
+Das Kontextmenü zeigt das Ziel des Elements (bei festen Kanälen alle Kanäle), dazu Duplizieren, Löschen und Farbe.
+
+Seiten:
+
+* hinzufügen mit „+“,
+* umbenennen per Doppelklick,
+* löschen per Rechtsklick.
+
+Die Lupen ändern die Ansichtsgröße (Klick auf die Prozentzahl: 100 %).
 
 ## Bedienen
 
 * **Schaltflächen** lösen ihr Ziel aus wie eine Taste der Tastatur- und MIDI-Zuordnung (siehe `MAPPING.md`). Aktive Szenen und gewählte Gruppen haben einen weißen Rahmen.
-* **Fader und Drehregler** setzen den Wert direkt, z. B. Master oder feste Kanäle.
+* **Fader und Drehregler** setzen den Wert direkt, z. B. Master oder feste Kanäle. Doppelklick: 0 ↔ voll. Der Pegel erscheint in der Elementfarbe.
 * **Farbrad:** Farbton nach rechts, Sättigung nach unten. Es setzt Rot, Grün und Blau der Geräte als Live-Werte.
 * **XY-Feld:** setzt Pan und Tilt als Live-Werte.
 
