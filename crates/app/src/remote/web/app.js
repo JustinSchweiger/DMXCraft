@@ -5,11 +5,11 @@
 const UNIT = 72, GAP = 6;
 const de = (navigator.language || "de").toLowerCase().startsWith("de");
 const T = de ? {
-  connecting: "Verbinde …", offline: "Keine Verbindung zu DMXCraft – versuche erneut …",
+  connecting: "Verbinde …", offline: "Verbindung zu DMXCraft unterbrochen", since: "Seit {s} s – verbinde automatisch neu …",
   pin: "PIN eingeben", wrongPin: "PIN falsch", empty: "Diese Show hat noch keine Touch-Seiten.\nIn DMXCraft im Modus „Touch“ anlegen.",
   loading: "Lade Layout …",
 } : {
-  connecting: "Connecting …", offline: "No connection to DMXCraft – retrying …",
+  connecting: "Connecting …", offline: "Connection to DMXCraft lost", since: "For {s} s – reconnecting automatically …",
   pin: "Enter PIN", wrongPin: "Wrong PIN", empty: "This show has no touch pages yet.\nCreate them in DMXCraft in “Touch” mode.",
   loading: "Loading layout …",
 };
@@ -26,7 +26,7 @@ const MIN_SCALE = 0.7;
 const FLOW_BELOW = 0.75;
 let flow = null;
 let panX = 0, panY = 0, contentW = 0, contentH = 0, pan = null;
-let online = false, pinNeeded = false;
+let online = null, pinNeeded = false;  // null = noch unbekannt
 const images = new Map();          // id -> Image
 const pointers = new Map();        // pointerId -> {item, ...}
 const local = new Map();           // item id -> {v|rgb|xy, until}
@@ -35,10 +35,20 @@ let flushTimer = null, dirty = true;
 
 // ------------------------------------------------------------ Netzwerk
 
+// Ohne Antwort so lange gilt die Verbindung als getrennt. Ohne eigenes
+// Zeitlimit würde der Browser bei weggefallenem Rechner bis zum TCP-Timeout
+// warten (auf Handys oft 1–2 Minuten).
+const REQUEST_TIMEOUT = 1500;
+const OFFLINE_AFTER = 2500;
+let lastOk = performance.now(), offlineSince = 0;
+
 function api(path, opts = {}) {
   const headers = Object.assign({}, opts.headers || {});
   if (pin) headers["X-Pin"] = pin;
-  return fetch(path, Object.assign({}, opts, { headers, cache: "no-store" }));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT);
+  return fetch(path, Object.assign({}, opts, { headers, cache: "no-store", signal: ctrl.signal }))
+    .finally(() => clearTimeout(timer));
 }
 
 async function loadLayout() {
@@ -61,6 +71,7 @@ async function poll() {
   try {
     if (pinNeeded) return;
     const r = await api("/api/state");
+    lastOk = performance.now();
     if (r.status === 401) { askPin(!!pin); return; }
     const j = await r.json();
     setOnline(true);
@@ -69,11 +80,23 @@ async function poll() {
     }
     if (j.values) { state = j; dirty = true; }
   } catch (e) {
-    setOnline(false);
+    // einzelne Aussetzer (WLAN) überbrücken, der Wächter entscheidet
+    if (performance.now() - lastOk > OFFLINE_AFTER) setOnline(false);
   } finally {
-    setTimeout(poll, document.hidden ? 1000 : 120);
+    setTimeout(poll, document.hidden ? 1000 : online ? 120 : 700);
   }
 }
+
+// Wächter: auch eine hängende Anfrage fällt so nach kurzer Zeit auf
+setInterval(() => {
+  if (!document.hidden && !pinNeeded && performance.now() - lastOk > OFFLINE_AFTER) setOnline(false);
+  if (!online) updateOffline();
+}, 500);
+
+// nach dem Aufwecken aus dem Hintergrund nicht sofort „getrennt“ melden
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) lastOk = performance.now();
+});
 
 function send(cmd) {
   pending.set(cmd.item + ":" + cmd.t, cmd);
@@ -99,10 +122,25 @@ function setOnline(ok) {
   if (ok !== online) {
     online = ok;
     $("dot").classList.toggle("ok", ok);
+    $("msg").classList.toggle("offline", !ok);
+    if (!ok) {
+      offlineSince = performance.now();
+      // laufende Bedienung abbrechen, nichts nachsenden
+      pointers.clear();
+      pan = null;
+      pending.clear();
+      if (navigator.vibrate) navigator.vibrate([60, 60, 60]);
+      dirty = true;
+    }
   }
-  if (!ok) message(T.offline);
+  if (!ok) updateOffline();
   else if (layout && layout.pages.length) message(null);
   else if (layout) message(T.empty);
+}
+
+function updateOffline() {
+  const secs = Math.round((performance.now() - offlineSince) / 1000);
+  message(T.offline + (secs >= 3 ? "\n" + T.since.replace("{s}", secs) : ""));
 }
 
 function message(text) {
@@ -128,7 +166,7 @@ $("pin").addEventListener("submit", (ev) => {
   message(T.connecting);
   rev = -1;
   layout = null;
-  poll();
+  lastOk = performance.now();
 });
 
 $("full").addEventListener("click", () => {
