@@ -6,6 +6,7 @@ use dmxcraft_core::FixtureId;
 use eframe::egui::{self, Color32};
 use glam::Vec3;
 
+use super::library;
 use super::{
     aim_selected, apply_placement, renumber, rig, targets, vec3_row, DialogKind, Pick, VizView,
 };
@@ -170,10 +171,105 @@ impl VizView {
                 self.open_dialog(ui.ctx(), DialogKind::ImportModel);
             }
         });
+        fold_section(ui, "viz_library", t("Bibliothek"), false, |ui| {
+            self.library_ui(ui, cx);
+        });
         fold_section(ui, "viz_objects", t("Objekte"), true, |ui| {
             self.object_tree(ui, cx);
         });
         self.missing_section(ui, cx);
+    }
+
+    fn library_ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        let (builtin, user) = self
+            .library
+            .get_or_insert_with(|| (library::builtin(), library::load_user()));
+        let at = self.camera.map_or(Vec3::ZERO, |c| c.target);
+        let mut insert: Option<library::Prefab> = None;
+        ui.label(
+            egui::RichText::new(t("Mitgeliefert"))
+                .small()
+                .color(theme::text_dim()),
+        );
+        ui.horizontal_wrapped(|ui| {
+            for p in builtin.iter() {
+                if ui.button(&p.name).clicked() {
+                    insert = Some(p.clone());
+                }
+            }
+        });
+        ui.add_space(theme::SP_XS);
+        ui.label(
+            egui::RichText::new(t("Eigene"))
+                .small()
+                .color(theme::text_dim()),
+        );
+        let mut delete = None;
+        if user.is_empty() {
+            ui.label(
+                egui::RichText::new(t("Noch keine – Objekt auswählen und unten speichern."))
+                    .small()
+                    .color(theme::text_faint()),
+            );
+        }
+        ui.horizontal_wrapped(|ui| {
+            for (i, u) in user.iter().enumerate() {
+                let r = ui.button(&u.prefab.name);
+                if r.clicked() {
+                    insert = Some(u.prefab.clone());
+                }
+                r.context_menu(|ui| {
+                    if ui.button(t("Aus der Bibliothek löschen")).clicked() {
+                        delete = Some(i);
+                        ui.close();
+                    }
+                });
+            }
+        });
+        if let Some(i) = delete {
+            let u = user.remove(i);
+            if let Err(e) = std::fs::remove_file(&u.path) {
+                cx.state.error(e.to_string());
+            }
+        }
+        let sel = match self.selected {
+            Some(Pick::Object(id)) => Some(id),
+            _ => None,
+        };
+        if ui
+            .add_enabled(
+                sel.is_some(),
+                egui::Button::new(t("Auswahl als eigenes Objekt speichern")),
+            )
+            .on_hover_text(t(
+                "Speichert das ausgewählte Objekt bzw. den Ordner samt Inhalt in der Bibliothek",
+            ))
+            .clicked()
+        {
+            if let Some(p) =
+                sel.and_then(|id| library::Prefab::from_venue(&cx.engine.show().venue, id))
+            {
+                match library::save_user(&p) {
+                    Ok(_) => {
+                        cx.state
+                            .info(tr!("In der Bibliothek gespeichert: {n}", n = p.name));
+                        self.library = None;
+                    }
+                    Err(e) => cx.state.error(e),
+                }
+            }
+        }
+        if let Some(p) = insert {
+            let v = &mut cx.engine.show_mut().venue;
+            let id = p.insert(
+                v,
+                (at.x * 20.0).round() / 20.0,
+                (at.z * 20.0).round() / 20.0,
+            );
+            self.sel_objects = [id].into();
+            self.selected = Some(Pick::Object(id));
+            cx.state.selected.clear();
+        }
     }
 
     fn fixtures_tab(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {

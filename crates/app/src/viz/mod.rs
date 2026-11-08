@@ -6,6 +6,7 @@
 
 pub mod camera;
 pub mod gltf_import;
+pub mod library;
 pub mod mesh;
 mod outline;
 mod panels;
@@ -140,6 +141,8 @@ pub struct VizView {
     /// Objekt oder Geräteordner, der gerade umbenannt wird.
     renaming: Option<outline::Renaming>,
     rename_focus: bool,
+    /// Objekt-Bibliothek (beim ersten Öffnen geladen).
+    library: Option<(Vec<library::Prefab>, Vec<library::UserPrefab>)>,
     fixture_anchor: Option<FixtureId>,
     /// Objekt im Baum aufklappen und zeigen / Gerät in der Liste zeigen.
     reveal: Option<u32>,
@@ -416,6 +419,7 @@ impl Default for VizView {
             fixture_sort: Default::default(),
             renaming: None,
             rename_focus: false,
+            library: None,
             fixture_anchor: None,
             reveal: None,
             reveal_fixture: None,
