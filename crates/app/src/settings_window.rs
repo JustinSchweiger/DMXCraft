@@ -32,17 +32,19 @@ pub enum Tab {
     Startup,
     Outputs,
     Midi,
+    Remote,
     Ai,
     Project,
 }
 
 impl Tab {
-    const ALL: [Tab; 7] = [
+    const ALL: [Tab; 8] = [
         Tab::General,
         Tab::Customize,
         Tab::Startup,
         Tab::Outputs,
         Tab::Midi,
+        Tab::Remote,
         Tab::Ai,
         Tab::Project,
     ];
@@ -54,6 +56,7 @@ impl Tab {
             Tab::Startup => t("Start"),
             Tab::Outputs => t("Ausgänge"),
             Tab::Midi => t("MIDI"),
+            Tab::Remote => t("Fernbedienung"),
             Tab::Ai => t("MCP"),
             Tab::Project => t("Projekt"),
         }
@@ -66,6 +69,7 @@ impl Tab {
             Tab::Startup => Icon::Play,
             Tab::Outputs => Icon::Levels,
             Tab::Midi => Icon::Midi,
+            Tab::Remote => Icon::Remote,
             Tab::Ai => Icon::Robot,
             Tab::Project => Icon::FileOpen,
         }
@@ -82,6 +86,8 @@ pub struct SettingsChanges {
     pub theme: bool,
     /// MCP-Server neu starten.
     pub mcp_retry: bool,
+    /// Fernbedienung neu starten.
+    pub remote_retry: bool,
     /// LEDs dieses Ausgangs jetzt löschen.
     pub midi_clear: Option<(String, DeviceModel)>,
 }
@@ -98,6 +104,7 @@ pub struct SettingsCx<'a> {
     pub usb_ports: &'a mut Vec<UsbDmxPort>,
     pub show_path: &'a str,
     pub mcp: &'a crate::mcp::McpStatus,
+    pub remote: &'a crate::remote::RemoteLink,
     /// Gefundene MIDI-Ein- und -Ausgänge.
     pub midi_inputs: &'a [String],
     pub midi_outputs: &'a [String],
@@ -149,6 +156,7 @@ impl SettingsWindow {
                             Tab::Midi => {
                                 midi(ui, cx.settings, cx.midi_inputs, cx.midi_outputs, &mut ch)
                             }
+                            Tab::Remote => remote(ui, cx.settings, cx.remote, &mut ch),
                             Tab::Ai => ai(ui, cx.settings, cx.mcp, &mut ch),
                             Tab::Project => project(ui, cx.engine, cx.show_path),
                         }
@@ -290,6 +298,133 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
         ui,
         t("Claude Desktop startet DMXCraft dafür mit dem Argument „mcp“ als Brücke; DMXCraft selbst muss laufen und der Server eingeschaltet sein. Änderungen der KI lassen sich mit Strg+Z rückgängig machen; ist DMXCraft gesperrt, darf die KI nur lesen."),
     );
+}
+
+/// Touch-Fernbedienung: Server ein/aus, Port, PIN, Adressen und QR-Code.
+fn remote(
+    ui: &mut Ui,
+    s: &mut Settings,
+    link: &crate::remote::RemoteLink,
+    ch: &mut SettingsChanges,
+) {
+    use crate::remote::RemoteStatus;
+    section(ui, t("Touch-Fernbedienung"));
+    ch.save |= ui
+        .add(Toggle::new(
+            &mut s.remote_enabled,
+            t("Fernbedienung im lokalen Netzwerk einschalten"),
+        ))
+        .changed();
+    ui.add_space(theme::SP_S);
+    form(ui, "settings_remote", |f| {
+        f.row(t("Port"), |ui| {
+            let mut port = s.remote_port;
+            let r = ui.add(egui::DragValue::new(&mut port).range(1024..=65535).speed(1));
+            if port != s.remote_port {
+                s.remote_port = port;
+            }
+            if r.lost_focus() || r.drag_stopped() {
+                ch.save = true;
+            }
+        });
+        f.row(t("PIN"), |ui| {
+            let r = ui.add(
+                egui::TextEdit::singleline(&mut s.remote_pin)
+                    .hint_text(t("ohne PIN"))
+                    .char_limit(12)
+                    .desired_width(ui.available_width()),
+            );
+            if r.changed() {
+                s.remote_pin.retain(|c| !c.is_whitespace());
+            }
+            if r.lost_focus() {
+                ch.save = true;
+            }
+        });
+        f.row(t("Status"), |ui| {
+            let (text, color) = match &link.status {
+                RemoteStatus::Off => (t("aus").to_string(), theme::text_dim()),
+                RemoteStatus::Running(_) if link.clients > 0 => (
+                    tr!("läuft – {n} Gerät(e) verbunden", n = link.clients),
+                    theme::OK,
+                ),
+                RemoteStatus::Running(_) => {
+                    (t("läuft – kein Gerät verbunden").to_string(), theme::OK)
+                }
+                RemoteStatus::Error(e) => (tr!("Fehler: {e}", e = e), theme::DANGER),
+            };
+            ui.label(egui::RichText::new(text).color(color));
+            if matches!(link.status, RemoteStatus::Error(_))
+                && ui.button(t("Erneut versuchen")).clicked()
+            {
+                ch.remote_retry = true;
+            }
+        });
+    });
+    if matches!(link.status, RemoteStatus::Running(_)) {
+        ui.add_space(theme::SP_M);
+        section(ui, t("Verbinden"));
+        ui.horizontal_top(|ui| {
+            if let Some(url) = link.addresses.first() {
+                qr_code(ui, url, 180.0);
+                ui.add_space(theme::SP_M);
+            }
+            ui.vertical(|ui| {
+                ui.label(t("Mit der Kamera des Smartphones oder Tablets scannen oder eine Adresse im Browser öffnen:"));
+                ui.add_space(theme::SP_S);
+                for url in &link.addresses {
+                    ui.horizontal(|ui| {
+                        ui.hyperlink_to(egui::RichText::new(url).monospace(), url);
+                        if ui
+                            .add(IconButton::new(Icon::Copy))
+                            .on_hover_text(t("Kopieren"))
+                            .clicked()
+                        {
+                            ui.ctx().copy_text(url.clone());
+                        }
+                    });
+                }
+                if link.addresses.is_empty() {
+                    ui.label(
+                        egui::RichText::new(t("Keine Netzwerkadresse gefunden."))
+                            .color(theme::WARN),
+                    );
+                }
+            });
+        });
+    }
+    ui.add_space(theme::SP_M);
+    hint(
+        ui,
+        t("Die Fernbedienung zeigt die Seiten des Touch-Modus im Browser (iPhone, iPad, Android). Gerät und Rechner müssen im selben Netzwerk sein; beim ersten Start fragt die Firewall eventuell nach. Über „Zum Home-Bildschirm“ läuft sie wie eine App im Vollbild. Ohne PIN kann jeder im Netzwerk bedienen."),
+    );
+}
+
+/// QR-Code einer Adresse zeichnen (schwarz auf weiß, mit Ruhezone).
+fn qr_code(ui: &mut Ui, text: &str, size: f32) {
+    let (rect, _) = ui.allocate_exact_size(vec2(size, size), Sense::hover());
+    let Ok(code) = qrcode::QrCode::new(text.as_bytes()) else {
+        return;
+    };
+    let n = code.width();
+    let p = ui.painter();
+    p.rect_filled(rect, theme::R_S, egui::Color32::WHITE);
+    let cell = size / (n + 8) as f32;
+    let origin = rect.min + vec2(cell * 4.0, cell * 4.0);
+    for y in 0..n {
+        for x in 0..n {
+            if code[(x, y)] == qrcode::Color::Dark {
+                p.rect_filled(
+                    egui::Rect::from_min_size(
+                        origin + vec2(x as f32 * cell, y as f32 * cell),
+                        vec2(cell + 0.3, cell + 0.3),
+                    ),
+                    0.0,
+                    egui::Color32::BLACK,
+                );
+            }
+        }
+    }
 }
 
 fn hint(ui: &mut Ui, text: &str) {

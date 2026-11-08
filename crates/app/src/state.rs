@@ -54,6 +54,9 @@ pub struct AppState {
     /// Touch: ausgelöste Schaltflächen/Fader (Zuordnung, gedrückt, Wert,
     /// Regler) – verarbeitet der Zuordnungs-Rahmen am Ende des Bilds.
     pub touch_fire: Vec<(dmxcraft_core::mapping::Mapping, bool, u8, bool)>,
+    /// Zuletzt gesetzte Werte von Touch-Fadern/-Reglern ohne lesbaren
+    /// Zustand (Touch-Modus und Fernbedienung teilen sie).
+    pub touch_values: std::collections::HashMap<u32, f32>,
     /// Zuletzt verarbeitete Szenen-Markierung (Edit-Modus: Geräte mitwählen).
     pub scene_selection_seen: BTreeSet<SceneId>,
     /// Zuletzt verarbeiteter Programmer-Modus.
@@ -161,6 +164,7 @@ impl AppState {
             touch_edit: false,
             touch_sel: None,
             touch_fire: Vec::new(),
+            touch_values: Default::default(),
             programmer_mode: ProgrammerMode::default(),
             focus: Focus::default(),
             scene_selection_seen: BTreeSet::new(),

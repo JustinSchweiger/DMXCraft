@@ -17,6 +17,7 @@ mod midi;
 mod midi_device;
 mod palettes;
 mod profiles;
+mod remote;
 mod settings;
 mod settings_window;
 mod state;

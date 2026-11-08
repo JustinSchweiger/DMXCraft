@@ -68,6 +68,7 @@ pub struct DmxCraftApp {
     history: History,
     /// MCP-Server für KI-Assistenten.
     mcp: crate::mcp::McpLink,
+    remote: crate::remote::RemoteLink,
     mapper: crate::mapping::Mapper,
     /// 3D-Visualisierer.
     viz: crate::viz::VizView,
@@ -150,6 +151,7 @@ impl DmxCraftApp {
             windows: Windows::default(),
             history: History::default(),
             mcp: crate::mcp::McpLink::default(),
+            remote: crate::remote::RemoteLink::default(),
             mapper: crate::mapping::Mapper::default(),
             viz: crate::viz::VizView::default(),
             builder: Default::default(),
@@ -610,6 +612,7 @@ impl DmxCraftApp {
                     usb_ports: &mut self.usb_ports,
                     show_path: &self.state.show_path,
                     mcp: &self.mcp.status,
+                    remote: &self.remote,
                     midi_inputs: &self.mapper.midi.input_names,
                     midi_outputs: &self.mapper.midi.output_names,
                 },
@@ -617,6 +620,9 @@ impl DmxCraftApp {
             drop(e);
             if ch.mcp_retry {
                 self.mcp.retry();
+            }
+            if ch.remote_retry {
+                self.remote.retry();
             }
             if let Some((out, model)) = ch.midi_clear {
                 self.mapper.clear_now(&out, model);
@@ -869,6 +875,9 @@ impl eframe::App for DmxCraftApp {
                 }
             }
             crate::mapping::window::show(&ctx, cx.engine, cx.state, &mut self.mapper);
+            // Touch-Fernbedienung (Web-App) vor den Zuordnungen auswerten
+            self.remote
+                .update(&ctx, cx.engine, cx.state, &self.settings);
             self.mapper.end_frame(&ctx, cx.engine, cx.state);
             // Alt + Klick: Element zur Touch-Oberfläche
             for p in crate::mapping::take_touch_picks(&ctx) {

@@ -40,6 +40,12 @@ pub struct Settings {
     pub mcp_enabled: bool,
     /// Port des MCP-Servers (http://127.0.0.1:<port>/mcp).
     pub mcp_port: u16,
+    /// Touch-Fernbedienung im lokalen Netz (Web-App für Smartphone/Tablet).
+    pub remote_enabled: bool,
+    /// Port der Fernbedienung (http://<rechner>:<port>).
+    pub remote_port: u16,
+    /// Optionale PIN der Fernbedienung (leer = ohne).
+    pub remote_pin: String,
     /// Qualität des 3D-Visualisierers (0 = niedrig … 3 = ultra).
     pub viz_quality: u8,
     /// Eingerichtete MIDI-Controller (Typ, LED-Ausgang).
@@ -64,6 +70,9 @@ impl Default for Settings {
             fader_ranges: true,
             mcp_enabled: false,
             mcp_port: dmxcraft_mcp::DEFAULT_PORT,
+            remote_enabled: false,
+            remote_port: crate::remote::DEFAULT_PORT,
+            remote_pin: String::new(),
             viz_quality: 1,
             midi_devices: Vec::new(),
         }

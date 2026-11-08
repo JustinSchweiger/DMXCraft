@@ -78,8 +78,6 @@ pub struct TouchView {
     drag: Option<Drag>,
     rename_page: Option<(u32, String)>,
     rename_focus: bool,
-    /// Zuletzt gesetzte Werte von Fadern ohne lesbaren Zustand.
-    values: HashMap<u32, f32>,
     /// Gedrückte Schaltflächen (für Loslassen).
     held: Vec<u32>,
     textures: HashMap<u32, egui::TextureHandle>,
@@ -93,7 +91,6 @@ impl Default for TouchView {
             drag: None,
             rename_page: None,
             rename_focus: false,
-            values: HashMap::new(),
             held: Vec::new(),
             textures: HashMap::new(),
             image_dialog: None,
@@ -102,7 +99,7 @@ impl Default for TouchView {
 }
 
 /// Zuordnung, mit der ein Element auslöst (wie eine Taste).
-fn mapping_of(item: &TouchItem) -> Option<Mapping> {
+pub(crate) fn mapping_of(item: &TouchItem) -> Option<Mapping> {
     let control = item.control?;
     let fader = matches!(item.kind, TouchKind::Fader | TouchKind::Knob);
     Some(Mapping {
@@ -413,7 +410,7 @@ impl TouchView {
                 .image
                 .and_then(|id| self.texture(ui.ctx(), cx.engine.show(), id));
             let id = ui.make_persistent_id(("touch_item", item.id));
-            let value = self.value(cx.engine, item);
+            let value = item_value(cx.engine, cx.state, item);
             if editing {
                 let resp = ui.interact(rect, id, Sense::click_and_drag());
                 paint_item(
@@ -600,23 +597,6 @@ impl TouchView {
         }
     }
 
-    /// Aktueller Wert 0–1 eines Faders/Drehreglers.
-    fn value(&self, e: &Engine, item: &TouchItem) -> f32 {
-        let live = |c: &ChannelRef| {
-            e.live()
-                .get(c)
-                .map_or(if c.is_virtual() { 1.0 } else { 0.0 }, |v| {
-                    f32::from(*v) / 255.0
-                })
-        };
-        match item.control {
-            Some(Control::Master) => e.master(),
-            Some(Control::Channels) => item.channels.first().map_or(0.0, live),
-            Some(Control::Channel { channel }) => live(&channel),
-            _ => self.values.get(&item.id).copied().unwrap_or(0.0),
-        }
-    }
-
     /// Element bedienen.
     #[allow(clippy::too_many_arguments)]
     fn play_item(
@@ -630,7 +610,7 @@ impl TouchView {
         id: egui::Id,
         tex: Option<&egui::TextureHandle>,
     ) {
-        let value = self.value(cx.engine, item);
+        let value = item_value(cx.engine, cx.state, item);
         match item.kind {
             TouchKind::Label => {
                 paint_item(p, cx.engine, cx.state, states, item, rect, 0.0, false, tex);
@@ -668,7 +648,7 @@ impl TouchView {
                     v = if value > 0.0 { 0.0 } else { 1.0 };
                 }
                 if (v - value).abs() > f32::EPSILON {
-                    self.values.insert(item.id, v);
+                    cx.state.touch_values.insert(item.id, v);
                     if let Some(m) = mapping_of(item) {
                         let raw = (v * 127.0).round() as u8;
                         cx.state.touch_fire.push((m, raw > 0, raw, true));
@@ -1368,7 +1348,7 @@ fn item_title(item: &TouchItem) -> String {
 }
 
 /// Beschriftung: eigene oder aus dem Ziel.
-fn display_label(show: &Show, item: &TouchItem) -> String {
+pub(crate) fn display_label(show: &Show, item: &TouchItem) -> String {
     if !item.label.is_empty() {
         return item.label.clone();
     }
@@ -1739,6 +1719,24 @@ fn paint_item(
     }
 }
 
+/// Aktueller Wert 0–1 eines Faders/Drehreglers (lesbarer Zustand, sonst
+/// der zuletzt gesetzte Wert – gemeinsam für Touch-Modus und Fernbedienung).
+pub(crate) fn item_value(e: &Engine, st: &AppState, item: &TouchItem) -> f32 {
+    let live = |c: &ChannelRef| {
+        e.live()
+            .get(c)
+            .map_or(if c.is_virtual() { 1.0 } else { 0.0 }, |v| {
+                f32::from(*v) / 255.0
+            })
+    };
+    match item.control {
+        Some(Control::Master) => e.master(),
+        Some(Control::Channels) => item.channels.first().map_or(0.0, live),
+        Some(Control::Channel { channel }) => live(&channel),
+        _ => st.touch_values.get(&item.id).copied().unwrap_or(0.0),
+    }
+}
+
 /// Kanäle einer Art eines Geräts.
 fn channels_of(show: &Show, f: FixtureId, kind: ChannelKind) -> Vec<ChannelRef> {
     show.fixture(f)
@@ -1758,7 +1756,7 @@ fn channels_of(show: &Show, f: FixtureId, kind: ChannelKind) -> Vec<ChannelRef> 
 }
 
 /// Farbe als Live-Werte setzen (Rot/Grün/Blau aller Zellen).
-fn set_color(e: &mut Engine, fixtures: &[FixtureId], rgb: [u8; 3]) {
+pub(crate) fn set_color(e: &mut Engine, fixtures: &[FixtureId], rgb: [u8; 3]) {
     for f in fixtures {
         for (kind, v) in [
             (ChannelKind::Red, rgb[0]),
@@ -1772,7 +1770,7 @@ fn set_color(e: &mut Engine, fixtures: &[FixtureId], rgb: [u8; 3]) {
     }
 }
 
-fn current_color(e: &Engine, f: FixtureId) -> Option<[u8; 3]> {
+pub(crate) fn current_color(e: &Engine, f: FixtureId) -> Option<[u8; 3]> {
     let get = |k| {
         channels_of(e.show(), f, k)
             .first()
@@ -1786,7 +1784,7 @@ fn current_color(e: &Engine, f: FixtureId) -> Option<[u8; 3]> {
 }
 
 /// Pan/Tilt als Live-Werte setzen (0–1, Feinkanäle 0).
-fn set_position(e: &mut Engine, fixtures: &[FixtureId], x: f32, y: f32) {
+pub(crate) fn set_position(e: &mut Engine, fixtures: &[FixtureId], x: f32, y: f32) {
     for f in fixtures {
         for (kind, v) in [
             (ChannelKind::Pan, (x * 255.0).round() as u8),
@@ -1801,7 +1799,7 @@ fn set_position(e: &mut Engine, fixtures: &[FixtureId], x: f32, y: f32) {
     }
 }
 
-fn current_position(e: &Engine, f: FixtureId) -> Option<(f32, f32)> {
+pub(crate) fn current_position(e: &Engine, f: FixtureId) -> Option<(f32, f32)> {
     let get = |k| {
         channels_of(e.show(), f, k)
             .first()
