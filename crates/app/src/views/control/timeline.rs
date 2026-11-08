@@ -537,11 +537,13 @@ impl TimelineView {
                     ui.scope_id().with(("fo", cid)),
                     Sense::drag(),
                 );
+                // Schneiden: waagerechter Pfeil; Fades: schräg wie die
+                // Fade-Linie (unter Windows sind alle waagerechten Zeiger gleich)
                 for (resp, cursor) in [
-                    (&left, egui::CursorIcon::ResizeColumn),
-                    (&right, egui::CursorIcon::ResizeColumn),
-                    (&fin, egui::CursorIcon::ResizeHorizontal),
-                    (&fout, egui::CursorIcon::ResizeHorizontal),
+                    (&left, egui::CursorIcon::ResizeHorizontal),
+                    (&right, egui::CursorIcon::ResizeHorizontal),
+                    (&fin, egui::CursorIcon::ResizeNeSw),
+                    (&fout, egui::CursorIcon::ResizeNwSe),
                 ] {
                     if resp.hovered() || resp.dragged() {
                         ui.ctx().set_cursor_icon(cursor);
