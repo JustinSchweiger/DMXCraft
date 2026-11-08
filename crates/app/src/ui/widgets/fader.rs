@@ -365,16 +365,6 @@ impl Fader {
         }
         // Bereich unter dem Zeiger bzw. am aktuellen Wert
         let range_at = |v: u8| self.ranges.iter().find(|r| (r.from..=r.to).contains(&v));
-        if !self.ranges.is_empty() {
-            if let Some(pos) = resp.hover_pos() {
-                let tv = 1.0 - ((pos.y - travel.top()) / travel.height()).clamp(0.0, 1.0);
-                let v = (tv * 255.0).round() as u8;
-                if let Some(r) = range_at(v) {
-                    resp.clone()
-                        .on_hover_text(format!("{} – {}  {}", r.from, r.to, r.label));
-                }
-            }
-        }
         crate::ui::widgets::menu::context(&resp, |ui| {
             use crate::ui::widgets::menu::{self, MenuItem};
             menu::begin(ui);
@@ -423,35 +413,26 @@ impl Fader {
         );
         p.rect_filled(slot, 3.0, theme::bg());
         if !self.ranges.is_empty() {
-            // Bereiche als Leiste rechts der Schiene, Farbfelder in ihrer Farbe
-            let x0 = outer.right() - 6.0;
+            // Bereiche direkt auf der Schiene: abwechselnd hell/dunkel,
+            // Farbfelder in ihrer Farbe
             let y_of = |v: f32| travel.bottom() - travel.height() * (v / 255.0);
             for (k, r) in self.ranges.iter().enumerate() {
                 let seg = Rect::from_min_max(
-                    pos2(x0, y_of(f32::from(r.to) + 0.5)),
-                    pos2(x0 + 3.0, y_of(f32::from(r.from) - 0.5)),
+                    pos2(
+                        slot.left() + 1.0,
+                        y_of(f32::from(r.to) + 0.5).max(slot.top()),
+                    ),
+                    pos2(
+                        slot.right() - 1.0,
+                        y_of(f32::from(r.from) - 0.5).min(slot.bottom()),
+                    ),
                 );
                 let c = r.color.unwrap_or(if k % 2 == 0 {
                     theme::text_faint()
                 } else {
                     theme::border()
                 });
-                p.rect_filled(seg.shrink2(Vec2::new(0.0, 0.5)), 0.0, c);
-            }
-            // aktueller Bereich senkrecht neben der Schiene
-            if let Some(r) = range_at(value).filter(|r| !r.label.is_empty()) {
-                let font = egui::FontId::proportional(9.5);
-                let color = if self.active {
-                    theme::text_dim()
-                } else {
-                    theme::text_faint()
-                };
-                let galley = p.layout_no_wrap(r.label.clone(), font, color);
-                let pos = pos2(outer.left() + 3.0, travel.bottom() - 2.0);
-                p.with_clip_rect(track_area).add(
-                    egui::epaint::TextShape::new(pos, galley, color)
-                        .with_angle(-std::f32::consts::FRAC_PI_2),
-                );
+                p.rect_filled(seg.shrink2(Vec2::new(0.0, 0.5)), 1.0, c);
             }
         }
         // Griff
@@ -494,6 +475,34 @@ impl Fader {
             ],
             Stroke::new(2.5, line),
         );
+        // Bezeichnung des Bereichs neben dem Griff, solange der Fader bewegt
+        // wird oder der Zeiger darüber ist
+        if hot || matches!(event, FaderEvent::Changed(_)) {
+            if let Some(r) = range_at(value).filter(|r| !r.label.is_empty()) {
+                let painter = ui.ctx().layer_painter(egui::LayerId::new(
+                    egui::Order::Tooltip,
+                    egui::Id::unique("fader_range_tip"),
+                ));
+                let g = painter.layout_no_wrap(r.label.clone(), theme::body(), theme::text());
+                let pad = Vec2::new(6.0, 3.0);
+                let size = g.size() + pad * 2.0;
+                let screen = ui.ctx().content_rect();
+                // rechts neben dem Fader, am Rand nach links ausweichen
+                let mut min = pos2(outer.right() + 4.0, handle.center().y - size.y * 0.5);
+                if min.x + size.x > screen.right() {
+                    min.x = outer.left() - 4.0 - size.x;
+                }
+                let rect = Rect::from_min_size(min, size);
+                painter.rect_filled(rect, theme::R_S, theme::raised());
+                painter.rect_stroke(
+                    rect,
+                    theme::R_S,
+                    Stroke::new(1.0, theme::border()),
+                    StrokeKind::Inside,
+                );
+                painter.galley(rect.min + pad, g, theme::text());
+            }
+        }
         event
     }
 }
