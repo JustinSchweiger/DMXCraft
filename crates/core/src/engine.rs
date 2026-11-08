@@ -788,6 +788,9 @@ impl Engine {
             }
         }
 
+        // Kanäle, die eine Quelle (Szene, Vorschau, Programmer, Effekt, Live)
+        // gesetzt hat – Gerätegrenzen gelten nur für diese, nicht für Grundwerte
+        let mut touched: std::collections::HashSet<ChannelRef> = std::collections::HashSet::new();
         // 2) Szenen in Startreihenfolge (LTP: spätere überschreiben)
         // Reihenfolge: Priorität, dann Startreihenfolge (später gewinnt)
         let mut order: Vec<&PlayingScene> = self.playing.iter().collect();
@@ -817,6 +820,7 @@ impl Engine {
                 } else {
                     v
                 };
+                touched.insert(ch);
                 if let Some(slot) = values.get_mut(&ch) {
                     *slot = if k >= 1.0 { v } else { lerp(*slot, v, k) };
                 }
@@ -832,6 +836,7 @@ impl Engine {
             // SUPER SCENE: Stand der Zeitleiste an der Vorschau-Stelle
             if let Some(tl) = show.scene(*id).and_then(|s| s.timeline()) {
                 for (ch, v) in self.timeline_values(show, tl, self.timeline_cursor, 0) {
+                    touched.insert(ch);
                     if let Some(slot) = values.get_mut(&ch) {
                         *slot = v;
                     }
@@ -849,6 +854,7 @@ impl Engine {
                     fixture: cv.fixture,
                     channel: cv.channel,
                 };
+                touched.insert(ch);
                 if let Some(slot) = values.get_mut(&ch) {
                     *slot = cv.value;
                 }
@@ -857,6 +863,7 @@ impl Engine {
 
         // 4) Programmer
         for (ch, v) in self.programmer.iter().filter(|_| edit) {
+            touched.insert(*ch);
             if let Some(slot) = values.get_mut(ch) {
                 *slot = *v;
             }
@@ -869,6 +876,7 @@ impl Engine {
             let mut fx = HashMap::new();
             Self::apply_effects(show, scene, self.fx_cycles(*id), &mut fx);
             for (ch, v) in fx {
+                touched.insert(ch);
                 if let Some(slot) = values.get_mut(&ch) {
                     *slot = v;
                 }
@@ -877,6 +885,7 @@ impl Engine {
 
         // 5) Live-Werte
         for (ch, v) in &self.live {
+            touched.insert(*ch);
             if let Some(slot) = values.get_mut(ch) {
                 *slot = *v;
             }
@@ -930,7 +939,7 @@ impl Engine {
                     } else {
                         def.kind.is_color_intensity()
                     };
-                    if scale {
+                    if scale && touched.contains(&ch(i)) {
                         if let Some(v) = values.get_mut(&ch(i)) {
                             *v = lim.map_dimmer(*v);
                         }
@@ -950,6 +959,14 @@ impl Engine {
                     let fv = fine.and_then(|i| values.get(&ch(i)).copied()).unwrap_or(0);
                     Some(u16::from(c) << 8 | u16::from(fv))
                 };
+                // nur, was eine Quelle gesetzt hat (Ruhelage bleibt unverändert)
+                let set = |c: Option<usize>, f: Option<usize>| {
+                    c.is_some_and(|i| touched.contains(&ch(i)))
+                        || f.is_some_and(|i| touched.contains(&ch(i)))
+                };
+                if !set(pan, pan_f) && !set(tilt, tilt_f) {
+                    continue;
+                }
                 let (mut p16, mut t16) = (read(pan, pan_f), read(tilt, tilt_f));
                 if lim.swap_pan_tilt {
                     std::mem::swap(&mut p16, &mut t16);
@@ -1074,6 +1091,35 @@ mod tests {
             Some(255),
             "Dimmer aus dem Schritt"
         );
+    }
+
+    #[test]
+    fn limits_leave_rest_position_alone() {
+        use crate::show::FixtureLimits;
+        let mut show = Show::new("t", 1);
+        show.fixture_types = crate::library::builtin_fixture_types();
+        let id = show
+            .add_fixture("MH", "generic/moving-head-spot-11ch", 0, 1)
+            .unwrap();
+        show.fixture_mut(id).unwrap().limits = FixtureLimits {
+            invert_pan: true,
+            invert_tilt: true,
+            ..FixtureLimits::default()
+        };
+        let mut e = Engine::new(show);
+        // nichts aktiv: Grundwerte unverändert (Pan/Tilt 128, nicht gespiegelt auf 127)
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 1), Some(128));
+        // vom Programmer gesetzt: gespiegelt
+        e.set_programmer(
+            ChannelRef {
+                fixture: id,
+                channel: 0,
+            },
+            0,
+        );
+        let f = e.render_frame();
+        assert_eq!(f.get(0, 1), Some(255));
     }
 
     #[test]

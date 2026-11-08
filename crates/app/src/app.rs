@@ -779,6 +779,7 @@ impl eframe::App for DmxCraftApp {
         {
             let mut e = Self::lock(&engine);
             self.state.wrap_scenes = self.settings.wrap_scenes;
+            self.state.fader_ranges = self.settings.fader_ranges;
             self.state.viz_quality = crate::viz::Quality::from_key(self.settings.viz_quality);
             let mut cx = ViewCtx {
                 engine: &mut e,

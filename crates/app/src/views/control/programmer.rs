@@ -147,6 +147,8 @@ impl View for ProgrammerView {
         });
         toolbar(ui, cx.engine, cx.state);
         let dot = mode_color(cx.state.programmer_mode);
+        let on = cx.state.fader_ranges;
+        ui.data_mut(|d| d.insert_temp(ranges_on_id(), on));
         ui.add_space(theme::SP_S);
 
         egui::Panel::left("programmer_categories")
@@ -438,7 +440,10 @@ fn fader(
         .map(fader_ranges)
         .unwrap_or_default();
     let ev = Fader::new(value, grp.number, grp.kind)
-        .ranges(ranges)
+        .ranges(
+            ranges,
+            ui.data(|d| d.get_temp(ranges_on_id())).unwrap_or(true),
+        )
         .active(active)
         .dot(dot)
         .color(kind_color(grp.kind))
@@ -506,6 +511,11 @@ struct FxTarget {
     scene: dmxcraft_core::SceneId,
     fx: u32,
     kinds: Vec<dmxcraft_core::ChannelKind>,
+}
+
+/// Einstellung „Wertebereiche auf den Fader-Schienen“ (je Bild gesetzt).
+fn ranges_on_id() -> egui::Id {
+    egui::Id::unique("programmer_fader_ranges")
 }
 
 fn fx_target_id() -> egui::Id {

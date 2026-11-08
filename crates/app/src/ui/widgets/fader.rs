@@ -49,6 +49,8 @@ pub struct Fader {
     fx: Option<bool>,
     /// Wertebereiche aus der Gerätedatei.
     ranges: Vec<FaderRange>,
+    /// Bereiche auf der Schiene zeichnen (sonst nur Hinweis und Menü).
+    range_track: bool,
 }
 
 /// Wertebereich am Fader: Anfang, Ende, Bezeichnung, Farbe (Farbrad).
@@ -74,12 +76,14 @@ impl Fader {
             width: FADER_W,
             fx: None,
             ranges: Vec::new(),
+            range_track: true,
         }
     }
 
     /// Wertebereiche zeigen (Leiste am Fader, Bezeichnung, Menü zum Anspringen).
-    pub fn ranges(mut self, r: Vec<FaderRange>) -> Self {
+    pub fn ranges(mut self, r: Vec<FaderRange>, on_track: bool) -> Self {
         self.ranges = r;
+        self.range_track = on_track;
         self
     }
 
@@ -412,7 +416,7 @@ impl Fader {
             Vec2::new(6.0, track_area.height() - 6.0),
         );
         p.rect_filled(slot, 3.0, theme::bg());
-        if !self.ranges.is_empty() {
+        if self.range_track && !self.ranges.is_empty() {
             // Bereiche direkt auf der Schiene: abwechselnd hell/dunkel,
             // Farbfelder in ihrer Farbe
             let y_of = |v: f32| travel.bottom() - travel.height() * (v / 255.0);

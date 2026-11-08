@@ -33,6 +33,9 @@ pub struct Settings {
     pub open_dmx: Vec<String>,
     /// Szenen am unteren Rand in weitere Spalten umbrechen (statt Scrollen).
     pub wrap_scenes: bool,
+    /// Wertebereiche der Gerätedatei auf den Fader-Schienen zeigen.
+    #[serde(default = "yes")]
+    pub fader_ranges: bool,
     /// MCP-Server für KI-Assistenten (nur lokal erreichbar).
     pub mcp_enabled: bool,
     /// Port des MCP-Servers (http://127.0.0.1:<port>/mcp).
@@ -56,6 +59,7 @@ impl Default for Settings {
             output: "simulation".into(),
             open_dmx: Vec::new(),
             wrap_scenes: false,
+            fader_ranges: true,
             mcp_enabled: false,
             mcp_port: dmxcraft_mcp::DEFAULT_PORT,
             viz_quality: 1,
@@ -160,6 +164,10 @@ impl Settings {
         let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         std::fs::write(path, json).map_err(|e| e.to_string())
     }
+}
+
+fn yes() -> bool {
+    true
 }
 
 #[cfg(test)]

@@ -52,6 +52,8 @@ pub struct AppState {
     pub scene_anchor: Option<SceneId>,
     /// Szenen am unteren Rand in weitere Spalten umbrechen (Einstellung).
     pub wrap_scenes: bool,
+    /// Wertebereiche auf den Fader-Schienen (Einstellung).
+    pub fader_ranges: bool,
     /// Qualität des 3D-Visualisierers (Einstellung).
     pub viz_quality: crate::viz::Quality,
     /// 3D-Visualisierer im eigenen Fenster.
@@ -142,6 +144,7 @@ impl AppState {
             timeline_sel: BTreeSet::new(),
             scene_anchor: None,
             wrap_scenes: false,
+            fader_ranges: true,
             viz_quality: crate::viz::Quality::default(),
             viz_window: false,
             can_undo: false,

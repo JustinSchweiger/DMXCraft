@@ -536,6 +536,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Zu", "Closed"),
     ("Gobo {n}", "Gobo {n}"),
     ("Strobe {a}–{b} Hz", "Strobe {a}–{b} Hz"),
+    ("Wertebereiche auf den Fader-Schienen zeigen", "Show value ranges on the fader tracks"),
+    ("Aus: schlichte Schienen; die Bezeichnung erscheint weiter beim Bewegen", "Off: plain tracks; the label still appears while moving"),
     ("Zielpunkt auf dem Boden anklicken", "Click the target point on the floor"),
     ("Ausrichten ({n} Geräte)", "Aim ({n} fixtures)"),
     ("Ausrichten", "Aim"),

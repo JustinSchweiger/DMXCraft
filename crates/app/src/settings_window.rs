@@ -351,6 +351,15 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
             "Aus: alle Szenen einer Bank untereinander (mit Bildlaufleiste)",
         ))
         .changed();
+    ch.save |= ui
+        .add(Toggle::new(
+            &mut s.fader_ranges,
+            t("Wertebereiche auf den Fader-Schienen zeigen"),
+        ))
+        .on_hover_text(t(
+            "Aus: schlichte Schienen; die Bezeichnung erscheint weiter beim Bewegen",
+        ))
+        .changed();
     ui.add_space(theme::SP_M);
     section(ui, t("Startup"));
     ch.save |= ui
