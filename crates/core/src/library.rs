@@ -72,7 +72,7 @@ pub fn builtin_fixture_types() -> Vec<FixtureType> {
                 ChannelDef::new("Farbrad", K::ColorWheel),
                 ChannelDef::new("Gobo", K::Gobo),
                 ChannelDef::new("Gobo-Rotation", K::Generic),
-                ChannelDef::new("Reset", K::Generic),
+                ChannelDef::new("Reset", K::Control),
             ],
         ),
     ]

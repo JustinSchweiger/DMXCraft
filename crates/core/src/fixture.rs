@@ -21,10 +21,24 @@ pub enum ChannelKind {
     Gobo,
     Speed,
     Generic,
+    /// Laser-Ausgabe/Muster.
+    Laser,
+    /// Nebel-/Hazer-Ausstoß (Pumpe).
+    Fog,
+    /// Lüfter (Nebel, Hazer).
+    Fan,
+    Zoom,
+    Focus,
+    /// Programme, Makros, Auto-/Sound-Modi, Effekte.
+    Program,
+    /// Betriebsart, Reset, Einstellungen.
+    Control,
+    /// Kanal ohne Funktion.
+    NoFunction,
 }
 
 impl ChannelKind {
-    pub const ALL: [ChannelKind; 16] = [
+    pub const ALL: [ChannelKind; 24] = [
         ChannelKind::Dimmer,
         ChannelKind::Red,
         ChannelKind::Green,
@@ -41,6 +55,14 @@ impl ChannelKind {
         ChannelKind::Gobo,
         ChannelKind::Speed,
         ChannelKind::Generic,
+        ChannelKind::Laser,
+        ChannelKind::Fog,
+        ChannelKind::Fan,
+        ChannelKind::Zoom,
+        ChannelKind::Focus,
+        ChannelKind::Program,
+        ChannelKind::Control,
+        ChannelKind::NoFunction,
     ];
 
     /// Intensitätskanäle werden HTP (höchster Wert gewinnt) gemischt,
@@ -81,7 +103,128 @@ impl ChannelKind {
             ChannelKind::Gobo => "Gobo",
             ChannelKind::Speed => "Speed",
             ChannelKind::Generic => "Generisch",
+            ChannelKind::Laser => "Laser",
+            ChannelKind::Fog => "Nebel",
+            ChannelKind::Fan => "Lüfter",
+            ChannelKind::Zoom => "Zoom",
+            ChannelKind::Focus => "Fokus",
+            ChannelKind::Program => "Programm",
+            ChannelKind::Control => "Steuerung",
+            ChannelKind::NoFunction => "Keine Funktion",
         }
+    }
+
+    /// Kanalart anhand des Kanalnamens verfeinern. Gerätedateien liefern oft
+    /// nur „Dimmer“, „Speed“ oder gar nichts (Generisch) – der Name verrät
+    /// mehr: „UV1 Dimmer“ ist UV, „Pump“ ist Nebel, „Flash rate“ ist Strobe,
+    /// „Laser (10CH)“ ist Laser, „Auto Programs“ ein Programm.
+    ///
+    /// Nur Dimmer, Speed und Generisch werden verfeinert; Feinkanäle bleiben
+    /// unverändert. Mehrfaches Anwenden ändert nichts mehr.
+    pub fn refine(self, name: &str) -> ChannelKind {
+        use ChannelKind as K;
+        if !matches!(self, K::Dimmer | K::Speed | K::Generic) {
+            return self;
+        }
+        let n = name.to_lowercase();
+        let words: Vec<&str> = n
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .collect();
+        let word = |w: &str| words.contains(&w);
+        let any = |list: &[&str]| list.iter().any(|x| n.contains(x));
+        if word("fine")
+            || word("lsb")
+            || word("fein")
+            || n.contains("16bit")
+            || n.contains("16 bit")
+        {
+            return self;
+        }
+        let generic = self == K::Generic;
+        if generic
+            && any(&[
+                "no function",
+                "nofunction",
+                "not used",
+                "unused",
+                "reserved",
+                "unbenutzt",
+                "keine funktion",
+                "ohne funktion",
+            ])
+        {
+            return K::NoFunction;
+        }
+        if self != K::Speed && n.contains("laser") {
+            return K::Laser;
+        }
+        if any(&["fog", "smoke", "haze", "nebel", "dunst"]) || word("pump") {
+            return K::Fog;
+        }
+        if word("fan") || any(&["lüfter", "luefter", "ventilator", "gebläse"]) {
+            return K::Fan;
+        }
+        if self != K::Dimmer && any(&["strob", "flash", "shutter", "blitz"]) {
+            return K::Strobe;
+        }
+        let uv = words.iter().any(|w| {
+            w.strip_prefix("uv")
+                .is_some_and(|rest| rest.chars().all(|c| c.is_ascii_digit()))
+        }) || any(&["ultraviolet", "ultra violet", "blacklight", "schwarzlicht"]);
+        if self != K::Speed && uv {
+            return K::Uv;
+        }
+        if !generic {
+            return self;
+        }
+        if n.contains("zoom") {
+            return K::Zoom;
+        }
+        if n.contains("focus") || n.contains("fokus") {
+            return K::Focus;
+        }
+        if any(&[
+            "macro",
+            "makro",
+            "program",
+            "auto",
+            "color change",
+            "colour change",
+            "pattern",
+            "effect",
+            "effekt",
+            "matrix",
+            "chase",
+            "sound",
+            "preset",
+            "show",
+            "rainbow",
+            "smd",
+            "ring",
+            "animation",
+            "fade",
+        ]) || word("fx")
+        {
+            return K::Program;
+        }
+        if any(&[
+            "mode",
+            "modus",
+            "reset",
+            "control",
+            "function",
+            "operating",
+            "setting",
+            "special",
+            "curve",
+            "kurve",
+            "steuer",
+            "betrieb",
+        ]) {
+            return K::Control;
+        }
+        self
     }
 }
 
@@ -216,5 +359,49 @@ impl FixtureType {
             self.mode,
             self.channels.len()
         )
+    }
+}
+
+#[cfg(test)]
+mod refine_tests {
+    use super::ChannelKind as K;
+
+    #[test]
+    fn refine_by_name() {
+        let cases = [
+            (K::Dimmer, "UV1 Dimmer", K::Uv),
+            (K::Dimmer, "UV2 Dimmer", K::Uv),
+            (K::Generic, "Laser (10CH)", K::Laser),
+            (K::Strobe, "Laser Strobe", K::Strobe),
+            (K::Speed, "Laser Rotation", K::Speed),
+            (K::Dimmer, "Pump", K::Fog),
+            (K::Generic, "Fog", K::Fog),
+            (K::Speed, "Fan", K::Fan),
+            (K::Speed, "Flash rate", K::Strobe),
+            (K::Generic, "Focus", K::Focus),
+            (K::Generic, "Zoom", K::Zoom),
+            (K::Generic, "Auto Programs", K::Program),
+            (K::Generic, "Auto mode / Sound control", K::Program),
+            (K::Generic, "Color Change", K::Program),
+            (K::Generic, "Ring effect", K::Program),
+            (K::Generic, "Matrix", K::Program),
+            (K::Generic, "White SMDs", K::Program),
+            (K::Generic, "Mode", K::Control),
+            (K::Generic, "Operating mode selection", K::Control),
+            (K::Generic, "Reset", K::Control),
+            (K::Generic, "No function", K::NoFunction),
+            (K::Generic, "(unbenutzt)", K::NoFunction),
+            (K::Dimmer, "Master Dimmer", K::Dimmer),
+            (K::Dimmer, "Dimmer", K::Dimmer),
+            (K::Speed, "Speed (Matrix)", K::Speed),
+            (K::Speed, "Pan/Tilt Speed", K::Speed),
+            (K::Generic, "Dimmer fine", K::Generic),
+            (K::Red, "UV", K::Red),
+            (K::Generic, "Blubb", K::Generic),
+        ];
+        for (k, name, want) in cases {
+            assert_eq!(k.refine(name), want, "{name}");
+            assert_eq!(want.refine(name), want, "{name} stabil");
+        }
     }
 }

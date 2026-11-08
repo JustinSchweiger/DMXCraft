@@ -781,6 +781,12 @@ fn channel_kind(s: &str) -> Option<ChannelKind> {
         "w" | "weiß" | "weiss" => "white",
         "intensity" | "intensität" => "dimmer",
         "colour" | "farbrad" => "colorwheel",
+        "nebel" | "smoke" | "haze" => "fog",
+        "lüfter" | "luefter" => "fan",
+        "fokus" => "focus",
+        "programm" | "makro" | "macro" | "effekt" => "program",
+        "steuerung" | "modus" | "mode" => "control",
+        "keinefunktion" => "nofunction",
         other => other,
     };
     ChannelKind::ALL

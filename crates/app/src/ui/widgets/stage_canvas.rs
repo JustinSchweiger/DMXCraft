@@ -379,6 +379,10 @@ impl StageCanvas<'_> {
                 sel,
                 Some(*id) == hovered,
             );
+            let time = ui.input(|i| i.time);
+            if paint_effects(&painter, self.show, *id, self.frame, b, time) {
+                ui.ctx().request_repaint();
+            }
             // Nummer in der Auswahlreihenfolge
             if let Some(n) = sel
                 .then(|| self.order.iter().position(|f| f == id))
@@ -514,7 +518,16 @@ pub fn strobe_hz(show: &Show, id: FixtureId, frame: &DmxFrame) -> Option<f32> {
     (v >= 10).then(|| 1.0 + f32::from(v - 10) / 245.0 * 19.0)
 }
 
+/// Anzeigefarben der einzelnen Lichtarten (linear 0–1).
+const AMBER: [f32; 3] = [1.0, 0.55, 0.05];
+const UV: [f32; 3] = [0.5, 0.12, 1.0];
+const WHITE: [f32; 3] = [1.0, 0.95, 0.88];
+
 /// Eine Anzeigefarbe pro Pixel (bei Leisten mehrere, sonst eine) mit Helligkeit.
+///
+/// Berücksichtigt Rot, Grün, Blau, Weiß, Amber und UV (UV violett), dazu
+/// Farbräder/Farbmakros: Stehen alle Farbkanäle auf 0, zeigt das Gerät die
+/// angenäherte Farbe des Rads.
 pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32, f32)> {
     let Some(f) = show.fixture(id) else {
         return vec![(Color32::DARK_GRAY, 0.0)];
@@ -535,36 +548,64 @@ pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32
             .map(|(i, _)| i)
             .collect()
     };
-    let (reds, greens, blues, whites) = (
+    let (reds, greens, blues, whites, ambers, uvs) = (
         all(ChannelKind::Red),
         all(ChannelKind::Green),
         all(ChannelKind::Blue),
         all(ChannelKind::White),
+        all(ChannelKind::Amber),
+        all(ChannelKind::Uv),
     );
     let dimmers = all(ChannelKind::Dimmer);
-    let pixels = reds.len().max(greens.len()).max(blues.len()).max(1);
-    let has_color = !(reds.is_empty() && greens.is_empty() && blues.is_empty());
+    let wheel = all(ChannelKind::ColorWheel).first().map(|i| value(*i));
+    let pixels = [&reds, &greens, &blues, &whites, &uvs]
+        .iter()
+        .map(|v| v.len())
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    let has_color = [&reds, &greens, &blues, &whites, &ambers, &uvs]
+        .iter()
+        .any(|v| !v.is_empty());
     (0..pixels)
         .map(|px| {
-            let pick = |v: &Vec<usize>| -> Option<f32> {
-                v.get(px).or_else(|| v.first()).map(|i| value(*i))
+            let pick = |v: &Vec<usize>| -> f32 {
+                v.get(px).or_else(|| v.first()).map_or(0.0, |i| value(*i))
             };
-            let w = pick(&whites).unwrap_or(0.0);
-            let base = if has_color {
-                [
-                    pick(&reds).unwrap_or(0.0) + w,
-                    pick(&greens).unwrap_or(0.0) + w,
-                    pick(&blues).unwrap_or(0.0) + w,
-                ]
-            } else {
-                [1.0, 0.95, 0.85]
+            let mut base = [0.0f32; 3];
+            let mut add = |c: [f32; 3], x: f32| {
+                for k in 0..3 {
+                    base[k] += c[k] * x;
+                }
             };
+            add([1.0, 0.0, 0.0], pick(&reds));
+            add([0.0, 1.0, 0.0], pick(&greens));
+            add([0.0, 0.0, 1.0], pick(&blues));
+            add(WHITE, pick(&whites));
+            add(AMBER, pick(&ambers));
+            add(UV, pick(&uvs));
+            let mixed = base.iter().any(|x| *x > 0.003);
+            if !has_color || !mixed {
+                // Farbrad bzw. Farbmakro, sonst Halogen-Weiß
+                if let Some(w) = wheel.filter(|w| *w > 0.03 || !has_color) {
+                    let c = crate::viz::rig::color_wheel(w);
+                    base = [c.x, c.y, c.z];
+                } else if !has_color {
+                    base = WHITE;
+                }
+            }
             // Pixel-Dimmer, falls vorhanden, sonst der erste Dimmer
-            let intensity = match (dimmers.len(), has_color) {
+            let intensity = match (dimmers.len(), has_color || wheel.is_some()) {
                 (0, true) => 1.0,
                 (0, false) => 0.0,
                 (n, _) if n == pixels => value(dimmers[px]),
                 _ => value(dimmers[0]),
+            };
+            // Farbrad ohne Farbkanäle und ohne Dimmer: an, sobald das Rad steht
+            let intensity = if !has_color && dimmers.is_empty() {
+                wheel.map_or(0.0, |w| if w > 0.03 { 1.0 } else { 0.0 })
+            } else {
+                intensity
             };
             let c = base.map(|x| (x * intensity).min(1.0));
             let lum = c[0].max(c[1]).max(c[2]);
@@ -578,6 +619,113 @@ pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32
             )
         })
         .collect()
+}
+
+/// Effekte über dem Gerät: Laser (bunte Punkte/Strahlen, drehen sich mit
+/// der Laser-Rotation), Nebel (Wolke nach Ausstoß und Lüfter) und die
+/// Pan/Tilt-Richtung bei Moving Heads. Gibt `true` zurück, solange etwas
+/// animiert wird.
+pub fn paint_effects(
+    p: &egui::Painter,
+    show: &Show,
+    id: FixtureId,
+    frame: &DmxFrame,
+    r: Rect,
+    time: f64,
+) -> bool {
+    let Some(f) = show.fixture(id) else {
+        return false;
+    };
+    let Some(ty) = show.type_of(f) else {
+        return false;
+    };
+    let value = |i: usize| -> f32 {
+        frame
+            .get(usize::from(f.universe), f.address + i as u16)
+            .map_or(0.0, |v| f32::from(v) / 255.0)
+    };
+    let find = |k: ChannelKind| ty.channels.iter().position(|c| c.kind == k);
+    let named = |k: ChannelKind, word: &str| {
+        ty.channels
+            .iter()
+            .position(|c| c.kind == k && c.name.to_lowercase().contains(word))
+    };
+    let c = r.center();
+    let size = r.width().max(r.height());
+    let t = time as f32;
+    let mut animating = false;
+
+    // ----- Nebel -----
+    if let Some(i) = find(ChannelKind::Fog) {
+        let out = value(i);
+        let fan = find(ChannelKind::Fan).map_or(0.5, value);
+        if out > 0.02 {
+            animating = true;
+            let n = 7;
+            let spread = size * (0.9 + fan * 1.3);
+            for k in 0..n {
+                let seed = k as f32 * 1.7;
+                let phase = (t * (0.15 + fan * 0.35) + seed * 0.37).fract();
+                let dir = egui::Vec2::angled(seed * 2.4 + (t * 0.1).sin() * 0.3);
+                let pos = c + dir * spread * 0.25 + Vec2::new(0.0, -phase * spread * 0.6);
+                let rad = size * (0.35 + phase * 0.5);
+                let alpha = (out * (1.0 - phase) * 70.0) as u8;
+                p.circle_filled(pos, rad, Color32::from_white_alpha(alpha));
+            }
+        }
+    }
+
+    // ----- Laser -----
+    if let Some(i) = find(ChannelKind::Laser) {
+        let v = value(i);
+        // eigener Laser-Strobe (Name enthält „laser“) schaltet dunkel
+        let gate = named(ChannelKind::Strobe, "laser").is_none_or(|s| {
+            let sv = value(s);
+            sv < 0.04 || (time * f64::from(1.0 + sv * 19.0)).fract() < 0.35
+        });
+        if v > 0.02 && gate {
+            animating = true;
+            let rot = named(ChannelKind::Speed, "laser")
+                .or_else(|| named(ChannelKind::Speed, "rot"))
+                .map_or(0.3, value);
+            let angle = t * (0.2 + rot * 3.0);
+            // Muster aus dem Kanalwert: Anzahl Punkte und Farben wechseln
+            let pattern = (v * 7.99) as usize;
+            let dots = 6 + pattern * 3;
+            let cols = [
+                Color32::from_rgb(0xff, 0x30, 0x30),
+                Color32::from_rgb(0x30, 0xff, 0x50),
+                Color32::from_rgb(0x40, 0x80, 0xff),
+            ];
+            let reach = size * 2.2;
+            for k in 0..dots {
+                let a = angle + std::f32::consts::TAU * k as f32 / dots as f32;
+                let wobble = ((k * 7 + pattern) % 5) as f32 / 5.0;
+                let end = c + Vec2::angled(a) * reach * (0.55 + wobble * 0.45);
+                let col = cols[(k + pattern) % 3];
+                p.line_segment([c, end], Stroke::new(1.0, col.gamma_multiply(0.35)));
+                p.circle_filled(end, 2.0, col);
+            }
+        }
+    }
+
+    // ----- Pan/Tilt -----
+    if let (Some(pi), Some(ti)) = (find(ChannelKind::Pan), find(ChannelKind::Tilt)) {
+        // Pan 0–540°, Tilt aus der Mitte (128) heraus = Länge des Zeigers
+        let pan = value(pi) * 540f32.to_radians() - std::f32::consts::FRAC_PI_2;
+        let tilt = (value(ti) - 0.5) * 2.0;
+        // nach hinten geneigt = Zeiger in Gegenrichtung
+        let dir = if tilt < 0.0 {
+            -Vec2::angled(pan)
+        } else {
+            Vec2::angled(pan)
+        };
+        let end = c + dir * (size * 0.35 + tilt.abs() * size * 0.7);
+        let s = Stroke::new(1.5, theme::accent());
+        p.line_segment([c, end], s);
+        p.circle_filled(end, 2.5, theme::accent());
+    }
+    animating
 }
 
 /// Zeichnet ein Gerät in seiner Form – vollflächig in der aktuellen Farbe,

@@ -122,6 +122,7 @@ fn channel_def(ch: Node<'_, '_>) -> Option<(String, ChannelDef)> {
         Some(p) => kind_from_preset(p).unwrap_or_else(|| kind_from_group(ch, &name)),
         None => kind_from_group(ch, &name),
     };
+    let kind = kind.refine(&name);
     let default = ch
         .attribute("Default")
         .and_then(|d| d.parse::<u16>().ok())
@@ -192,7 +193,7 @@ pub fn convert_qxf(xml: &str) -> Result<LibraryFixture, OflError> {
             continue;
         }
         let mut out: Vec<ChannelDef> = (0..=last)
-            .map(|_| ChannelDef::new("(unbenutzt)", ChannelKind::Generic))
+            .map(|_| ChannelDef::new("(unbenutzt)", ChannelKind::NoFunction))
             .collect();
         for (n, name) in entries {
             out[n] = channels
@@ -327,7 +328,7 @@ mod tests {
                 K::Generic,
                 K::Strobe,
                 K::ColorWheel,
-                K::Generic, // Lücke (Kanal 9 fehlt in der Datei)
+                K::NoFunction, // Lücke (Kanal 9 fehlt in der Datei)
                 K::Gobo,
             ]
         );

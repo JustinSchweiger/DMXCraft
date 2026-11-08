@@ -418,8 +418,21 @@ impl Fader {
     }
 }
 
+/// Farbe einer Kanalart (Pegel im Fader, Farbpunkt im Symbol).
+pub fn kind_color(k: ChannelKind) -> Color32 {
+    match k {
+        ChannelKind::Red => Color32::from_rgb(0xff, 0x45, 0x45),
+        ChannelKind::Green => Color32::from_rgb(0x3d, 0xe0, 0x6a),
+        ChannelKind::Blue => Color32::from_rgb(0x4a, 0x7d, 0xff),
+        ChannelKind::White => Color32::from_rgb(0xf2, 0xf2, 0xf2),
+        ChannelKind::Amber => Color32::from_rgb(0xff, 0xa8, 0x2e),
+        ChannelKind::Uv => Color32::from_rgb(0xa2, 0x5c, 0xff),
+        _ => theme::accent(),
+    }
+}
+
 /// Symbol der Kanalart (eigene, schlichte Zeichnungen).
-fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Color32) {
+pub fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Color32) {
     use ChannelKind as K;
     let c = rect.center();
     let r = rect.width() * 0.5;
@@ -517,12 +530,116 @@ fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Color32
                         s,
                     );
                 }
+                K::Laser => {
+                    // Quelle links, Strahlen fächern nach rechts auf
+                    let src = c + Vec2::new(-r * 0.6, r * 0.35);
+                    let cols = [
+                        Color32::from_rgb(0xff, 0x40, 0x40),
+                        Color32::from_rgb(0x40, 0xe0, 0x60),
+                        Color32::from_rgb(0x50, 0x90, 0xff),
+                    ];
+                    for (k, col) in cols.iter().enumerate() {
+                        let end = c + Vec2::new(r * 0.65, -r * 0.65 + k as f32 * r * 0.5);
+                        p.line_segment([src, end], Stroke::new(1.3, *col));
+                        p.circle_filled(end, 1.6, *col);
+                    }
+                    p.circle_filled(src, 2.2, fg);
+                }
+                K::Fog => {
+                    // Wolke aus drei Kreisen
+                    let base = c + Vec2::new(0.0, r * 0.15);
+                    for (dx, dy, rr) in [(-0.35, 0.05, 0.3), (0.0, -0.2, 0.36), (0.35, 0.05, 0.28)]
+                    {
+                        p.circle_filled(
+                            base + Vec2::new(dx * r, dy * r),
+                            rr * r,
+                            theme::text_dim(),
+                        );
+                    }
+                    p.line_segment(
+                        [
+                            base + Vec2::new(-r * 0.62, r * 0.33),
+                            base + Vec2::new(r * 0.6, r * 0.33),
+                        ],
+                        Stroke::new(1.2, theme::text_dim()),
+                    );
+                }
+                K::Fan => {
+                    // drei Flügel
+                    for k in 0..3 {
+                        let a = std::f32::consts::TAU * k as f32 / 3.0 - 1.2;
+                        let tip = c + Vec2::angled(a) * r * 0.7;
+                        let side = c + Vec2::angled(a + 0.7) * r * 0.45;
+                        p.add(Shape::convex_polygon(vec![c, side, tip], fg, Stroke::NONE));
+                    }
+                    p.circle_filled(c, 2.0, theme::bg());
+                }
+                K::Zoom => {
+                    // Lichtkegel mit Pfeilen nach außen
+                    let src = c + Vec2::new(-r * 0.6, 0.0);
+                    for d in [-1.0, 1.0] {
+                        let end = c + Vec2::new(r * 0.6, d * r * 0.6);
+                        p.line_segment([src, end], s);
+                        p.line_segment([end, end + Vec2::new(-4.0, 0.0)], s);
+                        p.line_segment([end, end + Vec2::new(0.0, -d * 4.0)], s);
+                    }
+                }
+                K::Focus => {
+                    p.circle_stroke(c, r * 0.5, s);
+                    for d in [Vec2::X, -Vec2::X, Vec2::Y, -Vec2::Y] {
+                        p.line_segment([c + d * r * 0.5, c + d * r * 0.78], s);
+                    }
+                    p.circle_filled(c, 1.8, fg);
+                }
+                K::Program => {
+                    // Abspielen-Dreieck mit Funken
+                    let w = r * 0.5;
+                    p.add(Shape::convex_polygon(
+                        vec![
+                            c + Vec2::new(-w * 0.7, -w),
+                            c + Vec2::new(w, 0.0),
+                            c + Vec2::new(-w * 0.7, w),
+                        ],
+                        theme::accent(),
+                        Stroke::NONE,
+                    ));
+                    p.circle_filled(c + Vec2::new(r * 0.6, -r * 0.6), 1.5, fg);
+                    p.circle_filled(c + Vec2::new(r * 0.68, r * 0.45), 1.2, fg);
+                }
+                K::Control => {
+                    // drei Regler
+                    for k in 0..3 {
+                        let x = c.x + (k as f32 - 1.0) * r * 0.5;
+                        p.line_segment(
+                            [pos2(x, c.y - r * 0.6), pos2(x, c.y + r * 0.6)],
+                            Stroke::new(1.2, theme::text_dim()),
+                        );
+                        let y = c.y + [0.3, -0.35, 0.1][k] * r;
+                        p.rect_filled(
+                            Rect::from_center_size(pos2(x, y), Vec2::new(5.0, 3.0)),
+                            1.0,
+                            fg,
+                        );
+                    }
+                }
+                K::NoFunction => {
+                    p.circle_stroke(c, r * 0.55, Stroke::new(1.3, theme::text_faint()));
+                    p.line_segment(
+                        [
+                            c + Vec2::angled(-0.8) * r * 0.55,
+                            c + Vec2::angled(2.35) * r * 0.55,
+                        ],
+                        Stroke::new(1.3, theme::text_faint()),
+                    );
+                }
                 _ => {
-                    p.text(
-                        c,
-                        egui::Align2::CENTER_CENTER,
-                        "?",
-                        theme::heading_font(),
+                    // Generisch: Wertebalken
+                    let w = r * 1.2;
+                    let bar = Rect::from_center_size(c, Vec2::new(w, 6.0));
+                    p.rect_stroke(bar, 2.0, Stroke::new(1.2, fg), StrokeKind::Inside);
+                    p.rect_filled(
+                        Rect::from_min_size(bar.min, Vec2::new(w * 0.55, 6.0)),
+                        2.0,
                         fg,
                     );
                 }

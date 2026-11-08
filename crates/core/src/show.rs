@@ -756,6 +756,7 @@ impl Show {
         }
         show.universes = UNIVERSES;
         show.normalize();
+        show.refine_channel_kinds();
         Ok(show)
     }
 
@@ -766,6 +767,23 @@ impl Show {
 
     pub fn load(path: impl AsRef<Path>) -> Result<Self, ShowError> {
         Self::from_json(&std::fs::read_to_string(path)?)
+    }
+
+    /// Kanalarten der gespeicherten Gerätetypen anhand der Kanalnamen
+    /// verfeinern (ältere Shows kennen z. B. Laser oder Nebel noch nicht).
+    /// Gibt die Anzahl geänderter Kanäle zurück.
+    pub fn refine_channel_kinds(&mut self) -> usize {
+        let mut n = 0;
+        for ty in &mut self.fixture_types {
+            for c in &mut ty.channels {
+                let k = c.kind.refine(&c.name);
+                if k != c.kind {
+                    c.kind = k;
+                    n += 1;
+                }
+            }
+        }
+        n
     }
 
     // ---------- Gerätetypen ----------

@@ -360,6 +360,12 @@ fn channel_kind(fixture: &Value, name: &str, r: &Resolved<'_>) -> ChannelKind {
             }
         }
         "EffectSpeed" | "PanTiltSpeed" | "Speed" => ChannelKind::Speed,
+        "Fog" | "FogOutput" | "FogType" => ChannelKind::Fog,
+        "Zoom" => ChannelKind::Zoom,
+        "Focus" => ChannelKind::Focus,
+        "Effect" | "EffectParameter" | "SoundSensitivity" => ChannelKind::Program,
+        "Maintenance" => ChannelKind::Control,
+        "NoFunction" => ChannelKind::NoFunction,
         _ => ChannelKind::Generic,
     }
 }
@@ -440,7 +446,11 @@ pub fn convert_fixture(
         match lookup.resolve(ch_name) {
             Some(r) => ChannelDef {
                 name: ch_name.to_string(),
-                kind: channel_kind(&fixture, ch_name, &r),
+                kind: if r.fine > 0 {
+                    channel_kind(&fixture, ch_name, &r)
+                } else {
+                    channel_kind(&fixture, ch_name, &r).refine(ch_name)
+                },
                 default: default_value(&r),
             },
             None => ChannelDef::new(ch_name, ChannelKind::Generic),
@@ -468,7 +478,9 @@ pub fn convert_fixture(
             .flatten()
         {
             match entry {
-                Value::Null => channels.push(ChannelDef::new("(unbenutzt)", ChannelKind::Generic)),
+                Value::Null => {
+                    channels.push(ChannelDef::new("(unbenutzt)", ChannelKind::NoFunction))
+                }
                 Value::String(s) => channels.push(make_channel(s)),
                 Value::Object(o)
                     if o.get("insert").and_then(Value::as_str) == Some("matrixChannels") =>
@@ -571,7 +583,14 @@ mod tests {
         assert_eq!(m.channel_count(), 6);
         assert_eq!(
             kinds(m),
-            [K::Dimmer, K::Red, K::Green, K::Blue, K::Strobe, K::Generic]
+            [
+                K::Dimmer,
+                K::Red,
+                K::Green,
+                K::Blue,
+                K::Strobe,
+                K::NoFunction
+            ]
         );
         assert_eq!(m.channels[0].default, 255);
         assert_eq!(m.manufacturer, "Testhersteller");

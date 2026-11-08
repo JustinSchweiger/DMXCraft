@@ -46,25 +46,17 @@ impl Category {
             ),
             Category::Position => matches!(k, K::Pan | K::PanFine | K::Tilt | K::TiltFine),
             Category::Gobo => matches!(k, K::Gobo),
-            Category::Beam => matches!(k, K::Strobe | K::Speed),
-            Category::Other => matches!(k, K::Generic),
+            Category::Beam => matches!(k, K::Strobe | K::Speed | K::Zoom | K::Focus),
+            Category::Other => matches!(
+                k,
+                K::Generic | K::Laser | K::Fog | K::Fan | K::Program | K::Control | K::NoFunction
+            ),
             Category::All => true,
         }
     }
 }
 
-/// Farbe des Pegels im Fader je Kanalart.
-fn kind_color(k: ChannelKind) -> Color32 {
-    match k {
-        ChannelKind::Red => Color32::from_rgb(0xff, 0x45, 0x45),
-        ChannelKind::Green => Color32::from_rgb(0x3d, 0xe0, 0x6a),
-        ChannelKind::Blue => Color32::from_rgb(0x4a, 0x7d, 0xff),
-        ChannelKind::White => Color32::from_rgb(0xf2, 0xf2, 0xf2),
-        ChannelKind::Amber => Color32::from_rgb(0xff, 0xa8, 0x2e),
-        ChannelKind::Uv => Color32::from_rgb(0xa2, 0x5c, 0xff),
-        _ => theme::accent(),
-    }
-}
+use crate::ui::widgets::fader::kind_color;
 
 /// Ein Fader steuert denselben Kanal aller ausgewählten Geräte eines Typs.
 pub struct FaderGroup {

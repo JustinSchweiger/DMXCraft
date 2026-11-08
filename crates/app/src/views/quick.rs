@@ -76,6 +76,11 @@ pub fn quick_action(e: &mut Engine, layer: Layer, ids: &[FixtureId], q: Quick) {
             continue;
         };
         let has_white = ty.has_kind(ChannelKind::White);
+        // reine UV-Geräte (z. B. UV-Leisten) haben UV als einziges Licht
+        let uv_only = !has_white
+            && ![ChannelKind::Red, ChannelKind::Green, ChannelKind::Blue]
+                .iter()
+                .any(|k| ty.has_kind(*k));
         for (i, def) in ty.channels.iter().enumerate() {
             let ch = ChannelRef {
                 fixture: *id,
@@ -84,6 +89,8 @@ pub fn quick_action(e: &mut Engine, layer: Layer, ids: &[FixtureId], q: Quick) {
             let value = match (q, def.kind) {
                 (Quick::Off, ChannelKind::Dimmer) => Some(0),
                 (Quick::Off, k) if k.is_color_intensity() => Some(0),
+                (Quick::Off, ChannelKind::Laser | ChannelKind::Fog) => Some(0),
+                (Quick::On, ChannelKind::Uv) if uv_only => Some(255),
                 (Quick::On, ChannelKind::Dimmer) => Some(255),
                 (Quick::On, ChannelKind::White) => Some(255),
                 (Quick::On, ChannelKind::Red | ChannelKind::Green | ChannelKind::Blue)

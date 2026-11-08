@@ -196,6 +196,10 @@ impl ProfileChannel {
 
     /// Kanalart, die DMXCraft daraus ableitet (wie der OFL-Konverter).
     pub fn kind(&self) -> ChannelKind {
+        self.kind_from_capabilities().refine(&self.name)
+    }
+
+    fn kind_from_capabilities(&self) -> ChannelKind {
         let main = self
             .capabilities
             .iter()
@@ -438,6 +442,12 @@ impl Capability {
                 _ => ChannelKind::Generic,
             },
             C::EffectSpeed | C::PanTiltSpeed | C::Speed => ChannelKind::Speed,
+            C::Fog | C::FogOutput => ChannelKind::Fog,
+            C::Zoom => ChannelKind::Zoom,
+            C::Focus => ChannelKind::Focus,
+            C::Effect => ChannelKind::Program,
+            C::Maintenance => ChannelKind::Control,
+            C::NoFunction => ChannelKind::NoFunction,
             _ => ChannelKind::Generic,
         }
     }
@@ -1490,7 +1500,18 @@ fn cap_for_kind(kind: ChannelKind, name: &str) -> Capability {
             c
         }
         ChannelKind::Speed => Capability::new(C::Speed),
-        ChannelKind::Generic => Capability::new(C::Generic),
+        ChannelKind::Fog => Capability::new(C::FogOutput),
+        ChannelKind::Zoom => Capability::new(C::Zoom),
+        ChannelKind::Focus => Capability::new(C::Focus),
+        ChannelKind::Program => {
+            let mut c = Capability::new(C::Effect);
+            c.label = name.to_string();
+            c
+        }
+        ChannelKind::Control => Capability::new(C::Maintenance),
+        ChannelKind::NoFunction => Capability::new(C::NoFunction),
+        // OFL kennt keine eigenen Typen dafür – der Kanalname macht es eindeutig
+        ChannelKind::Generic | ChannelKind::Laser | ChannelKind::Fan => Capability::new(C::Generic),
     };
     cap.range(0, 255)
 }

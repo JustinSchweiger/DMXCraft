@@ -1003,4 +1003,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Bereich hinzufügen", "Add range"),
     ("Ende – kleiner als 255 legt für den Rest einen neuen Bereich an", "End – less than 255 creates a new range for the rest"),
     ("Ende – die folgenden Bereiche rücken automatisch nach", "End – the following ranges move along automatically"),
+    ("Lüfter", "Fan"),
+    ("Programm", "Program"),
+    ("Steuerung", "Control"),
 ];
