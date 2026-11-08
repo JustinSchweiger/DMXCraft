@@ -33,6 +33,19 @@ pub struct TitleInfo<'a> {
     pub update: UpdateBadge,
     /// Aktiver Zuordnungsmodus.
     pub mapping: Option<dmxcraft_core::mapping::MapKind>,
+    /// Ton-Master (Lautstärke der Audioblöcke).
+    pub audio: AudioInfo,
+}
+
+/// Zustand des Ton-Masters für die Titelleiste.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AudioInfo {
+    pub master: f32,
+    pub mute: bool,
+    /// MIDI-Fader wartet auf Übernahme.
+    pub pickup: bool,
+    pub fading: bool,
+    pub fade_ms: u32,
 }
 
 /// Update-Hinweis in der Titelleiste.
@@ -67,6 +80,10 @@ pub enum MenuAction {
     CheckUpdates,
     InstallUpdate,
     ToggleLock,
+    /// Ton-Master setzen.
+    AudioMaster(f32),
+    AudioMute,
+    AudioFade,
     /// Tastatur- bzw. MIDI-Zuordnung ein/aus.
     Mapping(dmxcraft_core::mapping::MapKind),
     About,
@@ -235,6 +252,8 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             }
             ui.add_space(theme::SP_XS);
             load_meter(ui, info);
+            ui.add_space(theme::SP_M);
+            audio_control(ui, info.audio, &mut actions);
             if let Some((msg, err)) = info.message {
                 ui.separator();
                 let color = if err { theme::DANGER } else { theme::text() };
@@ -243,6 +262,131 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
         });
     });
     actions
+}
+
+/// Ton-Master: Lautsprecher (stumm), Schieber, Prozent. Nur die Wiedergabe
+/// von DMXCraft, nicht die Systemlautstärke.
+fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>) {
+    use dmxcraft_core::mapping::Control;
+    // Rechts nach links: Prozent, Schieber, Symbol
+    let pct = if a.mute {
+        t("stumm").to_string()
+    } else {
+        format!("{:.0} %", a.master * 100.0)
+    };
+    let color = if a.mute {
+        theme::DANGER
+    } else if a.master < 0.995 {
+        theme::WARN
+    } else {
+        theme::text_dim()
+    };
+    let (prect, _) = ui.allocate_exact_size(egui::vec2(40.0, 18.0), Sense::hover());
+    ui.painter().text(
+        prect.left_center(),
+        egui::Align2::LEFT_CENTER,
+        pct,
+        theme::heading_font(),
+        color,
+    );
+
+    // Schieber
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(90.0, 18.0), Sense::click_and_drag());
+    let overlay = crate::mapping::target(ui, rect, Control::AudioMaster);
+    let track = egui::Rect::from_center_size(rect.center(), egui::vec2(rect.width() - 10.0, 4.0));
+    if !overlay {
+        if let Some(pos) = resp
+            .interact_pointer_pos()
+            .filter(|_| resp.dragged() || resp.clicked())
+        {
+            let v = ((pos.x - track.left()) / track.width()).clamp(0.0, 1.0);
+            actions.push(MenuAction::AudioMaster(v));
+        }
+        if resp.double_clicked() {
+            actions.push(MenuAction::AudioMaster(1.0));
+        }
+        if resp.hovered() {
+            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+            if scroll != 0.0 {
+                actions.push(MenuAction::AudioMaster(
+                    (a.master + scroll / 600.0).clamp(0.0, 1.0),
+                ));
+            }
+        }
+    }
+    let p = ui.painter();
+    p.rect_filled(track, 2.0, theme::raised());
+    let fill_color = if a.mute {
+        theme::text_dim()
+    } else if a.fading {
+        theme::WARN
+    } else {
+        theme::accent()
+    };
+    let x = track.left() + track.width() * a.master.clamp(0.0, 1.0);
+    p.rect_filled(
+        egui::Rect::from_min_max(track.min, egui::pos2(x, track.max.y)),
+        2.0,
+        fill_color,
+    );
+    p.circle_filled(
+        egui::pos2(x, track.center().y),
+        if resp.hovered() || resp.dragged() {
+            6.0
+        } else {
+            5.0
+        },
+        theme::text(),
+    );
+    let mut tip = t("Ton-Master – nur die Wiedergabe von DMXCraft, nicht die Systemlautstärke.\nDoppelklick: 100 %, Mausrad: fein einstellen").to_string();
+    if a.pickup {
+        tip.push_str("\n\n");
+        tip.push_str(t(
+            "Zurückgesetzt: ein MIDI-Fader wirkt erst wieder, wenn er den aktuellen Wert erreicht.",
+        ));
+    }
+    resp.on_hover_text(tip);
+
+    // Lautsprecher: Klick schaltet stumm, Rechtsklick: Ausfaden / 100 %
+    let icon = if a.mute {
+        Icon::SpeakerMute
+    } else if a.master <= 0.0 {
+        Icon::SpeakerNone
+    } else if a.master < 0.5 {
+        Icon::SpeakerLow
+    } else {
+        Icon::SpeakerHigh
+    };
+    let mut b = IconButton::new(icon).size(28.0).flat();
+    if a.mute || a.master < 0.995 {
+        b = b.active(true).tint(color);
+    }
+    let r = ui.add(b);
+    let overlay = crate::mapping::target(ui, r.rect, Control::AudioMute);
+    let r = r.on_hover_text(t("Ton stumm schalten (Rechtsklick: Ausfaden)"));
+    if !overlay && r.clicked() {
+        actions.push(MenuAction::AudioMute);
+    }
+    menu::context(&r, |ui| {
+        menu::begin(ui);
+        if menu::item(
+            ui,
+            MenuItem::new(&tr!(
+                "Ton ausfaden ({s} s)",
+                s = if a.fade_ms % 1000 == 0 {
+                    (a.fade_ms / 1000).to_string()
+                } else {
+                    format!("{:.1}", a.fade_ms as f32 / 1000.0)
+                }
+            ))
+            .enabled(!a.fading && a.master > 0.0),
+        ) {
+            actions.push(MenuAction::AudioFade);
+        }
+        if menu::item(ui, MenuItem::new(t("Auf 100 %"))) {
+            actions.push(MenuAction::AudioMaster(1.0));
+        }
+    });
 }
 
 /// Auslastungsanzeige: Statuspunkt des Ausgangs und Balken.

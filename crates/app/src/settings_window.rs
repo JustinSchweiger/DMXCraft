@@ -472,6 +472,41 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
         });
     });
     ui.add_space(theme::SP_L);
+    section(ui, t("Ton"));
+    ch.save |= ui
+        .add(Toggle::new(
+            &mut s.audio_reset_on_start,
+            t("Start einer SUPER SCENE setzt den Ton-Master auf 100 %"),
+        ))
+        .changed();
+    hint(
+        ui,
+        t("Ein MIDI-Fader auf dem Ton-Master wirkt danach erst wieder, wenn er den aktuellen Wert erreicht – er springt also nicht."),
+    );
+    ui.add_space(theme::SP_S);
+    form(ui, "settings_audio", |f| {
+        f.row(t("Ausfaden"), |ui| {
+            let mut secs = s.audio_fade_ms as f32 / 1000.0;
+            let r = ui.add(
+                egui::DragValue::new(&mut secs)
+                    .range(0.5..=60.0)
+                    .speed(0.1)
+                    .fixed_decimals(1)
+                    .suffix(" s"),
+            );
+            s.audio_fade_ms = (secs * 1000.0).round() as u32;
+            if r.lost_focus() || r.drag_stopped() {
+                ch.save = true;
+            }
+        });
+    });
+    ch.save |= ui
+        .add(Toggle::new(
+            &mut s.audio_fade_stop,
+            t("Nach dem Ausfaden die SUPER SCENES mit Ton stoppen"),
+        ))
+        .changed();
+    ui.add_space(theme::SP_L);
     if let Some(p) = Settings::path() {
         hint(ui, &tr!("Gespeichert in {v}", v = p.display()));
     }

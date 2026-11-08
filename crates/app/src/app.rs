@@ -364,6 +364,9 @@ impl DmxCraftApp {
                 st.map_sel = None;
                 st.map_learn = false;
             }
+            MenuAction::AudioMaster(v) => self.state.audio.set_master(v),
+            MenuAction::AudioMute => self.state.audio.mute = !self.state.audio.mute,
+            MenuAction::AudioFade => self.state.audio.start_fade(),
             MenuAction::ToggleLock => {
                 if self.state.locked {
                     self.lock_dialog = Some(LockDialog {
@@ -786,6 +789,13 @@ impl eframe::App for DmxCraftApp {
             message: message.as_ref().map(|(m, e)| (m.as_str(), *e)),
             update,
             mapping: self.state.mapping,
+            audio: titlebar::AudioInfo {
+                master: self.state.audio.master,
+                mute: self.state.audio.mute,
+                pickup: self.state.audio.pickup,
+                fading: self.state.audio.fading(),
+                fade_ms: self.settings.audio_fade_ms,
+            },
         };
         let mut actions = Vec::new();
         egui::Panel::top("titlebar")
@@ -887,7 +897,10 @@ impl eframe::App for DmxCraftApp {
             }
             edit_preview(cx.engine, cx.state);
             cx.engine.set_timeline_cursor(cx.state.timeline_cursor);
-            cx.state.audio.update(cx.engine);
+            cx.state.audio.update(cx.engine, &self.settings);
+            if cx.state.audio.fading() {
+                ctx.request_repaint();
+            }
         }
         self.state.viewport_busy = false;
         // 3D-Visualisierer im eigenen Fenster (z. B. auf dem zweiten Bildschirm)

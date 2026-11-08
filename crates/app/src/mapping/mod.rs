@@ -399,6 +399,7 @@ fn alt_click(
         let fader = matches!(
             control,
             Control::Master
+                | Control::AudioMaster
                 | Control::Channel { .. }
                 | Control::Channels
                 | Control::Ui { fader: true, .. }
@@ -538,6 +539,9 @@ pub fn describe(show: &Show, c: &Control) -> (String, String) {
         ),
         Control::Blackout => (t("Global").to_string(), t("Blackout").to_string()),
         Control::Master => (t("Global").to_string(), t("Master").to_string()),
+        Control::AudioMaster => (t("Ton").to_string(), t("Ton-Master").to_string()),
+        Control::AudioMute => (t("Ton").to_string(), t("Ton stumm").to_string()),
+        Control::AudioFade => (t("Ton").to_string(), t("Ton ausfaden").to_string()),
         Control::StopAll => (
             t("Global").to_string(),
             t("Alle Szenen stoppen").to_string(),
@@ -645,6 +649,9 @@ pub(crate) fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, m: &
         }
         Control::Blackout => e.blackout(),
         Control::Master => e.master() > 0.0,
+        Control::AudioMaster => st.audio.gain() > 0.0,
+        Control::AudioMute => st.audio.mute,
+        Control::AudioFade => st.audio.fading(),
         Control::Ui { key, .. } => states.get(key).copied().unwrap_or(false),
         Control::Fixture { id } => st.selected.contains(id),
         Control::Group { id } => {
@@ -746,6 +753,28 @@ fn fire(
         Control::StopAll => {
             if pressed {
                 e.release_all();
+            }
+        }
+        Control::AudioMaster => match m.mode {
+            ButtonMode::Value => st.audio.set_master(f32::from(value) / 127.0),
+            ButtonMode::Toggle => {
+                if pressed {
+                    let v = if st.audio.master > 0.5 { 0.0 } else { 1.0 };
+                    st.audio.set_master(v);
+                }
+            }
+        },
+        Control::AudioMute => match (m.mode, m.flash) {
+            (ButtonMode::Toggle, false) => {
+                if pressed {
+                    st.audio.mute = !st.audio.mute;
+                }
+            }
+            _ => st.audio.mute = on,
+        },
+        Control::AudioFade => {
+            if pressed {
+                st.audio.start_fade();
             }
         }
         Control::Group { id } => {
@@ -984,6 +1013,7 @@ impl Mapper {
                         if matches!(
                             c,
                             Control::Master
+                                | Control::AudioMaster
                                 | Control::Channel { .. }
                                 | Control::Ui { fader: true, .. }
                         ) && kind == MapKind::Midi
@@ -1176,6 +1206,7 @@ impl Mapper {
                             && matches!(
                                 m.control,
                                 Control::Master
+                                    | Control::AudioMaster
                                     | Control::Channel { .. }
                                     | Control::Ui { fader: true, .. }
                             )
@@ -1211,6 +1242,12 @@ impl Mapper {
             .collect();
         let cc = ev.message == MidiMessage::Cc;
         for m in hits {
+            // Ton-Master per Fader: Übernahme erst, wenn der Fader den Wert
+            // erreicht (nach dem Zurücksetzen beim Start einer SUPER SCENE)
+            if m.control == Control::AudioMaster && (cc || m.mode == ButtonMode::Value) {
+                st.audio.fader_input(f32::from(ev.value) / 127.0);
+                continue;
+            }
             fire(e, st, &mut self.ui_fires, &m, ev.value > 0, ev.value, cc);
         }
     }

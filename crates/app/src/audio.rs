@@ -5,11 +5,11 @@
 //! Zeitleiste abgeglichen: fehlende Spieler werden an der richtigen Stelle
 //! gestartet, abweichende nachgestellt, beendete entfernt.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub use dmxcraft_core::audio::FRAME_MS;
 use dmxcraft_core::audio::{Analyzer, AudioAnalysis, VERSION};
@@ -38,16 +38,131 @@ impl Player {
     }
 }
 
-#[derive(Default)]
 pub struct AudioPlayer {
     stream: Option<OutputStream>,
     stream_failed: bool,
     /// Laufende Spieler je (Szene, Block).
     sinks: HashMap<(SceneId, u32), Player>,
     waves: Arc<Mutex<HashMap<String, WaveState>>>,
+    /// Ton-Master 0–1 (nur DMXCraft, nicht die Systemlautstärke).
+    pub master: f32,
+    pub mute: bool,
+    /// Nach dem Zurücksetzen: MIDI-Fader wird ignoriert, bis er den
+    /// aktuellen Wert erreicht (bzw. überquert).
+    pub pickup: bool,
+    /// Letzter ignorierter Fader-Wert (zum Erkennen des Überquerens).
+    pickup_last: Option<f32>,
+    /// Laufendes Ausfaden: Startwert, Beginn, Dauer.
+    fade: Option<(f32, Instant, Duration)>,
+    /// Dauer für „Ton ausfaden“ (aus den Einstellungen).
+    pub fade_ms: u32,
+    /// Laufende SUPER SCENES im letzten Frame (zum Erkennen eines Starts).
+    running: HashSet<SceneId>,
+}
+
+impl Default for AudioPlayer {
+    fn default() -> Self {
+        Self {
+            stream: None,
+            stream_failed: false,
+            sinks: HashMap::new(),
+            waves: Arc::default(),
+            master: 1.0,
+            mute: false,
+            pickup: false,
+            pickup_last: None,
+            fade: None,
+            fade_ms: 5000,
+            running: HashSet::new(),
+        }
+    }
 }
 
 impl AudioPlayer {
+    /// Wirksame Lautstärke (Master, stumm).
+    pub fn gain(&self) -> f32 {
+        if self.mute {
+            0.0
+        } else {
+            self.master
+        }
+    }
+
+    /// Ton-Master setzen (beendet ein laufendes Ausfaden).
+    pub fn set_master(&mut self, v: f32) {
+        self.master = v.clamp(0.0, 1.0);
+        self.fade = None;
+    }
+
+    /// Wert eines MIDI-Faders: nach dem Zurücksetzen erst übernehmen, wenn
+    /// der Fader den aktuellen Wert erreicht oder überquert hat.
+    pub fn fader_input(&mut self, v: f32) {
+        if self.pickup {
+            let near = (v - self.master).abs() <= 0.03;
+            let crossed = self
+                .pickup_last
+                .is_some_and(|l| (l - self.master).signum() != (v - self.master).signum());
+            if !near && !crossed {
+                self.pickup_last = Some(v);
+                return;
+            }
+            self.pickup = false;
+            self.pickup_last = None;
+        }
+        self.set_master(v);
+    }
+
+    /// Gleichmäßig auf 0 ausblenden.
+    pub fn start_fade(&mut self) {
+        if self.master > 0.0 {
+            let ms = u64::from(self.fade_ms.max(100));
+            self.fade = Some((self.master, Instant::now(), Duration::from_millis(ms)));
+        }
+    }
+
+    pub fn fading(&self) -> bool {
+        self.fade.is_some()
+    }
+
+    /// Ton-Master auf 100 % (z. B. beim Start einer SUPER SCENE).
+    fn reset(&mut self) {
+        if self.master < 1.0 || self.fade.is_some() {
+            self.master = 1.0;
+            self.fade = None;
+            // ein MIDI-Fader steht vermutlich noch unten
+            self.pickup = true;
+            self.pickup_last = None;
+        }
+    }
+
+    /// Ausfaden fortschreiben und Starts von SUPER SCENES erkennen.
+    /// Gibt `true` zurück, wenn ein Ausfaden gerade fertig wurde.
+    fn tick(&mut self, e: &Engine, reset_on_start: bool) -> bool {
+        let mut done = false;
+        if let Some((from, start, dur)) = self.fade {
+            let k = start.elapsed().as_secs_f32() / dur.as_secs_f32();
+            if k >= 1.0 {
+                self.master = 0.0;
+                self.fade = None;
+                done = true;
+            } else {
+                self.master = from * (1.0 - k);
+            }
+        }
+        let running: HashSet<SceneId> = e
+            .show()
+            .scenes
+            .iter()
+            .filter(|s| s.timeline().is_some() && e.timeline_time(s.id).is_some())
+            .map(|s| s.id)
+            .collect();
+        if reset_on_start && running.iter().any(|id| !self.running.contains(id)) {
+            self.reset();
+        }
+        self.running = running;
+        done
+    }
+
     /// Analyse einer Datei (startet sie beim ersten Aufruf im Hintergrund;
     /// fertige Analysen kommen aus dem Zwischenspeicher).
     pub fn wave(&self, path: &str, ctx: &eframe::egui::Context) -> WaveState {
@@ -79,8 +194,30 @@ impl AudioPlayer {
     }
 
     /// Wiedergabe an die laufenden SUPER SCENES anpassen.
-    pub fn update(&mut self, e: &Engine) {
-        // je Block: Datei, Stelle, Lautstärke, Tempo (Szenen- × Hauptgeschwindigkeit)
+    pub fn update(&mut self, e: &mut Engine, settings: &crate::settings::Settings) {
+        self.fade_ms = settings.audio_fade_ms;
+        if self.tick(e, settings.audio_reset_on_start) && settings.audio_fade_stop {
+            // ausgeblendet: SUPER SCENES mit Ton stoppen
+            let with_audio: Vec<SceneId> = e
+                .show()
+                .scenes
+                .iter()
+                .filter(|s| {
+                    s.timeline().is_some_and(|tl| {
+                        tl.tracks
+                            .iter()
+                            .flat_map(|t| &t.clips)
+                            .any(|c| matches!(c.content, ClipContent::Audio { .. }))
+                    })
+                })
+                .map(|s| s.id)
+                .filter(|id| e.is_active(*id))
+                .collect();
+            for id in with_audio {
+                e.release(id);
+            }
+        }
+        let gain = self.gain();
         let mut wanted: HashMap<(SceneId, u32), (String, Duration, f32, f32)> = HashMap::new();
         for scene in &e.show().scenes {
             let Some(tl) = scene.timeline() else {
@@ -101,7 +238,7 @@ impl AudioPlayer {
                 } = &clip.content
                 {
                     let pos = offset_ms + (now - clip.start_ms);
-                    let vol = clip.level * clip.fade_at(now) * e.master();
+                    let vol = clip.level * clip.fade_at(now) * gain;
                     wanted.insert(
                         (scene.id, clip.id),
                         (path.clone(), Duration::from_millis(pos), vol, rate),
@@ -268,6 +405,45 @@ pub fn duration_ms(path: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Nach dem Zurücksetzen wirkt der MIDI-Fader erst ganz oben.
+    #[test]
+    fn fader_pickup_after_reset() {
+        let mut a = AudioPlayer::default();
+        a.fader_input(0.0);
+        assert_eq!(a.master, 0.0);
+        a.reset();
+        assert_eq!(a.master, 1.0);
+        assert!(a.pickup);
+        // Fader steht noch unten / wird hochgeschoben: ignoriert
+        a.fader_input(0.0);
+        a.fader_input(0.6);
+        assert_eq!(a.master, 1.0);
+        // oben angekommen: übernimmt wieder
+        a.fader_input(1.0);
+        assert!(!a.pickup);
+        a.fader_input(0.4);
+        assert!((a.master - 0.4).abs() < 1e-6);
+        // ohne Änderung kein Fangmodus
+        a.set_master(1.0);
+        a.reset();
+        assert!(!a.pickup);
+    }
+
+    #[test]
+    fn mute_and_fade() {
+        let mut a = AudioPlayer {
+            mute: true,
+            ..Default::default()
+        };
+        assert_eq!(a.gain(), 0.0);
+        a.mute = false;
+        a.fade_ms = 100;
+        a.start_fade();
+        assert!(a.fading());
+        a.set_master(0.5);
+        assert!(!a.fading(), "Eingriff beendet das Ausfaden");
+    }
 
     /// Kleine WAV-Datei (Mono, 8 kHz, 16 Bit): 0,5 s Ton, 0,5 s Stille.
     fn wav(path: &std::path::Path) {

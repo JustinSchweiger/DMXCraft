@@ -46,6 +46,12 @@ pub struct Settings {
     pub remote_port: u16,
     /// Optionale PIN der Fernbedienung (leer = ohne).
     pub remote_pin: String,
+    /// Start einer SUPER SCENE setzt den Ton-Master auf 100 %.
+    pub audio_reset_on_start: bool,
+    /// Dauer von „Ton ausfaden“ in ms.
+    pub audio_fade_ms: u32,
+    /// Nach dem Ausfaden die SUPER SCENES mit Ton stoppen.
+    pub audio_fade_stop: bool,
     /// Qualität des 3D-Visualisierers (0 = niedrig … 3 = ultra).
     pub viz_quality: u8,
     /// Eingerichtete MIDI-Controller (Typ, LED-Ausgang).
@@ -73,6 +79,9 @@ impl Default for Settings {
             remote_enabled: false,
             remote_port: crate::remote::DEFAULT_PORT,
             remote_pin: String::new(),
+            audio_reset_on_start: true,
+            audio_fade_ms: 5000,
+            audio_fade_stop: false,
             viz_quality: 1,
             midi_devices: Vec::new(),
         }

@@ -170,6 +170,12 @@ pub enum Control {
     Master,
     /// Alle Szenen stoppen.
     StopAll,
+    /// Ton-Master: Lautstärke der Audioblöcke (Wert der Eingabe).
+    AudioMaster,
+    /// Ton stumm schalten.
+    AudioMute,
+    /// Ton gleichmäßig ausblenden (Dauer in den Einstellungen).
+    AudioFade,
 }
 
 /// Welche Szene: diese, die ausgewählte, oder nach Position in einer Bank.

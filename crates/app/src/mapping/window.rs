@@ -118,6 +118,9 @@ fn presets(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, 
                 (Control::Blackout, t("Blackout")),
                 (Control::Master, t("Master")),
                 (Control::StopAll, t("Alle Szenen stoppen")),
+                (Control::AudioMaster, t("Ton-Master")),
+                (Control::AudioMute, t("Ton stumm")),
+                (Control::AudioFade, t("Ton ausfaden")),
                 (Control::BankStep { delta: 1 }, t("Nächste Bank")),
                 (Control::BankStep { delta: -1 }, t("Vorige Bank")),
                 (
@@ -373,7 +376,10 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
         });
         if matches!(
             m.control,
-            Control::Scene { .. } | Control::Blackout | Control::Channel { .. }
+            Control::Scene { .. }
+                | Control::Blackout
+                | Control::AudioMute
+                | Control::Channel { .. }
         ) && m.mode == ButtonMode::Toggle
         {
             f.row(t("Flash-Taste"), |ui| {

@@ -1949,6 +1949,7 @@ pub(crate) fn item_value(e: &Engine, st: &AppState, item: &TouchItem) -> f32 {
     };
     match item.control {
         Some(Control::Master) => e.master(),
+        Some(Control::AudioMaster) => st.audio.master,
         Some(Control::Channels) => item.channels.first().map_or(0.0, live),
         Some(Control::Channel { channel }) => live(&channel),
         _ => st.touch_values.get(&item.id).copied().unwrap_or(0.0),
