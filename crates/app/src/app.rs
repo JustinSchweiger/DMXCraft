@@ -606,11 +606,16 @@ impl DmxCraftApp {
                     usb_ports: &mut self.usb_ports,
                     show_path: &self.state.show_path,
                     mcp: &self.mcp.status,
+                    midi_inputs: &self.mapper.midi.input_names,
+                    midi_outputs: &self.mapper.midi.output_names,
                 },
             );
             drop(e);
             if ch.mcp_retry {
                 self.mcp.retry();
+            }
+            if let Some((out, model)) = ch.midi_clear {
+                self.mapper.clear_now(&out, model);
             }
             if let Some(z) = ch.zoom {
                 ctx.set_zoom_factor(z);
@@ -734,6 +739,9 @@ impl eframe::App for DmxCraftApp {
         if self.state.locked {
             self.state.mapping = None;
             self.state.map_learn = false;
+        }
+        if self.mapper.devices != self.settings.midi_devices {
+            self.mapper.devices = self.settings.midi_devices.clone();
         }
         self.mapper
             .begin_frame(&ctx, Self::lock(&self.engine).show(), &self.state);

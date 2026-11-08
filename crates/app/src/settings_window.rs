@@ -5,6 +5,7 @@
 //! neu starten, Zoom setzen).
 
 use crate::i18n::t;
+use crate::midi_device::{DeviceModel, MidiDevice};
 use dmxcraft_core::{Engine, UNIVERSES};
 use dmxcraft_output::UsbDmxPort;
 use eframe::egui::{self, pos2, vec2, Align2, Sense, Stroke, Ui};
@@ -67,6 +68,8 @@ pub struct SettingsChanges {
     pub theme: bool,
     /// MCP-Server neu starten.
     pub mcp_retry: bool,
+    /// LEDs dieses Ausgangs jetzt löschen.
+    pub midi_clear: Option<(String, DeviceModel)>,
 }
 
 #[derive(Default)]
@@ -81,6 +84,9 @@ pub struct SettingsCx<'a> {
     pub usb_ports: &'a mut Vec<UsbDmxPort>,
     pub show_path: &'a str,
     pub mcp: &'a crate::mcp::McpStatus,
+    /// Gefundene MIDI-Ein- und -Ausgänge.
+    pub midi_inputs: &'a [String],
+    pub midi_outputs: &'a [String],
 }
 
 impl SettingsWindow {
@@ -124,7 +130,9 @@ impl SettingsWindow {
                             Tab::Outputs => {
                                 outputs(ui, cx.settings, cx.engine, cx.usb_ports, &mut ch)
                             }
-                            Tab::Midi => midi(ui),
+                            Tab::Midi => {
+                                midi(ui, cx.settings, cx.midi_inputs, cx.midi_outputs, &mut ch)
+                            }
                             Tab::Ai => ai(ui, cx.settings, cx.mcp, &mut ch),
                             Tab::Project => project(ui, cx.engine, cx.show_path),
                         }
@@ -490,19 +498,139 @@ fn outputs(
         });
 }
 
-fn midi(ui: &mut Ui) {
-    section(ui, t("MIDI-Eingang"));
-    form(ui, "settings_midi", |f| {
-        f.row(t("Gerät"), |ui| {
-            ui.add_enabled_ui(false, |ui| {
-                full_combo(ui, "settings_midi_dev", t("– kein Gerät –"), |_| {});
-            })
-            .response
-            .on_disabled_hover_text(t(
-                "Hier wählst du später den MIDI-Controller für das MIDI-Mapping",
-            ));
+fn midi(
+    ui: &mut Ui,
+    s: &mut Settings,
+    inputs: &[String],
+    outputs: &[String],
+    ch: &mut SettingsChanges,
+) {
+    ui.horizontal(|ui| {
+        ui.label(theme::heading_text(t("MIDI-Controller")));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let free: Vec<&String> = inputs
+                .iter()
+                .filter(|i| !s.midi_devices.iter().any(|d| &d.input == *i))
+                .collect();
+            let add = ui
+                .add(IconButton::new(Icon::Plus).flat().enabled(!free.is_empty()))
+                .on_hover_text(t("Gerät hinzufügen"));
+            if add.clicked() {
+                egui::Popup::toggle_id(ui.ctx(), add.id);
+            }
+            crate::ui::widgets::menu::dropdown(&add, |ui| {
+                for i in free {
+                    if ui.button(i.as_str()).clicked() {
+                        s.midi_devices.push(MidiDevice::new(i, outputs));
+                        ch.save = true;
+                        ui.close();
+                    }
+                }
+            });
         });
     });
+    hint(
+        ui,
+        t("Alle angeschlossenen MIDI-Eingänge werden für die Zuordnung geöffnet. Hier eingerichtete Geräte bekommen ihren Typ (Farben der Tasten) und den Ausgang für die LED-Rückmeldung."),
+    );
+    ui.add_space(theme::SP_S);
+    if s.midi_devices.is_empty() {
+        hint(
+            ui,
+            if inputs.is_empty() {
+                t("Kein MIDI-Gerät gefunden.")
+            } else {
+                t("Noch kein Gerät eingerichtet – mit „+“ hinzufügen.")
+            },
+        );
+        return;
+    }
+    let mut remove = None;
+    for (i, d) in s.midi_devices.iter_mut().enumerate() {
+        let before = d.clone();
+        let connected = inputs.contains(&d.input);
+        egui::Frame::new()
+            .fill(theme::raised())
+            .stroke(egui::Stroke::new(1.0, theme::border()))
+            .corner_radius(theme::R_M)
+            .inner_margin(theme::SP_M)
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    let (r, dot) = ui.allocate_exact_size(vec2(10.0, 18.0), Sense::hover());
+                    let c = if connected {
+                        theme::OK
+                    } else {
+                        theme::text_faint()
+                    };
+                    ui.painter().circle_filled(r.center(), 4.0, c);
+                    dot.on_hover_text(if connected {
+                        t("Angeschlossen")
+                    } else {
+                        t("Nicht angeschlossen")
+                    });
+                    ui.label(egui::RichText::new(&d.input).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(IconButton::new(Icon::Trash).flat().danger())
+                            .on_hover_text(t("Gerät entfernen"))
+                            .clicked()
+                        {
+                            remove = Some(i);
+                        }
+                    });
+                });
+                ui.add_space(theme::SP_XS);
+                form(ui, &format!("settings_midi_dev_{i}"), |f| {
+                    f.row(t("Typ"), |ui| {
+                        full_combo(ui, ("midi_model", i), d.model.label(), |ui| {
+                            for m in DeviceModel::ALL {
+                                ui.selectable_value(&mut d.model, m, m.label());
+                            }
+                        });
+                    });
+                    f.row(t("LED-Ausgang"), |ui| {
+                        let shown = if d.output.is_empty() {
+                            t("– kein Ausgang –").to_string()
+                        } else {
+                            d.output.clone()
+                        };
+                        full_combo(ui, ("midi_out", i), shown, |ui| {
+                            ui.selectable_value(
+                                &mut d.output,
+                                String::new(),
+                                t("– kein Ausgang –"),
+                            );
+                            for o in outputs {
+                                ui.selectable_value(&mut d.output, o.clone(), o);
+                            }
+                        });
+                    });
+                    f.row(t("LEDs löschen"), |ui| {
+                        ui.add(Toggle::new(&mut d.clear_on_connect, t("beim Verbinden")));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui
+                                .add_enabled(
+                                    !d.output.is_empty(),
+                                    egui::Button::new(t("Jetzt löschen")),
+                                )
+                                .clicked()
+                            {
+                                ch.midi_clear = Some((d.output.clone(), d.model));
+                            }
+                        });
+                    });
+                });
+            });
+        ui.add_space(theme::SP_S);
+        if *d != before {
+            ch.save = true;
+        }
+    }
+    if let Some(i) = remove {
+        s.midi_devices.remove(i);
+        ch.save = true;
+    }
 }
 
 fn project(ui: &mut Ui, e: &mut Engine, show_path: &str) {

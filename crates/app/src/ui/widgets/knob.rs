@@ -19,6 +19,8 @@ pub struct Knob<'a> {
     default: f32,
     color: Color32,
     enabled: bool,
+    /// Zuordenbar über Tastatur/MIDI: (Schlüssel, Kategorie).
+    map: Option<(String, String)>,
 }
 
 impl<'a> Knob<'a> {
@@ -30,6 +32,7 @@ impl<'a> Knob<'a> {
             default: 1.0,
             color: theme::accent(),
             enabled: true,
+            map: None,
         }
     }
 
@@ -47,6 +50,13 @@ impl<'a> Knob<'a> {
 
     pub fn enabled(mut self, on: bool) -> Self {
         self.enabled = on;
+        self
+    }
+
+    /// Über Tastatur/MIDI zuordenbar machen (fester Schlüssel, Kategorie für
+    /// die Liste; das Ziel ist die Beschriftung).
+    pub fn map(mut self, key: impl Into<String>, category: impl Into<String>) -> Self {
+        self.map = Some((key.into(), category.into()));
         self
     }
 
@@ -81,6 +91,17 @@ impl<'a> Knob<'a> {
         }
         if resp.hovered() && !resp.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+        }
+        if let Some((key, cat)) = &self.map {
+            let label = self.label;
+            if let Some(v) = crate::mapping::fader(ui, rect, key, *self.value, || {
+                (cat.clone(), label.to_string())
+            }) {
+                if self.enabled && v != *self.value {
+                    *self.value = v;
+                    changed = true;
+                }
+            }
         }
 
         let p = ui.painter();

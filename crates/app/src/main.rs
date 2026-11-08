@@ -14,6 +14,7 @@ mod lock;
 mod mapping;
 mod mcp;
 mod midi;
+mod midi_device;
 mod palettes;
 mod profiles;
 mod settings;

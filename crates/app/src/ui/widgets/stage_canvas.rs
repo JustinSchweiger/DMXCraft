@@ -87,6 +87,9 @@ pub struct Camera {
 }
 
 impl Camera {
+    pub fn zoom(self) -> f32 {
+        self.zoom
+    }
     pub fn scale(self) -> f32 {
         WORLD * self.zoom
     }

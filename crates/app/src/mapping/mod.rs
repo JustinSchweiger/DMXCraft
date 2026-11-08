@@ -7,15 +7,16 @@
 
 pub mod window;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use dmxcraft_core::mapping::{
     ButtonMode, Control, Input, MapKind, Mapping, MidiMessage, SceneTarget,
 };
 use dmxcraft_core::{Engine, SceneId, Show, ZoneId};
-use eframe::egui::{self, Color32, Rect, Sense, Stroke, StrokeKind};
+use eframe::egui::{self, Color32, Rect, Response, Sense, Stroke, StrokeKind};
 
 use crate::midi::{MidiEvent, MidiHub};
+use crate::midi_device::{self, MidiDevice};
 use crate::state::AppState;
 use crate::ui::theme;
 
@@ -44,9 +45,114 @@ fn pick_id() -> egui::Id {
     egui::Id::unique("mapping_pick")
 }
 
+/// Angeklicktes Element mit Anzeigename (nur bei [`Control::Ui`]).
+type Pick = (Control, Option<(String, String)>);
+
+fn pick(ctx: &egui::Context, p: Pick) {
+    ctx.data_mut(|d| d.insert_temp(pick_id(), Some(p)));
+}
+
+/// Ausgelöste Eingaben für Bedienelemente der Oberfläche (für das nächste Bild).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct UiFire {
+    /// Taste gedrückt (Knopf: wie ein Klick).
+    pub press: bool,
+    /// Wert 0–1 (Regler über CC bzw. „Wert in %“).
+    pub value: Option<f32>,
+}
+
+fn fires_id() -> egui::Id {
+    egui::Id::unique("mapping_ui_fires")
+}
+
+fn states_id() -> egui::Id {
+    egui::Id::unique("mapping_ui_states")
+}
+
+/// Ausgelöste Eingabe eines Elements abholen.
+fn take_fire(ctx: &egui::Context, key: u64) -> Option<UiFire> {
+    ctx.data_mut(|d| {
+        d.get_temp_mut_or_default::<HashMap<u64, UiFire>>(fires_id())
+            .remove(&key)
+    })
+}
+
+/// Zustand eines Elements für die LED-Rückmeldung merken.
+fn report(ctx: &egui::Context, key: u64, on: bool) {
+    ctx.data_mut(|d| {
+        d.get_temp_mut_or_default::<HashMap<u64, bool>>(states_id())
+            .insert(key, on);
+    });
+}
+
+/// Knopf der Oberfläche zuordenbar machen. `key` ist ein fester Name wie
+/// „programmer/mode/live“, `on` der Zustand für die LED, `name` liefert
+/// (Kategorie, Ziel) für die Liste. Gibt `true` zurück, wenn eine
+/// zugeordnete Taste gedrückt wurde (dann wie ein Klick behandeln).
+pub fn button(
+    ui: &egui::Ui,
+    resp: &Response,
+    key: &str,
+    on: bool,
+    name: impl FnOnce() -> (String, String),
+) -> bool {
+    button_rect(ui, resp.rect, key, on, name)
+}
+
+/// Wie [`button`] für eine Fläche ohne eigene Antwort (z. B. Geräte im Plan).
+pub fn button_rect(
+    ui: &egui::Ui,
+    rect: Rect,
+    key: &str,
+    on: bool,
+    name: impl FnOnce() -> (String, String),
+) -> bool {
+    let key = dmxcraft_core::mapping::ui_key(key);
+    let control = Control::Ui { key, fader: false };
+    report(ui.ctx(), key, on);
+    if target_with(ui, rect, control, name) {
+        return false;
+    }
+    take_fire(ui.ctx(), key).is_some_and(|f| f.press || f.value.is_some_and(|v| v > 0.0))
+}
+
+/// Regler der Oberfläche zuordenbar machen. `value` ist der aktuelle Wert
+/// 0–1. Gibt den neuen Wert zurück, wenn eine Eingabe kam (Regler: Wert,
+/// Taste: zwischen 0 und 1 umschalten).
+pub fn fader(
+    ui: &egui::Ui,
+    rect: Rect,
+    key: &str,
+    value: f32,
+    name: impl FnOnce() -> (String, String),
+) -> Option<f32> {
+    let key = dmxcraft_core::mapping::ui_key(key);
+    let control = Control::Ui { key, fader: true };
+    report(ui.ctx(), key, value > 0.0);
+    if target_with(ui, rect, control, name) {
+        return None;
+    }
+    let f = take_fire(ui.ctx(), key)?;
+    match f.value {
+        Some(v) => Some(v),
+        None if f.press => Some(if value > 0.5 { 0.0 } else { 1.0 }),
+        None => None,
+    }
+}
+
 /// Bedienelement anmelden. Gibt `true` zurück, wenn die Überlagerung aktiv
 /// ist (dann hat die Überlagerung den Klick, nicht das Element).
 pub fn target(ui: &egui::Ui, rect: Rect, control: Control) -> bool {
+    target_with(ui, rect, control, || (String::new(), String::new()))
+}
+
+/// Wie [`target`], mit Anzeigename für Bedienelemente der Oberfläche.
+fn target_with(
+    ui: &egui::Ui,
+    rect: Rect,
+    control: Control,
+    name: impl FnOnce() -> (String, String),
+) -> bool {
     let Some(o) = ui.ctx().data(|d| d.get_temp::<Overlay>(overlay_id())) else {
         return false;
     };
@@ -87,10 +193,18 @@ pub fn target(ui: &egui::Ui, rect: Rect, control: Control) -> bool {
         p.galley(pos, g, Color32::WHITE);
     }
     if resp.clicked() {
-        ui.ctx()
-            .data_mut(|d| d.insert_temp(pick_id(), Some(control)));
+        let name = matches!(control, Control::Ui { .. }).then(name);
+        pick(ui.ctx(), (control, name));
     }
     true
+}
+
+/// Anzeigename einer Zuordnung: (Kategorie, Ziel).
+pub fn describe_mapping(show: &Show, m: &Mapping) -> (String, String) {
+    match (&m.control, &m.name) {
+        (Control::Ui { .. }, Some(n)) => n.clone(),
+        (c, _) => describe(show, c),
+    }
 }
 
 /// Name des Bedienelements für Listen: (Kategorie, Ziel).
@@ -155,6 +269,7 @@ pub fn describe(show: &Show, c: &Control) -> (String, String) {
             t("Global").to_string(),
             t("Alle Szenen stoppen").to_string(),
         ),
+        Control::Ui { .. } => (t("Oberfläche").to_string(), t("Bedienelement").to_string()),
     }
 }
 
@@ -189,7 +304,7 @@ pub fn resolve(show: &Show, st: &AppState, t: &SceneTarget) -> Vec<SceneId> {
 }
 
 /// Zustand „an“ eines Elements (für die LED-Rückmeldung).
-fn is_on(e: &Engine, st: &AppState, c: &Control) -> bool {
+fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, c: &Control) -> bool {
     match c {
         Control::Scene { target } => resolve(e.show(), st, target)
             .iter()
@@ -200,12 +315,21 @@ fn is_on(e: &Engine, st: &AppState, c: &Control) -> bool {
         }
         Control::Blackout => e.blackout(),
         Control::Master => e.master() > 0.0,
+        Control::Ui { key, .. } => states.get(key).copied().unwrap_or(false),
         Control::BankStep { .. } | Control::StopAll => false,
     }
 }
 
 /// Eingabe auslösen: `pressed` (Taste/Note an) und Wert 0–127.
-fn fire(e: &mut Engine, st: &mut AppState, m: &Mapping, pressed: bool, value: u8) {
+fn fire(
+    e: &mut Engine,
+    st: &mut AppState,
+    ui: &mut HashMap<u64, UiFire>,
+    m: &Mapping,
+    pressed: bool,
+    value: u8,
+    cc: bool,
+) {
     let on = match m.mode {
         ButtonMode::Toggle => pressed,
         ButtonMode::Value => value > 0,
@@ -288,7 +412,41 @@ fn fire(e: &mut Engine, st: &mut AppState, m: &Mapping, pressed: bool, value: u8
                 e.release_all();
             }
         }
+        Control::Ui { key, fader } => {
+            let f = ui.entry(*key).or_default();
+            if *fader && (cc || m.mode == ButtonMode::Value) {
+                f.value = Some(f32::from(value) / 127.0);
+            } else if pressed {
+                f.press = true;
+            }
+        }
     }
+}
+
+/// LED-Rückmeldung für eine neu gelernte Taste: Ausgang des eingerichteten
+/// Geräts (oder gleichnamiger Ausgang), „An“ in der Szenenfarbe.
+fn default_feedback(
+    devices: &[MidiDevice],
+    outputs: &[String],
+    input: &str,
+    color: Option<[u8; 3]>,
+) -> Option<dmxcraft_core::mapping::Feedback> {
+    let (out, model) = match devices.iter().find(|d| d.input == input) {
+        Some(d) if !d.output.is_empty() => (d.output.clone(), d.model),
+        Some(_) => return None,
+        None => {
+            let o = midi_device::matching_output(input, outputs)?;
+            (o, midi_device::DeviceModel::detect(input))
+        }
+    };
+    let mut fb = dmxcraft_core::mapping::Feedback {
+        device: out,
+        ..Default::default()
+    };
+    if let (Some(p), Some(c)) = (model.palette(), color) {
+        fb.on.velocity = midi_device::nearest(p, c);
+    }
+    Some(fb)
 }
 
 /// Zustand der Zuordnung zwischen den Bildern.
@@ -301,6 +459,12 @@ pub struct Mapper {
     held: Vec<u32>,
     /// Zustand des Zuordnungsfensters.
     pub win: window::WindowState,
+    /// Eingerichtete Controller (aus den Einstellungen).
+    pub devices: Vec<MidiDevice>,
+    /// Ausgänge, deren LEDs seit dem Verbinden gelöscht wurden.
+    cleared: HashSet<String>,
+    /// Ausgelöste Eingaben für Bedienelemente (gehen ans nächste Bild).
+    ui_fires: HashMap<u64, UiFire>,
 }
 
 impl Mapper {
@@ -336,7 +500,7 @@ impl Mapper {
         };
         ctx.data_mut(|d| {
             d.insert_temp(overlay_id(), o);
-            d.remove_temp::<Option<Control>>(pick_id());
+            d.remove_temp::<Option<Pick>>(pick_id());
         });
     }
 
@@ -354,9 +518,9 @@ impl Mapper {
             e.show_mut().mappings.retain_scenes(|id| ids.contains(&id));
         }
         // angeklicktes Element: vorhandene Zuordnung wählen oder neue anlegen
-        if let (Some(kind), Some(Some(c))) = (
+        if let (Some(kind), Some(Some((c, name)))) = (
             st.mapping,
-            ctx.data(|d| d.get_temp::<Option<Control>>(pick_id())),
+            ctx.data(|d| d.get_temp::<Option<Pick>>(pick_id())),
         ) {
             let existing = e
                 .show()
@@ -381,7 +545,10 @@ impl Mapper {
                     let id = maps.add(kind, c);
                     if let Some(m) = maps.find_mut(kind, id) {
                         m.flash = flash;
-                        if matches!(c, Control::Master) {
+                        m.name = name;
+                        if matches!(c, Control::Master | Control::Ui { fader: true, .. })
+                            && kind == MapKind::Midi
+                        {
                             m.mode = ButtonMode::Value;
                         }
                     }
@@ -390,12 +557,48 @@ impl Mapper {
                 }
             }
         }
+        self.clear_leds();
         self.keyboard(ctx, e, st);
         let events = self.midi.drain();
         for ev in events {
             self.midi_event(&ev, e, st);
         }
-        self.feedback(e, st);
+        let fires = std::mem::take(&mut self.ui_fires);
+        if !fires.is_empty() {
+            ctx.request_repaint();
+        }
+        ctx.data_mut(|d| d.insert_temp(fires_id(), fires));
+        let states: HashMap<u64, bool> = ctx.data(|d| d.get_temp(states_id())).unwrap_or_default();
+        self.feedback(e, st, &states);
+    }
+
+    /// LEDs neu verbundener Ausgänge löschen (Einstellung je Gerät).
+    fn clear_leds(&mut self) {
+        let connected = &self.midi.output_names;
+        self.cleared.retain(|o| connected.contains(o));
+        let todo: Vec<(String, midi_device::DeviceModel)> = self
+            .devices
+            .iter()
+            .filter(|d| {
+                d.clear_on_connect
+                    && !d.output.is_empty()
+                    && connected.contains(&d.output)
+                    && !self.cleared.contains(&d.output)
+            })
+            .map(|d| (d.output.clone(), d.model))
+            .collect();
+        for (out, model) in todo {
+            self.clear_now(&out, model);
+        }
+    }
+
+    /// Alle LEDs eines Ausgangs ausschalten, danach die Zustände neu senden.
+    pub fn clear_now(&mut self, output: &str, model: midi_device::DeviceModel) {
+        for msg in model.clear_messages() {
+            self.midi.send(output, &msg);
+        }
+        self.cleared.insert(output.to_string());
+        self.sent.clear();
     }
 
     fn keyboard(&mut self, ctx: &egui::Context, e: &mut Engine, st: &mut AppState) {
@@ -470,13 +673,31 @@ impl Mapper {
                 } else {
                     self.held.retain(|h| *h != m.id);
                 }
-                fire(e, st, &m, pressed, if pressed { 127 } else { 0 });
+                let v = if pressed { 127 } else { 0 };
+                fire(e, st, &mut self.ui_fires, &m, pressed, v, false);
             }
         }
     }
 
     fn midi_event(&mut self, ev: &MidiEvent, e: &mut Engine, st: &mut AppState) {
         if st.map_learn && st.mapping == Some(MapKind::Midi) {
+            // Szenenfarbe als „An“-Farbe vorschlagen
+            let color_hint = st.map_sel.and_then(|id| {
+                let show = e.show();
+                let m = show.mappings.midi.iter().find(|m| m.id == id)?;
+                match m.element() {
+                    Control::Scene {
+                        target: SceneTarget::Scene { id },
+                    } => {
+                        let s = show.scene(id)?;
+                        Some(s.color.unwrap_or_else(|| {
+                            let c = theme::zone_color(show, s.zone);
+                            [c.r(), c.g(), c.b()]
+                        }))
+                    }
+                    _ => None,
+                }
+            });
             // nur „Drücken“ bzw. Reglerbewegung lernen
             if ev.value > 0 || ev.message == MidiMessage::Cc {
                 if let Some(id) = st.map_sel {
@@ -487,8 +708,22 @@ impl Mapper {
                             message: ev.message,
                             number: ev.number,
                         });
-                        if ev.message == MidiMessage::Cc && matches!(m.control, Control::Master) {
+                        if ev.message == MidiMessage::Cc
+                            && matches!(
+                                m.control,
+                                Control::Master | Control::Ui { fader: true, .. }
+                            )
+                        {
                             m.mode = ButtonMode::Value;
+                        }
+                        // LED-Rückmeldung vorschlagen: Ausgang des Geräts
+                        if m.feedback.is_none() && ev.message == MidiMessage::Note {
+                            m.feedback = default_feedback(
+                                &self.devices,
+                                &self.midi.output_names,
+                                &ev.device,
+                                color_hint,
+                            );
                         }
                     }
                 }
@@ -509,13 +744,14 @@ impl Mapper {
             })
             .cloned()
             .collect();
+        let cc = ev.message == MidiMessage::Cc;
         for m in hits {
-            fire(e, st, &m, ev.value > 0, ev.value);
+            fire(e, st, &mut self.ui_fires, &m, ev.value > 0, ev.value, cc);
         }
     }
 
     /// LED-Rückmeldung: geänderte Zustände (bzw. alle nach Geräteverbindung).
-    fn feedback(&mut self, e: &Engine, st: &AppState) {
+    fn feedback(&mut self, e: &Engine, st: &AppState, states: &HashMap<u64, bool>) {
         if std::mem::take(&mut self.midi.new_outputs) {
             self.sent.clear();
         }
@@ -537,7 +773,7 @@ impl Mapper {
             else {
                 continue;
             };
-            let on = is_on(e, st, &m.control);
+            let on = is_on(e, st, states, &m.control);
             if self.sent.get(&m.id) == Some(&on) {
                 continue;
             }
@@ -580,6 +816,7 @@ mod tests {
             mode: ButtonMode::Toggle,
             flash,
             feedback: None,
+            name: None,
         }
     }
 
@@ -592,16 +829,16 @@ mod tests {
             },
             false,
         );
-        fire(&mut e, &mut st, &m, true, 127);
-        fire(&mut e, &mut st, &m, false, 0);
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, false);
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, false, 0, false);
         assert!(e.is_active(a));
-        fire(&mut e, &mut st, &m, true, 127);
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, false);
         assert!(!e.is_active(a));
 
         let m = mapping(m.control, true);
-        fire(&mut e, &mut st, &m, true, 127);
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, false);
         assert!(e.is_active(a));
-        fire(&mut e, &mut st, &m, false, 0);
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, false, 0, false);
         assert!(!e.is_active(a));
     }
 
@@ -620,10 +857,36 @@ mod tests {
     fn bank_step_wraps() {
         let (mut e, mut st, _, _, z) = setup();
         let m = mapping(Control::BankStep { delta: 1 }, false);
-        fire(&mut e, &mut st, &m, true, 127);
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, false);
         assert_eq!(st.request_bank, Some(Some(z)));
         st.shown_bank = Some(z);
-        fire(&mut e, &mut st, &m, true, 127);
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, false);
         assert_eq!(st.request_bank, Some(None));
+    }
+
+    #[test]
+    fn ui_controls_get_value_or_press() {
+        let (mut e, mut st, _, _, _) = setup();
+        let mut fires = HashMap::new();
+        let fader = mapping(
+            Control::Ui {
+                key: 7,
+                fader: true,
+            },
+            false,
+        );
+        fire(&mut e, &mut st, &mut fires, &fader, true, 127, true);
+        assert_eq!(fires[&7].value, Some(1.0));
+        let button = mapping(
+            Control::Ui {
+                key: 8,
+                fader: false,
+            },
+            false,
+        );
+        fire(&mut e, &mut st, &mut fires, &button, true, 127, false);
+        assert!(fires[&8].press);
+        fire(&mut e, &mut st, &mut fires, &button, false, 0, false);
+        assert!(fires[&8].press);
     }
 }

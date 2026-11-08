@@ -8,6 +8,8 @@ pub struct Toggle<'a> {
     value: &'a mut bool,
     label: &'a str,
     enabled: bool,
+    /// Zuordenbar über Tastatur/MIDI: (Schlüssel, Kategorie, Ziel).
+    map: Option<(String, String, String)>,
 }
 
 impl<'a> Toggle<'a> {
@@ -16,10 +18,21 @@ impl<'a> Toggle<'a> {
             value,
             label,
             enabled: true,
+            map: None,
         }
     }
     pub fn enabled(mut self, on: bool) -> Self {
         self.enabled = on;
+        self
+    }
+    /// Über Tastatur/MIDI zuordenbar machen.
+    pub fn map(
+        mut self,
+        key: impl Into<String>,
+        category: impl Into<String>,
+        target: impl Into<String>,
+    ) -> Self {
+        self.map = Some((key.into(), category.into(), target.into()));
         self
     }
 }
@@ -42,7 +55,10 @@ impl Widget for Toggle<'_> {
             Sense::hover()
         };
         let (rect, mut resp) = ui.allocate_exact_size(size, sense);
-        if resp.clicked() {
+        let mapped = self.map.is_some_and(|(key, cat, target)| {
+            crate::mapping::button(ui, &resp, &key, *self.value, || (cat, target))
+        });
+        if resp.clicked() || (mapped && self.enabled) {
             *self.value = !*self.value;
             resp.mark_changed();
         }

@@ -115,6 +115,34 @@ impl View for StageView {
                 theme::DANGER,
             );
         }
+        // Geräte im Plan: Tastatur/MIDI schaltet die Auswahl um
+        if let Some((rect, cam)) = self.interaction.view {
+            let show = cx.engine.show();
+            let mut toggle = Vec::new();
+            for f in &show.fixtures {
+                let r = crate::ui::widgets::stage_canvas::fixture_rect(
+                    show,
+                    f.id,
+                    cam.to_screen(crate::ui::widgets::stage_canvas::fixture_pos(show, f.id)),
+                    cam.zoom(),
+                );
+                if !rect.contains_rect(r) {
+                    continue;
+                }
+                let key = format!("stage/fixture/{}", f.id.0);
+                let on = cx.state.selected.contains(&f.id);
+                if crate::mapping::button_rect(ui, r, &key, on, || {
+                    (t("Gerät").to_string(), f.name.clone())
+                }) {
+                    toggle.push(f.id);
+                }
+            }
+            for id in toggle {
+                if !cx.state.selected.remove(&id) {
+                    cx.state.selected.insert(id);
+                }
+            }
+        }
         if let Some(a) = action {
             fixture_menu::apply(cx.engine, cx.state, a);
         }
@@ -290,7 +318,7 @@ impl StageView {
             ui.label(theme::heading_text(t("Gruppen")));
             ui.label(egui::RichText::new("|").color(theme::text_faint()));
             let all: BTreeSet<FixtureId> = show.fixtures.iter().map(|f| f.id).collect();
-            if let Some(a) = group_pill(ui, t("Alle"), &all, &st.selected) {
+            if let Some(a) = group_pill(ui, "groups/all", t("Alle"), &all, &st.selected) {
                 actions.push(a);
             }
             for g in &show.groups {
@@ -318,7 +346,8 @@ impl StageView {
                     }
                     continue;
                 }
-                let pill = PillResult::show(ui, &g.name, &set, &st.selected);
+                let key = format!("groups/{}", g.id.0);
+                let pill = PillResult::show(ui, &key, &g.name, &set, &st.selected);
                 if let Some(a) = pill.action {
                     actions.push(a);
                 }
@@ -431,7 +460,13 @@ fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppSt
         .place(rect, btn)
         .on_hover_text(t("Effekt mit der aktuellen Auswahl aktualisieren"))
         .on_disabled_hover_text(t("Effekt anklicken, dann Geräte ändern"));
-    if r.clicked() && pending {
+    let mapped = crate::mapping::button(ui, &r, "stage/fx_update", pending, || {
+        (
+            t("Bühne").to_string(),
+            t("Effekt mit der aktuellen Auswahl aktualisieren").to_string(),
+        )
+    });
+    if (r.clicked() || mapped) && pending {
         if let Some((scene, fx)) = target {
             let ids = st.selection_order.clone();
             if let Some(f) = e
@@ -447,11 +482,12 @@ fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppSt
 
 fn group_pill(
     ui: &mut egui::Ui,
+    key: &str,
     label: &str,
     set: &BTreeSet<FixtureId>,
     selected: &BTreeSet<FixtureId>,
 ) -> Option<GroupAction> {
-    PillResult::show(ui, label, set, selected).action
+    PillResult::show(ui, key, label, set, selected).action
 }
 
 struct PillResult {
@@ -464,6 +500,7 @@ impl PillResult {
     /// teilweise ausgewählt = farbiger Rand.
     fn show(
         ui: &mut egui::Ui,
+        key: &str,
         label: &str,
         set: &BTreeSet<FixtureId>,
         selected: &BTreeSet<FixtureId>,
@@ -551,8 +588,15 @@ impl PillResult {
         );
 
         let mut action = None;
-        if resp.clicked() {
-            let mods = ui.input(|i| i.modifiers);
+        let mapped = crate::mapping::button(ui, &resp, key, full, || {
+            (t("Gruppe").to_string(), label.to_string())
+        });
+        if resp.clicked() || mapped {
+            let mods = if mapped {
+                egui::Modifiers::NONE
+            } else {
+                ui.input(|i| i.modifiers)
+            };
             action = Some(GroupAction::Select(if mods.command || mods.shift {
                 // hinzufügen bzw. herausnehmen
                 if full {

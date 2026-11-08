@@ -11,8 +11,9 @@ use dmxcraft_core::mapping::{
 use dmxcraft_core::{Engine, Show};
 use eframe::egui::{self, vec2, Align, Align2, Layout, Sense, Ui};
 
-use super::{color, describe, Mapper};
+use super::{color, Mapper};
 use crate::i18n::t;
+use crate::midi_device::{color32, DeviceModel};
 use crate::state::AppState;
 use crate::ui::theme;
 use crate::ui::widgets::dialog::{form, Dialog};
@@ -128,8 +129,7 @@ fn presets(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, 
             ];
             for (c, label) in items {
                 if ui.button(label).clicked() {
-                    ui.ctx()
-                        .data_mut(|d| d.insert_temp(super::pick_id(), Some(c)));
+                    super::pick(ui.ctx(), (c, None));
                     ui.close();
                 }
             }
@@ -147,7 +147,7 @@ fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, ki
         .list(kind)
         .iter()
         .map(|m| {
-            let (cat, target) = describe(show, &m.control);
+            let (cat, target) = super::describe_mapping(show, m);
             let input = match &m.input {
                 Some(i) => i.label(),
                 None => "–".to_string(),
@@ -376,7 +376,7 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
             && m.mode == ButtonMode::Toggle
         {
             f.row(t("Flash-Taste"), |ui| {
-                ui.checkbox(&mut m.flash, "")
+                ui.add(crate::ui::widgets::Toggle::new(&mut m.flash, ""))
                     .on_hover_text(t("Nur aktiv, solange die Taste gedrückt ist"));
             });
         }
@@ -440,6 +440,11 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
     if kind == MapKind::Midi {
         ui.add_space(theme::SP_S);
         section_header(ui, t("MIDI-Ausgang"), |_| {});
+        let models: Vec<(String, DeviceModel)> = mapper
+            .devices
+            .iter()
+            .map(|d| (d.output.clone(), d.model))
+            .collect();
         let edit_on = &mut mapper.win.edit_on;
         form(ui, &format!("mapping_out_{id}"), |f| {
             f.row(t("Gerät"), |ui| {
@@ -472,21 +477,27 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
                 ui.selectable_value(edit_on, false, t("Aus"));
                 ui.selectable_value(edit_on, true, t("An"));
             });
-            let apc = fb.device.to_lowercase().contains("apc");
+            let model = models
+                .iter()
+                .find(|(o, _)| *o == fb.device)
+                .map_or_else(|| DeviceModel::detect(&fb.device), |d| d.1);
             let s = if *edit_on { &mut fb.on } else { &mut fb.off };
             f.row(t("Kanal"), |ui| {
                 combo(
                     ui,
                     ("map_fbch", id, *edit_on),
-                    channel_label(s.channel, apc),
+                    channel_label(s.channel, model),
                     |ui| {
                         for c in 1..=16u8 {
-                            ui.selectable_value(&mut s.channel, c, channel_label(c, apc));
+                            ui.selectable_value(&mut s.channel, c, channel_label(c, model));
                         }
                     },
                 );
             });
             f.row(t("Velocity"), |ui| {
+                if let Some(p) = model.palette() {
+                    palette_button(ui, ("map_pal", id, *edit_on), p, &mut s.velocity);
+                }
                 ui.add(egui::DragValue::new(&mut s.velocity).range(0..=127));
             });
         });
@@ -548,21 +559,67 @@ fn scene_targets(show: &Show, m: &Mapping) -> Vec<(Control, String)> {
     out
 }
 
-/// Kanal der Rückmeldung; beim APC mini mk2 mit Bedeutung.
-fn channel_label(c: u8, apc: bool) -> String {
-    if !apc {
-        return c.to_string();
+/// Kanal der Rückmeldung, bei bekannten Geräten mit Bedeutung.
+fn channel_label(c: u8, model: DeviceModel) -> String {
+    match model.channel_meaning(c) {
+        Some(m) => format!("{c} – {m}"),
+        None => c.to_string(),
     }
-    const BRIGHT: [u8; 7] = [10, 25, 50, 65, 75, 90, 100];
-    const RATE: [&str; 9] = [
-        "1/16", "1/8", "1/4", "1/2", "1/24", "1/16", "1/8", "1/4", "1/2",
-    ];
-    let what = match c {
-        1..=7 => crate::tr!("An, {p} % Helligkeit", p = BRIGHT[usize::from(c - 1)]),
-        8..=11 => crate::tr!("Pulsieren {r}", r = RATE[usize::from(c - 8)]),
-        _ => crate::tr!("Blinken {r}", r = RATE[usize::from(c - 8)]),
-    };
-    format!("{c} – {what}")
+}
+
+/// Farbfeld der gewählten Anschlagstärke; Klick öffnet die Palette des Geräts.
+fn palette_button(
+    ui: &mut Ui,
+    id: impl std::hash::Hash + std::fmt::Debug,
+    palette: &[u32; 128],
+    velocity: &mut u8,
+) {
+    let (rect, resp) = ui.allocate_exact_size(vec2(36.0, 22.0), Sense::click());
+    let c = color32(palette[usize::from(*velocity & 0x7f)]);
+    ui.painter().rect_filled(rect, theme::R_S, c);
+    ui.painter().rect_stroke(
+        rect,
+        theme::R_S,
+        egui::Stroke::new(1.0, theme::border()),
+        egui::StrokeKind::Inside,
+    );
+    let resp = resp.on_hover_text(t("Farbe wählen"));
+    let pid = resp.id;
+    if resp.clicked() {
+        egui::Popup::toggle_id(ui.ctx(), pid);
+    }
+    egui::Popup::menu(&resp)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            const CELL: f32 = 20.0;
+            ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+            egui::Grid::new(ui.make_persistent_id(id))
+                .spacing(vec2(2.0, 2.0))
+                .show(ui, |ui| {
+                    for row in 0..8 {
+                        for col in 0..16 {
+                            let v = (row * 16 + col) as u8;
+                            let (r, cell) =
+                                ui.allocate_exact_size(vec2(CELL, CELL), Sense::click());
+                            ui.painter()
+                                .rect_filled(r, 2, color32(palette[usize::from(v)]));
+                            if v == *velocity || cell.hovered() {
+                                ui.painter().rect_stroke(
+                                    r,
+                                    2,
+                                    egui::Stroke::new(2.0, theme::text()),
+                                    egui::StrokeKind::Inside,
+                                );
+                            }
+                            if cell.on_hover_text(v.to_string()).clicked() {
+                                *velocity = v;
+                                egui::Popup::close_id(ui.ctx(), pid);
+                            }
+                        }
+                        ui.end_row();
+                    }
+                });
+        });
 }
 
 fn combo(
@@ -688,9 +745,9 @@ mod tests {
     }
 
     #[test]
-    fn apc_channel_labels() {
-        assert_eq!(channel_label(3, false), "3");
-        assert!(channel_label(7, true).starts_with("7 – "));
-        assert!(channel_label(16, true).contains("1/2"));
+    fn channel_labels() {
+        assert_eq!(channel_label(3, DeviceModel::Generic), "3");
+        assert!(channel_label(7, DeviceModel::ApcMiniMk2).starts_with("7 – "));
+        assert!(channel_label(16, DeviceModel::ApcMiniMk2).contains("1/2"));
     }
 }

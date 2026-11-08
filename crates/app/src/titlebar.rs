@@ -454,13 +454,23 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             );
         });
         menu::sub(ui, MenuItem::new(t("Mappings")).plain(), |ui| {
-            for (label, icon) in [
-                (t("Tastatur-Mapping"), Icon::Keyboard),
-                (t("MIDI-Mapping"), Icon::Midi),
-                (t("Touch-Mapping"), Icon::Touch),
+            use dmxcraft_core::mapping::MapKind;
+            for (label, icon, kind) in [
+                (t("Tastatur-Mapping"), Icon::Keyboard, MapKind::Keyboard),
+                (t("MIDI-Mapping"), Icon::Midi, MapKind::Midi),
             ] {
-                ui.add(MenuItem::new(label).icon(icon).enabled(false).tooltip(soon));
+                act(
+                    ui,
+                    MenuItem::new(label).icon(icon).enabled(free),
+                    MenuAction::Mapping(kind),
+                );
             }
+            ui.add(
+                MenuItem::new(t("Touch-Mapping"))
+                    .icon(Icon::Touch)
+                    .enabled(false)
+                    .tooltip(soon),
+            );
         });
         menu::sub(ui, MenuItem::new(t("Hilfe")).plain(), |ui| {
             act(

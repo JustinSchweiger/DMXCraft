@@ -42,6 +42,8 @@ pub struct Settings {
     pub mcp_port: u16,
     /// Qualität des 3D-Visualisierers (0 = niedrig … 3 = ultra).
     pub viz_quality: u8,
+    /// Eingerichtete MIDI-Controller (Typ, LED-Ausgang).
+    pub midi_devices: Vec<crate::midi_device::MidiDevice>,
 }
 
 impl Default for Settings {
@@ -63,6 +65,7 @@ impl Default for Settings {
             mcp_enabled: false,
             mcp_port: dmxcraft_mcp::DEFAULT_PORT,
             viz_quality: 1,
+            midi_devices: Vec::new(),
         }
     }
 }

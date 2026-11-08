@@ -48,6 +48,7 @@ impl Mappings {
             mode: ButtonMode::Toggle,
             flash: false,
             feedback: None,
+            name: None,
         });
         id
     }
@@ -97,6 +98,10 @@ pub struct Mapping {
     /// MIDI-Rückmeldung (LEDs am Controller).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feedback: Option<Feedback>,
+    /// Anzeigename (Kategorie, Ziel) bei Bedienelementen der Oberfläche
+    /// ([`Control::Ui`]); andere Ziele werden aus der Show beschriftet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<(String, String)>,
 }
 
 impl Mapping {
@@ -132,6 +137,14 @@ pub enum Control {
         delta: i32,
     },
     Blackout,
+    /// Bedienelement der Oberfläche (Knopf, Regler, Farbfeld …), erkannt
+    /// über einen festen Schlüssel ([`ui_key`]). Das Element reagiert selbst,
+    /// solange es angezeigt wird.
+    Ui {
+        key: u64,
+        /// Regler (Wert) statt Knopf (Drücken).
+        fader: bool,
+    },
     /// Gesamthelligkeit (Wert der Eingabe).
     Master,
     /// Alle Szenen stoppen.
@@ -237,6 +250,14 @@ impl Default for Feedback {
     }
 }
 
+/// Fester Schlüssel eines Bedienelements aus einem Namen wie
+/// „programmer/fader/dimmer/1“ (FNV-1a, unabhängig von Version und Plattform).
+pub fn ui_key(name: &str) -> u64 {
+    name.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
+
 /// Notenname wie in vielen DAWs und Daslight-Listen: 60 = C3, 0 = C-2.
 pub fn note_name(n: u8) -> String {
     const NAMES: [&str; 12] = [
@@ -309,6 +330,13 @@ impl Input {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ui_keys_are_stable() {
+        assert_eq!(ui_key(""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(ui_key("a"), 0xaf63_dc4c_8601_ec8c);
+        assert_ne!(ui_key("go"), ui_key("og"));
+    }
 
     #[test]
     fn note_names() {

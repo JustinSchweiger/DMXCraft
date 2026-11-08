@@ -80,16 +80,19 @@ impl View for ScenePropsView {
             (Tab::Effects, Icon::Fx, t("Effekte")),
             (Tab::Third, Icon::Gear, t("Erweiterte Eigenschaften")),
         ] {
-            if tab_ui
+            let r = tab_ui
                 .add(
                     IconButton::new(icon)
                         .size(32.0)
                         .flat()
                         .active(self.tab == tab),
                 )
-                .on_hover_text(tip)
-                .clicked()
-            {
+                .on_hover_text(tip);
+            let key = format!("scene/tab/{}", tab as u8);
+            let mapped = crate::mapping::button(&tab_ui, &r, &key, self.tab == tab, || {
+                (t("Seitenleiste").to_string(), tip.to_string())
+            });
+            if r.clicked() || mapped {
                 self.tab = tab;
             }
         }
@@ -157,11 +160,14 @@ fn header(ui: &mut egui::Ui, e: &mut Engine, id: SceneId) {
             } else {
                 t("Abspielen")
             };
-            if ui
+            let r = ui
                 .add(IconButton::new(icon).size(30.0).active(active))
-                .on_hover_text(tip)
-                .clicked()
-            {
+                .on_hover_text(tip);
+            let mapped =
+                crate::mapping::button(ui, &r, "scene/play_pause", active && !paused, || {
+                    (t("Szene").to_string(), t("Abspielen / Pause").to_string())
+                });
+            if r.clicked() || mapped {
                 if active {
                     e.toggle_pause(id);
                 } else {
@@ -192,6 +198,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         let mut dim = f32::from(st.dimmer) / 255.0;
         let dim_text = format!("{:.0} %", dim * 100.0);
         if Knob::new(&mut dim, t("Dimmer"), dim_text)
+            .map("scene/knob/dimmer", t("Szene"))
             .color(color)
             .enabled(on)
             .show(ui)
@@ -201,6 +208,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         // Speed logarithmisch: 10 % … 100 % (Mitte) … 1000 %
         let mut sp = ((f32::from(st.speed_pct) / 10.0).log10() / 2.0).clamp(0.0, 1.0);
         if Knob::new(&mut sp, t("Speed"), format!("{} %", st.speed_pct))
+            .map("scene/knob/speed", t("Szene"))
             .color(color)
             .default_value(0.5)
             .enabled(on)
@@ -210,6 +218,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         }
         let mut ph = f32::from(st.phase_deg) / 360.0;
         if Knob::new(&mut ph, t("Phase"), format!("{}°", st.phase_deg))
+            .map("scene/knob/phase", t("Szene"))
             .color(color)
             .default_value(0.0)
             .enabled(on)
@@ -219,6 +228,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         }
         let mut sz = f32::from(st.size_pct) / 200.0;
         if Knob::new(&mut sz, t("Size"), format!("{} %", st.size_pct))
+            .map("scene/knob/size", t("Szene"))
             .color(color)
             .default_value(0.5)
             .enabled(on)
@@ -233,35 +243,42 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     let pos = e.scene_position(id);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
-        if ui
-            .add(IconButton::new(Icon::Prev).enabled(pos.is_some()))
-            .on_hover_text(t("Zum Anfang"))
-            .clicked()
-        {
-            e.seek(id, 0.0);
-        }
-        if ui
-            .add(IconButton::new(Icon::Next).enabled(pos.is_some()))
-            .on_hover_text(t("Zum Ende"))
-            .clicked()
-        {
-            e.seek(id, 1.0);
+        for (to, icon, key, tip) in [
+            (0.0, Icon::Prev, "scene/seek_start", t("Zum Anfang")),
+            (1.0, Icon::Next, "scene/seek_end", t("Zum Ende")),
+        ] {
+            let r = ui
+                .add(IconButton::new(icon).enabled(pos.is_some()))
+                .on_hover_text(tip);
+            let mapped = crate::mapping::button(ui, &r, key, false, || {
+                (t("Szene").to_string(), tip.to_string())
+            });
+            if r.clicked() || (mapped && pos.is_some()) {
+                e.seek(id, to);
+            }
         }
         ui.add_space(theme::SP_XS);
         for (rev, icon, tip) in [
             (true, Icon::PlayBack, t("Rückwärts abspielen")),
             (false, Icon::Play, t("Vorwärts abspielen")),
         ] {
-            if ui
+            let r = ui
                 .add(
                     IconButton::new(icon)
                         .active(st.reverse == rev)
                         .tint(color)
                         .enabled(on),
                 )
-                .on_hover_text(tip)
-                .clicked()
-            {
+                .on_hover_text(tip);
+            let key = if rev {
+                "scene/reverse"
+            } else {
+                "scene/forward"
+            };
+            let mapped = crate::mapping::button(ui, &r, key, st.reverse == rev, || {
+                (t("Szene").to_string(), tip.to_string())
+            });
+            if r.clicked() || (mapped && on) {
                 st.reverse = rev;
             }
         }
@@ -1489,11 +1506,14 @@ fn advanced(
                 (LoopMode::Once, Icon::RepeatOnce, t("X-mal abspielen")),
                 (LoopMode::Loop, Icon::Repeat, t("Endlosschleife")),
             ] {
-                if ui
+                let r = ui
                     .add(IconButton::new(icon).active(loop_mode == mode).tint(color))
-                    .on_hover_text(tip)
-                    .clicked()
-                {
+                    .on_hover_text(tip);
+                let key = format!("scene/loop/{mode:?}");
+                let mapped = crate::mapping::button(ui, &r, &key, loop_mode == mode, || {
+                    (t("Szene").to_string(), tip.to_string())
+                });
+                if r.clicked() || mapped {
                     loop_mode = mode;
                 }
             }
@@ -1510,7 +1530,11 @@ fn advanced(
                 }
             });
             row(ui, t("Am Ende freigeben"), |ui| {
-                ui.add(Toggle::new(&mut st.release_at_end, ""));
+                ui.add(Toggle::new(&mut st.release_at_end, "").map(
+                    "scene/release_at_end",
+                    t("Szene"),
+                    t("Am Ende freigeben"),
+                ));
             });
         });
         ui.add_space(theme::SP_S);
@@ -1532,7 +1556,7 @@ fn advanced(
         }
         ui.add_space(theme::SP_S);
         row(ui, t("Flash-Modus"), |ui| {
-            ui.add(Toggle::new(&mut st.flash, ""))
+            ui.add(Toggle::new(&mut st.flash, "").map("scene/flash", t("Szene"), t("Flash-Modus")))
                 .on_hover_text(t("Läuft nur, solange die Szene gedrückt wird"));
         });
     });

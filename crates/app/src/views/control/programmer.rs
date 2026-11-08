@@ -439,7 +439,7 @@ fn fader(
         .and_then(|t| t.channels.get(usize::from(first.channel)))
         .map(fader_ranges)
         .unwrap_or_default();
-    let ev = Fader::new(value, grp.number, grp.kind)
+    let fader = Fader::new(value, grp.number, grp.kind)
         .ranges(
             ranges,
             ui.data(|d| d.get_temp(ranges_on_id())).unwrap_or(true),
@@ -450,8 +450,20 @@ fn fader(
         .height(height)
         .width(width)
         .hint(grp.name.clone())
-        .fx(assigned)
-        .show(ui);
+        .fx(assigned);
+    let shown = ui.scope(|ui| fader.show(ui));
+    let ev = shown.inner;
+    let key = format!("programmer/fader/{:?}/{}", grp.kind, grp.number);
+    if let Some(v) = crate::mapping::fader(
+        ui,
+        shown.response.rect,
+        &key,
+        f32::from(value) / 255.0,
+        || (t("Programmer").to_string(), grp.name.clone()),
+    ) {
+        set_group(e, layer, grp, (v * 255.0).round() as u8);
+        return;
+    }
     if ev == FaderEvent::ToggleFx {
         if let Some(t) = target {
             toggle_feature(e, t.scene, t.fx, grp.kind);
@@ -592,11 +604,12 @@ fn color_bar(
             ("Weiß", [255, 255, 255]),
         ];
         for (name, c) in PRESETS {
-            if ui
-                .add(Swatch(theme::rgb(c)))
-                .on_hover_text(t(name))
-                .clicked()
-            {
+            let resp = ui.add(Swatch(theme::rgb(c))).on_hover_text(t(name));
+            let key = format!("programmer/color/{name}");
+            let mapped = crate::mapping::button(ui, &resp, &key, rgb == c, || {
+                (t("Farbe").to_string(), t(name).to_string())
+            });
+            if resp.clicked() || mapped {
                 rgb = c;
                 changed = true;
             }
@@ -673,16 +686,19 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
                 t("Beams zentrieren (Pan/Tilt 50 %)"),
             ),
         ] {
-            if ui
+            let resp = ui
                 .add(
                     IconButton::new(icon)
                         .size(34.0)
                         .flat()
                         .enabled(some && !locked),
                 )
-                .on_hover_text(tip)
-                .clicked()
-            {
+                .on_hover_text(tip);
+            let key = format!("programmer/quick/{q:?}");
+            let mapped = crate::mapping::button(ui, &resp, &key, false, || {
+                (t("Programmer").to_string(), tip.to_string())
+            });
+            if resp.clicked() || (mapped && some && !locked) {
                 quick = Some(q);
             }
         }
@@ -691,7 +707,7 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
         }
         tool_separator(ui);
         let any = !layer.map(e).is_empty();
-        if ui
+        let resp = ui
             .add(
                 IconButton::new(Icon::Undo)
                     .caption(t("ALLE"))
@@ -699,9 +715,14 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
                     .flat()
                     .enabled(any && !locked),
             )
-            .on_hover_text(t("Alle Beams zurücksetzen"))
-            .clicked()
-        {
+            .on_hover_text(t("Alle Beams zurücksetzen"));
+        let mapped = crate::mapping::button(ui, &resp, "programmer/reset_all", any, || {
+            (
+                t("Programmer").to_string(),
+                t("Alle Beams zurücksetzen").to_string(),
+            )
+        });
+        if resp.clicked() || (mapped && any && !locked) {
             layer.clear_all(e);
         }
         // nur die Ebene des aktuellen Modus (Live bzw. Edit)
@@ -711,7 +732,7 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
             .filter(|c| st.selected.contains(&c.fixture))
             .copied()
             .collect();
-        if ui
+        let resp = ui
             .add(
                 IconButton::new(Icon::Undo)
                     .caption(t("AUSW."))
@@ -719,9 +740,16 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
                     .flat()
                     .enabled(!sel.is_empty() && !locked),
             )
-            .on_hover_text(t("Ausgewählte Beams zurücksetzen"))
-            .clicked()
-        {
+            .on_hover_text(t("Ausgewählte Beams zurücksetzen"));
+        let some_sel = !sel.is_empty();
+        let mapped =
+            crate::mapping::button(ui, &resp, "programmer/reset_selected", some_sel, || {
+                (
+                    t("Programmer").to_string(),
+                    t("Ausgewählte Beams zurücksetzen").to_string(),
+                )
+            });
+        if resp.clicked() || (mapped && some_sel && !locked) {
             for c in sel {
                 layer.clear(e, c);
             }
@@ -846,7 +874,16 @@ pub(super) fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: 
             }
             _ => {}
         }
-        if resp.clicked() && !locked {
+        let key = format!("programmer/mode/{m:?}");
+        let mapped = crate::mapping::button(ui, &resp, &key, active, || {
+            let name = match m {
+                ProgrammerMode::Edit => t("Edit"),
+                ProgrammerMode::Blind => t("Blind Edit"),
+                ProgrammerMode::Live => t("Live"),
+            };
+            (t("Programmer").to_string(), name.to_string())
+        });
+        if (resp.clicked() || mapped) && !locked {
             // Auge schaltet Blind ein/aus (immer zusammen mit Edit)
             *mode = match (m, *mode) {
                 (ProgrammerMode::Blind, ProgrammerMode::Blind) => ProgrammerMode::Edit,
@@ -961,7 +998,11 @@ fn category_list(
                 },
             );
         }
-        if resp.clicked() {
+        let key = format!("programmer/category/{i}");
+        let mapped = crate::mapping::button(ui, &resp, &key, active, || {
+            (t("Programmer").to_string(), t(label).to_string())
+        });
+        if resp.clicked() || mapped {
             *current = *c;
         }
     }
