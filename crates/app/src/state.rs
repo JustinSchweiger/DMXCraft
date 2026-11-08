@@ -93,6 +93,11 @@ pub struct AppState {
     pub timeline_cursor: f64,
     /// Audiowiedergabe und Wellenformen.
     pub audio: crate::audio::AudioPlayer,
+    /// Audio-Trigger der SUPER SCENES (Hüllkurven, Ereignisse, gedrückte Ziele).
+    pub triggers: crate::audio_triggers::TriggerEngine,
+    /// Ziel eines Audio-Triggers wird gewählt (Szene, Block, Trigger):
+    /// das nächste Alt + Klick geht an ihn statt an die Touch-Oberfläche.
+    pub trigger_pick: Option<(dmxcraft_core::SceneId, u32, u32)>,
     /// Worauf die Entf-Taste unter STEUERN wirkt (zuletzt angeklickt).
     pub focus: Focus,
     /// Betriebsmodus des Programmers.
@@ -188,6 +193,8 @@ impl AppState {
             viewport_busy: false,
             timeline_cursor: 0.0,
             audio: Default::default(),
+            triggers: Default::default(),
+            trigger_pick: None,
             patch: PatchForm {
                 name: String::new(),
                 count: 1,

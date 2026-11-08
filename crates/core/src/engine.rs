@@ -174,6 +174,16 @@ impl Engine {
 
     /// Startet eine Szene (von vorn). Andere Szenen derselben Zone stoppen.
     pub fn activate(&mut self, id: SceneId) {
+        self.start(id, true);
+    }
+
+    /// Startet eine Szene zusätzlich, ohne andere freizugeben (z. B. von
+    /// einem Audio-Trigger, während die SUPER SCENE derselben Bank läuft).
+    pub fn activate_layered(&mut self, id: SceneId) {
+        self.start(id, false);
+    }
+
+    fn start(&mut self, id: SceneId, exclusive: bool) {
         let Some(scene) = self.show.scene(id) else {
             return;
         };
@@ -196,7 +206,7 @@ impl Engine {
             let Some(other) = show.scene(p.scene) else {
                 return false;
             };
-            let target = mode.matches(zone, other.zone);
+            let target = exclusive && mode.matches(zone, other.zone);
             let protected = other.settings.protect.matches(other.zone, zone);
             !target || protected || Self::stop(show, p)
         });
@@ -1065,6 +1075,18 @@ fn lerp(from: u8, to: u8, t: f64) -> u8 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn layered_start_keeps_other_scenes() {
+        let mut show = Show::default();
+        let z = show.zones.first().map(|z| z.id);
+        let a = show.add_scene("A", z, vec![crate::show::Step::new(Vec::new())]);
+        let b = show.add_scene("B", z, vec![crate::show::Step::new(Vec::new())]);
+        let mut e = Engine::new(show);
+        e.activate(a);
+        e.activate_layered(b);
+        assert!(e.is_active(a) && e.is_active(b));
+    }
+
     use super::*;
     use crate::library::builtin_fixture_types;
     use crate::show::{ChannelValue, FixtureId, Step};

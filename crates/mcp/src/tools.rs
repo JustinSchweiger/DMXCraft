@@ -1416,6 +1416,7 @@ fn add_clips(
                         offset_ms: 0,
                         length_ms: length,
                         grid: None,
+                        triggers: Vec::new(),
                     },
                     start,
                     dur,

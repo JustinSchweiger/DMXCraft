@@ -892,10 +892,21 @@ impl eframe::App for DmxCraftApp {
             // Touch-Fernbedienung (Web-App) vor den Zuordnungen auswerten
             self.remote
                 .update(&ctx, cx.engine, cx.state, &self.settings);
+            // Audio-Trigger laufender SUPER SCENES (vor der Zuordnung)
+            let mut triggers = std::mem::take(&mut cx.state.triggers);
+            triggers.update(&ctx, cx.engine, cx.state);
+            cx.state.triggers = triggers;
             self.mapper.end_frame(&ctx, cx.engine, cx.state);
-            // Alt + Klick: Element zur Touch-Oberfläche
+            // Alt + Klick: Element zur Touch-Oberfläche bzw. als Trigger-Ziel
             for p in crate::mapping::take_touch_picks(&ctx) {
-                if !cx.state.locked {
+                if cx.state.locked {
+                    continue;
+                }
+                if let Some(target) = cx.state.trigger_pick.take() {
+                    crate::views::control::audio_trigger_ui::apply_trigger_pick(
+                        cx.engine, cx.state, target, p,
+                    );
+                } else {
                     crate::views::touch::apply_pick(cx.engine, cx.state, p);
                 }
             }

@@ -60,6 +60,9 @@ pub struct AudioPlayer {
     pub limit: f32,
     /// Laufende SUPER SCENES im letzten Frame (zum Erkennen eines Starts).
     running: HashSet<SceneId>,
+    /// Abspielkopf wird gezogen: Ton bis zum Loslassen anhalten (setzt die
+    /// Zeitleiste in jedem Frame, `update` setzt es zurück).
+    pub scrubbing: bool,
 }
 
 impl Default for AudioPlayer {
@@ -77,6 +80,7 @@ impl Default for AudioPlayer {
             fade_ms: 5000,
             limit: 1.0,
             running: HashSet::new(),
+            scrubbing: false,
         }
     }
 }
@@ -215,6 +219,7 @@ impl AudioPlayer {
 
     /// Wiedergabe an die laufenden SUPER SCENES anpassen.
     pub fn update(&mut self, e: &mut Engine, settings: &crate::settings::Settings) {
+        let scrubbing = std::mem::take(&mut self.scrubbing);
         self.fade_ms = settings.audio_fade_ms;
         self.limit = f32::from(settings.audio_limit_pct.clamp(1, 100)) / 100.0;
         if self.tick(e, settings.audio_reset_on_start) && settings.audio_fade_stop {
@@ -240,7 +245,7 @@ impl AudioPlayer {
             let Some(t) = e.timeline_time(scene.id) else {
                 continue;
             };
-            let rate = if e.timeline_running(scene.id) {
+            let rate = if e.timeline_running(scene.id) && !scrubbing {
                 e.speed() * f32::from(scene.settings.speed_pct) / 100.0
             } else {
                 0.0
@@ -331,7 +336,7 @@ fn has_audio(s: &dmxcraft_core::Scene) -> bool {
 
 /// Datei öffnen; aus einer `File` (nicht `BufReader`) erzeugt, damit der
 /// Decoder springen kann (Länge bekannt, „seekable“).
-fn open_decoder(path: &str) -> Option<Decoder<BufReader<File>>> {
+pub(crate) fn open_decoder(path: &str) -> Option<Decoder<BufReader<File>>> {
     Decoder::try_from(File::open(path).ok()?).ok()
 }
 

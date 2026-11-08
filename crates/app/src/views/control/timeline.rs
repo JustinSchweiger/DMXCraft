@@ -1190,6 +1190,10 @@ impl TimelineView {
                 Icon::Magnifier.paint(&fg, ir, theme::text());
             }
         }
+        if head.dragged() {
+            // beim Ziehen kein Ton, erst nach dem Loslassen an der neuen Stelle
+            st.audio.scrubbing = true;
+        }
         if let Some(q) = head.interact_pointer_pos().filter(|_| head.dragged()) {
             let ms = self.snap(self.ms_at(q.x, lanes).max(0.0), tl, &[], 0);
             st.timeline_cursor = ms;
@@ -1763,6 +1767,9 @@ fn paint_clip(
                 ClipContent::Audio { grid: Some(g), .. } => Some(*g),
                 _ => a.grid,
             };
+            if let ClipContent::Audio { triggers, .. } = &c.content {
+                paint_triggers(ui, p, wave, c, *offset_ms, path, triggers, st);
+            }
             if let Some(g) = grid {
                 paint_beats(p, wave, c, *offset_ms, &g);
                 p.with_clip_rect(r.intersect(p.clip_rect())).text(
@@ -1897,6 +1904,49 @@ fn paint_bands(
     }
 }
 
+/// Ereignisse der Trigger als Balken am unteren Rand (eine Zeile je Trigger).
+#[allow(clippy::too_many_arguments)]
+fn paint_triggers(
+    ui: &egui::Ui,
+    p: &egui::Painter,
+    wave: Rect,
+    c: &Clip,
+    offset_ms: u64,
+    path: &str,
+    triggers: &[dmxcraft_core::timeline::AudioTrigger],
+    st: &AppState,
+) {
+    const ROW: f32 = 5.0;
+    let px_per_ms = wave.width() / c.duration_ms.max(1) as f32;
+    let from = offset_ms as f64;
+    let to = from + c.duration_ms as f64;
+    let clip = p.with_clip_rect(wave.intersect(p.clip_rect()));
+    let vis = clip.clip_rect();
+    for (row, tr) in triggers.iter().filter(|t| !t.muted).enumerate() {
+        let Some(events) = st.triggers.events(path, tr, ui.ctx()) else {
+            continue;
+        };
+        let [r, g, b] = theme::ZONE_PALETTE[row % theme::ZONE_PALETTE.len()];
+        let color = Color32::from_rgb(r, g, b);
+        let y1 = wave.bottom() - 1.0 - row as f32 * (ROW + 1.0);
+        let y0 = y1 - ROW;
+        let lead = f64::from(tr.lead_ms);
+        let start = events.partition_point(|e| e.1 - lead < from);
+        for &(a, b) in &events[start..] {
+            let (a, b) = (a - lead, b - lead);
+            if a >= to {
+                break;
+            }
+            let x0 = wave.left() + ((a - from) as f32) * px_per_ms;
+            let x1 = (wave.left() + ((b - from) as f32) * px_per_ms).max(x0 + 1.5);
+            if x1 < vis.left() || x0 > vis.right() {
+                continue;
+            }
+            clip.rect_filled(Rect::from_min_max(pos2(x0, y0), pos2(x1, y1)), 0.0, color);
+        }
+    }
+}
+
 /// Beat-Raster im Block: Downbeats als Linie, Schläge als kurze Striche.
 fn paint_beats(
     p: &egui::Painter,
@@ -1942,6 +1992,7 @@ fn add_audio(tl: &mut Timeline, track: usize, at: u64, path: &str) -> (u32, u64)
             offset_ms: 0,
             length_ms: len,
             grid: None,
+            triggers: Vec::new(),
         },
         at,
         len,

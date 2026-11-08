@@ -5,7 +5,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::audio::AudioGrid;
-use crate::show::SceneId;
+use crate::mapping::Control;
+use crate::show::{ChannelRef, SceneId};
 
 /// Raster der Zeitleiste.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,7 +93,105 @@ pub enum ClipContent {
         /// Korrigiertes Beat-Raster (sonst gilt das erkannte).
         #[serde(default)]
         grid: Option<AudioGrid>,
+        /// Trigger: Ereignisse eines Frequenzbands lösen Ziele aus.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        triggers: Vec<AudioTrigger>,
     },
+}
+
+/// Trigger eines Audio-Blocks: ein gefiltertes Band der Datei; überschreitet
+/// sein Pegel den Schwellwert, wird das Ziel ausgelöst (wie eine Taste).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioTrigger {
+    pub id: u32,
+    pub name: String,
+    /// Durchlassbereich in Hz (`low_hz` ≤ 20: Tiefpass, `high_hz` ≥ 16 000:
+    /// Hochpass).
+    pub low_hz: f32,
+    pub high_hz: f32,
+    /// Schwellwert und Hysterese (0..=1 des Bandpegels).
+    pub threshold: f32,
+    pub hysteresis: f32,
+    /// Mindestabstand zwischen zwei Ereignissen.
+    pub min_gap_ms: u32,
+    /// Mindestdauer eines Ereignisses.
+    pub hold_ms: u32,
+    /// Vorlauf: Ereignis so viel früher auslösen (Trägheit der Geräte).
+    pub lead_ms: u32,
+    /// Ziel (wie bei Tastatur/MIDI) und ggf. feste Kanäle.
+    pub control: Option<Control>,
+    pub channels: Vec<ChannelRef>,
+    /// Ziel nur während des Ereignisses (sonst umschalten).
+    pub flash: bool,
+    pub muted: bool,
+}
+
+impl Default for AudioTrigger {
+    fn default() -> Self {
+        Self::preset(0, TriggerBand::Low)
+    }
+}
+
+/// Voreingestellte Bänder für neue Trigger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TriggerBand {
+    Low,
+    Mid,
+    High,
+}
+
+impl TriggerBand {
+    pub const ALL: [TriggerBand; 3] = [TriggerBand::Low, TriggerBand::Mid, TriggerBand::High];
+
+    pub fn range(self) -> (f32, f32) {
+        match self {
+            TriggerBand::Low => (0.0, 150.0),
+            TriggerBand::Mid => (150.0, 2500.0),
+            TriggerBand::High => (2500.0, 20_000.0),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TriggerBand::Low => "Low",
+            TriggerBand::Mid => "Mid",
+            TriggerBand::High => "High",
+        }
+    }
+}
+
+impl AudioTrigger {
+    pub fn preset(id: u32, band: TriggerBand) -> Self {
+        let (low_hz, high_hz) = band.range();
+        Self {
+            id,
+            name: match band {
+                TriggerBand::Low => "Kick",
+                TriggerBand::Mid => "Snare",
+                TriggerBand::High => "Hi-Hat",
+            }
+            .into(),
+            low_hz,
+            high_hz,
+            threshold: 0.6,
+            hysteresis: 0.15,
+            min_gap_ms: if band == TriggerBand::High { 60 } else { 120 },
+            hold_ms: 80,
+            lead_ms: 0,
+            control: None,
+            channels: Vec::new(),
+            flash: true,
+            muted: false,
+        }
+    }
+
+    /// Voreingestelltes Band, falls der Bereich einem entspricht.
+    pub fn band(&self) -> Option<TriggerBand> {
+        TriggerBand::ALL
+            .into_iter()
+            .find(|b| b.range() == (self.low_hz, self.high_hz))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

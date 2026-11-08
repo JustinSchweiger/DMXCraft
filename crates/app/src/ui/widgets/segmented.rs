@@ -26,6 +26,11 @@ impl<'a, T: PartialEq + Copy> Segmented<'a, T> {
         self.item_width = Some(w);
         self
     }
+    /// Feste Breite je Eintrag (horizontal).
+    pub fn item_width(mut self, w: f32) -> Self {
+        self.item_width = Some(w);
+        self
+    }
     /// Einträge, die gedämpft angezeigt werden (z. B. leere Kategorien).
     #[allow(dead_code)]
     pub fn dimmed(mut self, f: &'a dyn Fn(T) -> bool) -> Self {

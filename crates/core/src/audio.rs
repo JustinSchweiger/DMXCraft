@@ -255,6 +255,126 @@ impl Analyzer {
     }
 }
 
+/// Hüllkurve eines frei gefilterten Bands (für Trigger): `low_hz` ≤ 20 =
+/// nur Tiefpass, `high_hz` ≥ 16 kHz = nur Hochpass, sonst Bandpass.
+pub struct Envelope {
+    frame_len: f64,
+    stages: Vec<Biquad>,
+    sum: f64,
+    n: usize,
+    samples: u64,
+    frames: Vec<f32>,
+}
+
+impl Envelope {
+    pub fn new(sample_rate: u32, low_hz: f32, high_hz: f32) -> Self {
+        let rate = f64::from(sample_rate.max(1000));
+        let (lo, hi) = (f64::from(low_hz), f64::from(high_hz));
+        let mut stages = Vec::new();
+        if lo > 20.0 {
+            for _ in 0..2 {
+                stages.push(Biquad::new(FilterKind::High, lo, 0.707, rate));
+            }
+        }
+        if hi < 16_000.0 {
+            for _ in 0..2 {
+                stages.push(Biquad::new(FilterKind::Low, hi.max(lo + 10.0), 0.707, rate));
+            }
+        }
+        Self {
+            frame_len: rate * FRAME_MS / 1000.0,
+            stages,
+            sum: 0.0,
+            n: 0,
+            samples: 0,
+            frames: Vec::new(),
+        }
+    }
+
+    pub fn push(&mut self, s: f32) {
+        let mut x = f64::from(s);
+        for st in &mut self.stages {
+            x = st.run(x);
+        }
+        self.sum += x * x;
+        self.n += 1;
+        self.samples += 1;
+        if self.samples as f64 >= (self.frames.len() as f64 + 1.0) * self.frame_len {
+            self.flush();
+        }
+    }
+
+    fn flush(&mut self) {
+        if self.n > 0 {
+            self.frames.push((self.sum / self.n as f64).sqrt() as f32);
+        }
+        self.sum = 0.0;
+        self.n = 0;
+    }
+
+    /// Pegel je 10 ms (0..=255, auf das Stück normiert).
+    pub fn finish(mut self) -> Vec<u8> {
+        self.flush();
+        let top = percentile(&self.frames, 0.995).max(1e-6);
+        self.frames
+            .iter()
+            .map(|x| ((x / top).min(1.0) * 255.0).round() as u8)
+            .collect()
+    }
+}
+
+/// Ereignisse (Beginn, Ende in ms) einer Hüllkurve: an, wenn der Pegel den
+/// Schwellwert erreicht (frühestens `min_gap_ms` nach dem letzten Beginn),
+/// aus, wenn er unter Schwellwert − Hysterese fällt; mindestens `hold_ms`
+/// lang.
+pub fn trigger_events(
+    env: &[u8],
+    threshold: f32,
+    hysteresis: f32,
+    min_gap_ms: f64,
+    hold_ms: f64,
+) -> Vec<(f64, f64)> {
+    let on = (threshold.clamp(0.01, 1.0) * 255.0).round() as u8;
+    let off =
+        (((threshold - hysteresis.max(0.0)).clamp(0.0, 1.0) * 255.0).round() as u8).clamp(1, on);
+    let mut out: Vec<(f64, f64)> = Vec::new();
+    let mut start: Option<f64> = None;
+    let mut last_start = f64::NEG_INFINITY;
+    for (i, v) in env.iter().enumerate() {
+        let t = i as f64 * FRAME_MS;
+        match start {
+            None => {
+                if *v >= on && t - last_start >= min_gap_ms {
+                    start = Some(t);
+                    last_start = t;
+                }
+            }
+            Some(s) => {
+                if *v < off {
+                    out.push((s, t.max(s + hold_ms)));
+                    start = None;
+                }
+            }
+        }
+    }
+    if let Some(s) = start {
+        let end = env.len() as f64 * FRAME_MS;
+        out.push((s, end.max(s + hold_ms)));
+    }
+    // Haltezeit darf nicht in das nächste Ereignis reichen
+    for i in 1..out.len() {
+        let next = out[i].0;
+        out[i - 1].1 = out[i - 1].1.min(next - 1.0);
+    }
+    out
+}
+
+/// Ist zum Zeitpunkt `t` (ms) ein Ereignis aktiv? (`events` sortiert)
+pub fn event_at(events: &[(f64, f64)], t: f64) -> Option<usize> {
+    let i = events.partition_point(|e| e.0 <= t);
+    (i > 0 && t < events[i - 1].1).then(|| i - 1)
+}
+
 /// Ganze Sample-Folge auf einmal analysieren.
 pub fn analyze(samples: &[f32], sample_rate: u32) -> AudioAnalysis {
     let mut a = Analyzer::new(sample_rate);
@@ -591,6 +711,58 @@ mod tests {
         let a = analyze(&vec![0.0; RATE as usize * 6], RATE);
         assert!(a.grid.is_none());
         assert!(a.peaks.iter().all(|p| *p == 0));
+    }
+
+    #[test]
+    fn trigger_events_use_threshold_hysteresis_and_gap() {
+        // Pegel: 0, 200 (an), 150 (bleibt an wegen Hysterese), 50 (aus) …
+        let env = [0u8, 200, 150, 50, 0, 210, 0, 220, 0, 0, 0, 0, 230, 0];
+        let ev = trigger_events(&env, 0.6, 0.2, 0.0, 0.0);
+        assert_eq!(ev[0], (10.0, 30.0));
+        assert_eq!(ev.len(), 4);
+        // Mindestabstand 60 ms: Ereignisse bei 50 und 120 ms entfallen
+        let ev = trigger_events(&env, 0.6, 0.2, 60.0, 0.0);
+        let starts: Vec<f64> = ev.iter().map(|e| e.0).collect();
+        assert_eq!(starts, vec![10.0, 70.0]);
+        // Haltezeit verlängert, endet aber vor dem nächsten Ereignis
+        let ev = trigger_events(&env, 0.6, 0.2, 0.0, 100.0);
+        assert_eq!(ev[0], (10.0, 49.0));
+        assert_eq!(event_at(&ev, 20.0), Some(0));
+        assert_eq!(event_at(&ev, 49.5), None);
+    }
+
+    #[test]
+    fn envelope_filters_band() {
+        // 60 Hz und 5 kHz gemischt: Tiefpass sieht nur den Bass
+        let n = RATE as usize * 2;
+        let s: Vec<f32> = (0..n)
+            .map(|i| {
+                let t = i as f64 / f64::from(RATE);
+                let bass = if t < 1.0 { (TAU * 60.0 * t).sin() } else { 0.0 };
+                let hat = if t >= 1.0 {
+                    (TAU * 5000.0 * t).sin()
+                } else {
+                    0.0
+                };
+                (0.5 * (bass + hat)) as f32
+            })
+            .collect();
+        let run = |lo: f32, hi: f32| {
+            let mut e = Envelope::new(RATE, lo, hi);
+            for x in &s {
+                e.push(*x);
+            }
+            e.finish()
+        };
+        let low = run(0.0, 150.0);
+        let high = run(2500.0, 20_000.0);
+        assert!(low[50] > 200 && low[150] < 20, "{} {}", low[50], low[150]);
+        assert!(
+            high[150] > 200 && high[50] < 20,
+            "{} {}",
+            high[150],
+            high[50]
+        );
     }
 
     #[test]

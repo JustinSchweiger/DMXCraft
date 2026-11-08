@@ -609,6 +609,11 @@ impl ScenePropsView {
                 };
                 Some((cid, name, tl.beat_ms()))
             });
+        // Audio-Block: Trigger-Anzeige
+        let trig_cx = block.as_ref().and_then(|(cid, _, _)| {
+            super::audio_trigger_ui::trigger_cx(cx.engine, cx.state, ui.ctx(), id, *cid)
+        });
+        let mut trig_action = super::audio_trigger_ui::TriggerAction::None;
         let mut step_clicked = false;
         let mut toggle = None;
         let mut select = None;
@@ -675,7 +680,15 @@ impl ScenePropsView {
                                     } else if fx.kind == EffectKind::SuperScene {
                                         let mut e = fx.clone();
                                         if let Some(tl) = e.timeline.as_mut() {
-                                            if block_props(ui, tl, block.as_ref(), color, !locked) {
+                                            if block_props(
+                                                ui,
+                                                tl,
+                                                block.as_ref(),
+                                                color,
+                                                !locked,
+                                                trig_cx.as_ref(),
+                                                &mut trig_action,
+                                            ) {
                                                 color_changes.push(e);
                                             }
                                         }
@@ -709,6 +722,15 @@ impl ScenePropsView {
                     }
                 });
         });
+        match (trig_action, block.as_ref()) {
+            (super::audio_trigger_ui::TriggerAction::Pick(tr), Some((cid, _, _))) => {
+                cx.state.trigger_pick = Some((id, *cid, tr));
+            }
+            (super::audio_trigger_ui::TriggerAction::CancelPick, _) => {
+                cx.state.trigger_pick = None;
+            }
+            _ => {}
+        }
         if steps != steps_before && !locked {
             if let Some(sc) = cx.engine.show_mut().scene_mut(id) {
                 for (dst, src) in sc.steps.iter_mut().zip(&steps) {
@@ -991,6 +1013,8 @@ fn block_props(
     block: Option<&(u32, String, f64)>,
     accent: Color32,
     enabled: bool,
+    trig: Option<&super::audio_trigger_ui::TriggerCx>,
+    trig_action: &mut super::audio_trigger_ui::TriggerAction,
 ) -> bool {
     let before = tl.clone();
     let caption = |ui: &mut egui::Ui, s: &str| {
@@ -1033,6 +1057,11 @@ fn block_props(
         // Länge auf ganze Schläge runden
         let beats = (c.duration_ms as f64 / beat).round().max(1.0);
         c.duration_ms = (beats * beat).round() as u64;
+    }
+    if let (Some(tcx), dmxcraft_core::timeline::ClipContent::Audio { triggers, .. }) =
+        (trig, &mut c.content)
+    {
+        super::audio_trigger_ui::triggers_ui(ui, triggers, tcx, accent, enabled, trig_action);
     }
     *tl != before
 }
