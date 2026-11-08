@@ -27,7 +27,12 @@ Alle zuordenbaren Elemente werden farbig markiert:
   * die Kategorien,
   * jeder Fader,
   * die Farbvorgaben.
-* **Bühne:** jedes Gerät im Plan (schaltet die Auswahl um), die Gruppen und der FX-Knopf.
+* **Bühne:**
+  * jedes Gerät im Plan,
+  * die Gruppen,
+  * der FX-Knopf.
+
+  Bei einem Gerät wählst du unter „Ziel“, was die Taste macht: die Auswahl des Geräts umschalten oder einen einzelnen Kanal steuern, z. B. Dimmer, Pan oder Rot. Der Kanal wird als Live-Wert gesetzt, unabhängig davon, was gerade ausgewählt ist. Ein Regler (CC) setzt den Wert direkt. Eine Taste schaltet zwischen 0 und voll um, als Flash-Taste nur solange sie gedrückt ist.
 * **Globale Befehle** über „+“ im Fenster: Blackout, Master, Alle Szenen stoppen, nächste/vorige Bank, ausgewählte Szene.
 
 Ein Klick auf ein markiertes Element löst nichts aus. Er wählt das Element aus bzw. legt eine neue Zuordnung an und wartet auf die Eingabe.
@@ -64,6 +69,9 @@ Regler (Fader, Drehregler) folgen einem MIDI-Regler (CC) direkt. Eine Taste scha
 * Gerät,
 * für die Zustände Aus und An jeweils Kanal und Velocity.
 * Bei bekannten Controllern zeigt die Kanalliste die Bedeutung, und die Velocity lässt sich als Farbe aus der Palette wählen.
+* **Vorschau:** Solange eine Zuordnung gewählt ist, zeigt ihre Taste am Controller den gerade bearbeiteten Zustand (Aus/An).
+
+Die LED einer gelöschten oder umgelegten Zuordnung wird ausgeschaltet. Das gilt auch, wenn alle Zuordnungen gelöscht oder importiert werden.
 
 ## MIDI-Controller einrichten (Einstellungen → MIDI)
 

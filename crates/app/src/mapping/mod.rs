@@ -270,7 +270,29 @@ pub fn describe(show: &Show, c: &Control) -> (String, String) {
             t("Alle Szenen stoppen").to_string(),
         ),
         Control::Ui { .. } => (t("Oberfläche").to_string(), t("Bedienelement").to_string()),
+        Control::Fixture { id } => (
+            t("Gerät").to_string(),
+            show.fixture(*id)
+                .map_or_else(|| t("(gelöscht)").to_string(), |f| f.name.clone()),
+        ),
+        Control::Channel { channel } => (t("Gerät").to_string(), channel_name(show, *channel)),
     }
+}
+
+/// „Gerät: Kanalname“.
+pub fn channel_name(show: &Show, ch: dmxcraft_core::ChannelRef) -> String {
+    let Some(f) = show.fixture(ch.fixture) else {
+        return t_deleted();
+    };
+    let name = show
+        .type_of(f)
+        .and_then(|ty| ty.channels.get(usize::from(ch.channel)))
+        .map_or_else(|| format!("{}", ch.channel + 1), |c| c.name.clone());
+    format!("{}: {}", f.name, name)
+}
+
+fn t_deleted() -> String {
+    crate::i18n::t("(gelöscht)").to_string()
 }
 
 /// Szenen einer Bank in der angezeigten Reihenfolge (ohne ausgeblendete).
@@ -316,6 +338,8 @@ fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, c: &Control) ->
         Control::Blackout => e.blackout(),
         Control::Master => e.master() > 0.0,
         Control::Ui { key, .. } => states.get(key).copied().unwrap_or(false),
+        Control::Fixture { id } => st.selected.contains(id),
+        Control::Channel { channel } => e.live().get(channel).is_some_and(|v| *v > 0),
         Control::BankStep { .. } | Control::StopAll => false,
     }
 }
@@ -412,6 +436,29 @@ fn fire(
                 e.release_all();
             }
         }
+        Control::Fixture { id } => {
+            if pressed && !st.selected.remove(id) {
+                st.selected.insert(*id);
+            }
+        }
+        Control::Channel { channel } => {
+            let ch = *channel;
+            if cc || m.mode == ButtonMode::Value {
+                e.set_live(ch, ((u32::from(value) * 255 + 63) / 127) as u8);
+            } else if m.flash {
+                if pressed {
+                    e.set_live(ch, 255);
+                } else {
+                    e.clear_live_channel(ch);
+                }
+            } else if pressed {
+                if e.live().get(&ch).is_some_and(|v| *v > 0) {
+                    e.clear_live_channel(ch);
+                } else {
+                    e.set_live(ch, 255);
+                }
+            }
+        }
         Control::Ui { key, fader } => {
             let f = ui.entry(*key).or_default();
             if *fader && (cc || m.mode == ButtonMode::Value) {
@@ -454,7 +501,7 @@ fn default_feedback(
 pub struct Mapper {
     pub midi: MidiHub,
     /// Zuletzt gesendete LED-Zustände je MIDI-Zuordnung.
-    sent: HashMap<u32, bool>,
+    sent: HashMap<u32, Sent>,
     /// Gedrückte Tasten (für Loslassen bei Flash).
     held: Vec<u32>,
     /// Zustand des Zuordnungsfensters.
@@ -513,9 +560,37 @@ impl Mapper {
         let stale = show.mappings.keyboard.iter().chain(&show.mappings.midi).any(|m| {
             matches!(m.element(), Control::Scene { target: SceneTarget::Scene { id } } if show.scene(id).is_none())
         });
+        let gone_fixture = |c: Control| match c {
+            Control::Fixture { id }
+            | Control::Channel {
+                channel: dmxcraft_core::ChannelRef { fixture: id, .. },
+            } => show.fixture(id).is_none(),
+            _ => false,
+        };
+        let stale_fixtures = show
+            .mappings
+            .keyboard
+            .iter()
+            .chain(&show.mappings.midi)
+            .any(|m| gone_fixture(m.element()) || gone_fixture(m.control));
         if stale {
             let ids: Vec<SceneId> = show.scenes.iter().map(|s| s.id).collect();
             e.show_mut().mappings.retain_scenes(|id| ids.contains(&id));
+        }
+        if stale_fixtures {
+            let ids: Vec<dmxcraft_core::FixtureId> =
+                e.show().fixtures.iter().map(|f| f.id).collect();
+            let alive = |c: Control| match c {
+                Control::Fixture { id }
+                | Control::Channel {
+                    channel: dmxcraft_core::ChannelRef { fixture: id, .. },
+                } => ids.contains(&id),
+                _ => true,
+            };
+            let maps = &mut e.show_mut().mappings;
+            for list in [&mut maps.keyboard, &mut maps.midi] {
+                list.retain(|m| alive(m.element()) && alive(m.control));
+            }
         }
         // angeklicktes Element: vorhandene Zuordnung wählen oder neue anlegen
         if let (Some(kind), Some(Some((c, name)))) = (
@@ -546,8 +621,12 @@ impl Mapper {
                     if let Some(m) = maps.find_mut(kind, id) {
                         m.flash = flash;
                         m.name = name;
-                        if matches!(c, Control::Master | Control::Ui { fader: true, .. })
-                            && kind == MapKind::Midi
+                        if matches!(
+                            c,
+                            Control::Master
+                                | Control::Channel { .. }
+                                | Control::Ui { fader: true, .. }
+                        ) && kind == MapKind::Midi
                         {
                             m.mode = ButtonMode::Value;
                         }
@@ -711,7 +790,9 @@ impl Mapper {
                         if ev.message == MidiMessage::Cc
                             && matches!(
                                 m.control,
-                                Control::Master | Control::Ui { fader: true, .. }
+                                Control::Master
+                                    | Control::Channel { .. }
+                                    | Control::Ui { fader: true, .. }
                             )
                         {
                             m.mode = ButtonMode::Value;
@@ -728,7 +809,6 @@ impl Mapper {
                     }
                 }
                 st.map_learn = false;
-                self.sent.clear();
             }
             return;
         }
@@ -750,20 +830,19 @@ impl Mapper {
         }
     }
 
-    /// LED-Rückmeldung: geänderte Zustände (bzw. alle nach Geräteverbindung).
+    /// LED-Rückmeldung: geänderte Zustände senden. LEDs gelöschter oder
+    /// umgelegter Zuordnungen werden ausgeschaltet. Im Zuordnungsfenster zeigt
+    /// die gewählte Zuordnung den gerade bearbeiteten Zustand (Vorschau).
     fn feedback(&mut self, e: &Engine, st: &AppState, states: &HashMap<u64, bool>) {
         if std::mem::take(&mut self.midi.new_outputs) {
             self.sent.clear();
         }
-        let maps: Vec<Mapping> = e
-            .show()
-            .mappings
-            .midi
-            .iter()
-            .filter(|m| m.feedback.as_ref().is_some_and(|f| !f.device.is_empty()))
-            .cloned()
-            .collect();
-        for m in maps {
+        let preview = match (st.mapping, st.map_sel) {
+            (Some(MapKind::Midi), Some(id)) => Some((id, self.win.edit_on)),
+            _ => None,
+        };
+        let mut want: HashMap<u32, Sent> = HashMap::new();
+        for m in &e.show().mappings.midi {
             let (
                 Some(fb),
                 Some(Input::Midi {
@@ -773,24 +852,68 @@ impl Mapper {
             else {
                 continue;
             };
-            let on = is_on(e, st, states, &m.control);
-            if self.sent.get(&m.id) == Some(&on) {
+            if fb.device.is_empty() {
                 continue;
             }
+            let on = match preview {
+                Some((id, p)) if id == m.id => p,
+                _ => is_on(e, st, states, &m.control),
+            };
             let s = if on { fb.on } else { fb.off };
-            let status = match message {
-                MidiMessage::Note => 0x90,
-                MidiMessage::Cc => 0xb0,
-            } | (s.channel.clamp(1, 16) - 1);
-            self.midi
-                .send(&fb.device, &[status, *number & 0x7f, s.velocity & 0x7f]);
-            self.sent.insert(m.id, on);
+            want.insert(
+                m.id,
+                Sent {
+                    device: fb.device.clone(),
+                    cc: *message == MidiMessage::Cc,
+                    number: *number & 0x7f,
+                    channel: s.channel.clamp(1, 16),
+                    velocity: s.velocity & 0x7f,
+                },
+            );
+        }
+        // nicht mehr verwendete Tasten ausschalten
+        let gone: Vec<(u32, Sent)> = self
+            .sent
+            .iter()
+            .filter(|(id, s)| want.get(id).is_none_or(|w| !w.same_key(s)))
+            .map(|(id, s)| (*id, s.clone()))
+            .collect();
+        for (id, s) in gone {
+            self.sent.remove(&id);
+            if !want.values().any(|w| w.same_key(&s)) {
+                self.midi.send(&s.device, &s.blank());
+            }
+        }
+        for (id, w) in want {
+            if self.sent.get(&id) != Some(&w) {
+                self.midi.send(&w.device, &w.message());
+                self.sent.insert(id, w);
+            }
         }
     }
+}
 
-    /// Rückmeldung beim nächsten Bild komplett neu senden.
-    pub fn resend(&mut self) {
-        self.sent.clear();
+/// Zuletzt an eine Taste gesendete Rückmeldung.
+#[derive(Clone, Debug, PartialEq)]
+struct Sent {
+    device: String,
+    cc: bool,
+    number: u8,
+    channel: u8,
+    velocity: u8,
+}
+
+impl Sent {
+    fn same_key(&self, o: &Sent) -> bool {
+        self.device == o.device && self.cc == o.cc && self.number == o.number
+    }
+    fn message(&self) -> [u8; 3] {
+        let base = if self.cc { 0xb0 } else { 0x90 };
+        [base | (self.channel - 1), self.number, self.velocity]
+    }
+    /// Taste aus (Kanal 1, Wert 0).
+    fn blank(&self) -> [u8; 3] {
+        [if self.cc { 0xb0 } else { 0x90 }, self.number, 0]
     }
 }
 
@@ -888,5 +1011,35 @@ mod tests {
         assert!(fires[&8].press);
         fire(&mut e, &mut st, &mut fires, &button, false, 0, false);
         assert!(fires[&8].press);
+    }
+
+    #[test]
+    fn channel_mapping_sets_live_value() {
+        let (mut e, mut st, _, _, _) = setup();
+        let ch = dmxcraft_core::ChannelRef {
+            fixture: dmxcraft_core::FixtureId(1),
+            channel: 0,
+        };
+        let m = mapping(Control::Channel { channel: ch }, false);
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, true);
+        assert_eq!(e.live().get(&ch), Some(&255));
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 64, true);
+        assert_eq!(e.live().get(&ch), Some(&129));
+        let m = mapping(Control::Channel { channel: ch }, false);
+        fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, false);
+        assert!(e.live().get(&ch).is_none());
+    }
+
+    #[test]
+    fn feedback_messages() {
+        let s = Sent {
+            device: "APC".into(),
+            cc: false,
+            number: 56,
+            channel: 7,
+            velocity: 21,
+        };
+        assert_eq!(s.message(), [0x96, 56, 21]);
+        assert_eq!(s.blank(), [0x90, 56, 0]);
     }
 }

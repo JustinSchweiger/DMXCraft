@@ -276,9 +276,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/stage.rs": {
-    "mtime": 1794148909.0271223,
-    "seen": 1794149223.6431592,
-    "ast_hash": "e38fc05d9eb7d60c4b8e091f59896ab4",
+    "mtime": 1794150158.8425212,
+    "seen": 1794150220.3249521,
+    "ast_hash": "c7ea0ceb30a5c5fd73a231d3b8685dcf",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/mod.rs": {
@@ -444,9 +444,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/i18n/en.rs": {
-    "mtime": 1794148938.8654642,
-    "seen": 1794149223.6431131,
-    "ast_hash": "aeed912982ca4a262dcdc505652ccb7f",
+    "mtime": 1794150133.3602598,
+    "seen": 1794150220.3249042,
+    "ast_hash": "94b58db1b7c5a5cf18f6429f0020bcfb",
     "semantic_hash": ""
   },
   "crates/app/src/i18n/mod.rs": {
@@ -732,15 +732,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/mapping/mod.rs": {
-    "mtime": 1794149191.0756087,
-    "seen": 1794149223.643119,
-    "ast_hash": "3c678846053d1da16bda3ae9f498f68a",
+    "mtime": 1794150158.722521,
+    "seen": 1794150220.32491,
+    "ast_hash": "f7fadc3d0a3ae5b400a113e6b850bf9d",
     "semantic_hash": ""
   },
   "crates/app/src/mapping/window.rs": {
-    "mtime": 1794149111.7858999,
-    "seen": 1794149223.6431198,
-    "ast_hash": "7b967b12c656fe8168bb01ac4c83ea70",
+    "mtime": 1794150158.7305212,
+    "seen": 1794150220.324911,
+    "ast_hash": "616dba8d610a1b06181fac14796bfc5d",
     "semantic_hash": ""
   },
   "crates/app/src/midi.rs": {
@@ -750,15 +750,15 @@
     "semantic_hash": ""
   },
   "crates/core/src/mapping.rs": {
-    "mtime": 1794148548.3512902,
-    "seen": 1794149223.643191,
-    "ast_hash": "cbba9ac36245118f3125c5d0aaa5cbe1",
+    "mtime": 1794149936.1617413,
+    "seen": 1794150220.3249853,
+    "ast_hash": "d8b3e543a54f568ede63bf0c4aad5344",
     "semantic_hash": ""
   },
   "docs/MAPPING.md": {
-    "mtime": 1794149212.5996094,
-    "seen": 1794149223.6432195,
-    "ast_hash": "381d196521ed64c70a97da09ba41404d",
+    "mtime": 1794150169.5988932,
+    "seen": 1794150220.3250146,
+    "ast_hash": "3e33dd5da7a9792f9eb2c1fc17f94c05",
     "semantic_hash": ""
   },
   "crates/app/src/midi_device.rs": {

@@ -4,7 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::show::{SceneId, ZoneId};
+use crate::show::{ChannelRef, SceneId, ZoneId};
+use crate::FixtureId;
 
 /// Alle Zuordnungen einer Show.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -137,6 +138,14 @@ pub enum Control {
         delta: i32,
     },
     Blackout,
+    /// Gerät im Plan: Auswahl umschalten.
+    Fixture {
+        id: FixtureId,
+    },
+    /// Einzelner Kanal eines Geräts (Live-Wert), unabhängig von der Auswahl.
+    Channel {
+        channel: ChannelRef,
+    },
     /// Bedienelement der Oberfläche (Knopf, Regler, Farbfeld …), erkannt
     /// über einen festen Schlüssel ([`ui_key`]). Das Element reagiert selbst,
     /// solange es angezeigt wird.

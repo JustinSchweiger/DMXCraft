@@ -610,6 +610,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Seitenleiste", "Sidebar"),
     ("beim Verbinden", "on connect"),
     ("– kein Ausgang –", "– no output –"),
+    ("Auswahl umschalten", "Toggle selection"),
+    ("Kanal {n}: {name}", "Channel {n}: {name}"),
     ("Zielpunkt auf dem Boden anklicken", "Click the target point on the floor"),
     ("Ausrichten ({n} Geräte)", "Aim ({n} fixtures)"),
     ("Ausrichten", "Aim"),

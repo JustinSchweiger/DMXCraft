@@ -33,7 +33,7 @@ pub struct WindowState {
     /// Sortierung nach Kategorie absteigend.
     sort_desc: bool,
     /// Bearbeiteter LED-Zustand: an (sonst aus).
-    edit_on: bool,
+    pub(super) edit_on: bool,
     import: Option<(MapKind, Receiver<Option<PathBuf>>)>,
     export: Option<(MapKind, Vec<Mapping>, Receiver<Option<PathBuf>>)>,
 }
@@ -285,7 +285,6 @@ fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, ki
             st.map_sel = None;
             st.map_learn = false;
         }
-        mapper.resend();
     }
 }
 
@@ -343,9 +342,9 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
                 });
             },
         );
-        // Ziel (nur Szenen)
-        if let Control::Scene { .. } = m.control {
-            let options = scene_targets(show, &m);
+        // Ziel (Szenen: welche Szene, Geräte: Auswahl oder einzelner Kanal)
+        {
+            let options = targets(show, &m);
             if options.len() > 1 {
                 f.row(t("Ziel"), |ui| {
                     let current = options
@@ -372,8 +371,10 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
                 }
             });
         });
-        if matches!(m.control, Control::Scene { .. } | Control::Blackout)
-            && m.mode == ButtonMode::Toggle
+        if matches!(
+            m.control,
+            Control::Scene { .. } | Control::Blackout | Control::Channel { .. }
+        ) && m.mode == ButtonMode::Toggle
         {
             f.row(t("Flash-Taste"), |ui| {
                 ui.add(crate::ui::widgets::Toggle::new(&mut m.flash, ""))
@@ -520,19 +521,35 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
         maps.list_mut(kind).retain(|x| x.id != id);
         st.map_sel = None;
         st.map_learn = false;
-        mapper.resend();
     } else if m != before {
         if let Some(slot) = maps.find_mut(kind, id) {
             *slot = m;
         }
-        mapper.resend();
     }
 }
 
-/// Mögliche Ziele einer Szenen-Zuordnung, ausgehend vom angeklickten Element.
-fn scene_targets(show: &Show, m: &Mapping) -> Vec<(Control, String)> {
+/// Mögliche Ziele einer Zuordnung, ausgehend vom angeklickten Element:
+/// bei Szenen die Szene, die Auswahl oder eine Position in der Bank, bei
+/// Geräten die Auswahl oder ein einzelner Kanal.
+fn targets(show: &Show, m: &Mapping) -> Vec<(Control, String)> {
     let scene = |target| Control::Scene { target };
     let mut out = Vec::new();
+    if let Control::Fixture { id } = m.element() {
+        out.push((Control::Fixture { id }, t("Auswahl umschalten").to_string()));
+        if let Some(ty) = show.fixture(id).and_then(|f| show.type_of(f)) {
+            for (i, c) in ty.channels.iter().enumerate() {
+                out.push((
+                    Control::Channel {
+                        channel: dmxcraft_core::ChannelRef {
+                            fixture: id,
+                            channel: i as u16,
+                        },
+                    },
+                    crate::tr!("Kanal {n}: {name}", n = i + 1, name = c.name),
+                ));
+            }
+        }
+    }
     if let Control::Scene {
         target: SceneTarget::Scene { id },
     } = m.element()
@@ -691,7 +708,6 @@ fn poll_files(e: &mut Engine, st: &mut AppState, mapper: &mut Mapper) {
                         }
                         st.map_sel = None;
                         st.message = Some((crate::tr!("{n} Zuordnungen importiert", n = n), false));
-                        mapper.resend();
                     }
                     Err(err) => st.message = Some((err, true)),
                 }

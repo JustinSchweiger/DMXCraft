@@ -115,10 +115,9 @@ impl View for StageView {
                 theme::DANGER,
             );
         }
-        // Geräte im Plan: Tastatur/MIDI schaltet die Auswahl um
+        // Geräte im Plan: zuordenbar (Auswahl umschalten oder einzelner Kanal)
         if let Some((rect, cam)) = self.interaction.view {
             let show = cx.engine.show();
-            let mut toggle = Vec::new();
             for f in &show.fixtures {
                 let r = crate::ui::widgets::stage_canvas::fixture_rect(
                     show,
@@ -126,20 +125,12 @@ impl View for StageView {
                     cam.to_screen(crate::ui::widgets::stage_canvas::fixture_pos(show, f.id)),
                     cam.zoom(),
                 );
-                if !rect.contains_rect(r) {
-                    continue;
-                }
-                let key = format!("stage/fixture/{}", f.id.0);
-                let on = cx.state.selected.contains(&f.id);
-                if crate::mapping::button_rect(ui, r, &key, on, || {
-                    (t("Gerät").to_string(), f.name.clone())
-                }) {
-                    toggle.push(f.id);
-                }
-            }
-            for id in toggle {
-                if !cx.state.selected.remove(&id) {
-                    cx.state.selected.insert(id);
+                if rect.contains_rect(r) {
+                    crate::mapping::target(
+                        ui,
+                        r,
+                        dmxcraft_core::mapping::Control::Fixture { id: f.id },
+                    );
                 }
             }
         }
