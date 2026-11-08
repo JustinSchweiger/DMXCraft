@@ -21,13 +21,15 @@ use crate::i18n::t;
 use crate::profiles::{self, UserProfile};
 use crate::state::AppState;
 use crate::ui::theme;
+use crate::ui::widgets::dialog::FooterButton;
 use crate::ui::widgets::dialog::INPUT_H;
 use crate::ui::widgets::{form, text_field, Dialog, Icon, IconButton, Segmented};
 
 const SIDEBAR_W: f32 = 170.0;
 const TAB_H: f32 = 34.0;
-const WIDTH: f32 = 1040.0;
-const HEIGHT: f32 = 620.0;
+const FOOT_H: f32 = 52.0;
+/// Formulare (Allgemein, Physisch) nicht über die ganze Fensterbreite ziehen.
+const MAX_FORM_W: f32 = 900.0;
 const LIST_W: f32 = 220.0;
 const ROW_H: f32 = 28.0;
 
@@ -104,6 +106,8 @@ pub struct ProfileBuilder {
     file: Option<(FileJob, Receiver<Option<PathBuf>>)>,
     /// Nach dem Anlegen eines Kanals/Modus: Namensfeld fokussieren.
     focus_name: bool,
+    /// Fenster nach vorn holen (beim nächsten Zeichnen).
+    raise: bool,
 }
 
 impl ProfileBuilder {
@@ -113,6 +117,7 @@ impl ProfileBuilder {
 
     /// Anfrage aus Menü oder Bibliothek.
     pub fn request(&mut self, req: BuilderRequest) {
+        self.raise = true;
         let next = match req {
             BuilderRequest::Open => {
                 if !self.open && self.draft == Profile::default() {
@@ -145,45 +150,79 @@ impl ProfileBuilder {
         self.sel_mode = 0;
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, engine: &mut Engine, st: &mut AppState) {
-        if !self.open {
-            return;
-        }
-        if st.locked {
-            self.open = false;
-            return;
-        }
-        self.poll_file(st);
-        if self.pending.is_some() {
-            self.confirm(ctx);
-            return;
-        }
-        let title = if self.dirty() {
-            format!("{} *", t("Profile Builder"))
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
+    pub fn close(&mut self) {
+        self.open = false;
+    }
+
+    /// Fenstertitel (mit * bei ungespeicherten Änderungen).
+    pub fn title(&self) -> String {
+        let name = self.draft.display_name();
+        let base = if name.is_empty() {
+            format!("DMXCraft – {}", t("Profile Builder"))
         } else {
-            t("Profile Builder").to_string()
+            format!("DMXCraft – {} – {name}", t("Profile Builder"))
         };
+        if self.dirty() {
+            format!("{base} *")
+        } else {
+            base
+        }
+    }
+
+    /// Inhalt des eigenen Fensters: Reiter links, Inhalt, Fußzeile.
+    pub fn window(&mut self, root: &mut Ui, engine: &mut Engine, st: &mut AppState) {
+        let ctx = &root.ctx().clone();
+        self.poll_file(st);
+        if std::mem::take(&mut self.raise) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        }
         let busy = self.file.is_some();
-        let mut open = true;
-        let res = Dialog::new(&title)
-            .id("profile_builder")
-            .width(WIDTH)
-            .height(HEIGHT)
-            .flush()
-            .secondary(t("Importieren …"))
-            .secondary(t("Exportieren …"))
-            .cancel(t("Schließen"))
-            .primary(t("Speichern"))
-            .show(ctx, &mut open, |ui, _| {
-                let area = Rect::from_min_size(ui.cursor().min, vec2(WIDTH, HEIGHT));
+        let mut clicked = None;
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(theme::surface()))
+            .show(root, |ui| {
+                let area = ui.max_rect();
                 ui.allocate_rect(area, Sense::hover());
-                let side = Rect::from_min_size(area.min, vec2(SIDEBAR_W, HEIGHT));
+                let foot = Rect::from_min_max(pos2(area.left(), area.bottom() - FOOT_H), area.max);
+                let side = Rect::from_min_max(area.min, pos2(area.left() + SIDEBAR_W, foot.top()));
                 let problems = self.draft.problems().len();
                 sidebar(ui, side, &mut self.tab, problems);
                 let content = Rect::from_min_max(
                     pos2(side.right() + theme::SP_L, area.top() + theme::SP_M),
-                    pos2(area.right() - theme::SP_L, area.bottom() - theme::SP_M),
+                    pos2(area.right() - theme::SP_L, foot.top() - theme::SP_M),
                 );
+                // Fußzeile
+                ui.painter().rect_filled(foot, 0.0, theme::bg());
+                ui.painter().hline(
+                    foot.x_range(),
+                    foot.top() + 0.5,
+                    Stroke::new(1.0, theme::border()),
+                );
+                let mut row = ui.new_child(
+                    egui::UiBuilder::new()
+                        .max_rect(foot.shrink2(vec2(theme::SP_M, 0.0)))
+                        .layout(Layout::right_to_left(Align::Center)),
+                );
+                row.spacing_mut().item_spacing = vec2(theme::SP_S, 0.0);
+                let buttons = [
+                    (t("Speichern"), true, 3),
+                    (t("Schließen"), false, 2),
+                    (t("Exportieren …"), false, 1),
+                    (t("Importieren …"), false, 0),
+                ];
+                for (label, primary, i) in buttons {
+                    let enabled = i >= 2 || !busy;
+                    if row
+                        .add(FooterButton::new(label).primary(primary).enabled(enabled))
+                        .clicked()
+                    {
+                        clicked = Some(i);
+                    }
+                }
                 let mut cui = ui.new_child(
                     egui::UiBuilder::new()
                         .max_rect(content)
@@ -199,7 +238,7 @@ impl ProfileBuilder {
                             .auto_shrink([false, false])
                             .max_height(content.height())
                             .show(&mut cui, |ui| {
-                                ui.set_width(content.width() - theme::SP_S);
+                                ui.set_width((content.width() - theme::SP_S).min(MAX_FORM_W));
                                 match tab {
                                     Tab::General => general(ui, &mut self.draft),
                                     Tab::Physical => physical(ui, &mut self.draft),
@@ -209,17 +248,19 @@ impl ProfileBuilder {
                     }
                 }
             });
-        if !open {
-            self.open = false;
+        // Strg+S speichert
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
+            clicked = Some(3);
         }
-        if res.clicked(0) && !busy {
-            self.file = Some((FileJob::Import, pick_import(ctx)));
+        match clicked {
+            Some(0) => self.file = Some((FileJob::Import, pick_import(ctx))),
+            Some(1) => self.file = Some((FileJob::Export, pick_export(ctx, &self.draft))),
+            Some(2) => self.open = false,
+            Some(3) => self.save(engine, st),
+            _ => {}
         }
-        if res.clicked(1) && !busy {
-            self.file = Some((FileJob::Export, pick_export(ctx, &self.draft)));
-        }
-        if res.clicked(3) {
-            self.save(engine, st);
+        if self.pending.is_some() {
+            self.confirm(ctx);
         }
     }
 
@@ -466,36 +507,36 @@ impl ProfileBuilder {
         });
         ui.add_space(theme::SP_M);
         let ch = &mut p.channels[i];
+        ch.normalize_ranges();
         ui.horizontal(|ui| {
             ui.label(theme::heading_text(t("Funktionen")));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
-                    .add(IconButton::new(Icon::Plus))
-                    .on_hover_text(t("Bereich hinzufügen (teilt den letzten Bereich)"))
+                    .add(IconButton::new(Icon::Plus).enabled(ch.capabilities.len() < 256))
+                    .on_hover_text(t("Bereich hinzufügen"))
                     .clicked()
                 {
-                    ch.split_last();
+                    ch.add_range();
                 }
             });
         });
         ui.add_space(theme::SP_XS);
+        range_bar(ui, ch);
+        ui.add_space(theme::SP_S);
         let count = ch.capabilities.len();
-        let mut remove = None;
-        let name = ch.name.clone();
-        for (ci, cap) in ch.capabilities.iter_mut().enumerate() {
-            if capability_card(ui, (&name, i, ci), cap, count > 1) {
-                remove = Some(ci);
+        let mut action = None;
+        for ci in 0..count {
+            let last = ci + 1 == count;
+            match capability_card(ui, (i, ci), &mut ch.capabilities[ci], last, count > 1) {
+                CardAction::None => {}
+                a => action = Some((ci, a)),
             }
             ui.add_space(theme::SP_XS);
         }
-        if let Some(ci) = remove {
-            let gone = ch.capabilities.remove(ci);
-            // Lücke schließen: vorheriger Bereich übernimmt das Ende
-            if ci > 0 {
-                ch.capabilities[ci - 1].end = gone.end;
-            } else if let Some(first) = ch.capabilities.first_mut() {
-                first.start = gone.start;
-            }
+        match action {
+            Some((ci, CardAction::End(v))) => ch.set_range_end(ci, v),
+            Some((ci, CardAction::Remove)) => ch.remove_range(ci),
+            _ => {}
         }
     }
 
@@ -1173,15 +1214,65 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
 
 // ------------------------------------------------------------ Funktionen
 
-/// Karte für einen DMX-Bereich. Gibt `true` zurück, wenn gelöscht werden soll.
+enum CardAction {
+    None,
+    /// Neues Ende des Bereichs (die folgenden rücken nach).
+    End(u8),
+    Remove,
+}
+
+/// Balken 0–255 mit der Aufteilung in Bereiche.
+fn range_bar(ui: &mut Ui, ch: &ProfileChannel) {
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(rect, theme::R_S as f32, theme::bg());
+    let x = |v: f32| rect.left() + rect.width() * v / 256.0;
+    let mut hover = None;
+    for (i, c) in ch.capabilities.iter().enumerate() {
+        let r = Rect::from_min_max(
+            pos2(x(f32::from(c.start)), rect.top()),
+            pos2(x(f32::from(c.end) + 1.0), rect.bottom()),
+        );
+        let fill = if i % 2 == 0 {
+            theme::accent_dim()
+        } else {
+            theme::raised_hover()
+        };
+        p.rect_filled(r.shrink2(vec2(0.5, 0.0)), 2.0, fill);
+        if r.width() > 34.0 {
+            p.with_clip_rect(r).text(
+                r.center(),
+                Align2::CENTER_CENTER,
+                format!("{}", i + 1),
+                theme::caption(),
+                theme::text_dim(),
+            );
+        }
+        if resp.hover_pos().is_some_and(|h| r.contains(h)) {
+            hover = Some((i, c));
+        }
+    }
+    if let Some((i, c)) = hover {
+        resp.on_hover_text(format!(
+            "{} · {}–{} · {}",
+            i + 1,
+            c.start,
+            c.end,
+            kind_label(c.kind)
+        ));
+    }
+}
+
+/// Karte für einen DMX-Bereich. Der Anfang ergibt sich aus dem vorherigen
+/// Bereich; einstellbar ist nur das Ende.
 fn capability_card(
     ui: &mut Ui,
-    id: (&str, usize, usize),
+    salt: (usize, usize),
     cap: &mut Capability,
+    last: bool,
     removable: bool,
-) -> bool {
-    let mut remove = false;
-    let salt = (id.1, id.2);
+) -> CardAction {
+    let mut action = CardAction::None;
     egui::Frame::new()
         .fill(theme::raised())
         .stroke(Stroke::new(1.0, theme::border()))
@@ -1191,9 +1282,24 @@ fn capability_card(
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.set_height(INPUT_H);
-                ui.add(egui::DragValue::new(&mut cap.start).range(0..=255));
+                ui.add_sized(
+                    vec2(30.0, INPUT_H),
+                    egui::Label::new(
+                        egui::RichText::new(cap.start.to_string()).color(theme::text_dim()),
+                    ),
+                );
                 ui.label(egui::RichText::new("–").color(theme::text_faint()));
-                ui.add(egui::DragValue::new(&mut cap.end).range(0..=255));
+                let mut end = cap.end;
+                let r = ui
+                    .add(egui::DragValue::new(&mut end).range(cap.start..=255))
+                    .on_hover_text(if last {
+                        t("Ende – kleiner als 255 legt für den Rest einen neuen Bereich an")
+                    } else {
+                        t("Ende – die folgenden Bereiche rücken automatisch nach")
+                    });
+                if end != cap.end && (r.changed() || r.lost_focus()) {
+                    action = CardAction::End(end);
+                }
                 ui.add_space(theme::SP_S);
                 let mut kind = cap.kind;
                 ui.scope(|ui| {
@@ -1225,7 +1331,7 @@ fn capability_card(
                         .on_hover_text(t("Bereich löschen"))
                         .clicked()
                     {
-                        remove = true;
+                        action = CardAction::Remove;
                     }
                 });
             });
@@ -1240,7 +1346,7 @@ fn capability_card(
                 );
             });
         });
-    remove
+    action
 }
 
 /// Felder, die vom Typ abhängen (Farbe, Effekt, Slot, Start-/Endwert).

@@ -225,24 +225,104 @@ impl ProfileChannel {
         }
     }
 
-    /// Bereich nach dem letzten teilen: hängt eine neue Funktion an, die die
-    /// obere Hälfte des letzten Bereichs übernimmt.
-    pub fn split_last(&mut self) {
-        let Some(last) = self.capabilities.last_mut() else {
+    /// Bereiche lückenlos machen: der erste beginnt bei 0, jeder weitere
+    /// direkt nach dem vorherigen, der letzte endet bei 255. Jeder Bereich
+    /// umfasst mindestens einen Wert; die Reihenfolge bleibt erhalten.
+    pub fn normalize_ranges(&mut self) {
+        if self.capabilities.is_empty() {
             self.capabilities.push(Capability::default());
-            return;
-        };
-        if last.end <= last.start {
+        }
+        self.capabilities.truncate(256);
+        let n = self.capabilities.len();
+        let mut start: u16 = 0;
+        for (i, c) in self.capabilities.iter_mut().enumerate() {
+            let after = (n - 1 - i) as u16;
+            let end = if i == n - 1 {
+                255
+            } else {
+                u16::from(c.end).clamp(start, 255 - after)
+            };
+            c.start = start as u8;
+            c.end = end as u8;
+            start = end + 1;
+        }
+    }
+
+    /// Ende eines Bereichs setzen. Die folgenden Bereiche rücken nach (der
+    /// nächste beginnt direkt dahinter, zu kleine werden nach oben
+    /// geschoben). Endet der letzte Bereich vor 255, entsteht für den Rest
+    /// automatisch ein neuer Bereich.
+    pub fn set_range_end(&mut self, index: usize, end: u8) {
+        self.normalize_ranges();
+        let n = self.capabilities.len();
+        if index >= n {
             return;
         }
-        let mid = last.start + (last.end - last.start) / 2;
-        let end = last.end;
-        last.end = mid;
-        self.capabilities.push(Capability {
-            start: mid + 1,
-            end,
-            ..Capability::default()
-        });
+        let start = self.capabilities[index].start;
+        if index == n - 1 {
+            if end >= start && end < 255 {
+                self.capabilities[index].end = end;
+                self.capabilities.push(Capability {
+                    start: end + 1,
+                    end: 255,
+                    ..Capability::default()
+                });
+            }
+        } else {
+            self.capabilities[index].end = end.max(start);
+        }
+        self.normalize_ranges();
+    }
+
+    /// Neuen Bereich anhängen: übernimmt die obere Hälfte des letzten
+    /// Bereichs. Ist der letzte nur einen Wert breit, wird stattdessen der
+    /// breiteste Bereich geteilt (der neue steht direkt dahinter).
+    pub fn add_range(&mut self) {
+        self.normalize_ranges();
+        if self.capabilities.len() >= 256 {
+            return;
+        }
+        let width = |c: &Capability| u16::from(c.end) - u16::from(c.start) + 1;
+        let last = self.capabilities.len() - 1;
+        let target = if width(&self.capabilities[last]) >= 2 {
+            last
+        } else {
+            (0..=last)
+                .rev()
+                .max_by_key(|&i| width(&self.capabilities[i]))
+                .unwrap_or(last)
+        };
+        let c = &mut self.capabilities[target];
+        if c.end == c.start {
+            return; // alle 256 Werte einzeln belegt
+        }
+        let end = c.end;
+        let mid = c.start + (c.end - c.start) / 2;
+        c.end = mid;
+        self.capabilities.insert(
+            target + 1,
+            Capability {
+                start: mid + 1,
+                end,
+                ..Capability::default()
+            },
+        );
+        self.normalize_ranges();
+    }
+
+    /// Bereich löschen; der nächste (bzw. beim letzten der vorherige)
+    /// übernimmt die frei gewordenen Werte.
+    pub fn remove_range(&mut self, index: usize) {
+        if self.capabilities.len() <= 1 || index >= self.capabilities.len() {
+            return;
+        }
+        let gone = self.capabilities.remove(index);
+        if index < self.capabilities.len() {
+            self.capabilities[index].start = gone.start;
+        } else if let Some(prev) = self.capabilities.last_mut() {
+            prev.end = 255;
+        }
+        self.normalize_ranges();
     }
 }
 
@@ -1669,6 +1749,74 @@ mod tests {
         p.remove_channel(1);
         assert!(!p.modes[0].channels.contains(&"Dimmer".to_string()));
         assert_eq!(p.problems(), vec![]);
+    }
+
+    fn ranges(c: &ProfileChannel) -> Vec<(u8, u8)> {
+        c.capabilities.iter().map(|c| (c.start, c.end)).collect()
+    }
+
+    #[test]
+    fn ranges_always_cover_0_to_255() {
+        let mut c = ProfileChannel::default();
+        // Ende des einzigen Bereichs auf 100 → Rest wird neuer Bereich
+        c.set_range_end(0, 100);
+        assert_eq!(ranges(&c), [(0, 100), (101, 255)]);
+        // weiter anhängen: immer möglich, teilt den letzten
+        for _ in 0..10 {
+            c.add_range();
+        }
+        assert_eq!(c.capabilities.len(), 12);
+        assert_eq!(c.capabilities[0].start, 0);
+        assert_eq!(c.capabilities.last().unwrap().end, 255);
+        for w in c.capabilities.windows(2) {
+            assert_eq!(u16::from(w[0].end) + 1, u16::from(w[1].start));
+        }
+        // ersten Bereich vergrößern: alle folgenden rücken nach oben
+        let mut c = ProfileChannel::default();
+        c.set_range_end(0, 10);
+        c.set_range_end(1, 20);
+        c.set_range_end(2, 30);
+        assert_eq!(ranges(&c), [(0, 10), (11, 20), (21, 30), (31, 255)]);
+        c.set_range_end(0, 25);
+        assert_eq!(ranges(&c), [(0, 25), (26, 26), (27, 30), (31, 255)]);
+        c.set_range_end(0, 250);
+        assert_eq!(ranges(&c), [(0, 250), (251, 251), (252, 252), (253, 255)]);
+        // kleiner machen: der nächste beginnt früher
+        c.set_range_end(0, 5);
+        assert_eq!(ranges(&c)[..2], [(0, 5), (6, 251)]);
+        // löschen: der nächste übernimmt
+        c.remove_range(1);
+        assert_eq!(ranges(&c), [(0, 5), (6, 252), (253, 255)]);
+        c.remove_range(2);
+        assert_eq!(ranges(&c), [(0, 5), (6, 255)]);
+    }
+
+    #[test]
+    fn add_range_until_every_value_is_used() {
+        let mut c = ProfileChannel::default();
+        for _ in 0..300 {
+            c.add_range();
+        }
+        assert_eq!(c.capabilities.len(), 256);
+        assert!(c
+            .capabilities
+            .iter()
+            .enumerate()
+            .all(|(i, x)| x.start as usize == i && x.end as usize == i));
+    }
+
+    #[test]
+    fn normalize_repairs_gaps() {
+        let mut c = ProfileChannel {
+            capabilities: vec![
+                Capability::default().range(5, 50),
+                Capability::default().range(80, 60),
+                Capability::default().range(100, 120),
+            ],
+            ..ProfileChannel::default()
+        };
+        c.normalize_ranges();
+        assert_eq!(ranges(&c), [(0, 50), (51, 60), (61, 255)]);
     }
 
     #[test]

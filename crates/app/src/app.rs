@@ -69,6 +69,8 @@ pub struct DmxCraftApp {
     mcp: crate::mcp::McpLink,
     /// 3D-Visualisierer.
     viz: crate::viz::VizView,
+    /// Profile Builder (eigenes Fenster).
+    builder: crate::views::profile_builder::ProfileBuilder,
     fullscreen: Fullscreen,
     /// Vollbild beim nächsten Frame umschalten.
     toggle_fullscreen: bool,
@@ -135,6 +137,7 @@ impl DmxCraftApp {
             history: History::default(),
             mcp: crate::mcp::McpLink::default(),
             viz: crate::viz::VizView::default(),
+            builder: Default::default(),
             usb_ports: Vec::new(),
             fullscreen: Fullscreen::default(),
             toggle_fullscreen: false,
@@ -867,6 +870,32 @@ impl eframe::App for DmxCraftApp {
                         });
                     if vctx.input(|i| i.viewport().close_requested()) {
                         state.viz_window = false;
+                    }
+                },
+            );
+        }
+        // Profile Builder im eigenen Fenster
+        if let Some(req) = self.state.builder.take() {
+            self.builder.request(req);
+        }
+        if self.state.locked {
+            self.builder.close();
+        }
+        if self.builder.is_open() {
+            let engine = self.engine.clone();
+            let builder = &mut self.builder;
+            let state = &mut self.state;
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of("dmxcraft_profile_builder"),
+                egui::ViewportBuilder::default()
+                    .with_title(builder.title())
+                    .with_inner_size([1240.0, 800.0])
+                    .with_min_inner_size([900.0, 560.0]),
+                |vctx, _class| {
+                    let mut e = Self::lock(&engine);
+                    builder.window(vctx, &mut e, state);
+                    if vctx.input(|i| i.viewport().close_requested()) {
+                        builder.close();
                     }
                 },
             );

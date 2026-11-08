@@ -311,10 +311,31 @@ impl<'a> Dialog<'a> {
 }
 
 /// Knopf der Fußzeile: feste Mindestbreite, Überschrift-Schrift.
-struct FooterButton<'a> {
+/// Auch für eigene Fenster mit Dialog-Fußzeile (Profile Builder).
+pub struct FooterButton<'a> {
     label: &'a str,
     primary: bool,
     enabled: bool,
+}
+
+impl<'a> FooterButton<'a> {
+    pub fn new(label: &'a str) -> Self {
+        Self {
+            label,
+            primary: false,
+            enabled: true,
+        }
+    }
+
+    pub fn primary(mut self, primary: bool) -> Self {
+        self.primary = primary;
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
 }
 
 impl Widget for FooterButton<'_> {

@@ -830,7 +830,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Wert, solange keine Szene den Kanal setzt", "Value while no scene sets the channel"),
     ("Erkannt als", "Detected as"),
     ("Funktionen", "Capabilities"),
-    ("Bereich hinzufügen (teilt den letzten Bereich)", "Add range (splits the last range)"),
     ("Modus hinzufügen", "Add mode"),
     ("{n} Kan.", "{n} ch."),
     ("{n}-Kanal", "{n}-channel"),
@@ -974,4 +973,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Als Vorlage im Profile Builder …", "Use as template in the Profile Builder …"),
     ("Duplizieren …", "Duplicate …"),
     ("Profil fehlerhaft – im Profile Builder öffnen und prüfen", "Profile has errors – open it in the Profile Builder and check"),
+    ("Bereich hinzufügen", "Add range"),
+    ("Ende – kleiner als 255 legt für den Rest einen neuen Bereich an", "End – less than 255 creates a new range for the rest"),
+    ("Ende – die folgenden Bereiche rücken automatisch nach", "End – the following ranges move along automatically"),
 ];
