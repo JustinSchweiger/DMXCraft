@@ -1200,4 +1200,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Hoher Kontrast", "High contrast"),
     ("Hell", "Light"),
     ("Daslight (hell)", "Daslight (light)"),
+    ("Anpassen", "Customize"),
+    ("Aussehen", "Appearance"),
+    ("Darstellung", "Display"),
+    ("Beim Start", "On startup"),
 ];

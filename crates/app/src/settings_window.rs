@@ -28,6 +28,8 @@ pub const SCALES: [u32; 9] = [60, 75, 90, 100, 110, 125, 150, 175, 200];
 pub enum Tab {
     #[default]
     General,
+    Customize,
+    Startup,
     Outputs,
     Midi,
     Ai,
@@ -35,11 +37,21 @@ pub enum Tab {
 }
 
 impl Tab {
-    const ALL: [Tab; 5] = [Tab::General, Tab::Outputs, Tab::Midi, Tab::Ai, Tab::Project];
+    const ALL: [Tab; 7] = [
+        Tab::General,
+        Tab::Customize,
+        Tab::Startup,
+        Tab::Outputs,
+        Tab::Midi,
+        Tab::Ai,
+        Tab::Project,
+    ];
 
     fn label(self) -> &'static str {
         match self {
             Tab::General => t("Allgemein"),
+            Tab::Customize => t("Anpassen"),
+            Tab::Startup => t("Start"),
             Tab::Outputs => t("Ausgänge"),
             Tab::Midi => t("MIDI"),
             Tab::Ai => t("MCP"),
@@ -50,6 +62,8 @@ impl Tab {
     fn icon(self) -> Icon {
         match self {
             Tab::General => Icon::Settings,
+            Tab::Customize => Icon::Sliders,
+            Tab::Startup => Icon::Play,
             Tab::Outputs => Icon::Levels,
             Tab::Midi => Icon::Midi,
             Tab::Ai => Icon::Robot,
@@ -127,6 +141,8 @@ impl SettingsWindow {
                         ui.set_width(content.width());
                         match *tab {
                             Tab::General => general(ui, cx.settings, &mut ch),
+                            Tab::Customize => customize(ui, cx.settings, &mut ch),
+                            Tab::Startup => startup(ui, cx.settings, &mut ch),
                             Tab::Outputs => {
                                 outputs(ui, cx.settings, cx.engine, cx.usb_ports, &mut ch)
                             }
@@ -311,6 +327,25 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
                 ch.save = true;
             }
         });
+        f.row(t("Instanzname"), |ui| {
+            let r = ui
+                .add(text_field(&mut s.instance_name).desired_width(f32::INFINITY))
+                .on_hover_text(t("Name dieses Rechners, z. B. für Fernsteuerung im Netz"));
+            if r.lost_focus() {
+                ch.save = true;
+            }
+        });
+    });
+    ui.add_space(theme::SP_L);
+    if let Some(p) = Settings::path() {
+        hint(ui, &tr!("Gespeichert in {v}", v = p.display()));
+    }
+}
+
+/// Anpassen: Aussehen und Darstellung.
+fn customize(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
+    section(ui, t("Aussehen"));
+    form(ui, "settings_customize", |f| {
         f.row(t("Theme"), |ui| {
             let current = Theme::from_key(&s.theme);
             let mut picked = current;
@@ -340,16 +375,9 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
                 ch.save = true;
             }
         });
-        f.row(t("Instanzname"), |ui| {
-            let r = ui
-                .add(text_field(&mut s.instance_name).desired_width(f32::INFINITY))
-                .on_hover_text(t("Name dieses Rechners, z. B. für Fernsteuerung im Netz"));
-            if r.lost_focus() {
-                ch.save = true;
-            }
-        });
     });
-    ui.add_space(theme::SP_S);
+    ui.add_space(theme::SP_M);
+    section(ui, t("Darstellung"));
     ch.save |= ui
         .add(Toggle::new(
             &mut s.wrap_scenes,
@@ -368,8 +396,11 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
             "Aus: schlichte Schienen; die Bezeichnung erscheint weiter beim Bewegen",
         ))
         .changed();
-    ui.add_space(theme::SP_M);
-    section(ui, t("Startup"));
+}
+
+/// Start: was beim Programmstart passiert.
+fn startup(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
+    section(ui, t("Beim Start"));
     ch.save |= ui
         .add(Toggle::new(
             &mut s.open_last_show,
@@ -388,10 +419,6 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
             t("Beim Start nach Updates suchen"),
         ))
         .changed();
-    ui.add_space(theme::SP_L);
-    if let Some(p) = Settings::path() {
-        hint(ui, &tr!("Gespeichert in {v}", v = p.display()));
-    }
 }
 
 fn outputs(
