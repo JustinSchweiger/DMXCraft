@@ -1244,4 +1244,11 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Auf 100 %", "Set to 100 %"),
     ("Zurückgesetzt: ein MIDI-Fader wirkt erst wieder, wenn er den aktuellen Wert erreicht.", "Reset: a MIDI fader only takes effect again once it reaches the current value."),
     ("Ton ausfaden ({s} s)", "Fade out sound ({s} s)"),
+    ("Standard", "Default"),
+    ("Höchstlautstärke", "Maximum volume"),
+    ("Ton-Master 100 % (und ein MIDI-Fader ganz oben) entspricht dieser Lautstärke – z. B. 30 % zum Testen, ohne die Systemlautstärke zu ändern.", "Sound master 100 % (and a MIDI fader at the top) equals this volume – e.g. 30 % for testing without changing the system volume."),
+    ("Start einer SUPER SCENE setzt den Ton-Master auf die Höchstlautstärke", "Starting a SUPER SCENE resets the sound master to the maximum volume"),
+    ("Ausfaden (Standard)", "Fade out (default)"),
+    ("Dauer für „Ton ausfaden“, solange diese SUPER SCENE läuft. 0 = Standard aus den Einstellungen.", "Duration of “Fade out sound” while this SUPER SCENE is running. 0 = default from the settings."),
+    ("Höchstlautstärke {p} % (Einstellungen > Allgemein > Ton)", "Maximum volume {p} % (Settings > General > Sound)"),
 ];

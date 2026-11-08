@@ -473,10 +473,28 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     });
     ui.add_space(theme::SP_L);
     section(ui, t("Ton"));
+    form(ui, "settings_audio_limit", |f| {
+        f.row(t("Höchstlautstärke"), |ui| {
+            let r = ui.add(
+                egui::DragValue::new(&mut s.audio_limit_pct)
+                    .range(1..=100)
+                    .speed(0.5)
+                    .suffix(" %"),
+            );
+            if r.lost_focus() || r.drag_stopped() {
+                ch.save = true;
+            }
+        });
+    });
+    hint(
+        ui,
+        t("Ton-Master 100 % (und ein MIDI-Fader ganz oben) entspricht dieser Lautstärke – z. B. 30 % zum Testen, ohne die Systemlautstärke zu ändern."),
+    );
+    ui.add_space(theme::SP_S);
     ch.save |= ui
         .add(Toggle::new(
             &mut s.audio_reset_on_start,
-            t("Start einer SUPER SCENE setzt den Ton-Master auf 100 %"),
+            t("Start einer SUPER SCENE setzt den Ton-Master auf die Höchstlautstärke"),
         ))
         .changed();
     hint(
@@ -485,7 +503,7 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     );
     ui.add_space(theme::SP_S);
     form(ui, "settings_audio", |f| {
-        f.row(t("Ausfaden"), |ui| {
+        f.row(t("Ausfaden (Standard)"), |ui| {
             let mut secs = s.audio_fade_ms as f32 / 1000.0;
             let r = ui.add(
                 egui::DragValue::new(&mut secs)

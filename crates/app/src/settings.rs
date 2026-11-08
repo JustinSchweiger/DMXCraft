@@ -48,6 +48,9 @@ pub struct Settings {
     pub remote_pin: String,
     /// Start einer SUPER SCENE setzt den Ton-Master auf 100 %.
     pub audio_reset_on_start: bool,
+    /// Höchstlautstärke in Prozent: Ton-Master 100 % entspricht diesem Wert
+    /// (z. B. zum Testen leiser, ohne die Systemlautstärke zu ändern).
+    pub audio_limit_pct: u8,
     /// Dauer von „Ton ausfaden“ in ms.
     pub audio_fade_ms: u32,
     /// Nach dem Ausfaden die SUPER SCENES mit Ton stoppen.
@@ -81,6 +84,7 @@ impl Default for Settings {
             remote_pin: String::new(),
             audio_reset_on_start: true,
             audio_fade_ms: 5000,
+            audio_limit_pct: 100,
             audio_fade_stop: false,
             viz_quality: 1,
             midi_devices: Vec::new(),

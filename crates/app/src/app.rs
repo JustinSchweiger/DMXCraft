@@ -366,7 +366,10 @@ impl DmxCraftApp {
             }
             MenuAction::AudioMaster(v) => self.state.audio.set_master(v),
             MenuAction::AudioMute => self.state.audio.mute = !self.state.audio.mute,
-            MenuAction::AudioFade => self.state.audio.start_fade(),
+            MenuAction::AudioFade => {
+                let e = Self::lock(&self.engine);
+                self.state.audio.start_fade(&e);
+            }
             MenuAction::ToggleLock => {
                 if self.state.locked {
                     self.lock_dialog = Some(LockDialog {
@@ -794,7 +797,8 @@ impl eframe::App for DmxCraftApp {
                 mute: self.state.audio.mute,
                 pickup: self.state.audio.pickup,
                 fading: self.state.audio.fading(),
-                fade_ms: self.settings.audio_fade_ms,
+                fade_ms: self.state.audio.fade_ms_for(&Self::lock(&self.engine)),
+                limit: self.state.audio.limit,
             },
         };
         let mut actions = Vec::new();

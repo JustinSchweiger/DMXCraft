@@ -56,6 +56,8 @@ pub struct AudioPlayer {
     fade: Option<(f32, Instant, Duration)>,
     /// Dauer für „Ton ausfaden“ (aus den Einstellungen).
     pub fade_ms: u32,
+    /// Höchstlautstärke 0–1: Ton-Master 100 % entspricht diesem Wert.
+    pub limit: f32,
     /// Laufende SUPER SCENES im letzten Frame (zum Erkennen eines Starts).
     running: HashSet<SceneId>,
 }
@@ -73,18 +75,19 @@ impl Default for AudioPlayer {
             pickup_last: None,
             fade: None,
             fade_ms: 5000,
+            limit: 1.0,
             running: HashSet::new(),
         }
     }
 }
 
 impl AudioPlayer {
-    /// Wirksame Lautstärke (Master, stumm).
+    /// Wirksame Lautstärke (Master × Höchstlautstärke, stumm).
     pub fn gain(&self) -> f32 {
         if self.mute {
             0.0
         } else {
-            self.master
+            self.master * self.limit
         }
     }
 
@@ -112,10 +115,27 @@ impl AudioPlayer {
         self.set_master(v);
     }
 
-    /// Gleichmäßig auf 0 ausblenden.
-    pub fn start_fade(&mut self) {
+    /// Dauer von „Ton ausfaden“: die einer laufenden SUPER SCENE mit Ton,
+    /// sonst die aus den Programmeinstellungen.
+    pub fn fade_ms_for(&self, e: &Engine) -> u32 {
+        e.show()
+            .scenes
+            .iter()
+            .filter(|s| s.settings.audio_fade_ms > 0 && e.is_active(s.id) && has_audio(s))
+            .map(|s| s.settings.audio_fade_ms)
+            .next()
+            .unwrap_or(self.fade_ms)
+    }
+
+    /// Gleichmäßig auf 0 ausblenden (Dauer siehe [`Self::fade_ms_for`]).
+    pub fn start_fade(&mut self, e: &Engine) {
+        let ms = self.fade_ms_for(e);
+        self.start_fade_ms(ms);
+    }
+
+    fn start_fade_ms(&mut self, ms: u32) {
         if self.master > 0.0 {
-            let ms = u64::from(self.fade_ms.max(100));
+            let ms = u64::from(ms.max(100));
             self.fade = Some((self.master, Instant::now(), Duration::from_millis(ms)));
         }
     }
@@ -196,20 +216,14 @@ impl AudioPlayer {
     /// Wiedergabe an die laufenden SUPER SCENES anpassen.
     pub fn update(&mut self, e: &mut Engine, settings: &crate::settings::Settings) {
         self.fade_ms = settings.audio_fade_ms;
+        self.limit = f32::from(settings.audio_limit_pct.clamp(1, 100)) / 100.0;
         if self.tick(e, settings.audio_reset_on_start) && settings.audio_fade_stop {
             // ausgeblendet: SUPER SCENES mit Ton stoppen
             let with_audio: Vec<SceneId> = e
                 .show()
                 .scenes
                 .iter()
-                .filter(|s| {
-                    s.timeline().is_some_and(|tl| {
-                        tl.tracks
-                            .iter()
-                            .flat_map(|t| &t.clips)
-                            .any(|c| matches!(c.content, ClipContent::Audio { .. }))
-                    })
-                })
+                .filter(|s| has_audio(s))
                 .map(|s| s.id)
                 .filter(|id| e.is_active(*id))
                 .collect();
@@ -303,6 +317,16 @@ impl AudioPlayer {
             p.sink.play();
         }
     }
+}
+
+/// SUPER SCENE mit Audioblöcken?
+fn has_audio(s: &dmxcraft_core::Scene) -> bool {
+    s.timeline().is_some_and(|tl| {
+        tl.tracks
+            .iter()
+            .flat_map(|t| &t.clips)
+            .any(|c| matches!(c.content, ClipContent::Audio { .. }))
+    })
 }
 
 /// Datei öffnen; aus einer `File` (nicht `BufReader`) erzeugt, damit der
@@ -438,8 +462,9 @@ mod tests {
         };
         assert_eq!(a.gain(), 0.0);
         a.mute = false;
-        a.fade_ms = 100;
-        a.start_fade();
+        a.limit = 0.3;
+        assert!((a.gain() - 0.3).abs() < 1e-6, "Höchstlautstärke begrenzt");
+        a.start_fade_ms(100);
         assert!(a.fading());
         a.set_master(0.5);
         assert!(!a.fading(), "Eingriff beendet das Ausfaden");

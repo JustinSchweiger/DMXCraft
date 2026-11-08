@@ -774,7 +774,7 @@ fn fire(
         },
         Control::AudioFade => {
             if pressed {
-                st.audio.start_fade();
+                st.audio.start_fade(e);
             }
         }
         Control::Group { id } => {

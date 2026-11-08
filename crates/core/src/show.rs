@@ -531,6 +531,8 @@ pub struct SceneSettings {
     /// Phasen-Versatz beim Start/Stoppen (für Effekte).
     pub phase_in_ms: u32,
     pub phase_out_ms: u32,
+    /// SUPER SCENE: Dauer von „Ton ausfaden“ in ms (0 = Programmeinstellung).
+    pub audio_fade_ms: u32,
 }
 
 impl Default for SceneSettings {
@@ -553,6 +555,7 @@ impl Default for SceneSettings {
             flash: false,
             phase_in_ms: 0,
             phase_out_ms: 0,
+            audio_fade_ms: 0,
         }
     }
 }

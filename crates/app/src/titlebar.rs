@@ -46,6 +46,8 @@ pub struct AudioInfo {
     pub pickup: bool,
     pub fading: bool,
     pub fade_ms: u32,
+    /// Höchstlautstärke 0–1 (Ton-Master 100 % entspricht diesem Wert).
+    pub limit: f32,
 }
 
 /// Update-Hinweis in der Titelleiste.
@@ -272,7 +274,7 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
     let pct = if a.mute {
         t("stumm").to_string()
     } else {
-        format!("{:.0} %", a.master * 100.0)
+        format!("{:.0} %", a.master * a.limit * 100.0)
     };
     let color = if a.mute {
         theme::DANGER
@@ -339,6 +341,13 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
         theme::text(),
     );
     let mut tip = t("Ton-Master – nur die Wiedergabe von DMXCraft, nicht die Systemlautstärke.\nDoppelklick: 100 %, Mausrad: fein einstellen").to_string();
+    if a.limit < 0.995 {
+        tip.push_str("\n\n");
+        tip.push_str(&tr!(
+            "Höchstlautstärke {p} % (Einstellungen > Allgemein > Ton)",
+            p = format!("{:.0}", a.limit * 100.0)
+        ));
+    }
     if a.pickup {
         tip.push_str("\n\n");
         tip.push_str(t(

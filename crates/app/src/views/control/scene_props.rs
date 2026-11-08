@@ -185,6 +185,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         return;
     };
     let mut st = scene.settings.clone();
+    let super_scene = scene.timeline().is_some();
     let color = scene
         .color
         .map_or_else(|| theme::zone_color(e.show(), scene.zone), theme::rgb);
@@ -346,6 +347,26 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     row(ui, t("Phase out"), &mut |ui| {
         time_field(ui, "phase_out", &mut st.phase_out_ms, on, false, color);
     });
+    // SUPER SCENE: eigene Dauer für „Ton ausfaden“ (0 = Programmeinstellung)
+    if super_scene {
+        ui.horizontal(|ui| {
+            ui.set_min_height(32.0);
+            ui.label(egui::RichText::new(t("Ton ausfaden")).color(theme::text_dim()))
+                .on_hover_text(t(
+                    "Dauer für „Ton ausfaden“, solange diese SUPER SCENE läuft. 0 = Standard aus den Einstellungen.",
+                ));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                time_field(ui, "audio_fade", &mut st.audio_fade_ms, on, false, color);
+                if st.audio_fade_ms == 0 {
+                    ui.label(
+                        egui::RichText::new(t("Standard"))
+                            .small()
+                            .color(theme::text_faint()),
+                    );
+                }
+            });
+        });
+    }
 
     // Änderungen übernehmen (nur wenn sich etwas geändert hat → kein „*“)
     if let Some(scene) = e.show().scene(id) {
