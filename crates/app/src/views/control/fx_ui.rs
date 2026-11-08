@@ -456,7 +456,7 @@ fn curve_graph(
     p.add(Shape::line(pts, Stroke::new(1.5, theme::canvas_dim())));
     // aktueller Wert des ersten Beams
     let x = (cycles * f64::from(c.repeat) + f64::from(c.phase)).rem_euclid(1.0) as f32;
-    p.circle_filled(to(x, c.level(x, 0)), 4.0, Color32::WHITE);
+    p.circle_filled(to(x, c.level(x, 0)), 4.0, theme::handle());
     if c.shape != CurveShape::Custom || !enabled {
         return;
     }
@@ -486,7 +486,7 @@ fn curve_graph(
         p.circle_stroke(
             at,
             if hot { 6.0 } else { 4.5 },
-            Stroke::new(1.5, if hot { accent } else { Color32::WHITE }),
+            Stroke::new(1.5, if hot { accent } else { theme::handle() }),
         );
     }
     if let Some(i) = remove.filter(|_| c.custom.len() > 2) {
@@ -747,12 +747,12 @@ fn move_editor(
             let hot = r.hovered() || r.dragged();
             if sel == Some(i) {
                 p.circle_filled(at, 5.5, accent);
-                p.circle_stroke(at, 5.5, Stroke::new(1.5, Color32::WHITE));
+                p.circle_stroke(at, 5.5, Stroke::new(1.5, theme::handle()));
             } else {
                 p.circle_stroke(
                     at,
                     4.5,
-                    Stroke::new(1.5, if hot { accent } else { Color32::WHITE }),
+                    Stroke::new(1.5, if hot { accent } else { theme::handle() }),
                 );
             }
             // Nummer neben dem Punkt
@@ -779,7 +779,7 @@ fn move_editor(
     select_point(ui, id, sel);
     // aktuelle Lage der Beams
     for (i, q) in positions.iter().enumerate() {
-        p.circle_filled(to(*q), if i == 0 { 4.5 } else { 3.0 }, Color32::WHITE);
+        p.circle_filled(to(*q), if i == 0 { 4.5 } else { 3.0 }, theme::handle());
     }
 }
 

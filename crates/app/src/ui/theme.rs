@@ -28,8 +28,7 @@ pub struct Palette {
     pub fixture_bar: Color32,
     /// Helles Theme (egui-Grundstil hell, farbige Schrift wird abgedunkelt).
     pub light: bool,
-    /// Hintergrund der Arbeitsflächen (Bühnenansicht, Effekt-Felder). Bei
-    /// hellen Themes dunkel – Licht sieht man auf einer dunklen Bühne.
+    /// Hintergrund der Arbeitsflächen (Bühnenansicht, Effekt-Felder).
     pub canvas: Color32,
 }
 
@@ -179,7 +178,7 @@ pub const LIGHT: Palette = Palette {
     text_faint: c(0x93, 0x9b, 0xa3),
     fixture_bar: c(0xd6, 0xdc, 0xe2),
     light: true,
-    canvas: c(0x1d, 0x22, 0x28),
+    canvas: c(0xdf, 0xe3, 0xe7),
 };
 
 /// Daslight: Farben der Daslight-Oberfläche (aus dem Profile Builder
@@ -198,7 +197,7 @@ pub const DASLIGHT: Palette = Palette {
     text_faint: c(0x96, 0x96, 0x96),
     fixture_bar: c(0xde, 0xde, 0xde),
     light: true,
-    canvas: c(0x26, 0x28, 0x2b),
+    canvas: c(0xe7, 0xe7, 0xe7),
 };
 
 /// Wählbare Themes.
@@ -343,7 +342,7 @@ pub fn canvas() -> Color32 {
 /// Rasterlinien auf der Arbeitsfläche.
 pub fn canvas_line() -> Color32 {
     if is_light() {
-        c(0x3a, 0x40, 0x48)
+        c(0xb4, 0xb9, 0xbf)
     } else {
         border()
     }
@@ -351,7 +350,7 @@ pub fn canvas_line() -> Color32 {
 /// Linien/Bahnen auf der Arbeitsfläche.
 pub fn canvas_dim() -> Color32 {
     if is_light() {
-        c(0xa6, 0xad, 0xb5)
+        c(0x5d, 0x63, 0x6a)
     } else {
         text_dim()
     }
@@ -359,10 +358,34 @@ pub fn canvas_dim() -> Color32 {
 /// Hilfslinien auf der Arbeitsfläche.
 pub fn canvas_faint() -> Color32 {
     if is_light() {
-        c(0x6c, 0x73, 0x7b)
+        c(0x95, 0x9b, 0xa2)
     } else {
         text_faint()
     }
+}
+/// Griffe und Markierungen auf der Arbeitsfläche (hell auf dunkel, dunkel
+/// auf hell).
+pub fn handle() -> Color32 {
+    if is_light() {
+        c(0x2a, 0x2e, 0x33)
+    } else {
+        Color32::WHITE
+    }
+}
+/// Farbe einer Lampe auf der Arbeitsfläche. `col` ist die Lichtfarbe schon
+/// mit der Helligkeit verrechnet (aus = schwarz). Auf dunklem Grund passt
+/// das so; auf hellem Grund wäre „aus“ ein schwarzer Fleck – dort geht es
+/// von einem hellen Grau (aus) zur vollen Farbe (an).
+pub fn lamp(col: Color32) -> Color32 {
+    if !is_light() {
+        return col;
+    }
+    let (r, g, b) = (f32::from(col.r()), f32::from(col.g()), f32::from(col.b()));
+    let l = r.max(g).max(b) / 255.0;
+    let full = |x: f32| if l > 0.0 { x / l } else { 0.0 };
+    let off = [0xc9 as f32, 0xcd as f32, 0xd2 as f32];
+    let mix = |o: f32, x: f32| (o * (1.0 - l) + full(x) * l).clamp(0.0, 255.0) as u8;
+    Color32::from_rgb(mix(off[0], r), mix(off[1], g), mix(off[2], b))
 }
 /// Farbige Schrift (Zonen-/Szenenfarbe) lesbar machen: auf hellen Themes
 /// abgedunkelt, sonst unverändert.

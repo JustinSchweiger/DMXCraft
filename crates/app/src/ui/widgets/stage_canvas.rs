@@ -731,7 +731,12 @@ pub fn paint_effects(
                 let pos = c + dir * spread * 0.25 + Vec2::new(0.0, -phase * spread * 0.6);
                 let rad = size * (0.35 + phase * 0.5);
                 let alpha = (out * (1.0 - phase) * 70.0) as u8;
-                p.circle_filled(pos, rad, Color32::from_white_alpha(alpha));
+                let fog = if theme::is_light() {
+                    Color32::from_black_alpha(alpha / 2)
+                } else {
+                    Color32::from_white_alpha(alpha)
+                };
+                p.circle_filled(pos, rad, fog);
             }
         }
     }
@@ -883,6 +888,7 @@ fn paint_fixture(
         .copied()
         .max_by(|a, b| a.1.total_cmp(&b.1))
         .unwrap_or((Color32::BLACK, 0.0));
+    let c0 = theme::lamp(c0);
     let n = colors.len().max(1);
     match shape {
         PlanShape::Round => {
@@ -898,6 +904,7 @@ fn paint_fixture(
             let (cw, ch) = (r.width() / side as f32, r.height() / side as f32);
             for i in 0..side * side {
                 let (col, _) = colors.get(i).copied().unwrap_or((c0, l0));
+                let col = theme::lamp(col);
                 let cell = Rect::from_min_size(
                     Pos2::new(
                         r.left() + cw * (i % side) as f32,
@@ -930,7 +937,11 @@ fn paint_fixture(
                     )
                 };
                 let seg = if n > 1 { seg.shrink(0.5) } else { seg };
-                p.add(egui::Shape::convex_polygon(quad(seg), *col, Stroke::NONE));
+                p.add(egui::Shape::convex_polygon(
+                    quad(seg),
+                    theme::lamp(*col),
+                    Stroke::NONE,
+                ));
             }
             p.add(egui::Shape::closed_line(quad(r), stroke));
         }

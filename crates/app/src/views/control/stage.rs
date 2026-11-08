@@ -253,7 +253,7 @@ fn mapping_handles(
     for i in 0..4 {
         p.add(egui::Shape::dashed_line(
             &[corners[i], corners[(i + 1) % 4]],
-            Stroke::new(1.5, Color32::WHITE),
+            Stroke::new(1.5, theme::handle()),
             5.0,
             4.0,
         ));
@@ -295,7 +295,11 @@ fn mapping_handles(
         p.rect_filled(
             egui::Rect::from_center_size(*c, Vec2::splat(8.0)),
             1.0,
-            if hot { theme::accent() } else { Color32::WHITE },
+            if hot {
+                theme::accent()
+            } else {
+                theme::handle()
+            },
         );
     }
     // Drehgriff über der oberen Kante
@@ -307,7 +311,7 @@ fn mapping_handles(
     } else {
         top - dir * 22.0
     };
-    p.line_segment([top, knob], Stroke::new(1.0, Color32::WHITE));
+    p.line_segment([top, knob], Stroke::new(1.0, theme::handle()));
     let r = ui.interact(
         egui::Rect::from_center_size(knob, Vec2::splat(16.0)),
         id.with("rotate"),
@@ -324,7 +328,11 @@ fn mapping_handles(
     p.circle_filled(
         knob,
         5.0,
-        if hot { theme::accent() } else { Color32::WHITE },
+        if hot {
+            theme::accent()
+        } else {
+            theme::handle()
+        },
     );
     *m != before
 }
