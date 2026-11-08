@@ -173,7 +173,12 @@ impl Fader {
         p.text(
             pos2(outer.center().x, y + NUM_H * 0.5),
             egui::Align2::CENTER_CENTER,
-            self.number.to_string(),
+            // 0: virtueller Kanal (z. B. Dimmer eines Farbgeräts ohne Dimmer)
+            if self.number == 0 {
+                "V".to_string()
+            } else {
+                self.number.to_string()
+            },
             theme::heading_font(),
             theme::text(),
         );

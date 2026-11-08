@@ -444,6 +444,13 @@ impl FixtureType {
         self.channels.iter().any(|c| c.kind == kind)
     }
 
+    /// Farbgerät ohne eigenen Dimmer-Kanal: bekommt einen virtuellen Dimmer
+    /// ([`crate::ChannelRef::VIRTUAL_DIMMER`]), der die Farbkanäle skaliert.
+    pub fn needs_virtual_dimmer(&self) -> bool {
+        !self.channels.iter().any(|c| c.kind.is_htp())
+            && self.channels.iter().any(|c| c.kind.is_color_intensity())
+    }
+
     pub fn display_name(&self) -> String {
         format!(
             "{} {} ({}, {} Kan.)",

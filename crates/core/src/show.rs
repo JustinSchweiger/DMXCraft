@@ -208,6 +208,24 @@ pub struct ChannelRef {
     pub channel: u16,
 }
 
+impl ChannelRef {
+    /// Kanalnummer des virtuellen Dimmers (Geräte mit Farbkanälen, aber ohne
+    /// eigenen Dimmer). Er wird wie ein Kanal gespeichert und gemischt, aber
+    /// nicht ausgegeben: Er skaliert die Farbkanäle des Geräts.
+    pub const VIRTUAL_DIMMER: u16 = u16::MAX;
+
+    pub fn virtual_dimmer(fixture: FixtureId) -> Self {
+        Self {
+            fixture,
+            channel: Self::VIRTUAL_DIMMER,
+        }
+    }
+
+    pub fn is_virtual(self) -> bool {
+        self.channel == Self::VIRTUAL_DIMMER
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelValue {
     pub fixture: FixtureId,
@@ -819,6 +837,14 @@ impl Show {
 
     pub fn type_of(&self, fixture: &Fixture) -> Option<&FixtureType> {
         self.fixture_type(&fixture.type_key)
+    }
+
+    /// Virtueller Dimmer eines Geräts, falls es einen braucht.
+    pub fn virtual_dimmer(&self, id: FixtureId) -> Option<ChannelRef> {
+        let f = self.fixture(id)?;
+        self.type_of(f)?
+            .needs_virtual_dimmer()
+            .then(|| ChannelRef::virtual_dimmer(id))
     }
 
     pub fn channel_def(&self, ch: ChannelRef) -> Option<&ChannelDef> {

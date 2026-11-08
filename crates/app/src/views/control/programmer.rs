@@ -86,6 +86,23 @@ pub fn fader_groups(e: &Engine, st: &AppState) -> Vec<FaderGroup> {
         let Some(ty) = e.show().type_of(f) else {
             continue;
         };
+        // Farbgeräte ohne eigenen Dimmer: virtueller Dimmer (skaliert die Farben)
+        if ty.needs_virtual_dimmer() {
+            let ch = ChannelRef::virtual_dimmer(f.id);
+            match groups
+                .iter_mut()
+                .find(|g| g.type_key == f.type_key && g.number == 0)
+            {
+                Some(g) => g.channels.push(ch),
+                None => groups.push(FaderGroup {
+                    name: t("Dimmer (virtuell)").to_string(),
+                    kind: ChannelKind::Dimmer,
+                    number: 0,
+                    type_key: f.type_key.clone(),
+                    channels: vec![ch],
+                }),
+            }
+        }
         for (i, def) in ty.channels.iter().enumerate() {
             let ch = ChannelRef {
                 fixture: f.id,
@@ -426,8 +443,10 @@ fn fader(
 ) {
     let first = grp.channels[0];
     let active = layer.map(e).contains_key(&first);
-    // nicht gespeicherte Kanäle stehen auf 0
-    let value = layer.get(e, first).unwrap_or(0);
+    // nicht gespeicherte Kanäle stehen auf 0, der virtuelle Dimmer auf voll
+    let value = layer
+        .get(e, first)
+        .unwrap_or(if first.is_virtual() { 255 } else { 0 });
     // FX-Symbol, solange ein Feature-Effekt angeklickt ist
     let target: Option<FxTarget> = ui.data(|d| d.get_temp(fx_target_id()));
     let assigned = target.as_ref().map(|t| t.kinds.contains(&grp.kind));

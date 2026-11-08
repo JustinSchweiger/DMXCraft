@@ -537,6 +537,34 @@ impl Engine {
 
     /// Intensitätskanal für den Szenen-Dimmer: Dimmer, bei Geräten ohne
     /// Dimmer-Kanal die Farbkanäle.
+    /// Farbkanäle von Geräten mit virtuellem Dimmer mit dessen Wert skalieren
+    /// (Verhältnis der Farben bleibt erhalten, 255 = unverändert).
+    fn apply_virtual_dimmers(show: &Show, values: &mut HashMap<ChannelRef, u8>) {
+        for f in &show.fixtures {
+            let Some(dim) = values.get(&ChannelRef::virtual_dimmer(f.id)).copied() else {
+                continue;
+            };
+            if dim == 255 {
+                continue;
+            }
+            let Some(ty) = show.type_of(f) else {
+                continue;
+            };
+            for (i, def) in ty.channels.iter().enumerate() {
+                if !def.kind.is_color_intensity() {
+                    continue;
+                }
+                let ch = ChannelRef {
+                    fixture: f.id,
+                    channel: i as u16,
+                };
+                if let Some(v) = values.get_mut(&ch) {
+                    *v = ((u32::from(*v) * u32::from(dim) + 127) / 255) as u8;
+                }
+            }
+        }
+    }
+
     fn is_intensity(show: &Show, ch: ChannelRef) -> bool {
         let Some(def) = show.channel_def(ch) else {
             return false;
@@ -785,6 +813,9 @@ impl Engine {
                     };
                     values.insert(ch, def.default);
                 }
+                if ty.needs_virtual_dimmer() {
+                    values.insert(ChannelRef::virtual_dimmer(f.id), 255);
+                }
             }
         }
 
@@ -890,6 +921,10 @@ impl Engine {
                 *slot = *v;
             }
         }
+
+        // 5b) Virtuelle Dimmer: Farbkanäle anteilig herunterregeln. Die
+        // gespeicherten Werte bleiben unverändert, nur die Ausgabe wird skaliert.
+        Self::apply_virtual_dimmers(show, &mut values);
 
         // 6) Master / Blackout
         let master = if self.blackout { 0.0 } else { self.master };
@@ -998,7 +1033,10 @@ impl Engine {
 
         // 5) In den Frame schreiben
         for f in &show.fixtures {
-            for (ch, v) in values.iter().filter(|(ch, _)| ch.fixture == f.id) {
+            for (ch, v) in values
+                .iter()
+                .filter(|(ch, _)| ch.fixture == f.id && !ch.is_virtual())
+            {
                 frame.set(usize::from(f.universe), f.address + ch.channel, *v);
             }
         }
@@ -1013,6 +1051,9 @@ impl Engine {
 
     /// Aktueller Ausgabewert eines Gerätekanals (für Fader-Anzeigen).
     pub fn output_value(&self, frame: &DmxFrame, ch: ChannelRef) -> Option<u8> {
+        if ch.is_virtual() {
+            return None;
+        }
         let f = self.show.fixture(ch.fixture)?;
         frame.get(usize::from(f.universe), f.address + ch.channel)
     }
@@ -1047,6 +1088,42 @@ mod tests {
         let a = s.add_fixture("A", "generic/drgb-4ch", 0, 1).unwrap();
         let b = s.add_fixture("B", "generic/rgb-3ch", 1, 10).unwrap();
         (s, a, b)
+    }
+
+    #[test]
+    fn virtual_dimmer_scales_colors_and_keeps_ratio() {
+        let (s, a, b) = setup();
+        assert!(s.virtual_dimmer(b).is_some());
+        assert!(s.virtual_dimmer(a).is_none(), "eigener Dimmer");
+        let mut e = Engine::new(s);
+        let r = ChannelRef {
+            fixture: b,
+            channel: 0,
+        };
+        let g = ChannelRef {
+            fixture: b,
+            channel: 1,
+        };
+        e.set_live(r, 200);
+        e.set_live(g, 100);
+        let out = |e: &Engine| {
+            let f = e.render_frame();
+            (f.get(1, 10).unwrap(), f.get(1, 11).unwrap())
+        };
+        assert_eq!(out(&e), (200, 100), "ohne Dimmerwert: unverändert");
+        e.set_live(ChannelRef::virtual_dimmer(b), 128);
+        assert_eq!(out(&e), (100, 50));
+        e.set_live(ChannelRef::virtual_dimmer(b), 0);
+        assert_eq!(out(&e), (0, 0));
+        // gespeicherte Farbwerte bleiben erhalten
+        assert_eq!(e.live().get(&r), Some(&200));
+        e.set_live(ChannelRef::virtual_dimmer(b), 255);
+        assert_eq!(out(&e), (200, 100));
+        // virtueller Kanal wird nicht ausgegeben (kein Überlauf der Adresse)
+        assert_eq!(
+            e.output_value(&e.render_frame(), ChannelRef::virtual_dimmer(b)),
+            None
+        );
     }
 
     #[test]

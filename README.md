@@ -19,6 +19,8 @@ günstige USB-DMX-Kabel (Open DMX / FTDI) aus – ein Kabel je Universum.
 | Merge: HTP für Dimmer, LTP für alles andere | ✅ |
 | Programmer (Live-Fader, Farbwähler) → als Szene/Schritt speichern | ✅ |
 | Master, Blackout, Speed | ✅ |
+| Virtueller Dimmer für Farbgeräte ohne Dimmer-Kanal (skaliert die Farbe, Werte bleiben erhalten) | ✅ |
+| Tastatur- und MIDI-Zuordnung mit LED-Rückmeldung (siehe `docs/MAPPING.md`) | ✅ |
 | DMX-Monitor (512 Kanäle pro Universum) | ✅ |
 | Oberfläche auf Deutsch und Englisch, Themes Dunkelblau und Grau | ✅ |
 | Show-Datei (JSON) laden/speichern | ✅ |
@@ -27,7 +29,7 @@ günstige USB-DMX-Kabel (Open DMX / FTDI) aus – ein Kabel je Universum.
 | Daslight DVC Gold | ❌ verschlüsselt, nicht ansprechbar (siehe `dvc_gold.rs`) |
 | Gerätebibliothek: 650+ Geräte aus der Open Fixture Library und 1.781 aus QLC+, eigene OFL- und QLC+-Dateien importieren | ✅ |
 | Installer für Linux/macOS/Windows, Auto-Update | ✅ |
-| Effekt-Generator, 3D-Ansicht, MIDI | ❌ geplant |
+| Effekt-Generator, 3D-Ansicht | ✅ |
 
 ## Installieren
 

@@ -612,6 +612,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("– kein Ausgang –", "– no output –"),
     ("Auswahl umschalten", "Toggle selection"),
     ("Kanal {n}: {name}", "Channel {n}: {name}"),
+    ("Dimmer (virtuell)", "Dimmer (virtual)"),
     ("Zielpunkt auf dem Boden anklicken", "Click the target point on the floor"),
     ("Ausrichten ({n} Geräte)", "Aim ({n} fixtures)"),
     ("Ausrichten", "Aim"),
