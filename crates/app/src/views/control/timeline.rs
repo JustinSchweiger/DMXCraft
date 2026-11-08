@@ -1247,11 +1247,7 @@ impl TimelineView {
         }
         // Klick setzt die Abspielposition; Ziehen (Mauszeiger verschwindet):
         // hoch/runter zoomt, links/rechts scrollt
-        let resp = ui
-            .interact(r, ui.scope_id().with("ruler"), Sense::click_and_drag())
-            .on_hover_text(t(
-                "Klick: Position setzen · Ziehen: hoch/runter zoomen, links/rechts scrollen",
-            ));
+        let resp = ui.interact(r, ui.scope_id().with("ruler"), Sense::click_and_drag());
         // Abspielkopf (Dreieck) bleibt greifbar und liegt über dem Lineal
         let cx = self.x_at(st.timeline_cursor, lanes);
         let head = ui.interact(
