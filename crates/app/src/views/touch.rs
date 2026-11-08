@@ -35,6 +35,8 @@ use crate::views::{View, ViewCtx};
 pub const UNIT: f32 = 72.0;
 /// Abstand zwischen Elementen.
 const GAP: f32 = 6.0;
+/// Rand um die Seite (damit oben/links nichts abgeschnitten wird).
+const PAD: f32 = 10.0;
 /// Breite der Bearbeiten-Leiste rechts.
 const PANEL_W: f32 = 300.0;
 /// Rasterschritte (Bildpunkte bei 100 %).
@@ -76,6 +78,8 @@ pub struct TouchView {
     /// Ansichtsgröße (1.0 = 100 %).
     zoom: f32,
     drag: Option<Drag>,
+    /// Auswahlrechteck: Startpunkt.
+    marquee: Option<Pos2>,
     rename_page: Option<(u32, String)>,
     rename_focus: bool,
     /// Gedrückte Schaltflächen (für Loslassen).
@@ -89,6 +93,7 @@ impl Default for TouchView {
         Self {
             zoom: 1.0,
             drag: None,
+            marquee: None,
             rename_page: None,
             rename_focus: false,
             held: Vec::new(),
@@ -96,6 +101,26 @@ impl Default for TouchView {
             image_dialog: None,
         }
     }
+}
+
+/// Nur dieses Element auswählen.
+fn select_only(st: &mut AppState, id: u32) {
+    st.touch_sel = Some(id);
+    st.touch_multi = vec![id];
+}
+
+/// Element zur Auswahl hinzufügen bzw. entfernen (Umschalt/Strg + Klick).
+fn toggle_selected(st: &mut AppState, id: u32) {
+    if let Some(pos) = st.touch_multi.iter().position(|i| *i == id) {
+        st.touch_multi.remove(pos);
+    } else {
+        st.touch_multi.push(id);
+    }
+    st.touch_sel = if st.touch_multi.contains(&id) {
+        Some(id)
+    } else {
+        st.touch_multi.first().copied()
+    };
 }
 
 /// Zuordnung, mit der ein Element auslöst (wie eine Taste).
@@ -346,9 +371,32 @@ impl TouchView {
         let right = page.items.iter().map(|i| i.x + i.w).fold(0.0, f32::max) + 2.0;
         let bottom = page.items.iter().map(|i| i.y + i.h).fold(0.0, f32::max) + 2.0;
         let avail = ui.available_size();
-        let size = vec2((right * u).max(avail.x), (bottom * u).max(avail.y));
-        let (area, bg) = ui.allocate_exact_size(size, Sense::click());
-        let origin = area.min;
+        let size = vec2(
+            (right * u + 2.0 * PAD).max(avail.x),
+            (bottom * u + 2.0 * PAD).max(avail.y),
+        );
+        let (area, bg) = ui.allocate_exact_size(
+            size,
+            if editing {
+                Sense::click_and_drag()
+            } else {
+                Sense::click()
+            },
+        );
+        let origin = area.min + vec2(PAD, PAD);
+        // Auswahl bereinigen: nur Elemente dieser Seite, Hauptauswahl enthalten
+        {
+            let st = &mut *cx.state;
+            st.touch_multi
+                .retain(|id| page.items.iter().any(|i| i.id == *id));
+            match st.touch_sel {
+                Some(s) if !st.touch_multi.contains(&s) => st.touch_multi = vec![s],
+                None => st.touch_multi.clear(),
+                _ => {}
+            }
+        }
+        let mods = ui.input(|i| i.modifiers);
+        let additive = mods.shift || mods.command;
         let p = ui.painter().clone();
 
         // Hintergrund der Seite
@@ -390,8 +438,12 @@ impl TouchView {
                 }
             }
         }
-        if editing && bg.clicked() {
+        if editing && bg.clicked() && !additive {
             cx.state.touch_sel = None;
+            cx.state.touch_multi.clear();
+        }
+        if editing && bg.drag_started() {
+            self.marquee = bg.interact_pointer_pos();
         }
 
         let item_rect = |i: &TouchItem| {
@@ -402,8 +454,9 @@ impl TouchView {
         };
         let states: HashMap<u64, bool> = crate::mapping::ui_states(ui.ctx());
         let mut changes: Vec<TouchItem> = Vec::new();
-        let mut remove = None;
-        let mut duplicate = None;
+        let mut remove: Vec<u32> = Vec::new();
+        let mut duplicate: Vec<u32> = Vec::new();
+        let multi = cx.state.touch_multi.clone();
         for item in &page.items {
             let rect = item_rect(item);
             let tex = item
@@ -424,7 +477,7 @@ impl TouchView {
                     false,
                     tex.as_ref(),
                 );
-                let sel = cx.state.touch_sel == Some(item.id);
+                let sel = multi.contains(&item.id);
                 if sel || resp.hovered() {
                     p.rect_stroke(
                         rect.expand(2.0),
@@ -453,34 +506,56 @@ impl TouchView {
                 }
                 if hresp.drag_started() {
                     self.drag = Some(Drag::Resize { id: item.id });
-                    cx.state.touch_sel = Some(item.id);
+                    select_only(cx.state, item.id);
                 } else if resp.drag_started() {
                     let grab = resp
                         .interact_pointer_pos()
                         .map_or(vec2(0.0, 0.0), |p| p - rect.min);
                     self.drag = Some(Drag::Move { id: item.id, grab });
-                    cx.state.touch_sel = Some(item.id);
+                    // in einer Mehrfachauswahl: alle zusammen verschieben
+                    if !sel {
+                        select_only(cx.state, item.id);
+                    }
                 }
                 if resp.clicked() {
-                    cx.state.touch_sel = Some(item.id);
+                    if additive {
+                        toggle_selected(cx.state, item.id);
+                    } else {
+                        select_only(cx.state, item.id);
+                    }
                 }
+                if resp.secondary_clicked() && !sel {
+                    select_only(cx.state, item.id);
+                }
+                // Kontextmenü wirkt auf die ganze Auswahl, wenn das Element dazugehört
+                let group: Vec<u32> = if sel && multi.len() > 1 {
+                    multi.clone()
+                } else {
+                    vec![item.id]
+                };
                 menu::context(&resp, |ui| {
                     menu::begin(ui);
-                    menu::title(ui, &item_title(item));
-                    target_entry(ui, cx.engine.show(), item);
+                    if group.len() > 1 {
+                        menu::title(ui, &tr!("{n} Elemente", n = group.len()));
+                    } else {
+                        menu::title(ui, &item_title(item));
+                        target_entry(ui, cx.engine.show(), item);
+                    }
                     menu::separator(ui);
                     if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
-                        duplicate = Some(item.id);
+                        duplicate = group.clone();
                     }
                     if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash)) {
-                        remove = Some(item.id);
+                        remove = group.clone();
                     }
                     menu::separator(ui);
                     let mut c = item.color;
                     if swatch_row(ui, &mut c, true) {
-                        let mut i = item.clone();
-                        i.color = c;
-                        changes.push(i);
+                        for i in page.items.iter().filter(|i| group.contains(&i.id)) {
+                            let mut i = i.clone();
+                            i.color = c;
+                            changes.push(i);
+                        }
                         ui.close();
                     }
                 });
@@ -501,14 +576,29 @@ impl TouchView {
         if let Some(d) = self.drag {
             let pointer = ui.input(|i| i.pointer.interact_pos());
             let released = ui.input(|i| i.pointer.any_released());
-            let preview = match (d, pointer) {
+            let preview: Option<Vec<TouchItem>> = match (d, pointer) {
                 (Drag::Move { id, grab }, Some(pos)) => {
                     page.items.iter().find(|i| i.id == id).map(|it| {
                         let tl = (pos - grab - origin) / u;
-                        let mut n = it.clone();
-                        n.x = snap_to(tl.x).max(0.0);
-                        n.y = snap_to(tl.y).max(0.0);
-                        n
+                        let group: Vec<&TouchItem> = page
+                            .items
+                            .iter()
+                            .filter(|i| i.id == id || cx.state.touch_multi.contains(&i.id))
+                            .collect();
+                        // Versatz des gezogenen Elements, die Gruppe bleibt im Bereich
+                        let min_x = group.iter().map(|i| i.x).fold(f32::MAX, f32::min);
+                        let min_y = group.iter().map(|i| i.y).fold(f32::MAX, f32::min);
+                        let dx = (snap_to(tl.x) - it.x).max(-min_x);
+                        let dy = (snap_to(tl.y) - it.y).max(-min_y);
+                        group
+                            .into_iter()
+                            .map(|i| {
+                                let mut n = i.clone();
+                                n.x = (n.x + dx).max(0.0);
+                                n.y = (n.y + dy).max(0.0);
+                                n
+                            })
+                            .collect()
                     })
                 }
                 (Drag::Resize { id }, Some(pos)) => {
@@ -518,21 +608,23 @@ impl TouchView {
                         let mut n = it.clone();
                         n.w = snap_to(rel.x - it.x).max(min);
                         n.h = snap_to(rel.y - it.y).max(min);
-                        n
+                        vec![n]
                     })
                 }
                 _ => None,
             };
             match preview {
-                Some(n) => {
-                    p.rect_stroke(
-                        item_rect(&n),
-                        theme::R_M,
-                        Stroke::new(2.0, theme::accent()),
-                        StrokeKind::Outside,
-                    );
+                Some(ns) => {
+                    for n in &ns {
+                        p.rect_stroke(
+                            item_rect(n),
+                            theme::R_M,
+                            Stroke::new(2.0, theme::accent()),
+                            StrokeKind::Outside,
+                        );
+                    }
                     if released {
-                        changes.push(n);
+                        changes.extend(ns);
                         self.drag = None;
                     }
                 }
@@ -540,16 +632,70 @@ impl TouchView {
             }
         }
 
+        // Auswahlrechteck
+        if let Some(start) = self.marquee {
+            let pointer = ui.input(|i| i.pointer.interact_pos());
+            let released = ui.input(|i| i.pointer.any_released());
+            if !editing || pointer.is_none() {
+                self.marquee = None;
+            } else if let Some(pos) = pointer {
+                let r = Rect::from_two_pos(start, pos);
+                p.rect_filled(r, 0.0, theme::accent().gamma_multiply(0.12));
+                p.rect_stroke(
+                    r,
+                    0.0,
+                    Stroke::new(1.0, theme::accent()),
+                    StrokeKind::Inside,
+                );
+                let hits: Vec<u32> = page
+                    .items
+                    .iter()
+                    .filter(|i| item_rect(i).intersects(r))
+                    .map(|i| i.id)
+                    .collect();
+                for i in page.items.iter().filter(|i| hits.contains(&i.id)) {
+                    p.rect_stroke(
+                        item_rect(i).expand(2.0),
+                        theme::R_M,
+                        Stroke::new(1.0, theme::accent()),
+                        StrokeKind::Outside,
+                    );
+                }
+                if released {
+                    self.marquee = None;
+                    let st = &mut *cx.state;
+                    if !additive {
+                        st.touch_multi.clear();
+                    }
+                    for id in hits {
+                        if !st.touch_multi.contains(&id) {
+                            st.touch_multi.push(id);
+                        }
+                    }
+                    st.touch_sel = st.touch_multi.first().copied();
+                }
+            }
+        }
+
         // Entf löscht, Pfeiltasten verschieben das gewählte Element
         if editing && !ui.ctx().egui_wants_keyboard_input() {
-            if ui.input(|i| i.key_pressed(egui::Key::Delete)) {
-                remove = remove.or(cx.state.touch_sel);
-            }
-            if let Some(sel) = cx
-                .state
-                .touch_sel
-                .and_then(|s| page.items.iter().find(|i| i.id == s))
+            if ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
             {
+                if remove.is_empty() {
+                    remove = cx.state.touch_multi.clone();
+                }
+            }
+            // Strg+A: alles auf der Seite auswählen
+            if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::A)) {
+                cx.state.touch_multi = page.items.iter().map(|i| i.id).collect();
+                cx.state.touch_sel = cx.state.touch_multi.first().copied();
+            }
+            let sel_items: Vec<&TouchItem> = page
+                .items
+                .iter()
+                .filter(|i| cx.state.touch_multi.contains(&i.id))
+                .collect();
+            if !sel_items.is_empty() {
                 let s = if snap { step_px / UNIT } else { 0.05 };
                 let (dx, dy) = ui.input(|i| {
                     let mut d = (0.0, 0.0);
@@ -568,10 +714,15 @@ impl TouchView {
                     d
                 });
                 if dx != 0.0 || dy != 0.0 {
-                    let mut n = sel.clone();
-                    n.x = (n.x + dx).max(0.0);
-                    n.y = (n.y + dy).max(0.0);
-                    changes.push(n);
+                    let min_x = sel_items.iter().map(|i| i.x).fold(f32::MAX, f32::min);
+                    let min_y = sel_items.iter().map(|i| i.y).fold(f32::MAX, f32::min);
+                    let (dx, dy) = (dx.max(-min_x), dy.max(-min_y));
+                    for i in sel_items {
+                        let mut n = i.clone();
+                        n.x += dx;
+                        n.y += dy;
+                        changes.push(n);
+                    }
                 }
             }
         }
@@ -582,18 +733,23 @@ impl TouchView {
                     *slot = n;
                 }
             }
-            if let Some(id) = remove {
-                pg.items.retain(|i| i.id != id);
-                if cx.state.touch_sel == Some(id) {
-                    cx.state.touch_sel = None;
-                }
+            if !remove.is_empty() {
+                pg.items.retain(|i| !remove.contains(&i.id));
+                cx.state.touch_multi.retain(|i| !remove.contains(i));
+                cx.state.touch_sel = cx.state.touch_multi.first().copied();
             }
         }
-        if remove.is_some() {
+        if !remove.is_empty() {
             touch.prune_images();
         }
-        if let Some(id) = duplicate {
-            cx.state.touch_sel = touch.duplicate(page_id, id);
+        if !duplicate.is_empty() {
+            // Kopien werden die neue Auswahl
+            let copies: Vec<u32> = duplicate
+                .iter()
+                .filter_map(|id| touch.duplicate(page_id, *id))
+                .collect();
+            cx.state.touch_sel = copies.first().copied();
+            cx.state.touch_multi = copies;
         }
     }
 
@@ -738,6 +894,13 @@ impl TouchView {
                     ui.add_space(theme::SP_S);
                 }
 
+                // ----- Mehrfachauswahl -----
+                if cx.state.touch_multi.len() > 1 {
+                    ui.add_space(theme::SP_S);
+                    self.multi_panel(ui, cx, page);
+                    return;
+                }
+
                 // ----- Eigenschaften des gewählten Elements -----
                 if let Some(sel) = cx.state.touch_sel {
                     ui.add_space(theme::SP_S);
@@ -812,6 +975,60 @@ impl TouchView {
     }
 
     /// Eigenschaften des gewählten Elements.
+    /// Mehrere Elemente gewählt: Anzahl, Farbe für alle, Duplizieren, Löschen.
+    fn multi_panel(&mut self, ui: &mut Ui, cx: &mut ViewCtx<'_>, page: u32) {
+        let ids = cx.state.touch_multi.clone();
+        section_header(ui, &tr!("{n} Elemente ausgewählt", n = ids.len()), |_| {});
+        ui.label(
+            egui::RichText::new(t(
+                "Ziehen verschiebt alle, Pfeiltasten ebenso, Entf löscht. Umschalt/Strg + Klick fügt hinzu oder entfernt.",
+            ))
+            .small()
+            .color(theme::text_dim()),
+        );
+        ui.add_space(theme::SP_S);
+        let first_color = cx
+            .engine
+            .show()
+            .touch
+            .page(page)
+            .and_then(|p| p.items.iter().find(|i| ids.contains(&i.id)))
+            .and_then(|i| i.color);
+        let mut c = first_color;
+        form(ui, "touch_multi", |f| {
+            f.row(t("Farbe"), |ui| {
+                if swatch_row(ui, &mut c, true) {
+                    if let Some(p) = cx.engine.show_mut().touch.page_mut(page) {
+                        for i in p.items.iter_mut().filter(|i| ids.contains(&i.id)) {
+                            i.color = c;
+                        }
+                    }
+                }
+            });
+        });
+        ui.add_space(theme::SP_S);
+        ui.horizontal(|ui| {
+            if ui.button(t("Duplizieren")).clicked() {
+                let touch = &mut cx.engine.show_mut().touch;
+                let copies: Vec<u32> = ids
+                    .iter()
+                    .filter_map(|id| touch.duplicate(page, *id))
+                    .collect();
+                cx.state.touch_sel = copies.first().copied();
+                cx.state.touch_multi = copies;
+            }
+            if ui.button(t("Löschen")).clicked() {
+                let touch = &mut cx.engine.show_mut().touch;
+                if let Some(p) = touch.page_mut(page) {
+                    p.items.retain(|i| !ids.contains(&i.id));
+                }
+                touch.prune_images();
+                cx.state.touch_sel = None;
+                cx.state.touch_multi.clear();
+            }
+        });
+    }
+
     fn properties(&mut self, ui: &mut Ui, cx: &mut ViewCtx<'_>, page: u32, sel: u32) {
         let Some(mut item) = cx
             .engine

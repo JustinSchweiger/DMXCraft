@@ -51,6 +51,8 @@ pub struct AppState {
     pub touch_page: Option<u32>,
     pub touch_edit: bool,
     pub touch_sel: Option<u32>,
+    /// Alle gewählten Elemente (Mehrfachauswahl, enthält `touch_sel`).
+    pub touch_multi: Vec<u32>,
     /// Touch: ausgelöste Schaltflächen/Fader (Zuordnung, gedrückt, Wert,
     /// Regler) – verarbeitet der Zuordnungs-Rahmen am Ende des Bilds.
     pub touch_fire: Vec<(dmxcraft_core::mapping::Mapping, bool, u8, bool)>,
@@ -163,6 +165,7 @@ impl AppState {
             touch_page: None,
             touch_edit: false,
             touch_sel: None,
+            touch_multi: Vec::new(),
             touch_fire: Vec::new(),
             touch_values: Default::default(),
             programmer_mode: ProgrammerMode::default(),

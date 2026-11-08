@@ -1222,4 +1222,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Mit der Kamera des Smartphones oder Tablets scannen oder eine Adresse im Browser öffnen:", "Scan with the camera of your phone or tablet, or open an address in the browser:"),
     ("Keine Netzwerkadresse gefunden.", "No network address found."),
     ("Die Fernbedienung zeigt die Seiten des Touch-Modus im Browser (iPhone, iPad, Android). Gerät und Rechner müssen im selben Netzwerk sein; beim ersten Start fragt die Firewall eventuell nach. Über „Zum Home-Bildschirm“ läuft sie wie eine App im Vollbild. Ohne PIN kann jeder im Netzwerk bedienen.", "The remote shows the touch mode pages in the browser (iPhone, iPad, Android). Device and computer must be on the same network; the firewall may ask on first start. Use “Add to Home Screen” to run it full screen like an app. Without a PIN, anyone on the network can control it."),
+    ("{n} Elemente", "{n} items"),
+    ("{n} Elemente ausgewählt", "{n} items selected"),
+    ("Ziehen verschiebt alle, Pfeiltasten ebenso, Entf löscht. Umschalt/Strg + Klick fügt hinzu oder entfernt.", "Drag moves all of them, so do the arrow keys; Delete removes them. Shift/Ctrl + click adds or removes."),
 ];
