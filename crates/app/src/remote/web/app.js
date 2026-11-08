@@ -22,6 +22,9 @@ let pageId = Number(localStorage.getItem("dmxcraft-page")) || null;
 let scale = 1, offX = 0, offY = 0, dpr = 1;
 // Kleinste Darstellung: darunter wird die Seite verschoben statt verkleinert
 const MIN_SCALE = 0.7;
+// darunter (passend eingepasst) wird auf schmalen Bildschirmen neu angeordnet
+const FLOW_BELOW = 0.75;
+let flow = null;
 let panX = 0, panY = 0, contentW = 0, contentH = 0, pan = null;
 let online = false, pinNeeded = false;
 const images = new Map();          // id -> Image
@@ -189,13 +192,23 @@ function layoutCanvas() {
   cv.style.width = w + "px";
   cv.style.height = h + "px";
   const p = page();
+  flow = null;
   if (p && p.items.length) {
     const right = Math.max(...p.items.map((i) => i.x + i.w)) * UNIT - GAP;
     const bottom = Math.max(...p.items.map((i) => i.y + i.h)) * UNIT - GAP;
     const pad = 8;
     scale = Math.max(Math.min((w - 2 * pad) / right, (h - 2 * pad) / bottom, 2.5), MIN_SCALE);
-    contentW = right * scale + 2 * pad;
-    contentH = bottom * scale + 2 * pad;
+    const fit = Math.min((w - 2 * pad) / right, (h - 2 * pad) / bottom);
+    if (fit < FLOW_BELOW && w < 760) {
+      // zu klein (Handy hochkant): Elemente neu anordnen, senkrecht scrollen
+      flow = reflow(p.items, w - 2 * pad);
+      scale = 1;
+      contentW = w;
+      contentH = flow.height + 2 * pad;
+    } else {
+      contentW = right * scale + 2 * pad;
+      contentH = bottom * scale + 2 * pad;
+    }
   } else {
     scale = 1; contentW = contentH = 0;
   }
@@ -215,7 +228,84 @@ function placeContent() {
 window.addEventListener("resize", layoutCanvas);
 window.addEventListener("orientationchange", () => setTimeout(layoutCanvas, 200));
 
+/**
+ * Handy-Ansicht: Elemente in Lesereihenfolge (oben links nach unten rechts)
+ * auf ein Raster passend zur Bildschirmbreite packen. Halbe Zellen als
+ * Raster: Schaltfläche/Drehregler 2×2, Fader 2×6, Überschrift volle Breite
+ * × 1, Farbrad/XY volle Breite.
+ */
+function reflow(items, width) {
+  const cols = Math.max(2, Math.round(width / 120));
+  const n = cols * 2;                 // Halbzellen je Zeile
+  const g = width / n;                // Kantenlänge einer Halbzelle
+  const order = readingOrder(items);
+  const used = [];                    // used[row][col]
+  const free = (r, c, w, h) => {
+    for (let y = r; y < r + h; y++)
+      for (let x = c; x < c + w; x++) if (used[y] && used[y][x]) return false;
+    return true;
+  };
+  const take = (r, c, w, h) => {
+    for (let y = r; y < r + h; y++) {
+      used[y] = used[y] || [];
+      for (let x = c; x < c + w; x++) used[y][x] = true;
+    }
+  };
+  const rects = new Map();
+  let from = 0, bottom = 0;
+  for (const i of order) {
+    let w, h;
+    switch (i.kind) {
+      case "label": w = n; h = 1; break;
+      case "fader": w = 2; h = 6; break;
+      case "color": case "xy": w = n; h = Math.max(4, Math.round(n * 0.7)); break;
+      default: w = i.w >= 2 * i.h && n >= 4 ? 4 : 2; h = 2;
+    }
+    let r = from, c = 0;
+    search: for (;; r++) {
+      for (c = 0; c + w <= n; c++) if (free(r, c, w, h)) break search;
+    }
+    take(r, c, w, h);
+    // Reihenfolge erhalten: nicht vor die Zeile des letzten Elements springen
+    from = w === n ? r + h : r;
+    bottom = Math.max(bottom, r + h);
+    rects.set(i.id, { x: c * g, y: r * g, w: w * g - GAP, h: h * g - GAP });
+  }
+  return { rects, height: bottom * g - GAP };
+}
+
+/**
+ * Lesereihenfolge nach Blöcken (XY-Schnitt): erst an durchgehenden
+ * waagerechten Lücken in Zeilen teilen, sonst an senkrechten in Spalten –
+ * so bleiben z. B. nebeneinanderstehende Fader und Schaltflächengruppen
+ * zusammen.
+ */
+function readingOrder(items) {
+  if (items.length <= 1) return items;
+  const cut = (lo, hi) => {
+    // Schnittstellen: Kanten, die kein Element überspannt
+    const edges = [...new Set(items.flatMap((i) => [lo(i), hi(i)]))].sort((a, b) => a - b);
+    const groups = [];
+    let rest = items;
+    for (const e of edges) {
+      if (rest.some((i) => lo(i) < e - 1e-3 && hi(i) > e + 1e-3)) continue;
+      const before = rest.filter((i) => hi(i) <= e + 1e-3);
+      if (before.length && before.length < rest.length) {
+        groups.push(before);
+        rest = rest.filter((i) => hi(i) > e + 1e-3);
+      }
+    }
+    if (!groups.length) return null;
+    groups.push(rest);
+    return groups;
+  };
+  const groups = cut((i) => i.y, (i) => i.y + i.h) || cut((i) => i.x, (i) => i.x + i.w);
+  if (!groups) return [...items].sort((a, b) => a.y - b.y || a.x - b.x);
+  return groups.flatMap(readingOrder);
+}
+
 function rectOf(i) {
+  if (flow) return flow.rects.get(i.id);
   return { x: i.x * UNIT, y: i.y * UNIT, w: i.w * UNIT - GAP, h: i.h * UNIT - GAP };
 }
 
@@ -582,12 +672,22 @@ cv.addEventListener("pointerdown", (ev) => {
   ev.preventDefault();
   cv.setPointerCapture(ev.pointerId);
   const r = rectOf(i);
-  const ptr = { item: i, start: pt, last: pt, v0: valueOf(i) };
+  const ptr = { item: i, start: pt, last: pt, v0: valueOf(i), cx: ev.clientX, cy: ev.clientY };
   pointers.set(ev.pointerId, ptr);
-  if (navigator.vibrate && i.kind === "button") navigator.vibrate(8);
   switch (i.kind) {
     case "button":
-      sendNow({ t: "press", item: i.id, down: true });
+      if (scrollable()) {
+        // erst kurz abwarten: Wischen über eine Schaltfläche scrollt die Seite
+        ptr.pending = true;
+        ptr.timer = setTimeout(() => {
+          if (pointers.get(ev.pointerId) === ptr && ptr.pending) {
+            ptr.pending = false;
+            pressDown(i);
+          }
+        }, 130);
+      } else {
+        pressDown(i);
+      }
       break;
     case "fader": {
       const f = faderParts(r);
@@ -623,6 +723,16 @@ cv.addEventListener("pointermove", (ev) => {
   const ptr = pointers.get(ev.pointerId);
   if (!ptr) return;
   ev.preventDefault();
+  if (ptr.pending && Math.hypot(ev.clientX - ptr.cx, ev.clientY - ptr.cy) > 10) {
+    // doch gewischt: Schaltfläche nicht auslösen, sondern verschieben
+    clearTimeout(ptr.timer);
+    pointers.delete(ev.pointerId);
+    pan = { id: ev.pointerId, x: ptr.cx, y: ptr.cy, px: panX, py: panY };
+    panX = pan.px - (ev.clientX - pan.x);
+    panY = pan.py - (ev.clientY - pan.y);
+    placeContent();
+    return;
+  }
   const pt = toLayout(ev);
   const i = ptr.item, r = rectOf(i);
   ptr.last = pt;
@@ -649,7 +759,14 @@ function release(ev) {
   pointers.delete(ev.pointerId);
   const i = ptr.item;
   if (i.kind === "button") {
-    sendNow({ t: "press", item: i.id, down: false });
+    if (ptr.pending) {
+      // kurzer Tipp: Drücken und Loslassen zusammen senden
+      clearTimeout(ptr.timer);
+      if (navigator.vibrate) navigator.vibrate(8);
+      sendBatch([{ t: "press", item: i.id, down: true }, { t: "press", item: i.id, down: false }]);
+    } else {
+      sendNow({ t: "press", item: i.id, down: false });
+    }
   } else {
     // letzten Wert sofort senden, Anzeige kurz halten bis der Server ihn meldet
     flush();
@@ -660,6 +777,21 @@ function release(ev) {
 cv.addEventListener("pointerup", release);
 cv.addEventListener("pointercancel", release);
 cv.addEventListener("contextmenu", (ev) => ev.preventDefault());
+
+function pressDown(i) {
+  if (navigator.vibrate) navigator.vibrate(8);
+  sendNow({ t: "press", item: i.id, down: true });
+}
+
+function scrollable() {
+  return contentW > main.clientWidth + 1 || contentH > main.clientHeight + 1;
+}
+
+function sendBatch(cmds) {
+  flush();
+  api("/api/cmd", { method: "POST", body: JSON.stringify(cmds), headers: { "Content-Type": "application/json" } })
+    .catch(() => setOnline(false));
+}
 
 function setValue(i, v) {
   v = Math.round(v * 1000) / 1000;
