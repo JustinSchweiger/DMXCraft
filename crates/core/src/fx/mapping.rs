@@ -247,8 +247,8 @@ impl MappingFx {
                 sample(pal, x, blend)
             }
             MapPreset::Burst => {
-                let rings = 0.25 + self.width / 100.0 * 1.75;
-                sample(pal, r * rings - phase, blend)
+                // wie COLOR FX: größere Farbenbreite = breitere Ringe
+                sample(pal, r / 2.0 / (1.0 + self.width / 10.0) - phase, blend)
             }
             MapPreset::Butterfly => {
                 let petals = self.swirls.max(1.0).round() * 2.0;

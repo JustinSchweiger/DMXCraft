@@ -340,7 +340,7 @@ impl Default for CurveFx {
     fn default() -> Self {
         Self {
             shape: CurveShape::Sine,
-            repeat: 1.0,
+            repeat: 2.0,
             size: 1.0,
             phase: 0.0,
             offset: 0.0,
@@ -470,6 +470,7 @@ mod tests {
     fn curve_phasing_shifts_beams() {
         let fx = CurveFx {
             phasing: 1.0,
+            repeat: 1.0,
             ..Default::default()
         };
         let l = curve_levels(&fx, 2, 0.25);

@@ -65,9 +65,6 @@ impl ColorPreset {
         match self {
             ColorPreset::KnightRider => vec![[0, 0, 0], [255, 0, 0]],
             ColorPreset::Sparkle => vec![[0, 0, 0], [255, 255, 255]],
-            ColorPreset::Sweep | ColorPreset::RandomFill => {
-                vec![[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]]
-            }
             _ => vec![
                 [255, 0, 0],
                 [255, 160, 0],
@@ -319,21 +316,26 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
     let line = order_coords(n, fx.transform, false);
     let colors: Vec<[f32; 3]> = match fx.preset {
         ColorPreset::Rainbow => {
-            // Farbenbreite 0: jede Palettenfarbe einmal über alle Beams
-            let span = 1.0 / (1.0 + fx.width / 10.0);
-            let offset = fx.angle / 360.0;
-            cyc.iter()
-                .map(|u| sample(&palette, u * span + offset - phase, blend))
+            // Farbenbreite 0: jede Palettenfarbe einmal über alle Beams.
+            // Der Winkel dreht die
+            // Laufrichtung (180° = umgekehrt, 90° = alle gleich).
+            let span = color_span(fx.width);
+            // gerundet, damit 180° die Reihenfolge exakt umkehrt
+            let dir = (fx.angle.to_radians().cos() * 1e4).round() / 1e4;
+            let proj: Vec<f32> = cyc.iter().map(|u| u * dir).collect();
+            let min = proj.iter().copied().fold(f32::INFINITY, f32::min);
+            proj.iter()
+                .map(|p| sample(&palette, (p - min) * span - phase + 1e-5, blend))
                 .collect()
         }
         ColorPreset::Burst => {
-            let rings = 0.25 + fx.width / 100.0 * 1.75;
+            // von der Mitte nach außen; Farbenbreite wie beim Regenbogen
+            let span = color_span(fx.width);
             let mid = (n as f32 - 1.0) / 2.0;
-            let half = (n as f32 / 2.0).max(1.0);
             (0..n)
                 .map(|i| {
-                    let d = (i as f32 - mid).abs() / half;
-                    sample(&palette, d * rings - phase, blend)
+                    let d = (i as f32 - mid).abs() / n as f32;
+                    sample(&palette, d * span - phase, blend)
                 })
                 .collect()
         }
@@ -617,6 +619,12 @@ fn normalized(beams: &[Beam], t: Transform) -> Vec<[f32; 2]> {
 /// Lage jedes Beams in der Reihenfolge, umgeformt. `cyclic`: i/n (für
 /// umlaufende Verläufe, der letzte Beam schließt an den ersten an), sonst
 /// 0..=1 vom ersten bis zum letzten Beam.
+/// Anteil der Palette, der über alle Beams läuft: Farbenbreite 0 = ganze
+/// Palette, größer = breitere Farbflächen.
+fn color_span(width: f32) -> f32 {
+    1.0 / (1.0 + width.max(0.0) / 10.0)
+}
+
 fn order_coords(n: usize, t: Transform, cyclic: bool) -> Vec<f32> {
     let lin = |i: usize| {
         if cyclic {
@@ -887,6 +895,39 @@ mod tests {
         let c = render(&fx, &line(4), 1.5); // Runde 1: grün füllt über rot
         assert_eq!(c[0], [0, 255, 0]);
         assert_eq!(c[3], [255, 0, 0]);
+    }
+
+    #[test]
+    fn rainbow_angle_reverses_and_flattens() {
+        let mut fx = ColorFx::new(ColorPreset::Rainbow);
+        fx.palette = (0..6).map(|i| [i * 40, 0, 0]).collect();
+        fx.blend = 0.0;
+        let b = line(6);
+        let fwd = render(&fx, &b, 0.0);
+        fx.angle = 180.0;
+        let mut back = render(&fx, &b, 0.0);
+        back.reverse();
+        // umgekehrte Reihenfolge, gleiche Farben
+        assert_eq!(back, fwd);
+        fx.angle = 90.0;
+        let flat = render(&fx, &b, 0.0);
+        assert!(flat.iter().all(|c| *c == flat[0]));
+    }
+
+    #[test]
+    fn burst_width_widens_rings() {
+        let mut fx = ColorFx::new(ColorPreset::Burst);
+        fx.palette = (0..8).map(|i| [i * 30, 0, 0]).collect();
+        fx.width = 0.0;
+        let b = line(7);
+        let spread = |c: &[[u8; 3]]| i32::from(c[0][0]) - i32::from(c[3][0]);
+        let narrow = spread(&render(&fx, &b, 0.0)).abs();
+        fx.width = 50.0;
+        let wide = spread(&render(&fx, &b, 0.0)).abs();
+        assert!(wide < narrow, "{wide} < {narrow}");
+        // symmetrisch zur Mitte
+        let c = render(&fx, &b, 0.3);
+        assert_eq!(c[0], c[6]);
     }
 
     #[test]

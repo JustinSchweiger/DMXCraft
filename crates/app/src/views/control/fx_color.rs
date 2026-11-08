@@ -358,7 +358,7 @@ pub fn color_fx_ui(
             s(ui, "blend", t("Verlauf"), &mut fx.blend, 0.0, 100.0, 1);
         }
         ColorPreset::Burst => {
-            s(ui, "width", t("Farbenbreite"), &mut fx.width, 0.0, 100.0, 0);
+            s(ui, "width", t("Farbenbreite"), &mut fx.width, 0.0, 500.0, 0);
             s(ui, "blend", t("Verlauf"), &mut fx.blend, 0.0, 100.0, 1);
         }
         ColorPreset::Plasma => {
