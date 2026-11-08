@@ -581,9 +581,13 @@ impl ScenePropsView {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     for fx in &effects {
-                        let (head, chevron) = effect_header(ui, fx, selected == Some(fx.id));
+                        let (head, chevron, close) =
+                            effect_header(ui, fx, selected == Some(fx.id), !locked);
                         if chevron.clicked() {
                             toggle = Some(fx.id);
+                        }
+                        if close.is_some_and(|c| c.clicked()) {
+                            menu_delete = Some(fx.id);
                         }
                         if head.clicked() {
                             select = Some(fx.id);
@@ -1347,11 +1351,14 @@ fn remove_effect(
     scene.effects.last().map(|e| e.id)
 }
 
+/// Kopfzeile eines Effekts: Pfeil zum Ein-/Ausklappen, Name und rechts ein
+/// X zum Löschen (nur wenn `removable`). Gibt (Kopf, Pfeil, X) zurück.
 fn effect_header(
     ui: &mut egui::Ui,
     fx: &Effect,
     selected: bool,
-) -> (egui::Response, egui::Response) {
+    removable: bool,
+) -> (egui::Response, egui::Response, Option<egui::Response>) {
     let (rect, head) =
         ui.allocate_exact_size(Vec2::new(ui.available_width(), 30.0), Sense::click());
     let arrow_rect = Rect::from_min_size(rect.min, Vec2::new(28.0, rect.height()));
@@ -1360,6 +1367,18 @@ fn effect_header(
         ui.make_persistent_id(("fx_chevron", fx.id)),
         Sense::click(),
     );
+    let close_rect = Rect::from_min_size(
+        pos2(rect.right() - 30.0, rect.top()),
+        Vec2::new(30.0, rect.height()),
+    );
+    let close = removable.then(|| {
+        ui.interact(
+            close_rect,
+            ui.make_persistent_id(("fx_close", fx.id)),
+            Sense::click(),
+        )
+        .on_hover_text(t("Effekt löschen"))
+    });
     let p = ui.painter();
     let fill = if selected {
         theme::accent_dim()
@@ -1390,7 +1409,22 @@ fn effect_header(
             theme::text_dim()
         },
     );
-    (head, chevron)
+    if let Some(c) = &close {
+        let hot = c.hovered();
+        if hot {
+            p.rect_filled(close_rect.shrink(3.0), theme::R_S, theme::raised_hover());
+        }
+        Icon::Close.paint(
+            p,
+            Rect::from_center_size(close_rect.center(), Vec2::splat(12.0)),
+            if hot {
+                theme::DANGER
+            } else {
+                theme::text_dim()
+            },
+        );
+    }
+    (head, chevron, close)
 }
 
 /// Wofür das Auswahlfenster geöffnet ist.
