@@ -5,6 +5,7 @@
 //! * [`engine`]  – Wiedergabe: Szenen, Überblendungen, HTP/LTP-Merge, Master
 //! * [`dmx`]     – DMX-Frame (mehrere Universen à 512 Kanäle)
 
+pub mod audio;
 pub mod dip;
 pub mod dmx;
 pub mod engine;

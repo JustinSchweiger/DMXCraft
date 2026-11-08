@@ -66,6 +66,8 @@ pub struct TimelineView {
     clipboard: Vec<(usize, Clip)>,
     /// Stand vor dem Ziehen (für „keine Überlappung“).
     before_drag: Option<Clip>,
+    /// Erster Audio-Block: Raster übernehmen, sobald die Analyse fertig ist.
+    pending_grid: Option<u32>,
 }
 
 impl Default for TimelineView {
@@ -87,6 +89,7 @@ impl Default for TimelineView {
             drag: None,
             clipboard: Vec::new(),
             before_drag: None,
+            pending_grid: None,
         }
     }
 }
@@ -144,6 +147,9 @@ impl TimelineView {
         }
         if running {
             ui.ctx().request_repaint();
+        }
+        if !locked {
+            self.pending_grid(ui.ctx(), &mut tl, st);
         }
 
         // Werkzeugleiste
@@ -344,7 +350,12 @@ impl TimelineView {
                 paste_at = Some(at);
             }
             if menu::item(ui, MenuItem::new(t("Audio hinzufügen…")).icon(Icon::Music)) {
-                add_audio_dialog(&mut tl, at.0, at.1);
+                let first = !has_audio(&tl);
+                if let Some(id) = add_audio_dialog(&mut tl, at.0, at.1) {
+                    if first {
+                        self.pending_grid = Some(id);
+                    }
+                }
             }
             menu::separator(ui);
             if menu::item(ui, MenuItem::new(t("Raster: Zeit")).icon(Icon::Clock)) {
@@ -597,6 +608,49 @@ impl TimelineView {
                     ) {
                         clip_menu = Some((cid, ClipAction::ResetSpeed));
                     }
+                    if matches!(c.content, ClipContent::Audio { .. }) {
+                        menu::separator(ui);
+                        for (a, label, icon) in [
+                            (
+                                ClipAction::ApplyGrid,
+                                t("Raster der Zeitleiste übernehmen"),
+                                Icon::MusicNote,
+                            ),
+                            (
+                                ClipAction::Grid(GridEdit::Double),
+                                t("Tempo verdoppeln"),
+                                Icon::MusicNote,
+                            ),
+                            (
+                                ClipAction::Grid(GridEdit::Halve),
+                                t("Tempo halbieren"),
+                                Icon::MusicNote,
+                            ),
+                            (
+                                ClipAction::Grid(GridEdit::Earlier),
+                                t("Downbeat einen Schlag früher"),
+                                Icon::MusicNote,
+                            ),
+                            (
+                                ClipAction::Grid(GridEdit::Later),
+                                t("Downbeat einen Schlag später"),
+                                Icon::MusicNote,
+                            ),
+                        ] {
+                            if menu::item(ui, MenuItem::new(label).icon(icon)) {
+                                clip_menu = Some((cid, a));
+                            }
+                        }
+                        if matches!(c.content, ClipContent::Audio { grid: Some(_), .. })
+                            && menu::item(
+                                ui,
+                                MenuItem::new(t("Erkanntes Raster wiederherstellen"))
+                                    .icon(Icon::Reset),
+                            )
+                        {
+                            clip_menu = Some((cid, ClipAction::Grid(GridEdit::Reset)));
+                        }
+                    }
                 });
             }
         }
@@ -719,10 +773,15 @@ impl TimelineView {
             if clip_area.contains(q) {
                 let ti = track_at(q.y).unwrap_or(tl.tracks.len());
                 let mut at = self.ms_at(q.x, lanes).max(0.0) as u64;
+                let first = !has_audio(&tl);
                 for f in dropped {
                     let path = f.path();
                     if !path.as_os_str().is_empty() {
-                        at += add_audio(&mut tl, ti, at, &path.to_string_lossy());
+                        let (id, len) = add_audio(&mut tl, ti, at, &path.to_string_lossy());
+                        if first && self.pending_grid.is_none() {
+                            self.pending_grid = Some(id);
+                        }
+                        at += len;
                     }
                 }
             }
@@ -1069,7 +1128,13 @@ impl TimelineView {
             }
             s
         };
-        let start = (self.scroll_ms / label_step).floor() * label_step;
+        // Beat-Raster: Beschriftung ab dem Offset (Takt 1)
+        let off = if tl.grid == GridMode::Beat {
+            f64::from(tl.offset_ms)
+        } else {
+            0.0
+        };
+        let start = ((self.scroll_ms - off) / label_step).floor() * label_step + off;
         let mut v = start;
         while self.x_at(v, lanes) < r.right() {
             let x = self.x_at(v, lanes);
@@ -1282,6 +1347,62 @@ impl TimelineView {
                     }
                 }
             }
+            ClipAction::ApplyGrid => {
+                if let Some((c, g)) = tl
+                    .clip(cid)
+                    .and_then(|(_, c)| audio_grid(st, c).map(|g| (c.clone(), g)))
+                {
+                    if let ClipContent::Audio { offset_ms, .. } = c.content {
+                        tl.apply_audio_grid(c.start_ms, offset_ms, g);
+                    }
+                }
+            }
+            ClipAction::Grid(edit) => {
+                let current = tl.clip(cid).and_then(|(_, c)| audio_grid(st, c));
+                if let Some(ClipContent::Audio { grid, .. }) =
+                    tl.clip_mut(cid).map(|c| &mut c.content)
+                {
+                    *grid = match (edit, current) {
+                        (GridEdit::Reset, _) | (_, None) => None,
+                        (GridEdit::Double, Some(g)) => Some(g.doubled()),
+                        (GridEdit::Halve, Some(g)) => Some(g.halved()),
+                        (GridEdit::Earlier, Some(g)) => Some(g.shifted(-1)),
+                        (GridEdit::Later, Some(g)) => Some(g.shifted(1)),
+                    };
+                }
+            }
+        }
+    }
+
+    /// Raster des ersten Audio-Blocks übernehmen, sobald seine Analyse
+    /// fertig ist.
+    fn pending_grid(&mut self, ctx: &egui::Context, tl: &mut Timeline, st: &AppState) {
+        let Some(id) = self.pending_grid else {
+            return;
+        };
+        let Some(c) = tl.clip(id).map(|(_, c)| c.clone()) else {
+            self.pending_grid = None;
+            return;
+        };
+        let ClipContent::Audio {
+            path,
+            offset_ms,
+            grid,
+            ..
+        } = &c.content
+        else {
+            self.pending_grid = None;
+            return;
+        };
+        match st.audio.wave(path, ctx) {
+            crate::audio::WaveState::Loading => {}
+            crate::audio::WaveState::Failed(_) => self.pending_grid = None,
+            crate::audio::WaveState::Ready(a) => {
+                if let Some(g) = grid.or(a.grid) {
+                    tl.apply_audio_grid(c.start_ms, *offset_ms, g);
+                }
+                self.pending_grid = None;
+            }
         }
     }
 
@@ -1296,6 +1417,31 @@ impl TimelineView {
     }
 }
 
+/// Korrektur des Beat-Rasters eines Audio-Blocks.
+#[derive(Clone, Copy, PartialEq)]
+enum GridEdit {
+    Double,
+    Halve,
+    Earlier,
+    Later,
+    Reset,
+}
+
+/// Gültiges Beat-Raster eines Audio-Blocks: korrigiert oder erkannt.
+fn audio_grid(st: &AppState, c: &Clip) -> Option<dmxcraft_core::audio::AudioGrid> {
+    let ClipContent::Audio { path, grid, .. } = &c.content else {
+        return None;
+    };
+    grid.or_else(|| st.audio.ready(path).and_then(|a| a.grid))
+}
+
+fn has_audio(tl: &Timeline) -> bool {
+    tl.tracks
+        .iter()
+        .flat_map(|t| &t.clips)
+        .any(|c| matches!(c.content, ClipContent::Audio { .. }))
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum ClipAction {
     Split,
@@ -1305,6 +1451,8 @@ enum ClipAction {
     Delete,
     EditScene,
     ResetSpeed,
+    ApplyGrid,
+    Grid(GridEdit),
 }
 
 enum HeaderAction {
@@ -1380,7 +1528,7 @@ fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {
                     egui::DragValue::new(&mut tl.bpm)
                         .range(20.0..=400.0)
                         .speed(0.5)
-                        .fixed_decimals(1),
+                        .fixed_decimals(2),
                 );
             });
             row(ui, t("Offset (ms)"), &mut |ui| {
@@ -1606,27 +1754,21 @@ fn paint_clip(
                 theme::DANGER,
             );
         }
-        if let crate::audio::WaveState::Ready(w) = state {
+        if let crate::audio::WaveState::Ready(a) = state {
             let wave = Rect::from_min_max(pos2(r.left(), head.bottom()), r.max);
-            let mid = wave.center().y;
-            let n = (wave.width() as usize).max(1);
-            let per_px = c.duration_ms as f64 / n as f64;
-            let mut pts = Vec::with_capacity(n);
-            for x in 0..n {
-                let ms = *offset_ms as f64 + x as f64 * per_px;
-                let i = (ms / 10.0) as usize;
-                let j = ((ms + per_px) / 10.0).ceil() as usize;
-                let peak = w
-                    .peaks
-                    .get(i..j.min(w.peaks.len()))
-                    .map_or(0.0, |s| s.iter().copied().fold(0.0, f32::max));
-                let h = peak * wave.height() * 0.48;
-                pts.push((wave.left() + x as f32, h));
-            }
-            for (x, h) in pts {
-                p.line_segment(
-                    [pos2(x, mid - h), pos2(x, mid + h)],
-                    Stroke::new(1.0, Color32::from_gray(25)),
+            paint_bands(p, wave, c, *offset_ms, &a);
+            let grid = match &c.content {
+                ClipContent::Audio { grid: Some(g), .. } => Some(*g),
+                _ => a.grid,
+            };
+            if let Some(g) = grid {
+                paint_beats(p, wave, c, *offset_ms, &g);
+                p.with_clip_rect(r.intersect(p.clip_rect())).text(
+                    pos2(r.right() - 4.0, head.center().y),
+                    egui::Align2::RIGHT_CENTER,
+                    format!("{:.1} BPM", g.bpm),
+                    egui::FontId::proportional(theme::FS_CAPTION - 1.0),
+                    Color32::BLACK,
                 );
             }
         }
@@ -1714,27 +1856,100 @@ fn paint_clip(
     );
 }
 
-/// Audiodatei als Block anlegen; gibt die Länge zurück.
-fn add_audio(tl: &mut Timeline, track: usize, at: u64, path: &str) -> u64 {
+/// Wellenform nach Bändern: Low (außen), Mid, High (innen).
+fn paint_bands(
+    p: &egui::Painter,
+    wave: Rect,
+    c: &Clip,
+    offset_ms: u64,
+    a: &dmxcraft_core::audio::AudioAnalysis,
+) {
+    use dmxcraft_core::audio::AudioAnalysis as A;
+    p.rect_filled(wave, 0.0, Color32::from_black_alpha(150));
+    let visible = wave.intersect(p.clip_rect());
+    if visible.width() <= 0.0 {
+        return;
+    }
+    let mid = wave.center().y;
+    let half = wave.height() * 0.48;
+    let per_px = c.duration_ms as f64 / f64::from(wave.width().max(1.0));
+    let x0 = (visible.left() - wave.left()).floor().max(0.0) as usize;
+    let x1 = (visible.right() - wave.left()).ceil() as usize;
+    for x in x0..x1 {
+        let from = offset_ms as f64 + x as f64 * per_px;
+        let to = from + per_px.max(crate::audio::FRAME_MS);
+        let px = wave.left() + x as f32 + 0.5;
+        for (band, scale, color) in [
+            (&a.low, 1.0, theme::BAND_LOW),
+            (&a.mid, 0.7, theme::BAND_MID),
+            (&a.high, 0.45, theme::BAND_HIGH),
+        ] {
+            let h = A::band_max(band, from, to) * half * scale;
+            if h >= 0.5 {
+                p.line_segment(
+                    [pos2(px, mid - h), pos2(px, mid + h)],
+                    Stroke::new(1.0, color),
+                );
+            }
+        }
+    }
+}
+
+/// Beat-Raster im Block: Downbeats als Linie, Schläge als kurze Striche.
+fn paint_beats(
+    p: &egui::Painter,
+    wave: Rect,
+    c: &Clip,
+    offset_ms: u64,
+    g: &dmxcraft_core::audio::AudioGrid,
+) {
+    let px_per_ms = wave.width() / c.duration_ms.max(1) as f32;
+    let beat_px = g.beat_ms() as f32 * px_per_ms;
+    if beat_px * 4.0 < 6.0 {
+        return;
+    }
+    let from = offset_ms as f64;
+    let to = from + c.duration_ms as f64;
+    let clip = p.with_clip_rect(wave.intersect(p.clip_rect()));
+    let vis = clip.clip_rect();
+    for (ms, down) in g.beats(from, to) {
+        let x = wave.left() + ((ms - from) as f32) * px_per_ms;
+        if x < vis.left() - 1.0 || x > vis.right() + 1.0 {
+            continue;
+        }
+        if down {
+            clip.line_segment(
+                [pos2(x, wave.top()), pos2(x, wave.bottom())],
+                Stroke::new(1.0, Color32::from_white_alpha(130)),
+            );
+        } else if beat_px >= 6.0 {
+            let s = Stroke::new(1.0, Color32::from_white_alpha(90));
+            clip.line_segment([pos2(x, wave.top()), pos2(x, wave.top() + 5.0)], s);
+            clip.line_segment([pos2(x, wave.bottom() - 5.0), pos2(x, wave.bottom())], s);
+        }
+    }
+}
+
+/// Audiodatei als Block anlegen; gibt ID und Länge zurück.
+fn add_audio(tl: &mut Timeline, track: usize, at: u64, path: &str) -> (u32, u64) {
     let len = crate::audio::duration_ms(path).unwrap_or(DEFAULT_CLIP_MS);
-    tl.add_clip(
+    let id = tl.add_clip(
         track,
         ClipContent::Audio {
             path: path.to_string(),
             offset_ms: 0,
             length_ms: len,
+            grid: None,
         },
         at,
         len,
     );
-    len
+    (id, len)
 }
 
-fn add_audio_dialog(tl: &mut Timeline, track: usize, at: u64) {
-    if let Some(path) = rfd::FileDialog::new()
+fn add_audio_dialog(tl: &mut Timeline, track: usize, at: u64) -> Option<u32> {
+    let path = rfd::FileDialog::new()
         .add_filter(t("Audio"), &["mp3", "wav", "flac", "ogg", "m4a", "aac"])
-        .pick_file()
-    {
-        add_audio(tl, track, at, &path.to_string_lossy());
-    }
+        .pick_file()?;
+    Some(add_audio(tl, track, at, &path.to_string_lossy()).0)
 }

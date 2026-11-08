@@ -407,6 +407,10 @@ pub fn ink(c: Color32) -> Color32 {
 pub const DANGER: Color32 = Color32::from_rgb(0xef, 0x44, 0x55);
 pub const OK: Color32 = Color32::from_rgb(0x34, 0xd3, 0x99);
 pub const WARN: Color32 = Color32::from_rgb(0xfb, 0xbf, 0x24);
+/// Frequenzbänder der Audio-Wellenform (Low, Mid, High).
+pub const BAND_LOW: Color32 = Color32::from_rgb(0x2f, 0x80, 0xff);
+pub const BAND_MID: Color32 = Color32::from_rgb(0xf5, 0xa5, 0x24);
+pub const BAND_HIGH: Color32 = Color32::from_rgb(0xee, 0xf2, 0xff);
 /// Gehäusefarbe der DIP-Schalter-Anzeige.
 pub const DIP_BODY: Color32 = Color32::from_rgb(0x1c, 0x3f, 0x8a);
 

@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::audio::AudioGrid;
 use crate::show::SceneId;
 
 /// Raster der Zeitleiste.
@@ -88,6 +89,9 @@ pub enum ClipContent {
         offset_ms: u64,
         #[serde(default)]
         length_ms: u64,
+        /// Korrigiertes Beat-Raster (sonst gilt das erkannte).
+        #[serde(default)]
+        grid: Option<AudioGrid>,
     },
 }
 
@@ -349,6 +353,17 @@ impl Timeline {
             .collect()
     }
 
+    /// Raster der Zeitleiste an ein Audio-Raster anpassen: Tempo übernehmen,
+    /// Offset auf einen Downbeat des Blocks (`start_ms`, Beginn `offset_ms`
+    /// in der Datei) legen.
+    pub fn apply_audio_grid(&mut self, start_ms: u64, offset_ms: u64, grid: AudioGrid) {
+        self.bpm = grid.bpm;
+        self.grid = GridMode::Beat;
+        let bar = grid.bar_ms();
+        let t = start_ms as f64 + grid.downbeat_ms - offset_ms as f64;
+        self.offset_ms = t.rem_euclid(bar).round() as u32;
+    }
+
     /// Länge eines Schlags in ms.
     pub fn beat_ms(&self) -> f64 {
         60_000.0 / f64::from(self.bpm.clamp(20.0, 400.0))
@@ -378,6 +393,20 @@ impl Timeline {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn audio_grid_sets_tempo_and_offset() {
+        let mut tl = Timeline::default();
+        let g = crate::audio::AudioGrid {
+            bpm: 120.0,
+            downbeat_ms: 300.0,
+        };
+        // Block ab 10 s, Datei ab 1 s: Downbeat bei 10 s + 0,3 s - 1 s = 9,3 s
+        tl.apply_audio_grid(10_000, 1_000, g);
+        assert_eq!(tl.bpm, 120.0);
+        assert_eq!(tl.grid, GridMode::Beat);
+        assert_eq!(f64::from(tl.offset_ms), (9_300.0f64).rem_euclid(2_000.0));
+    }
+
     use super::*;
 
     #[test]

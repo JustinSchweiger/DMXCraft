@@ -1415,6 +1415,7 @@ fn add_clips(
                         path,
                         offset_ms: 0,
                         length_ms: length,
+                        grid: None,
                     },
                     start,
                     dur,

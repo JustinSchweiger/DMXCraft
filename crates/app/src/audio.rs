@@ -1,4 +1,5 @@
-//! Audiowiedergabe der SUPER SCENES und Wellenformen für die Zeitleiste.
+//! Audiowiedergabe der SUPER SCENES und Analyse (Wellenform, Bänder, Beat-
+//! Raster) für die Zeitleiste.
 //!
 //! Jedes Frame werden die Audioblöcke laufender SUPER SCENES mit ihrer
 //! Zeitleiste abgeglichen: fehlende Spieler werden an der richtigen Stelle
@@ -10,21 +11,17 @@ use std::io::BufReader;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+pub use dmxcraft_core::audio::FRAME_MS;
+use dmxcraft_core::audio::{Analyzer, AudioAnalysis, VERSION};
 use dmxcraft_core::timeline::ClipContent;
 use dmxcraft_core::{Engine, SceneId};
 use rodio::{Decoder, OutputStream, Sink, Source};
 
-/// Spitzenwerte einer Datei für die Anzeige.
-pub struct Waveform {
-    /// Höchster Ausschlag je 10 ms (0..=1).
-    pub peaks: Vec<f32>,
-}
-
-/// Zustand einer Wellenform: wird gelesen, fertig oder nicht lesbar.
+/// Zustand der Analyse einer Datei: läuft, fertig oder nicht lesbar.
 #[derive(Clone)]
 pub enum WaveState {
     Loading,
-    Ready(Arc<Waveform>),
+    Ready(Arc<AudioAnalysis>),
     Failed(String),
 }
 
@@ -38,7 +35,8 @@ pub struct AudioPlayer {
 }
 
 impl AudioPlayer {
-    /// Wellenform einer Datei (startet das Lesen beim ersten Aufruf).
+    /// Analyse einer Datei (startet sie beim ersten Aufruf im Hintergrund;
+    /// fertige Analysen kommen aus dem Zwischenspeicher).
     pub fn wave(&self, path: &str, ctx: &eframe::egui::Context) -> WaveState {
         let mut map = self.waves.lock().expect("Wellenformen");
         if let Some(w) = map.get(path) {
@@ -49,7 +47,7 @@ impl AudioPlayer {
         let path = path.to_string();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let state = match read_wave(&path) {
+            let state = match analysis(&path) {
                 Ok(w) => WaveState::Ready(Arc::new(w)),
                 Err(e) => WaveState::Failed(e),
             };
@@ -57,6 +55,14 @@ impl AudioPlayer {
             ctx.request_repaint();
         });
         WaveState::Loading
+    }
+
+    /// Fertige Analyse einer Datei (ohne eine neue zu starten).
+    pub fn ready(&self, path: &str) -> Option<Arc<AudioAnalysis>> {
+        match self.waves.lock().expect("Wellenformen").get(path) {
+            Some(WaveState::Ready(a)) => Some(a.clone()),
+            _ => None,
+        }
     }
 
     /// Wiedergabe an die laufenden SUPER SCENES anpassen.
@@ -135,29 +141,66 @@ impl AudioPlayer {
     }
 }
 
-/// Datei ganz lesen und Spitzenwerte je 10 ms sammeln.
-fn read_wave(path: &str) -> Result<Waveform, String> {
+/// Analyse aus dem Zwischenspeicher oder neu erstellen (und speichern).
+fn analysis(path: &str) -> Result<AudioAnalysis, String> {
+    let cache = cache_file(path);
+    if let Some(a) = cache
+        .as_ref()
+        .and_then(|c| std::fs::read(c).ok())
+        .and_then(|b| serde_json::from_slice::<AudioAnalysis>(&b).ok())
+        .filter(|a| a.version == VERSION)
+    {
+        return Ok(a);
+    }
+    let a = analyze_file(path)?;
+    if let Some(c) = cache {
+        if let Some(dir) = c.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(json) = serde_json::to_vec(&a) {
+            let _ = std::fs::write(c, json);
+        }
+    }
+    Ok(a)
+}
+
+/// Datei dekodieren (auf Mono gemischt) und analysieren.
+fn analyze_file(path: &str) -> Result<AudioAnalysis, String> {
     let file = File::open(path).map_err(|e| e.to_string())?;
     let dec = Decoder::try_from(BufReader::new(file)).map_err(|e| e.to_string())?;
-    let rate = dec.sample_rate() as usize;
     let channels = usize::from(dec.channels()).max(1);
-    let per_peak = (rate * channels / 100).max(1);
-    let mut peaks = Vec::new();
-    let mut max = 0.0f32;
-    let mut n = 0usize;
+    let mut an = Analyzer::new(dec.sample_rate());
+    let (mut sum, mut n) = (0.0f32, 0usize);
     for s in dec {
-        max = max.max(s.abs());
+        sum += s;
         n += 1;
-        if n == per_peak {
-            peaks.push(max.min(1.0));
-            max = 0.0;
+        if n == channels {
+            an.push(sum / channels as f32);
+            sum = 0.0;
             n = 0;
         }
     }
-    if n > 0 {
-        peaks.push(max.min(1.0));
+    Ok(an.finish())
+}
+
+/// Zwischenspeicher je Datei (Pfad, Größe und Änderungszeit im Namen).
+fn cache_file(path: &str) -> Option<std::path::PathBuf> {
+    let meta = std::fs::metadata(path).ok()?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_secs());
+    let key = format!("{path}|{}|{mtime}", meta.len());
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in key.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
     }
-    Ok(Waveform { peaks })
+    let dir = crate::settings::Settings::path()?
+        .parent()?
+        .join("audio-cache");
+    Some(dir.join(format!("{h:016x}.json")))
 }
 
 /// Länge einer Audiodatei in ms (für neue Blöcke).
@@ -214,10 +257,11 @@ mod tests {
         wav(&path);
         let p = path.to_string_lossy();
         assert_eq!(duration_ms(&p), Some(1000));
-        let w = read_wave(&p).unwrap();
+        let w = analyze_file(&p).unwrap();
         assert!((95..=105).contains(&w.peaks.len()), "{}", w.peaks.len());
-        assert!(w.peaks[10] > 0.4);
-        assert!(w.peaks[80] < 0.01);
+        assert!(w.peaks[10] > 100);
+        assert!(w.peaks[80] < 3);
+        assert_eq!(w.duration_ms, 1000);
         let _ = std::fs::remove_file(path);
     }
 }
