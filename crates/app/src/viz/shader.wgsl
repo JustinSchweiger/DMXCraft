@@ -62,9 +62,15 @@ struct VIn {
     @location(5) m3: vec4<f32>,
     // rgb linear, a Deckkraft
     @location(6) color: vec4<f32>,
-    // x Glanz, y Selbstleuchten (0–1, bzw. > 1 = HDR)
+    // x Glanz, y Selbstleuchten (0–1, bzw. > 1 = HDR),
+    // z Kachelgröße (m) bzw. Gobo, w Bild: 0 keins, 1 aufprojiziert, 2 Bildkoordinaten
     @location(7) params: vec4<f32>,
+    @location(8) uv: vec2<f32>,
 };
+
+// Bild des Materials (ohne Bild: 1 × 1 weiß)
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var tex_sampler: sampler;
 
 struct VOut {
     @builtin(position) clip: vec4<f32>,
@@ -73,6 +79,10 @@ struct VOut {
     @location(2) color: vec4<f32>,
     @location(3) params: vec4<f32>,
     @location(4) local: vec3<f32>,
+    @location(5) uv: vec2<f32>,
+    // Lage im Objekt in Metern (Skalierung eingerechnet) und Normale im Objekt
+    @location(6) metric: vec3<f32>,
+    @location(7) lnormal: vec3<f32>,
 };
 
 @vertex
@@ -89,7 +99,31 @@ fn vs_main(v: VIn) -> VOut {
     o.color = v.color;
     o.params = v.params;
     o.local = v.pos;
+    o.uv = v.uv;
+    o.metric = v.pos * vec3<f32>(length(m[0].xyz), length(m[1].xyz), length(m[2].xyz));
+    o.lnormal = v.normal;
     return o;
+}
+
+// Farbe aus dem Bild: aufprojiziert (drei Richtungen, gewichtet nach der
+// Normalen) oder über die Bildkoordinaten des Modells
+fn texel(i: VOut) -> vec3<f32> {
+    // immer abtasten (gleichförmiger Ablauf), danach auswählen
+    let s = i.metric / max(i.params.z, 0.01);
+    var w = pow(abs(normalize(i.lnormal)), vec3<f32>(4.0));
+    w = w / max(w.x + w.y + w.z, 1e-4);
+    let a = textureSample(tex, tex_sampler, vec2<f32>(s.z, -s.y)).rgb;
+    let b = textureSample(tex, tex_sampler, vec2<f32>(s.x, s.z)).rgb;
+    let c = textureSample(tex, tex_sampler, vec2<f32>(s.x, -s.y)).rgb;
+    let d = textureSample(tex, tex_sampler, i.uv).rgb;
+    let mode = i32(i.params.w + 0.5);
+    if (mode == 2) {
+        return d;
+    }
+    if (mode == 1) {
+        return a * w.x + b * w.y + c * w.z;
+    }
+    return vec3<f32>(1.0);
 }
 
 fn inverse3(m: mat3x3<f32>) -> mat3x3<f32> {
@@ -165,7 +199,7 @@ fn fs_scene(i: VOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f3
         n = -n;
     }
     let view = normalize(g.camera.xyz - i.world);
-    let base = i.color.rgb;
+    let base = i.color.rgb * texel(i);
     // Raumlicht: leicht von oben, damit Formen lesbar bleiben
     let sky = 0.75 + 0.25 * n.y;
     var c = base * (0.02 + g.env.x * 1.4) * sky;

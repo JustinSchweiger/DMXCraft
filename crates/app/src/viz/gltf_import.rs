@@ -6,14 +6,20 @@
 
 use std::path::Path;
 
-use dmxcraft_core::venue::model::{b64_decode, Model, ModelPart};
+use dmxcraft_core::venue::model::{b64_decode, Blob, Model, ModelPart, Texture};
 use glam::{Mat3, Mat4, Vec3};
 
 /// Mehr Dreiecke werden abgelehnt (Show-Datei und Grafikspeicher).
 pub const MAX_TRIANGLES: usize = 2_000_000;
 
-/// Farbe, Ecken (Position + Normale), Dreiecke.
-type RawPart = ([u8; 3], Vec<[f32; 6]>, Vec<u32>);
+/// Teil beim Einlesen: Farbe, Bild (Index in `images`), Ecken, Bildkoordinaten, Dreiecke.
+struct RawPart {
+    color: [u8; 3],
+    image: Option<usize>,
+    verts: Vec<[f32; 6]>,
+    uv: Vec<[f32; 2]>,
+    idx: Vec<u32>,
+}
 
 pub fn load(path: &Path) -> Result<Model, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
@@ -39,7 +45,39 @@ pub fn load(path: &Path) -> Result<Model, String> {
         };
         buffers.push(data);
     }
-    // Dreiecke je Farbe sammeln
+    // Bilder der Materialien (nur PNG/JPEG; gltf-Index → Index in `images`)
+    let mut images: Vec<Texture> = Vec::new();
+    let mut image_map: Vec<(usize, usize)> = Vec::new();
+    let mut image_of = |img: gltf::Image| -> Option<usize> {
+        if let Some((_, i)) = image_map.iter().find(|(g, _)| *g == img.index()) {
+            return Some(*i);
+        }
+        let bytes = match img.source() {
+            gltf::image::Source::View { view, .. } => {
+                let b = buffers.get(view.buffer().index())?;
+                b.get(view.offset()..view.offset() + view.length())?
+                    .to_vec()
+            }
+            gltf::image::Source::Uri { uri, .. } => {
+                if let Some(rest) = uri.strip_prefix("data:") {
+                    b64_decode(rest.split_once(";base64,")?.1)?
+                } else {
+                    std::fs::read(dir.join(percent_decode(uri))).ok()?
+                }
+            }
+        };
+        // nur Bilder, die DMXCraft lesen kann
+        image::guess_format(&bytes)
+            .ok()
+            .filter(|f| matches!(f, image::ImageFormat::Png | image::ImageFormat::Jpeg))?;
+        images.push(Texture {
+            name: img.name().unwrap_or("Bild").to_string(),
+            data: Blob(bytes.into()),
+        });
+        image_map.push((img.index(), images.len() - 1));
+        Some(images.len() - 1)
+    };
+    // Dreiecke je Farbe und Bild sammeln
     let mut parts: Vec<RawPart> = Vec::new();
     let scene = gltf
         .default_scene()
@@ -88,23 +126,46 @@ pub fn load(path: &Path) -> Result<Model, String> {
                     "Modell zu groß (über {MAX_TRIANGLES} Dreiecke) – bitte vereinfachen"
                 ));
             }
-            let base = prim.material().pbr_metallic_roughness().base_color_factor();
+            let pbr = prim.material().pbr_metallic_roughness();
+            let base = pbr.base_color_factor();
             let color =
                 [base[0], base[1], base[2]].map(|c| (linear_to_srgb(c) * 255.0).round() as u8);
-            let part = match parts.iter_mut().find(|p| p.0 == color) {
+            // Bild mit Bildkoordinaten (sonst nur Farbe)
+            let tex = pbr.base_color_texture().and_then(|info| {
+                let uv: Vec<[f32; 2]> = reader
+                    .read_tex_coords(info.tex_coord())?
+                    .into_f32()
+                    .collect();
+                (uv.len() == pos.len()).then_some(())?;
+                Some((image_of(info.texture().source())?, uv))
+            });
+            let image = tex.as_ref().map(|t| t.0);
+            let part = match parts
+                .iter_mut()
+                .find(|p| p.color == color && p.image == image)
+            {
                 Some(p) => p,
                 None => {
-                    parts.push((color, Vec::new(), Vec::new()));
+                    parts.push(RawPart {
+                        color,
+                        image,
+                        verts: Vec::new(),
+                        uv: Vec::new(),
+                        idx: Vec::new(),
+                    });
                     parts.last_mut().expect("eben angelegt")
                 }
             };
-            let off = part.1.len() as u32;
-            part.1.extend(
+            let off = part.verts.len() as u32;
+            part.verts.extend(
                 pos.iter()
                     .zip(&normals)
                     .map(|(p, n)| [p.x, p.y, p.z, n.x, n.y, n.z]),
             );
-            part.2.extend(idx.iter().map(|i| i + off));
+            if let Some((_, uv)) = tex {
+                part.uv.extend(uv);
+            }
+            part.idx.extend(idx.iter().map(|i| i + off));
         }
     }
     if tris == 0 {
@@ -112,7 +173,7 @@ pub fn load(path: &Path) -> Result<Model, String> {
     }
     // Mitte in x/z, Unterkante auf y = 0
     let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-    for p in parts.iter().flat_map(|p| p.1.iter()) {
+    for p in parts.iter().flat_map(|p| p.verts.iter()) {
         let v = Vec3::new(p[0], p[1], p[2]);
         lo = lo.min(v);
         hi = hi.max(v);
@@ -120,13 +181,17 @@ pub fn load(path: &Path) -> Result<Model, String> {
     let shift = Vec3::new((lo.x + hi.x) * 0.5, lo.y, (lo.z + hi.z) * 0.5);
     let parts = parts
         .into_iter()
-        .map(|(c, mut v, i)| {
-            for p in &mut v {
+        .map(|mut r| {
+            for p in &mut r.verts {
                 p[0] -= shift.x;
                 p[1] -= shift.y;
                 p[2] -= shift.z;
             }
-            ModelPart::new(c, &v, &i)
+            let part = ModelPart::new(r.color, &r.verts, &r.idx);
+            match r.image {
+                Some(i) if r.uv.len() == r.verts.len() => part.with_texture(i, &r.uv),
+                _ => part,
+            }
         })
         .collect();
     Ok(Model {
@@ -135,6 +200,7 @@ pub fn load(path: &Path) -> Result<Model, String> {
             .map_or_else(|| "Modell".into(), |s| s.to_string_lossy().into_owned()),
         size: (hi - lo).to_array(),
         parts,
+        images,
     })
 }
 
@@ -213,6 +279,41 @@ mod tests {
         assert_eq!(v[2][..3], [-0.5, 2.0, 0.0]);
         // Normale aus den Dreiecken (z)
         assert!((v[0][5].abs() - 1.0).abs() < 1e-5);
+    }
+
+    /// Dreieck mit Bild (PNG als data-URI) und Bildkoordinaten.
+    #[test]
+    fn loads_base_color_texture() {
+        let mut bin = Vec::new();
+        for f in [0.0f32, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0] {
+            bin.extend_from_slice(&f.to_le_bytes());
+        }
+        for f in [0.0f32, 1.0, 1.0, 1.0, 0.0, 0.0] {
+            bin.extend_from_slice(&f.to_le_bytes());
+        }
+        let uri = dmxcraft_core::venue::model::b64_encode(&bin);
+        let mut png = Vec::new();
+        image::RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let img = dmxcraft_core::venue::model::b64_encode(&png);
+        let json = format!(
+            r#"{{"asset":{{"version":"2.0"}},"scene":0,"scenes":[{{"nodes":[0]}}],"nodes":[{{"mesh":0}}],
+            "meshes":[{{"primitives":[{{"attributes":{{"POSITION":0,"TEXCOORD_0":1}},"material":0}}]}}],
+            "materials":[{{"pbrMetallicRoughness":{{"baseColorTexture":{{"index":0}}}}}}],
+            "textures":[{{"source":0}}],"images":[{{"uri":"data:image/png;base64,{img}"}}],
+            "buffers":[{{"byteLength":60,"uri":"data:application/octet-stream;base64,{uri}"}}],
+            "bufferViews":[{{"buffer":0,"byteLength":36}},{{"buffer":0,"byteOffset":36,"byteLength":24}}],
+            "accessors":[{{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]}},
+              {{"bufferView":1,"componentType":5126,"count":3,"type":"VEC2"}}]}}"#
+        );
+        let path = std::env::temp_dir().join("dmxcraft_test_tex.gltf");
+        std::fs::write(&path, json).unwrap();
+        let m = load(&path).unwrap();
+        assert_eq!(m.images.len(), 1);
+        assert_eq!(m.parts[0].texture, Some(0));
+        assert_eq!(m.parts[0].uvs().unwrap()[1], [1.0, 1.0]);
+        assert!(crate::viz::decode_texture(&m.images[0].data.0).is_some());
     }
 
     #[test]

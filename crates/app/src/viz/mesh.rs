@@ -7,6 +7,8 @@ use glam::{Mat4, Vec3};
 pub struct Vertex {
     pub pos: [f32; 3],
     pub normal: [f32; 3],
+    /// Bildkoordinaten (nur Modelle mit Bild; Grundformen projizieren auf)
+    pub uv: [f32; 2],
 }
 
 #[derive(Clone, Debug, Default)]
@@ -20,6 +22,7 @@ impl Mesh {
         self.vertices.push(Vertex {
             pos: p.into(),
             normal: n.into(),
+            uv: [0.0; 2],
         });
         self.vertices.len() as u32 - 1
     }
@@ -41,6 +44,7 @@ impl Mesh {
             self.vertices.push(Vertex {
                 pos: p.into(),
                 normal: n.into(),
+                uv: v.uv,
             });
         }
         self.indices.extend(other.indices.iter().map(|i| i + base));

@@ -92,10 +92,11 @@ struct Globals {
 /// Was in einem Bild gezeichnet wird.
 #[derive(Default)]
 pub struct Frame3d {
-    pub opaque: Vec<(MeshKey, Instance)>,
-    pub transparent: Vec<(MeshKey, Instance)>,
+    /// Netz, Bild (0 = keins) und Lage
+    pub opaque: Vec<(MeshKey, u32, Instance)>,
+    pub transparent: Vec<(MeshKey, u32, Instance)>,
     /// Werfen Schatten (Bauten des Veranstaltungsorts).
-    pub casters: Vec<(MeshKey, Instance)>,
+    pub casters: Vec<(MeshKey, u32, Instance)>,
     pub beams: Vec<Instance>,
     pub lights: Vec<Light>,
     /// Blickmatrix je Schattenebene (Index = `Light::extra.x`).
@@ -165,6 +166,11 @@ pub struct Gpu {
     tone_layout: wgpu::BindGroupLayout,
     bloom_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    tex_layout: wgpu::BindGroupLayout,
+    tex_sampler: wgpu::Sampler,
+    /// Bild 1 × 1 weiß für Flächen ohne Bild
+    white: wgpu::BindGroup,
+    textures: HashMap<u32, wgpu::BindGroup>,
     meshes: HashMap<MeshKey, GpuMesh>,
     instances: wgpu::Buffer,
     instance_cap: u64,
@@ -345,6 +351,27 @@ impl Gpu {
                 uniform_entry(2, wgpu::ShaderStages::FRAGMENT),
             ],
         });
+        let tex_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("viz tex layout"),
+            entries: &[texture_entry(0), sampler_entry(1)],
+        });
+        let tex_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("viz tex sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            anisotropy_clamp: 8,
+            ..Default::default()
+        });
+        let white = Self::make_texture(
+            device,
+            &rs.queue,
+            &tex_layout,
+            &tex_sampler,
+            &image::RgbaImage::from_pixel(1, 1, image::Rgba([255; 4])),
+        );
         let globals = buffer(
             device,
             "viz globals",
@@ -384,7 +411,7 @@ impl Gpu {
 
         let scene_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("viz scene pl"),
-            bind_group_layouts: &[Some(&scene_layout)],
+            bind_group_layouts: &[Some(&scene_layout), Some(&tex_layout)],
             ..Default::default()
         });
         let shadow_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -406,7 +433,7 @@ impl Gpu {
             Some(wgpu::VertexBufferLayout {
                 array_stride: std::mem::size_of::<Vertex>() as u64,
                 step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3],
+                attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 8 => Float32x2],
             }),
             Some(wgpu::VertexBufferLayout {
                 array_stride: std::mem::size_of::<Instance>() as u64,
@@ -575,6 +602,10 @@ impl Gpu {
             tone_layout,
             bloom_layout,
             sampler,
+            tex_layout,
+            tex_sampler,
+            white,
+            textures: HashMap::new(),
             meshes: HashMap::new(),
             instances,
             instance_cap,
@@ -687,6 +718,102 @@ impl Gpu {
             &self.shadow_sampler,
             &self.shadow_mats,
         );
+    }
+
+    /// Bild mit Mipmaps hochladen und binden.
+    fn make_texture(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        layout: &wgpu::BindGroupLayout,
+        sampler: &wgpu::Sampler,
+        img: &image::RgbaImage,
+    ) -> wgpu::BindGroup {
+        let (w, h) = img.dimensions();
+        let levels = 32 - w.max(h).max(1).leading_zeros();
+        let tex = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("viz texture"),
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: levels,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let mut level = img.clone();
+        for l in 0..levels {
+            let (lw, lh) = level.dimensions();
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &tex,
+                    mip_level: l,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &level,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4 * lw),
+                    rows_per_image: Some(lh),
+                },
+                wgpu::Extent3d {
+                    width: lw,
+                    height: lh,
+                    depth_or_array_layers: 1,
+                },
+            );
+            if l + 1 < levels {
+                level = image::imageops::resize(
+                    &level,
+                    (lw / 2).max(1),
+                    (lh / 2).max(1),
+                    image::imageops::FilterType::Triangle,
+                );
+            }
+        }
+        let view = tex.create_view(&Default::default());
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("viz texture bind"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+            ],
+        })
+    }
+
+    pub fn has_texture(&self, id: u32) -> bool {
+        self.textures.contains_key(&id)
+    }
+
+    /// Bild hochladen (`None`: nicht lesbar – weiß verwenden, nicht erneut versuchen).
+    pub fn add_texture(
+        &mut self,
+        rs: &egui_wgpu::RenderState,
+        id: u32,
+        img: Option<&image::RgbaImage>,
+    ) {
+        let g = match img {
+            Some(img) => Self::make_texture(
+                &rs.device,
+                &rs.queue,
+                &self.tex_layout,
+                &self.tex_sampler,
+                img,
+            ),
+            None => self.white.clone(),
+        };
+        self.textures.insert(id, g);
     }
 
     pub fn has_mesh(&self, key: MeshKey) -> bool {
@@ -872,33 +999,36 @@ impl Gpu {
         if f.shadow_size > 0 && n_shadows > 0 {
             self.ensure_shadows(device, f.shadow_size, n_shadows as u32);
         }
-        // Instanzen nach Netz und Durchgang gruppieren (3 = Schattenwerfer)
-        let mut groups: Vec<(MeshKey, u8, Vec<Instance>)> = Vec::new();
-        let mut push = |key: MeshKey, pass: u8, inst: Instance| {
-            if let Some(g) = groups.iter_mut().find(|g| g.0 == key && g.1 == pass) {
-                g.2.push(inst);
+        // Instanzen nach Netz, Durchgang und Bild gruppieren (3 = Schattenwerfer)
+        let mut groups: Vec<(MeshKey, u8, u32, Vec<Instance>)> = Vec::new();
+        let mut push = |key: MeshKey, pass: u8, tex: u32, inst: Instance| {
+            if let Some(g) = groups
+                .iter_mut()
+                .find(|g| g.0 == key && g.1 == pass && g.2 == tex)
+            {
+                g.3.push(inst);
             } else {
-                groups.push((key, pass, vec![inst]));
+                groups.push((key, pass, tex, vec![inst]));
             }
         };
-        for (k, i) in &f.opaque {
-            push(*k, 0, *i);
+        for (k, t, i) in &f.opaque {
+            push(*k, 0, *t, *i);
         }
-        for (k, i) in &f.transparent {
-            push(*k, 1, *i);
+        for (k, t, i) in &f.transparent {
+            push(*k, 1, *t, *i);
         }
         for i in &f.beams {
-            push(MeshKey::Cone, 2, *i);
+            push(MeshKey::Cone, 2, 0, *i);
         }
         if n_shadows > 0 {
-            for (k, i) in &f.casters {
-                push(*k, 3, *i);
+            for (k, _, i) in &f.casters {
+                push(*k, 3, 0, *i);
             }
         }
         for g in &groups {
             self.mesh(device, g.0);
         }
-        let all: Vec<Instance> = groups.iter().flat_map(|g| g.2.iter().copied()).collect();
+        let all: Vec<Instance> = groups.iter().flat_map(|g| g.3.iter().copied()).collect();
         if all.len() as u64 > self.instance_cap {
             self.instance_cap = (all.len() as u64).next_power_of_two();
             self.instances = buffer(
@@ -970,7 +1100,7 @@ impl Gpu {
             pass.set_bind_group(1, &self.shadows.passes[layer].1, &[]);
             let mut off = 0u64;
             for g in &groups {
-                let count = g.2.len() as u64;
+                let count = g.3.len() as u64;
                 if g.1 == 3 {
                     let m = &self.meshes[&g.0];
                     pass.set_vertex_buffer(0, m.vb.slice(..));
@@ -1028,9 +1158,15 @@ impl Gpu {
                 });
                 let mut off = 0u64;
                 for g in &groups {
-                    let count = g.2.len() as u64;
+                    let count = g.3.len() as u64;
                     if g.1 == pass_kind {
                         let m = &self.meshes[&g.0];
+                        let tex = if g.2 == 0 {
+                            &self.white
+                        } else {
+                            self.textures.get(&g.2).unwrap_or(&self.white)
+                        };
+                        pass.set_bind_group(1, tex, &[]);
                         pass.set_vertex_buffer(0, m.vb.slice(..));
                         pass.set_vertex_buffer(
                             1,

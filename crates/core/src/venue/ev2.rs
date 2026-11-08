@@ -186,6 +186,7 @@ fn node(out: &mut Ev2Import, n: &roxmltree::Node, parent: [[f32; 4]; 4]) -> Opti
                     .and_then(|v| v.parse::<f32>().ok())
                     .unwrap_or(0.0)
                     .clamp(0.0, 1.0),
+                ..Material::default()
             };
             let shape = if file.contains("plane") {
                 Shape::Plane { size: [1.0, 1.0] }

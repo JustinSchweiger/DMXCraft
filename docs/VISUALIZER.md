@@ -41,11 +41,28 @@
   *Geräte* die Geräteliste mit Suche (Strg/Umschalt für Mehrfachauswahl);
   rechts angedockt die Eigenschaften der Auswahl in aufklappbaren Abschnitten.
   Rückgängig/Wiederholen oben neben *Bauen/Live* (oder Strg+Z/Strg+Y).
+* **Ordner**: Im Objektbaum sind Gruppen Ordner – mit „+“ oder Rechtsklick
+  anlegen, umbenennen (Doppelklick oder Menü), Objekte per Ziehen
+  einsortieren (die Lage im Raum bleibt), „Auswahl in neuen Ordner“, nach
+  Namen sortieren. Die Geräteliste hat eigene Ordner (nur zum Sortieren,
+  im Ort gespeichert), Ziehen in einen Ordner, Sortierung nach Adresse oder
+  Name.
+* **Mehrfachauswahl** (Strg/Umschalt): Griffe und Ziehen wirken auf alle
+  ausgewählten Objekte und Geräte; Drehen dreht jedes an seinem Platz.
+* **Bibliothek**: mitgelieferte Objekte (Podest, Bühne, Treppe, DJ-Pult,
+  Lautsprecher, Subwoofer, Traversen-Turm und -Rahmen, Leinwand, Tische,
+  Theke, Person) und eigene: Objekt oder Ordner auswählen, „Auswahl als
+  eigenes Objekt speichern“ (samt Modellen und Bildern, im
+  Konfigurationsordner unter `objects/`).
+* **Bilder (Texturen)**: im Material ein mitgeliefertes Bild (Holzdielen,
+  Bühnenboden, Beton, Teppich, Ziegel, Fliesen, Molton) oder ein eigenes PNG/
+  JPEG wählen; Kachelgröße in Metern; bei Ordnern für alles darin. Die Farbe
+  tönt das Bild. glTF-Modelle bringen ihre Bilder (Grundfarbe) mit.
 * **Griffe** an der Auswahl: rote/grüne/blaue Achse verschiebt entlang x/y/z
   des Raums, die drei Ringe drehen um x/y/z des Raums (5-cm- bzw. 5°-Raster,
   Strg: frei) – auch für Objekte in gedrehten Gruppen und für Geräte.
 * **Eigene 3D-Modelle** (glTF/GLB) importieren: Geometrie mit allen
-  Knoten-Lagen und die Grundfarben der Materialien (ohne Texturen) werden in
+  Knoten-Lagen, die Grundfarben und Bilder der Materialien werden in
   die Show eingebettet; das Modell steht mit der Unterkante auf dem Boden.
   Bis 2 Mio. Dreiecke.
 * **Geräte ausrichten**: auf einen Zielpunkt richten (Zahlen oder im Bild
@@ -68,4 +85,4 @@ Daslight-Gerätebibliothek.
 ## Nächste Schritte
 
 Farbfelder und Gobo-Bilder je Gerät (Profile Builder), Zellen aus den
-physischen Gerätedaten, Texturen in Modellen, Kamera-Voreinstellungen.
+physischen Gerätedaten, Normal-/Rauheitskarten, Kamera-Voreinstellungen.

@@ -34,6 +34,13 @@ impl<'de> Deserialize<'de> for Blob {
     }
 }
 
+/// Ein Bild (PNG oder JPEG, unverändert gespeichert).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Texture {
+    pub name: String,
+    pub data: Blob,
+}
+
 /// Ein importiertes Modell.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Model {
@@ -42,6 +49,9 @@ pub struct Model {
     /// Ausdehnung (m): Mitte in x/z bei 0, Unterkante bei y = 0.
     pub size: [f32; 3],
     pub parts: Vec<ModelPart>,
+    /// Bilder der Materialien (Index aus `ModelPart::texture`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<Texture>,
 }
 
 /// Dreiecke mit einer Farbe.
@@ -53,6 +63,12 @@ pub struct ModelPart {
     pub vertices: Blob,
     /// Dreiecke (u32, little endian)
     pub indices: Blob,
+    /// Bildkoordinaten je Ecke (u, v als f32), wenn das Teil ein Bild hat
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uv: Option<Blob>,
+    /// Bild aus `Model::images`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture: Option<usize>,
 }
 
 impl ModelPart {
@@ -67,7 +83,30 @@ impl ModelPart {
             color,
             vertices: Blob(v.into()),
             indices: Blob(i.into()),
+            uv: None,
+            texture: None,
         }
+    }
+
+    /// Bild mit Bildkoordinaten je Ecke setzen.
+    pub fn with_texture(mut self, texture: usize, uv: &[[f32; 2]]) -> Self {
+        let b: Vec<u8> = uv.iter().flatten().flat_map(|f| f.to_le_bytes()).collect();
+        self.uv = Some(Blob(b.into()));
+        self.texture = Some(texture);
+        self
+    }
+
+    pub fn uvs(&self) -> Option<Vec<[f32; 2]>> {
+        self.uv.as_ref().map(|b| {
+            b.0.chunks_exact(8)
+                .map(|c| {
+                    [
+                        f32::from_le_bytes(c[0..4].try_into().unwrap()),
+                        f32::from_le_bytes(c[4..8].try_into().unwrap()),
+                    ]
+                })
+                .collect()
+        })
     }
 
     pub fn vertices(&self) -> Vec<[f32; 6]> {

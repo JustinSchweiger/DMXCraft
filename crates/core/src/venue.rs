@@ -28,6 +28,9 @@ pub struct Venue {
     pub cameras: Vec<CameraPreset>,
     #[serde(default)]
     pub next_id: u32,
+    /// Bilder für Materialien (ID → Bild), benutzt von `Material::texture`.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub textures: std::collections::BTreeMap<u32, model::Texture>,
     /// Ordner für Geräte (nur zum Sortieren der Geräteliste im Visualisierer).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fixture_folders: Vec<FixtureFolder>,
@@ -169,6 +172,15 @@ pub struct Material {
     pub gloss: f32,
     /// Selbstleuchten 0–1.
     pub emissive: f32,
+    /// Bild aus `Venue::textures` (0 = keins); die Farbe tönt es.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub texture: u32,
+    /// Größe einer Kachel des Bilds in Metern.
+    pub tile: f32,
+}
+
+fn is_zero(v: &u32) -> bool {
+    *v == 0
 }
 
 impl Default for Material {
@@ -178,6 +190,8 @@ impl Default for Material {
             opacity: 1.0,
             gloss: 0.1,
             emissive: 0.0,
+            texture: 0,
+            tile: 1.0,
         }
     }
 }
@@ -266,6 +280,7 @@ impl Venue {
             next_id: 1,
             models: Default::default(),
             fixture_folders: Vec::new(),
+            textures: Default::default(),
         };
         let [w, h, d] = size;
         let floor = v.object(
@@ -501,6 +516,22 @@ impl Venue {
             })
             .collect();
         self.models.retain(|k, _| used.contains(k));
+        let tex: std::collections::BTreeSet<u32> = self
+            .flatten()
+            .into_iter()
+            .map(|(o, _)| o.material.texture)
+            .collect();
+        self.textures.retain(|k, _| tex.contains(k));
+    }
+
+    /// Bild hinzufügen; ein gleiches Bild wird wiederverwendet.
+    pub fn add_texture(&mut self, t: model::Texture) -> u32 {
+        if let Some((id, _)) = self.textures.iter().find(|(_, x)| x.data == t.data) {
+            return *id;
+        }
+        let id = self.new_id();
+        self.textures.insert(id, t);
+        id
     }
 
     /// Kette der Gruppen über einem Objekt (äußerste zuerst, ohne das Objekt).

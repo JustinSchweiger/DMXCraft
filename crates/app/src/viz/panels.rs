@@ -6,14 +6,55 @@ use dmxcraft_core::FixtureId;
 use eframe::egui::{self, Color32};
 use glam::Vec3;
 
-use super::library;
 use super::{
     aim_selected, apply_placement, renumber, rig, targets, vec3_row, DialogKind, Pick, VizView,
 };
+use super::{library, textures};
 use crate::i18n::t;
 use crate::ui::theme;
 use crate::ui::widgets::{fold_section, Segmented};
 use crate::views::ViewCtx;
+
+/// Wahl im Bild-Menü.
+enum TexAction {
+    /// Bild (0 = keins), optional Kachelgröße
+    Set(u32, Option<f32>),
+    Builtin(usize, f32),
+    Load,
+}
+
+/// Bild auf Objekte legen (Farbe dabei auf Weiß, damit das Bild wirkt).
+pub(super) fn apply_texture(
+    v: &mut Venue,
+    ids: impl IntoIterator<Item = u32>,
+    tex: u32,
+    tile: Option<f32>,
+) {
+    // Ordner: auf alles darin
+    fn set(o: &mut dmxcraft_core::venue::Object, tex: u32, tile: Option<f32>) {
+        if !matches!(
+            o.shape,
+            Shape::Group | Shape::Model { .. } | Shape::Truss { .. }
+        ) {
+            if o.material.texture == 0 && tex != 0 {
+                o.material.color = [255, 255, 255];
+            }
+            o.material.texture = tex;
+            if let Some(t) = tile {
+                o.material.tile = t;
+            }
+        }
+        for c in &mut o.children {
+            set(c, tex, tile);
+        }
+    }
+    for id in ids {
+        if let Some(o) = v.find_mut(id) {
+            set(o, tex, tile);
+        }
+    }
+    v.prune_models();
+}
 
 /// Reiter der linken Leiste.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -389,6 +430,12 @@ impl VizView {
                 .map(|m| (m.name.clone(), m.triangles(), m.size)),
             _ => None,
         };
+        let tex_list: Vec<(u32, String)> = v
+            .textures
+            .iter()
+            .map(|(k, t)| (*k, t.name.clone()))
+            .collect();
+        let mut tex_action: Option<TexAction> = None;
         let mut remove = false;
         let mut duplicate = false;
         let Some(o) = v.find_mut(id) else {
@@ -497,6 +544,58 @@ impl VizView {
                             }
                         });
                     }
+                    if !matches!(o.shape, Shape::Model { .. } | Shape::Truss { .. }) {
+                        ui.horizontal(|ui| {
+                            ui.label(t("Bild"));
+                            let current = tex_list
+                                .iter()
+                                .find(|x| x.0 == o.material.texture)
+                                .map_or(t("Keins").to_string(), |x| x.1.clone());
+                            egui::ComboBox::from_id_salt("viz_tex")
+                                .selected_text(current)
+                                .width(170.0)
+                                .show_ui(ui, |ui| {
+                                    if ui
+                                        .selectable_label(o.material.texture == 0, t("Keins"))
+                                        .clicked()
+                                    {
+                                        tex_action = Some(TexAction::Set(0, None));
+                                    }
+                                    for (k, name) in &tex_list {
+                                        if ui
+                                            .selectable_label(o.material.texture == *k, name)
+                                            .clicked()
+                                        {
+                                            tex_action = Some(TexAction::Set(*k, None));
+                                        }
+                                    }
+                                    ui.separator();
+                                    for (i, (name, tile, _)) in
+                                        textures::builtin().iter().enumerate()
+                                    {
+                                        if !tex_list.iter().any(|x| x.1 == *name)
+                                            && ui.button(tr!("+ {n}", n = name)).clicked()
+                                        {
+                                            tex_action = Some(TexAction::Builtin(i, *tile));
+                                        }
+                                    }
+                                    if ui.button(t("Bild laden (PNG/JPEG) …")).clicked() {
+                                        tex_action = Some(TexAction::Load);
+                                    }
+                                });
+                        });
+                        if o.material.texture != 0 {
+                            ui.horizontal(|ui| {
+                                ui.label(t("Kachelgröße (m)"));
+                                ui.add(
+                                    egui::DragValue::new(&mut o.material.tile)
+                                        .range(0.05..=100.0)
+                                        .speed(0.02)
+                                        .max_decimals(2),
+                                );
+                            });
+                        }
+                    }
                     ui.add(
                         egui::Slider::new(&mut o.material.opacity, 0.05..=1.0).text(t("Deckkraft")),
                     );
@@ -515,6 +614,22 @@ impl VizView {
                 .add_enabled(enabled, egui::Button::new(t("Löschen")))
                 .clicked();
         });
+        if let Some(a) = tex_action {
+            let (tex, tile) = match a {
+                TexAction::Set(k, tile) => (Some(k), tile),
+                TexAction::Builtin(i, tile) => {
+                    let (name, _, f) = textures::builtin()[i];
+                    (Some(v.add_texture(textures::make(name, f))), Some(tile))
+                }
+                TexAction::Load => {
+                    self.open_dialog(ui.ctx(), DialogKind::LoadTexture);
+                    (None, None)
+                }
+            };
+            if let Some(tex) = tex {
+                apply_texture(v, self.sel_objects.iter().copied().chain([id]), tex, tile);
+            }
+        }
         if duplicate {
             if let Some(mut copy) = v.find(id).cloned() {
                 renumber(v, &mut copy);

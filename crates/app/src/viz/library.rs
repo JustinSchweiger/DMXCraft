@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use dmxcraft_core::venue::model::Model;
+use dmxcraft_core::venue::model::{Model, Texture};
 use dmxcraft_core::venue::{Material, Object, Shape, Transform, TrussProfile, Venue};
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +19,9 @@ pub struct Prefab {
     pub object: Object,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub models: BTreeMap<String, Model>,
+    /// Benutzte Bilder (IDs wie im Objekt; beim Einsetzen neu vergeben)
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub textures: BTreeMap<u32, Texture>,
 }
 
 /// Eigenes Objekt mit Dateipfad.
@@ -38,6 +41,21 @@ impl Prefab {
         for (k, m) in &self.models {
             v.models.entry(k.clone()).or_insert_with(|| m.clone());
         }
+        // Bilder übernehmen und IDs umschreiben
+        let map: BTreeMap<u32, u32> = self
+            .textures
+            .iter()
+            .map(|(old, tex)| (*old, v.add_texture(tex.clone())))
+            .collect();
+        fn remap(o: &mut Object, map: &BTreeMap<u32, u32>) {
+            if o.material.texture != 0 {
+                o.material.texture = map.get(&o.material.texture).copied().unwrap_or(0);
+            }
+            for c in &mut o.children {
+                remap(c, map);
+            }
+        }
+        remap(&mut o, &map);
         let id = o.id;
         v.objects.push(o);
         id
@@ -55,21 +73,31 @@ impl Prefab {
             scale: s.to_array(),
         };
         let mut models = BTreeMap::new();
-        fn collect(o: &Object, v: &Venue, out: &mut BTreeMap<String, Model>) {
+        let mut textures = BTreeMap::new();
+        fn collect(
+            o: &Object,
+            v: &Venue,
+            out: &mut BTreeMap<String, Model>,
+            tex: &mut BTreeMap<u32, Texture>,
+        ) {
             if let Shape::Model { model } = &o.shape {
                 if let Some(m) = v.models.get(model) {
                     out.insert(model.clone(), m.clone());
                 }
             }
+            if let Some(t) = v.textures.get(&o.material.texture) {
+                tex.insert(o.material.texture, t.clone());
+            }
             for c in &o.children {
-                collect(c, v, out);
+                collect(c, v, out, tex);
             }
         }
-        collect(&object, v, &mut models);
+        collect(&object, v, &mut models, &mut textures);
         Some(Self {
             name: object.name.clone(),
             object,
             models,
+            textures,
         })
     }
 }
@@ -218,6 +246,7 @@ impl Builder {
             name: name.to_string(),
             object: g,
             models: BTreeMap::new(),
+            textures: BTreeMap::new(),
         }
     }
 }

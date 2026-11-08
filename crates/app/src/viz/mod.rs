@@ -12,6 +12,7 @@ mod outline;
 mod panels;
 pub mod render;
 pub mod rig;
+pub mod textures;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
@@ -112,6 +113,7 @@ enum DialogKind {
     ImportModel,
     LoadVenue,
     SaveVenue,
+    LoadTexture,
 }
 
 pub struct VizView {
@@ -810,15 +812,34 @@ impl VizView {
                         vertices: part
                             .vertices()
                             .into_iter()
-                            .map(|v| mesh::Vertex {
+                            .zip(
+                                part.uvs()
+                                    .into_iter()
+                                    .flatten()
+                                    .map(Some)
+                                    .chain(std::iter::repeat(None)),
+                            )
+                            .map(|(v, uv)| mesh::Vertex {
                                 pos: [v[0], v[1], v[2]],
                                 normal: [v[3], v[4], v[5]],
+                                uv: uv.unwrap_or([0.0; 2]),
                             })
                             .collect(),
                         indices: part.indices(),
                     };
                     gpu.add_mesh(&rs.device, k, &m);
                 }
+            }
+            for (i, img) in model.images.iter().enumerate() {
+                let id = model_tex_id(key, i);
+                if !gpu.has_texture(id) {
+                    gpu.add_texture(rs, id, decode_texture(&img.data.0).as_ref());
+                }
+            }
+        }
+        for (id, img) in &cx.engine.show().venue.textures {
+            if !gpu.has_texture(*id) {
+                gpu.add_texture(rs, *id, decode_texture(&img.data.0).as_ref());
             }
         }
         gpu.render(rs, px, msaa, &frame);
@@ -961,22 +982,31 @@ impl VizView {
                 let Some(md) = venue.models.get(model) else {
                     continue;
                 };
-                let sel = building && self.selected == Some(Pick::Object(ob.id));
+                let sel = building
+                    && (self.sel_objects.contains(&ob.id)
+                        || self.selected == Some(Pick::Object(ob.id)));
                 let mat = ob.material;
                 for (i, part) in md.parts.iter().enumerate() {
-                    let inst = Instance::new(
+                    let mut inst = Instance::new(
                         Mat4::from_cols_array_2d(&m),
                         rig::linear(part.color),
                         mat.opacity,
                         mat.gloss,
                         if sel { 0.12 } else { mat.emissive },
                     );
+                    let tex = match part.texture {
+                        Some(img) if part.uv.is_some() => {
+                            inst.params[3] = 2.0;
+                            model_tex_id(model, img)
+                        }
+                        _ => 0,
+                    };
                     let key = MeshKey::model(model, i);
                     if mat.opacity < 0.99 {
-                        f.transparent.push((key, inst));
+                        f.transparent.push((key, tex, inst));
                     } else {
-                        f.opaque.push((key, inst));
-                        f.casters.push((key, inst));
+                        f.opaque.push((key, tex, inst));
+                        f.casters.push((key, tex, inst));
                     }
                 }
                 continue;
@@ -984,21 +1014,34 @@ impl VizView {
             let Some((scale, key)) = shape_mesh(&ob.shape) else {
                 continue;
             };
-            let sel = building && self.selected == Some(Pick::Object(ob.id));
+            let sel = building
+                && (self.sel_objects.contains(&ob.id)
+                    || self.selected == Some(Pick::Object(ob.id)));
             let mat = ob.material;
             let color = rig::linear(mat.color);
-            let inst = Instance::new(
+            let mut inst = Instance::new(
                 Mat4::from_cols_array_2d(&m) * scale,
                 color,
                 mat.opacity,
                 mat.gloss,
                 if sel { 0.12 } else { mat.emissive },
             );
-            if mat.opacity < 0.99 {
-                f.transparent.push((key, inst));
+            // Bild aufprojiziert (Traversen ohne)
+            let tex = if mat.texture != 0
+                && venue.textures.contains_key(&mat.texture)
+                && !matches!(ob.shape, Shape::Truss { .. })
+            {
+                inst.params[2] = mat.tile.max(0.01);
+                inst.params[3] = 1.0;
+                mat.texture
             } else {
-                f.opaque.push((key, inst));
-                f.casters.push((key, inst));
+                0
+            };
+            if mat.opacity < 0.99 {
+                f.transparent.push((key, tex, inst));
+            } else {
+                f.opaque.push((key, tex, inst));
+                f.casters.push((key, tex, inst));
             }
         }
         let (rig, fog_boost) = rig::build(cx.engine, cx.frame, &cx.state.selected, time);
@@ -1028,6 +1071,7 @@ impl VizView {
                 };
                 f.opaque.push((
                     key,
+                    0,
                     Instance::new(p.matrix, p.color, 1.0, p.gloss, p.emissive),
                 ));
             }
@@ -1108,6 +1152,10 @@ impl VizView {
                     .set_title(t("3D-Modell importieren"))
                     .add_filter(t("glTF-Modell"), &["glb", "gltf"])
                     .pick_file(),
+                DialogKind::LoadTexture => rfd::FileDialog::new()
+                    .set_title(t("Bild laden"))
+                    .add_filter(t("Bild (PNG/JPEG)"), &["png", "jpg", "jpeg"])
+                    .pick_file(),
                 DialogKind::LoadVenue => rfd::FileDialog::new()
                     .set_title(t("Veranstaltungsort laden"))
                     .add_filter(t("Veranstaltungsort"), &[VENUE_EXT])
@@ -1186,6 +1234,23 @@ impl VizView {
         };
         let p = path.display().to_string();
         match kind {
+            DialogKind::LoadTexture => match textures::load_file(&path) {
+                Ok(tex) => {
+                    let v = &mut cx.engine.show_mut().venue;
+                    let id = v.add_texture(tex);
+                    let ids: Vec<u32> = self
+                        .sel_objects
+                        .iter()
+                        .copied()
+                        .chain(match self.selected {
+                            Some(Pick::Object(o)) => Some(o),
+                            _ => None,
+                        })
+                        .collect();
+                    panels::apply_texture(v, ids, id, None);
+                }
+                Err(e) => cx.state.error(tr!("Bild nicht geladen: {e}", e = e)),
+            },
             DialogKind::ImportModel => {
                 let (tx, rx) = channel();
                 std::thread::spawn(move || {
@@ -1273,6 +1338,28 @@ impl VizView {
             }
         }
     }
+}
+
+/// Bild-ID eines Modellbilds (oberes Bit gesetzt, getrennt von den Ort-Bildern).
+fn model_tex_id(key: &str, index: usize) -> u32 {
+    let h = key
+        .bytes()
+        .chain((index as u32).to_le_bytes())
+        .fold(0x811c_9dc5u32, |h, b| {
+            (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+        });
+    0x8000_0000 | (h & 0x7fff_ffff)
+}
+
+/// Bild lesen und auf höchstens 2048 Pixel Kantenlänge verkleinern.
+pub fn decode_texture(bytes: &[u8]) -> Option<image::RgbaImage> {
+    let img = image::load_from_memory(bytes).ok()?;
+    let img = if img.width().max(img.height()) > 2048 {
+        img.resize(2048, 2048, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+    Some(img.to_rgba8())
 }
 
 /// Netz und Skalierung einer Form (`None` = Gruppe).
