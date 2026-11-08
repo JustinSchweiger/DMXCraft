@@ -680,6 +680,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Vorlauf (ms)", "Lead time (ms)"),
     ("wird berechnet …", "calculating …"),
     ("{n} Ereignisse", "{n} events"),
+    ("Folgt dem Audio", "Follows the audio"),
     ("Zielpunkt auf dem Boden anklicken", "Click the target point on the floor"),
     ("Ausrichten ({n} Geräte)", "Aim ({n} fixtures)"),
     ("Ausrichten", "Aim"),

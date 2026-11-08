@@ -68,6 +68,22 @@ pub struct TimelineView {
     before_drag: Option<Clip>,
     /// Erster Audio-Block: Raster übernehmen, sobald die Analyse fertig ist.
     pending_grid: Option<u32>,
+    /// Schläge der Audio-Blöcke im sichtbaren Bereich (Raster folgt Audio).
+    marks: Vec<Mark>,
+    /// Stelle (Zeitleiste, ms) des letzten Rechtsklicks auf einen Block.
+    menu_clip_ms: Option<f64>,
+}
+
+/// Schlag eines Audio-Blocks in der Zeitleiste.
+#[derive(Clone, Copy)]
+struct Mark {
+    ms: f64,
+    down: bool,
+    /// Takt im Stück (ab 1) und Stück (ab 0) samt Anzahl der Stücke.
+    bar: i64,
+    seg: usize,
+    segs: usize,
+    beat_ms: f64,
 }
 
 impl Default for TimelineView {
@@ -90,6 +106,8 @@ impl Default for TimelineView {
             clipboard: Vec::new(),
             before_drag: None,
             pending_grid: None,
+            marks: Vec::new(),
+            menu_clip_ms: None,
         }
     }
 }
@@ -273,6 +291,12 @@ impl TimelineView {
         }
         self.scroll_ms = self.scroll_ms.clamp(0.0, (total - visible_ms).max(0.0));
 
+        self.marks = audio_marks(
+            &tl,
+            st,
+            self.scroll_ms - visible_ms,
+            self.scroll_ms + 2.0 * visible_ms,
+        );
         self.zoom_bar(ui, area, lanes, total);
         self.ruler(ui, &p, area, lanes, &tl, e, scene, st);
 
@@ -572,6 +596,9 @@ impl TimelineView {
                     if !st.timeline_sel.contains(&cid) {
                         st.timeline_sel = [cid].into();
                     }
+                }
+                if body.secondary_clicked() {
+                    self.menu_clip_ms = body.interact_pointer_pos().map(|q| self.ms_at(q.x, lanes));
                 }
                 if body.clicked() {
                     clicked_clip =
@@ -1024,6 +1051,21 @@ impl TimelineView {
         if let Some(n) = near {
             return n;
         }
+        if self.follows_audio(tl) {
+            // nächster Schlag der Audio-Blöcke (bei kleinem Zoom nur Takte)
+            let bars_only = self
+                .marks
+                .first()
+                .is_some_and(|m| (m.beat_ms as f32) * self.zoom < 8.0);
+            if let Some(m) = self
+                .marks
+                .iter()
+                .filter(|m| m.down || !bars_only)
+                .min_by(|a, b| (a.ms - v).abs().total_cmp(&(b.ms - v).abs()))
+            {
+                return m.ms.round();
+            }
+        }
         let step = self.grid_step(tl);
         let off = if tl.grid == GridMode::Beat {
             f64::from(tl.offset_ms)
@@ -1122,6 +1164,47 @@ impl TimelineView {
             pos2(lanes.right(), lanes.top()),
         );
         p.rect_filled(r, 0.0, theme::surface());
+        let follow = self.follows_audio(tl);
+        if follow {
+            // Takte der Stücke: „Stück · Takt“, Abstand mind. 60 px; der
+            // Beginn eines Stücks hat Vorrang vor dem Takt davor
+            let mut labels: Vec<(f32, String)> = Vec::new();
+            let mut last_seg = usize::MAX;
+            for m in self.marks.iter().filter(|m| m.down) {
+                let x = self.x_at(m.ms, lanes);
+                if x < r.left() - 40.0 || x > r.right() {
+                    continue;
+                }
+                let new_seg = m.seg != last_seg;
+                last_seg = m.seg;
+                let near = labels.last().is_some_and(|(lx, _)| x - lx < 60.0);
+                if near && !new_seg {
+                    continue;
+                }
+                if near {
+                    labels.pop();
+                }
+                let label = if m.segs > 1 {
+                    format!("{}·{}", m.seg + 1, m.bar)
+                } else {
+                    m.bar.to_string()
+                };
+                labels.push((x, label));
+            }
+            for (x, label) in labels {
+                p.line_segment(
+                    [pos2(x, r.bottom() - 6.0), pos2(x, r.bottom())],
+                    Stroke::new(1.0, theme::text_faint()),
+                );
+                p.text(
+                    pos2(x + 3.0, r.top() + 2.0),
+                    egui::Align2::LEFT_TOP,
+                    label,
+                    egui::FontId::proportional(theme::FS_CAPTION - 1.0),
+                    theme::text_dim(),
+                );
+            }
+        }
         // Beschriftung im sinnvollen Abstand
         let label_step = {
             let mut s = self.grid_step(tl);
@@ -1137,7 +1220,7 @@ impl TimelineView {
             0.0
         };
         let start = ((self.scroll_ms - off) / label_step).floor() * label_step + off;
-        let mut v = start;
+        let mut v = if follow { f64::INFINITY } else { start };
         while self.x_at(v, lanes) < r.right() {
             let x = self.x_at(v, lanes);
             if x >= r.left() {
@@ -1271,7 +1354,32 @@ impl TimelineView {
         }
     }
 
+    /// Folgt das Beat-Raster gerade den Audio-Blöcken?
+    fn follows_audio(&self, tl: &Timeline) -> bool {
+        tl.grid == GridMode::Beat && tl.follow_audio && !self.marks.is_empty()
+    }
+
     fn grid_lines(&self, p: &egui::Painter, lanes: Rect, tl: &Timeline) {
+        if self.follows_audio(tl) {
+            for m in &self.marks {
+                let beat_px = (m.beat_ms as f32) * self.zoom;
+                if !m.down && beat_px < 8.0 || m.down && beat_px * 4.0 < 8.0 {
+                    continue;
+                }
+                let x = self.x_at(m.ms, lanes);
+                if x < lanes.left() || x > lanes.right() {
+                    continue;
+                }
+                p.line_segment(
+                    [pos2(x, lanes.top()), pos2(x, lanes.bottom())],
+                    Stroke::new(
+                        1.0,
+                        theme::border().gamma_multiply(if m.down { 1.0 } else { 0.45 }),
+                    ),
+                );
+            }
+            return;
+        }
         let step = self.grid_step(tl);
         let off = if tl.grid == GridMode::Beat {
             f64::from(tl.offset_ms)
@@ -1354,27 +1462,42 @@ impl TimelineView {
                 }
             }
             ClipAction::ApplyGrid => {
-                if let Some((c, g)) = tl
+                let at = self.menu_clip_ms;
+                if let Some((c, (_, g))) = tl
                     .clip(cid)
-                    .and_then(|(_, c)| audio_grid(st, c).map(|g| (c.clone(), g)))
+                    .and_then(|(_, c)| audio_segment(st, c, at).map(|x| (c.clone(), x)))
                 {
                     if let ClipContent::Audio { offset_ms, .. } = c.content {
                         tl.apply_audio_grid(c.start_ms, offset_ms, g);
+                        tl.follow_audio = false;
                     }
                 }
             }
             ClipAction::Grid(edit) => {
-                let current = tl.clip(cid).and_then(|(_, c)| audio_grid(st, c));
-                if let Some(ClipContent::Audio { grid, .. }) =
-                    tl.clip_mut(cid).map(|c| &mut c.content)
+                let at = self.menu_clip_ms;
+                let current = tl.clip(cid).and_then(|(_, c)| audio_segment(st, c, at));
+                if let (
+                    Some((key, g)),
+                    Some(ClipContent::Audio {
+                        segment_grids,
+                        grid,
+                        ..
+                    }),
+                ) = (current, tl.clip_mut(cid).map(|c| &mut c.content))
                 {
-                    *grid = match (edit, current) {
-                        (GridEdit::Reset, _) | (_, None) => None,
-                        (GridEdit::Double, Some(g)) => Some(g.doubled()),
-                        (GridEdit::Halve, Some(g)) => Some(g.halved()),
-                        (GridEdit::Earlier, Some(g)) => Some(g.shifted(-1)),
-                        (GridEdit::Later, Some(g)) => Some(g.shifted(1)),
+                    // alte Korrektur der ganzen Datei geht in die Stück-Korrektur über
+                    *grid = None;
+                    segment_grids.retain(|(k, _)| *k != key);
+                    let new = match edit {
+                        GridEdit::Reset => None,
+                        GridEdit::Double => Some(g.doubled()),
+                        GridEdit::Halve => Some(g.halved()),
+                        GridEdit::Earlier => Some(g.shifted(-1)),
+                        GridEdit::Later => Some(g.shifted(1)),
                     };
+                    if let Some(n) = new {
+                        segment_grids.push((key, n));
+                    }
                 }
             }
         }
@@ -1404,7 +1527,12 @@ impl TimelineView {
             crate::audio::WaveState::Loading => {}
             crate::audio::WaveState::Failed(_) => self.pending_grid = None,
             crate::audio::WaveState::Ready(a) => {
-                if let Some(g) = grid.or(a.grid) {
+                // mehrere Stücke: Raster folgt dem Audio; sonst Tempo übernehmen
+                let segs = a.effective_segments(*grid, &[]);
+                tl.grid = GridMode::Beat;
+                if segs.len() > 1 {
+                    tl.follow_audio = true;
+                } else if let Some(g) = segs.first().and_then(|s| s.grid) {
                     tl.apply_audio_grid(c.start_ms, *offset_ms, g);
                 }
                 self.pending_grid = None;
@@ -1433,12 +1561,89 @@ enum GridEdit {
     Reset,
 }
 
-/// Gültiges Beat-Raster eines Audio-Blocks: korrigiert oder erkannt.
-fn audio_grid(st: &AppState, c: &Clip) -> Option<dmxcraft_core::audio::AudioGrid> {
-    let ClipContent::Audio { path, grid, .. } = &c.content else {
+/// Stück eines Audio-Blocks an Stelle `at` (Zeitleiste, ms; ohne Angabe
+/// der Beginn des Blocks): Schlüssel (Beginn in der Datei) und Raster.
+fn audio_segment(
+    st: &AppState,
+    c: &Clip,
+    at: Option<f64>,
+) -> Option<(u64, dmxcraft_core::audio::AudioGrid)> {
+    let ClipContent::Audio {
+        path,
+        offset_ms,
+        grid,
+        segment_grids,
+        ..
+    } = &c.content
+    else {
         return None;
     };
-    grid.or_else(|| st.audio.ready(path).and_then(|a| a.grid))
+    let a = st.audio.ready(path)?;
+    let file_ms = at.map_or(*offset_ms as f64, |t| {
+        *offset_ms as f64 + t - c.start_ms as f64
+    });
+    let segs = a.effective_segments(*grid, segment_grids);
+    let i = segs
+        .partition_point(|s| s.start_ms <= file_ms)
+        .saturating_sub(1);
+    let sg = segs.get(i)?;
+    Some((sg.start_ms.round() as u64, sg.grid?))
+}
+
+/// Schläge aller Audio-Blöcke im Bereich `from..to` (Zeitleiste, ms).
+fn audio_marks(tl: &Timeline, st: &AppState, from: f64, to: f64) -> Vec<Mark> {
+    let mut out = Vec::new();
+    for tr in tl.tracks.iter().filter(|t| !t.muted) {
+        for c in &tr.clips {
+            let ClipContent::Audio {
+                path,
+                offset_ms,
+                grid,
+                segment_grids,
+                ..
+            } = &c.content
+            else {
+                continue;
+            };
+            let (cs, ce) = (c.start_ms as f64, c.end_ms() as f64);
+            if ce < from || cs > to {
+                continue;
+            }
+            let Some(a) = st.audio.ready(path) else {
+                continue;
+            };
+            let shift = cs - *offset_ms as f64; // Datei → Zeitleiste
+            let segs = a.effective_segments(*grid, segment_grids);
+            let n = segs.len();
+            for (si, sg) in segs.iter().enumerate() {
+                let Some(g) = sg.grid else {
+                    continue;
+                };
+                let a0 = (sg.start_ms + shift).max(cs).max(from);
+                let b0 = (sg.end_ms + shift).min(ce).min(to);
+                if a0 >= b0 {
+                    continue;
+                }
+                let beat = g.beat_ms();
+                // erster Downbeat im Stück = Takt 1
+                let first = g.downbeat_ms
+                    + ((sg.start_ms - g.downbeat_ms) / g.bar_ms()).ceil() * g.bar_ms();
+                for (ms, down) in g.beats(a0 - shift, b0 - shift) {
+                    let k = ((ms - first) / beat).round() as i64;
+                    out.push(Mark {
+                        ms: ms + shift,
+                        down,
+                        bar: k.div_euclid(4) + 1,
+                        seg: si,
+                        segs: n,
+                        beat_ms: beat,
+                    });
+                }
+            }
+        }
+    }
+    out.sort_by(|a, b| a.ms.total_cmp(&b.ms));
+    out
 }
 
 fn has_audio(tl: &Timeline) -> bool {
@@ -1528,6 +1733,11 @@ fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {
         });
         menu::separator(ui);
         ui.add_enabled_ui(tl.grid == GridMode::Beat, |ui| {
+            row(ui, t("Folgt dem Audio"), &mut |ui| {
+                ui.add(crate::ui::widgets::Toggle::new(&mut tl.follow_audio, ""));
+            });
+        });
+        ui.add_enabled_ui(tl.grid == GridMode::Beat && !tl.follow_audio, |ui| {
             row(ui, t("Tempo (BPM)"), &mut |ui| {
                 ui.add_sized(
                     Vec2::new(64.0, 22.0),
@@ -1763,23 +1973,18 @@ fn paint_clip(
         if let crate::audio::WaveState::Ready(a) = state {
             let wave = Rect::from_min_max(pos2(r.left(), head.bottom()), r.max);
             paint_bands(p, wave, c, *offset_ms, &a);
-            let grid = match &c.content {
-                ClipContent::Audio { grid: Some(g), .. } => Some(*g),
-                _ => a.grid,
+            let segs = match &c.content {
+                ClipContent::Audio {
+                    grid,
+                    segment_grids,
+                    ..
+                } => a.effective_segments(*grid, segment_grids),
+                ClipContent::Scene(_) => Vec::new(),
             };
             if let ClipContent::Audio { triggers, .. } = &c.content {
                 paint_triggers(ui, p, wave, c, *offset_ms, path, triggers, st);
             }
-            if let Some(g) = grid {
-                paint_beats(p, wave, c, *offset_ms, &g);
-                p.with_clip_rect(r.intersect(p.clip_rect())).text(
-                    pos2(r.right() - 4.0, head.center().y),
-                    egui::Align2::RIGHT_CENTER,
-                    format!("{:.1} BPM", g.bpm),
-                    egui::FontId::proportional(theme::FS_CAPTION - 1.0),
-                    Color32::BLACK,
-                );
-            }
+            paint_segments(p, r, head, wave, c, *offset_ms, &segs);
         }
     }
     // Schleifen-Marken der Szene
@@ -1947,25 +2152,95 @@ fn paint_triggers(
     }
 }
 
-/// Beat-Raster im Block: Downbeats als Linie, Schläge als kurze Striche.
-fn paint_beats(
+/// Stücke im Block: abwechselnd leicht getönt, Grenze als helle Linie mit
+/// Nummer und Tempo; darin das Beat-Raster des Stücks.
+#[allow(clippy::too_many_arguments)]
+fn paint_segments(
     p: &egui::Painter,
+    r: Rect,
+    head: Rect,
     wave: Rect,
     c: &Clip,
     offset_ms: u64,
-    g: &dmxcraft_core::audio::AudioGrid,
+    segs: &[dmxcraft_core::audio::AudioSegment],
 ) {
     let px_per_ms = wave.width() / c.duration_ms.max(1) as f32;
-    let beat_px = g.beat_ms() as f32 * px_per_ms;
+    let from = offset_ms as f64;
+    let to = from + c.duration_ms as f64;
+    let x_of = |ms: f64| wave.left() + ((ms - from) as f32) * px_per_ms;
+    let clip = p.with_clip_rect(r.intersect(p.clip_rect()));
+    let many = segs.len() > 1;
+    for (i, sg) in segs.iter().enumerate() {
+        if sg.end_ms <= from || sg.start_ms >= to {
+            continue;
+        }
+        let (a, b) = (sg.start_ms.max(from), sg.end_ms.min(to));
+        let (x0, x1) = (x_of(a), x_of(b));
+        if many && i % 2 == 1 {
+            clip.rect_filled(
+                Rect::from_min_max(pos2(x0, wave.top()), pos2(x1, wave.bottom())),
+                0.0,
+                Color32::from_white_alpha(10),
+            );
+        }
+        if let Some(g) = sg.grid {
+            paint_beats(&clip, wave, x_of, a, b, &g);
+        }
+        // Kennzeichnung im Kopf: Nummer und Tempo am Beginn des Stücks
+        let text = match (many, sg.grid) {
+            (true, Some(g)) => format!("{} · {:.1} BPM", i + 1, g.bpm),
+            (true, None) => format!("{}", i + 1),
+            (false, Some(g)) => format!("{:.1} BPM", g.bpm),
+            (false, None) => String::new(),
+        };
+        if many && sg.start_ms > from {
+            clip.line_segment(
+                [pos2(x0, r.top()), pos2(x0, r.bottom())],
+                Stroke::new(2.0, Color32::WHITE),
+            );
+        }
+        if !text.is_empty() {
+            let font = egui::FontId::proportional(theme::FS_CAPTION - 1.0);
+            if !many {
+                clip.text(
+                    pos2(r.right() - 4.0, head.center().y),
+                    egui::Align2::RIGHT_CENTER,
+                    text,
+                    font,
+                    Color32::BLACK,
+                );
+            } else if x1 - x0 > 90.0 {
+                // am Beginn des Stücks; liegt dort der Blockname, am Ende
+                let (pos, align) = if x0 < r.left() + 90.0 {
+                    (
+                        pos2(x1.min(r.right()) - 4.0, head.center().y),
+                        egui::Align2::RIGHT_CENTER,
+                    )
+                } else {
+                    (pos2(x0 + 4.0, head.center().y), egui::Align2::LEFT_CENTER)
+                };
+                clip.text(pos, align, text, font, Color32::BLACK);
+            }
+        }
+    }
+}
+
+/// Beat-Raster im Block: Downbeats als Linie, Schläge als kurze Striche.
+fn paint_beats(
+    clip: &egui::Painter,
+    wave: Rect,
+    x_of: impl Fn(f64) -> f32,
+    from: f64,
+    to: f64,
+    g: &dmxcraft_core::audio::AudioGrid,
+) {
+    let beat_px = x_of(from + g.beat_ms()) - x_of(from);
     if beat_px * 4.0 < 6.0 {
         return;
     }
-    let from = offset_ms as f64;
-    let to = from + c.duration_ms as f64;
-    let clip = p.with_clip_rect(wave.intersect(p.clip_rect()));
     let vis = clip.clip_rect();
     for (ms, down) in g.beats(from, to) {
-        let x = wave.left() + ((ms - from) as f32) * px_per_ms;
+        let x = x_of(ms);
         if x < vis.left() - 1.0 || x > vis.right() + 1.0 {
             continue;
         }
@@ -1992,6 +2267,7 @@ fn add_audio(tl: &mut Timeline, track: usize, at: u64, path: &str) -> (u32, u64)
             offset_ms: 0,
             length_ms: len,
             grid: None,
+            segment_grids: Vec::new(),
             triggers: Vec::new(),
         },
         at,

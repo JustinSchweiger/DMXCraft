@@ -32,6 +32,8 @@ pub struct Timeline {
     pub auto_scroll: bool,
     pub snap: bool,
     pub grid: GridMode,
+    /// Beat-Raster folgt den Audio-Blöcken (Tempo je Stück) statt BPM/Offset.
+    pub follow_audio: bool,
     pub bpm: f32,
     pub offset_ms: u32,
 }
@@ -47,6 +49,7 @@ impl Default for Timeline {
             auto_scroll: true,
             snap: true,
             grid: GridMode::Time,
+            follow_audio: true,
             bpm: 120.0,
             offset_ms: 0,
         };
@@ -90,9 +93,13 @@ pub enum ClipContent {
         offset_ms: u64,
         #[serde(default)]
         length_ms: u64,
-        /// Korrigiertes Beat-Raster (sonst gilt das erkannte).
+        /// Korrigiertes Beat-Raster der ganzen Datei (ältere Shows; neue
+        /// Korrekturen stehen je Stück in `segment_grids`).
         #[serde(default)]
         grid: Option<AudioGrid>,
+        /// Korrigierte Raster je Stück (Beginn des Stücks in ms, Raster).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        segment_grids: Vec<(u64, AudioGrid)>,
         /// Trigger: Ereignisse eines Frequenzbands lösen Ziele aus.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         triggers: Vec<AudioTrigger>,

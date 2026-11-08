@@ -1543,6 +1543,7 @@ fn add_clips(
                         offset_ms: 0,
                         length_ms: length,
                         grid: None,
+                        segment_grids: Vec::new(),
                         triggers: Vec::new(),
                     },
                     start,

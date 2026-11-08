@@ -22,7 +22,8 @@ günstige USB-DMX-Kabel (Open DMX / FTDI) aus – ein Kabel je Universum.
 | Virtueller Dimmer für Farbgeräte ohne Dimmer-Kanal (skaliert die Farbe, Werte bleiben erhalten) | ✅ |
 | Tastatur- und MIDI-Zuordnung mit LED-Rückmeldung (siehe `docs/MAPPING.md`) | ✅ |
 | Touch-Oberfläche mit Seiten, frei angeordneten Knöpfen, Fadern, Farbrad, XY-Feld (siehe `docs/TOUCH.md`) | ✅ |
-| Audioanalyse in SUPER SCENES: Wellenform nach Bändern (Low/Mid/High), Tempo, Beat-Raster mit Downbeats, Raster der Zeitleiste übernehmen | ✅ |
+| Audioanalyse in SUPER SCENES: Wellenform nach Bändern (Low/Mid/High), Stücke mit eigenem Tempo in zusammengeschnittenen Dateien, Beat-Raster mit Downbeats, Zeitleisten-Raster folgt dem Audio | ✅ |
+| Audio-Trigger: Band, Schwellwert, Hysterese, Mindestabstand, Vorlauf → Szene oder beliebiges Bedienelement | ✅ |
 | DMX-Monitor (512 Kanäle pro Universum) | ✅ |
 | Oberfläche auf Deutsch und Englisch, Themes Dunkelblau und Grau | ✅ |
 | Show-Datei (JSON) laden/speichern | ✅ |

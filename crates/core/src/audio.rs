@@ -15,7 +15,7 @@ pub const FRAME_MS: f64 = 10.0;
 /// Rahmen je Energie-Wert (100 ms).
 pub const ENERGY_FRAMES: usize = 10;
 /// Version der Analyse (Zwischenspeicher wird bei Änderung neu erzeugt).
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// Grenzfrequenzen der Bänder in Hz.
 const LOW_HZ: f64 = 150.0;
@@ -97,8 +97,61 @@ pub struct AudioAnalysis {
     pub high: Vec<u8>,
     /// Geglätteter Gesamtpegel je 100 ms (0..=255).
     pub energy: Vec<u8>,
-    /// Erkanntes Beat-Raster (`None` ohne erkennbaren Rhythmus).
+    /// Erkanntes Beat-Raster (`None` ohne erkennbaren Rhythmus); bei
+    /// mehreren Stücken das des längsten.
     pub grid: Option<AudioGrid>,
+    /// Stücke der Datei (zusammengeschnittene Lieder mit eigenem Tempo).
+    #[serde(default)]
+    pub segments: Vec<AudioSegment>,
+}
+
+/// Ein Stück innerhalb der Datei mit eigenem Beat-Raster.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AudioSegment {
+    pub start_ms: f64,
+    pub end_ms: f64,
+    pub grid: Option<AudioGrid>,
+}
+
+impl AudioAnalysis {
+    /// Stücke mit gültigem Raster: Korrektur je Stück (Schlüssel = Beginn in
+    /// ms), sonst die alte Korrektur für die ganze Datei (`single`, nur bei
+    /// einem Stück), sonst das erkannte Raster. Ältere Analysen ohne Stücke
+    /// gelten als ein Stück.
+    pub fn effective_segments(
+        &self,
+        single: Option<AudioGrid>,
+        overrides: &[(u64, AudioGrid)],
+    ) -> Vec<AudioSegment> {
+        let mut segs = if self.segments.is_empty() {
+            vec![AudioSegment {
+                start_ms: 0.0,
+                end_ms: self.duration_ms as f64,
+                grid: self.grid,
+            }]
+        } else {
+            self.segments.clone()
+        };
+        let one = segs.len() == 1;
+        for sg in &mut segs {
+            let key = sg.start_ms.round() as u64;
+            if let Some((_, g)) = overrides.iter().find(|(k, _)| *k == key) {
+                sg.grid = Some(*g);
+            } else if let (true, Some(g)) = (one, single) {
+                sg.grid = Some(g);
+            }
+        }
+        segs
+    }
+
+    /// Stück an Stelle `ms` (Index), falls es Stücke gibt.
+    pub fn segment_at(&self, ms: f64) -> Option<usize> {
+        if self.segments.is_empty() {
+            return None;
+        }
+        let i = self.segments.partition_point(|s| s.start_ms <= ms);
+        Some(i.saturating_sub(1))
+    }
 }
 
 impl AudioAnalysis {
@@ -239,7 +292,12 @@ impl Analyzer {
             v.iter().map(|x| (x / top).min(1.0)).collect()
         };
         let (low, mid, high) = (norm(&low), norm(&mid), norm(&high));
-        let grid = detect_grid(&low, &mid, &high);
+        let segments = detect_segments(&low, &mid, &high);
+        let grid = segments
+            .iter()
+            .filter(|s| s.grid.is_some())
+            .max_by(|a, b| (a.end_ms - a.start_ms).total_cmp(&(b.end_ms - b.start_ms)))
+            .and_then(|s| s.grid);
         let energy = energy_curve(&norm(&all));
         let q = |v: &[f32]| v.iter().map(|x| (x * 255.0).round() as u8).collect();
         AudioAnalysis {
@@ -251,6 +309,7 @@ impl Analyzer {
             high: q(&high),
             energy: q(&energy),
             grid,
+            segments,
         }
     }
 }
@@ -448,6 +507,152 @@ fn tempo_coef(o: &[f32], bpm: f64) -> (f64, f64) {
 
 fn tempo_score(o: &[f32], bpm: f64) -> f64 {
     tempo_coef(o, bpm).0 + 0.5 * tempo_coef(o, bpm * 2.0).0
+}
+
+/// Länge des Fensters für das örtliche Tempo und Schrittweite (Rahmen).
+const SEG_WIN: usize = 1000;
+const SEG_HOP: usize = 200;
+/// Kürzestes Stück (Rahmen).
+const SEG_MIN: usize = 1200;
+
+/// Tempo eines Ausschnitts grob schätzen (0,5-BPM-Schritte) mit Stärke.
+fn local_tempo(o: &[f32]) -> Option<f64> {
+    let total: f64 = o.iter().map(|x| f64::from(*x)).sum();
+    if total < 1e-3 {
+        return None;
+    }
+    let mut best = (0.0, 0.0);
+    let mut b = BPM_MIN;
+    while b <= BPM_MAX {
+        let sc = tempo_score(o, b);
+        if sc > best.1 {
+            best = (b, sc);
+        }
+        b += 0.5;
+    }
+    (tempo_coef(o, best.0).0 / total >= 0.08).then_some(best.0)
+}
+
+/// Gleiches Tempo (auch doppelt/halb, ±2 %)?
+fn same_tempo(a: f64, b: f64) -> bool {
+    [1.0, 2.0, 0.5]
+        .iter()
+        .any(|k| (a * k / b - 1.0).abs() < 0.02)
+}
+
+/// Datei in Stücke teilen: an Tempowechseln (Grenze an der stärksten
+/// Klangänderung in der Nähe) und an Pausen; je Stück ein eigenes Raster.
+fn detect_segments(low: &[f32], mid: &[f32], high: &[f32]) -> Vec<AudioSegment> {
+    let n = low.len();
+    let whole = |a: usize, b: usize| AudioSegment {
+        start_ms: a as f64 * FRAME_MS,
+        end_ms: b as f64 * FRAME_MS,
+        grid: detect_grid(&low[a..b], &mid[a..b], &high[a..b]).map(|g| AudioGrid {
+            downbeat_ms: g.downbeat_ms + a as f64 * FRAME_MS,
+            ..g
+        }),
+    };
+    if n < SEG_MIN * 2 {
+        return vec![whole(0, n)];
+    }
+    let (ol, om, oh) = (onsets(low), onsets(mid), onsets(high));
+    let o: Vec<f32> = (0..n).map(|i| ol[i] + 0.6 * om[i] + 0.6 * oh[i]).collect();
+    // örtliches Tempo je Fenster
+    let mut local: Vec<(usize, Option<f64>)> = Vec::new();
+    let mut a = 0;
+    while a + SEG_WIN <= n {
+        local.push((a + SEG_WIN / 2, local_tempo(&o[a..a + SEG_WIN])));
+        a += SEG_HOP;
+    }
+    // Klangänderung: Unterschied der Bandpegel 4 s davor/danach
+    let level: Vec<[f32; 3]> = (0..n).map(|i| [low[i], mid[i], high[i]]).collect();
+    let mut prefix = vec![[0.0f64; 3]; n + 1];
+    for i in 0..n {
+        for b in 0..3 {
+            prefix[i + 1][b] = prefix[i][b] + f64::from(level[i][b]);
+        }
+    }
+    let mean = |a: usize, b: usize| -> [f64; 3] {
+        let len = (b - a).max(1) as f64;
+        [0, 1, 2].map(|k| (prefix[b][k] - prefix[a][k]) / len)
+    };
+    let novelty = |i: usize| -> f64 {
+        let w = 400.min(i).min(n - i);
+        if w < 50 {
+            return 0.0;
+        }
+        let (x, y) = (mean(i - w, i), mean(i, i + w));
+        (0..3).map(|k| (x[k] - y[k]).abs()).sum()
+    };
+    let mut cuts: Vec<usize> = Vec::new();
+    // Tempowechsel: zwei Fenster in Folge mit anderem Tempo als davor
+    let mut cur: Option<f64> = None;
+    let mut k = 0;
+    while k < local.len() {
+        let (center, bpm) = local[k];
+        match (cur, bpm) {
+            (None, Some(b)) => cur = Some(b),
+            (Some(c), Some(b)) if !same_tempo(c, b) => {
+                let stable = local
+                    .get(k + 1)
+                    .and_then(|l| l.1)
+                    .is_some_and(|b2| same_tempo(b, b2));
+                if stable {
+                    // Grenze: stärkste Änderung zwischen den Fenstermitten
+                    let from = local[k.saturating_sub(1)].0.saturating_sub(SEG_WIN / 2);
+                    let to = (center + SEG_WIN / 2).min(n - 1);
+                    let cut = (from..=to)
+                        .step_by(5)
+                        .max_by(|x, y| novelty(*x).total_cmp(&novelty(*y)))
+                        .unwrap_or(center);
+                    cuts.push(cut);
+                    cur = Some(b);
+                }
+            }
+            _ => {}
+        }
+        k += 1;
+    }
+    // Pausen (≥ 0,3 s fast still) trennen ebenfalls
+    let mut quiet = 0;
+    for (i, l) in level.iter().enumerate() {
+        if l[0] + l[1] + l[2] < 0.03 {
+            quiet += 1;
+        } else {
+            if quiet >= 30 && i > quiet {
+                cuts.push(i);
+            }
+            quiet = 0;
+        }
+    }
+    cuts.sort_unstable();
+    // zu kurze Stücke vermeiden
+    let mut bounds = vec![0];
+    for c in cuts {
+        if c >= bounds.last().copied().unwrap_or(0) + SEG_MIN && c + SEG_MIN <= n {
+            bounds.push(c);
+        }
+    }
+    bounds.push(n);
+    let mut segs: Vec<AudioSegment> = bounds.windows(2).map(|w| whole(w[0], w[1])).collect();
+    // Lieder beginnen meist auf einem Downbeat: Grenze auf den nächsten
+    // Downbeat des neuen Stücks legen (höchstens einen halben Takt weit)
+    for i in 1..segs.len() {
+        let Some(g) = segs[i].grid else {
+            continue;
+        };
+        let start = segs[i].start_ms;
+        let bar = g.bar_ms();
+        let near = g.downbeat_ms + ((start - g.downbeat_ms) / bar).round() * bar;
+        if (near - start).abs() <= bar / 2.0
+            && near > segs[i - 1].start_ms + 1000.0
+            && near < segs[i].end_ms - 1000.0
+        {
+            segs[i].start_ms = near;
+            segs[i - 1].end_ms = near;
+        }
+    }
+    segs
 }
 
 /// Tempo, Beat-Phase und Downbeat schätzen.
@@ -763,6 +968,52 @@ mod tests {
             high[150],
             high[50]
         );
+    }
+
+    #[test]
+    fn mixed_file_splits_into_tracks() {
+        // drei Lieder hintereinander (126, 140, 100 BPM), je 40 s
+        let mut s = track(126.0, 40.0, 300.0);
+        s.extend(track(140.0, 40.0, 0.0));
+        s.extend(track(100.0, 40.0, 150.0));
+        let a = analyze(&s, RATE);
+        assert_eq!(a.segments.len(), 3, "{:?}", a.segments);
+        for (seg, (bpm, start)) in
+            a.segments
+                .iter()
+                .zip([(126.0, 0.0), (140.0, 40_000.0), (100.0, 80_000.0)])
+        {
+            assert!(
+                (seg.start_ms - start).abs() < 1500.0,
+                "{} statt {start}",
+                seg.start_ms
+            );
+            let g = seg.grid.expect("Raster");
+            assert!(
+                (f64::from(g.bpm) - bpm).abs() < 0.3,
+                "{} statt {bpm}",
+                g.bpm
+            );
+        }
+        // Downbeat des zweiten Lieds liegt auf seinem Anfang (40 s)
+        let g = a.segments[1].grid.unwrap();
+        let bar = g.bar_ms();
+        let mut d = (g.downbeat_ms - 40_000.0).rem_euclid(bar);
+        d = d.min(bar - d);
+        assert!(d < 30.0, "Downbeat {}", g.downbeat_ms);
+        assert_eq!(a.segment_at(50_000.0), Some(1));
+        // Grenzen liegen auf dem ersten Schlag der Lieder
+        assert!(
+            (a.segments[2].start_ms - 80_150.0).abs() < 30.0,
+            "{}",
+            a.segments[2].start_ms
+        );
+    }
+
+    #[test]
+    fn one_song_stays_one_segment() {
+        let a = analyze(&track(128.0, 120.0, 0.0), RATE);
+        assert_eq!(a.segments.len(), 1, "{:?}", a.segments);
     }
 
     #[test]
