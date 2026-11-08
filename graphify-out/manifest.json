@@ -552,9 +552,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/audio.rs": {
-    "mtime": 1794168263.117488,
-    "seen": 1794168638.2989013,
-    "ast_hash": "930263c5c42d0c74e3f90cfac022c119",
+    "mtime": 1794169742.6686127,
+    "seen": 1794169752.135642,
+    "ast_hash": "0173544541be8ef35acf63ae56ca075f",
     "semantic_hash": ""
   },
   "crates/app/src/views/control/timeline.rs": {

@@ -25,12 +25,25 @@ pub enum WaveState {
     Failed(String),
 }
 
+/// Ein laufender Spieler: `base` = Stelle in der Datei, an der er begann
+/// (nur bei Formaten ohne Sprungmöglichkeit ≠ 0).
+struct Player {
+    sink: Sink,
+    base: Duration,
+}
+
+impl Player {
+    fn pos(&self) -> Duration {
+        self.base + self.sink.get_pos()
+    }
+}
+
 #[derive(Default)]
 pub struct AudioPlayer {
     stream: Option<OutputStream>,
     stream_failed: bool,
     /// Laufende Spieler je (Szene, Block).
-    sinks: HashMap<(SceneId, u32), Sink>,
+    sinks: HashMap<(SceneId, u32), Player>,
     waves: Arc<Mutex<HashMap<String, WaveState>>>,
 }
 
@@ -108,37 +121,61 @@ impl AudioPlayer {
             return;
         };
         for (key, (path, pos, vol, running)) in wanted {
-            let sink = match self.sinks.get(&key) {
-                Some(s) => s,
-                None => {
-                    let Ok(file) = File::open(&path) else {
-                        continue;
-                    };
-                    let Ok(dec) = Decoder::try_from(BufReader::new(file)) else {
-                        continue;
-                    };
-                    let sink = Sink::connect_new(stream.mixer());
-                    sink.append(dec);
-                    let _ = sink.try_seek(pos);
-                    self.sinks.entry(key).or_insert(sink)
-                }
-            };
-            sink.set_volume(vol.clamp(0.0, 1.0));
-            if running {
-                if sink.is_paused() {
-                    let _ = sink.try_seek(pos);
-                    sink.play();
-                }
-                // weicht die Wiedergabe ab, nachstellen
-                let drift = sink.get_pos().as_secs_f64() - pos.as_secs_f64();
-                if drift.abs() > 0.15 {
-                    let _ = sink.try_seek(pos);
-                }
-            } else {
-                sink.pause();
+            let vol = vol.clamp(0.0, 1.0);
+            if let std::collections::hash_map::Entry::Vacant(slot) = self.sinks.entry(key) {
+                let Some(p) = start_player(stream, &path, pos) else {
+                    continue;
+                };
+                slot.insert(p);
             }
+            let Some(p) = self.sinks.get(&key) else {
+                continue;
+            };
+            p.sink.set_volume(vol);
+            if !running {
+                p.sink.pause();
+                continue;
+            }
+            // weicht die Wiedergabe ab (Lineal, Sprung, Fortsetzen nach
+            // Pause): springen; geht das nicht, an der Stelle neu starten
+            let drift = p.pos().as_secs_f64() - pos.as_secs_f64();
+            if p.sink.is_paused() || drift.abs() > 0.15 {
+                let seeked = p.base.is_zero() && p.sink.try_seek(pos).is_ok();
+                if !seeked {
+                    self.sinks.remove(&key);
+                    let Some(n) = start_player(stream, &path, pos) else {
+                        continue;
+                    };
+                    n.sink.set_volume(vol);
+                    self.sinks.insert(key, n);
+                    continue;
+                }
+            }
+            p.sink.play();
         }
     }
+}
+
+/// Datei öffnen; aus einer `File` (nicht `BufReader`) erzeugt, damit der
+/// Decoder springen kann (Länge bekannt, „seekable“).
+fn open_decoder(path: &str) -> Option<Decoder<BufReader<File>>> {
+    Decoder::try_from(File::open(path).ok()?).ok()
+}
+
+/// Spieler an Stelle `pos` starten.
+fn start_player(stream: &OutputStream, path: &str, pos: Duration) -> Option<Player> {
+    let sink = Sink::connect_new(stream.mixer());
+    sink.append(open_decoder(path)?);
+    if pos.is_zero() || sink.try_seek(pos).is_ok() {
+        return Some(Player {
+            sink,
+            base: Duration::ZERO,
+        });
+    }
+    // Format ohne Sprungmöglichkeit: bis zur Stelle vorspulen
+    let sink = Sink::connect_new(stream.mixer());
+    sink.append(open_decoder(path)?.skip_duration(pos));
+    Some(Player { sink, base: pos })
 }
 
 /// Analyse aus dem Zwischenspeicher oder neu erstellen (und speichern).
@@ -167,7 +204,7 @@ fn analysis(path: &str) -> Result<AudioAnalysis, String> {
 /// Datei dekodieren (auf Mono gemischt) und analysieren.
 fn analyze_file(path: &str) -> Result<AudioAnalysis, String> {
     let file = File::open(path).map_err(|e| e.to_string())?;
-    let dec = Decoder::try_from(BufReader::new(file)).map_err(|e| e.to_string())?;
+    let dec = Decoder::try_from(file).map_err(|e| e.to_string())?;
     let channels = usize::from(dec.channels()).max(1);
     let mut an = Analyzer::new(dec.sample_rate());
     let (mut sum, mut n) = (0.0f32, 0usize);
@@ -205,8 +242,7 @@ fn cache_file(path: &str) -> Option<std::path::PathBuf> {
 
 /// Länge einer Audiodatei in ms (für neue Blöcke).
 pub fn duration_ms(path: &str) -> Option<u64> {
-    let file = File::open(path).ok()?;
-    let dec = Decoder::try_from(BufReader::new(file)).ok()?;
+    let dec = open_decoder(path)?;
     if let Some(d) = dec.total_duration() {
         return Some(d.as_millis() as u64);
     }
@@ -249,6 +285,30 @@ mod tests {
         f.extend_from_slice(&(data.len() as u32).to_le_bytes());
         f.extend_from_slice(&data);
         std::fs::write(path, f).unwrap();
+    }
+
+    /// MP3 (falls ffmpeg da ist): der Decoder muss springen können, sonst
+    /// folgt der Ton dem Lineal nicht.
+    #[test]
+    fn mp3_decoder_can_seek() {
+        let w = std::env::temp_dir().join("dmxcraft_seek.wav");
+        let mp3 = std::env::temp_dir().join("dmxcraft_seek.mp3");
+        wav(&w);
+        let ok = std::process::Command::new("ffmpeg")
+            .args(["-y", "-loglevel", "quiet", "-i"])
+            .arg(&w)
+            .arg(&mp3)
+            .status()
+            .is_ok_and(|s| s.success());
+        if !ok {
+            return;
+        }
+        let mut dec = open_decoder(&mp3.to_string_lossy()).expect("Decoder");
+        assert!(dec.try_seek(Duration::from_millis(600)).is_ok());
+        // zurückspringen geht nur mit „seekable“
+        assert!(dec.try_seek(Duration::from_millis(100)).is_ok());
+        let _ = std::fs::remove_file(w);
+        let _ = std::fs::remove_file(mp3);
     }
 
     #[test]
