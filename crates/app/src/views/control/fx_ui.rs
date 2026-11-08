@@ -185,6 +185,10 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                     m.set_shape(shape);
                 }
                 move_editor(ui, id("editor"), m, positions, accent, enabled);
+                point_row(ui, id("editor"), m, accent, enabled);
+                if m.shape == MoveShape::Points {
+                    toggle_row(ui, t("Springen"), &mut m.jump, enabled);
+                }
                 slider_row(
                     ui,
                     id("phasing"),
@@ -507,9 +511,66 @@ fn grid(p: &egui::Painter, r: Rect, cols: usize, rows: usize) {
     }
 }
 
+/// Ausgewählter Stützpunkt des Formeditors (in egui gemerkt).
+fn selected_point(ui: &egui::Ui, id: egui::Id) -> Option<usize> {
+    ui.data(|d| d.get_temp::<Option<usize>>(id.with("sel")))
+        .flatten()
+}
+
+fn select_point(ui: &egui::Ui, id: egui::Id, sel: Option<usize>) {
+    ui.data_mut(|d| d.insert_temp(id.with("sel"), sel));
+}
+
+/// Unter dem Formeditor: ausgewählter Punkt mit Rundung und Löschen.
+fn point_row(ui: &mut egui::Ui, id: egui::Id, m: &mut MoveFx, accent: Color32, enabled: bool) {
+    if !m.editable() {
+        return;
+    }
+    let Some(i) = selected_point(ui, id).filter(|i| *i < m.points.len()) else {
+        return;
+    };
+    let mut remove = false;
+    ui.horizontal(|ui| {
+        ui.set_min_height(28.0);
+        ui.label(egui::RichText::new(tr!("Punkt {n}", n = i + 1)).color(theme::text()));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            remove = ui
+                .add(
+                    crate::ui::widgets::IconButton::new(crate::ui::widgets::Icon::Trash)
+                        .flat()
+                        .size(24.0)
+                        .enabled(enabled && m.points.len() > m.min_points()),
+                )
+                .on_hover_text(t("Punkt löschen (Entf)"))
+                .clicked();
+        });
+    });
+    // Kurve ist von sich aus rund
+    if m.shape != MoveShape::Curve {
+        let mut pct = m.smooth_at(i) * 100.0;
+        slider_row(
+            ui,
+            id.with(("smooth", i)),
+            t("Rundung"),
+            &mut pct,
+            (0.0, 100.0),
+            0,
+            enabled,
+            accent,
+        );
+        if (pct / 100.0 - m.smooth_at(i)).abs() > 1e-4 {
+            m.set_smooth(i, pct / 100.0);
+        }
+    }
+    if remove && m.remove_point(i) {
+        select_point(ui, id, None);
+    }
+}
+
 /// Formeditor des MOVE FX: Feld = Pan (x) × Tilt (y). Rahmen ziehen
 /// verschiebt, Ecken skalieren, der Griff oben dreht, Stützpunkte lassen
-/// sich einzeln ziehen.
+/// sich einzeln ziehen. Doppelklick fügt einen Stützpunkt hinzu, Klick auf
+/// einen Punkt wählt ihn aus (Rundung und Löschen darunter, Entf löscht).
 fn move_editor(
     ui: &mut egui::Ui,
     id: egui::Id,
@@ -519,7 +580,15 @@ fn move_editor(
     enabled: bool,
 ) {
     let w = ui.available_width();
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, w.min(200.0)), Sense::hover());
+    let (rect, bg) = ui.allocate_exact_size(
+        Vec2::new(w, w.min(200.0)),
+        if enabled {
+            Sense::click()
+        } else {
+            Sense::hover()
+        },
+    );
+    let mut sel = selected_point(ui, id).filter(|i| *i < m.points.len());
     let p = ui.painter_at(rect);
     p.rect_filled(rect, theme::R_S, theme::bg());
     grid(&p, rect, 4, 4);
@@ -573,11 +642,27 @@ fn move_editor(
         body,
         id.with("body"),
         if enabled {
-            Sense::drag()
+            Sense::click_and_drag()
         } else {
             Sense::hover()
         },
     );
+    // Doppelklick (im Rahmen oder daneben): Stützpunkt hinzufügen,
+    // einfacher Klick ins Leere hebt die Auswahl auf
+    for resp in [&bg, &r] {
+        if m.editable() && resp.double_clicked() {
+            if let Some(q) = resp.interact_pointer_pos() {
+                sel = Some(m.insert_point(m.to_local(from(q))));
+            }
+        } else if resp.clicked() {
+            sel = None;
+        }
+    }
+    if m.editable() {
+        bg.clone()
+            .union(r.clone())
+            .on_hover_text(t("Doppelklick: Punkt hinzufügen"));
+    }
     if r.dragged() {
         let d = r.drag_delta();
         m.center[0] = (m.center[0] + d.x / rect.width()).clamp(0.0, 1.0);
@@ -622,9 +707,34 @@ fn move_editor(
     // Stützpunkte
     if m.shape != MoveShape::Circle {
         let pts = m.points.clone();
+        // gerundete Ecken: ursprüngliche Ecken als feine Hilfslinie zeigen
+        if m.shape != MoveShape::Curve && (0..pts.len()).any(|i| m.smooth_at(i) > 0.0) {
+            let mut guide: Vec<Pos2> = pts.iter().map(|q| to(m.to_field(*q))).collect();
+            if m.closed() && guide.len() > 2 {
+                guide.push(guide[0]);
+            }
+            p.add(Shape::dashed_line(
+                &guide,
+                Stroke::new(1.0, theme::text_faint()),
+                3.0,
+                3.0,
+            ));
+        }
         for (i, pt) in pts.iter().enumerate() {
             let at = to(m.to_field(*pt));
-            let r = handle(ui, at, 12.0);
+            ids += 1;
+            let r = ui.interact(
+                Rect::from_center_size(at, Vec2::splat(14.0)),
+                id.with(("pt", ids)),
+                if enabled {
+                    Sense::click_and_drag()
+                } else {
+                    Sense::hover()
+                },
+            );
+            if r.clicked() || r.drag_started() {
+                sel = Some(i);
+            }
             if r.dragged() {
                 if let Some(q) = r.interact_pointer_pos() {
                     let l = m.to_local(from(q));
@@ -632,13 +742,38 @@ fn move_editor(
                 }
             }
             let hot = r.hovered() || r.dragged();
-            p.circle_stroke(
-                at,
-                4.5,
-                Stroke::new(1.5, if hot { accent } else { Color32::WHITE }),
+            if sel == Some(i) {
+                p.circle_filled(at, 5.5, accent);
+                p.circle_stroke(at, 5.5, Stroke::new(1.5, Color32::WHITE));
+            } else {
+                p.circle_stroke(
+                    at,
+                    4.5,
+                    Stroke::new(1.5, if hot { accent } else { Color32::WHITE }),
+                );
+            }
+            // Nummer neben dem Punkt
+            p.text(
+                at + Vec2::new(7.0, -7.0),
+                egui::Align2::LEFT_BOTTOM,
+                (i + 1).to_string(),
+                egui::FontId::proportional(10.0),
+                theme::text_faint(),
             );
         }
+        // Entf löscht den gewählten Punkt, solange die Maus über dem Feld ist
+        if let Some(i) = sel {
+            let hovered = ui.rect_contains_pointer(rect);
+            if enabled
+                && hovered
+                && ui.input_mut(|inp| inp.consume_key(egui::Modifiers::NONE, egui::Key::Delete))
+                && m.remove_point(i)
+            {
+                sel = None;
+            }
+        }
     }
+    select_point(ui, id, sel);
     // aktuelle Lage der Beams
     for (i, q) in positions.iter().enumerate() {
         p.circle_filled(to(*q), if i == 0 { 4.5 } else { 3.0 }, Color32::WHITE);
