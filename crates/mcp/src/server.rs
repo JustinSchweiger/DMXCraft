@@ -42,10 +42,10 @@ impl McpServer {
 
 impl Drop for McpServer {
     fn drop(&mut self) {
+        // Annahme beenden, aber nicht auf den Faden warten: eine hängende
+        // Verbindung darf das Beenden von DMXCraft nicht aufhalten
         self.server.unblock();
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
-        }
+        drop(self.thread.take());
     }
 }
 
@@ -130,6 +130,20 @@ fn serve(host: &Host, mut req: tiny_http::Request) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bridge_forwards_to_server() {
+        let host =
+            crate::Host::headless(dmxcraft_core::Engine::new(dmxcraft_core::Show::new("T", 1)));
+        let port = (40100..40200)
+            .find(|p| std::net::TcpListener::bind(("127.0.0.1", *p)).is_ok())
+            .unwrap();
+        let _srv = McpServer::start(host, port).unwrap();
+        let r = crate::bridge::forward(port, r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#)
+            .unwrap()
+            .unwrap();
+        assert!(r.contains("create_scene"));
+    }
+
     use super::*;
     use std::io::Write;
     use std::net::TcpStream;

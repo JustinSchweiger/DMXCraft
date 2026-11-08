@@ -2,6 +2,10 @@
 //! stdin, schickt sie an den HTTP-Endpunkt der laufenden DMXCraft-Instanz
 //! und schreibt die Antworten nach stdout. So können MCP-Clients, die Server
 //! als Prozess starten (z. B. Claude Desktop), DMXCraft steuern.
+//!
+//! Nur `std` und `serde_json`: dieselbe Datei steckt auch im kleinen
+//! Programm `dmxcraft-mcp` (crates/app/src/bin), damit die laufende Brücke
+//! nicht `dmxcraft.exe` sperrt (Neubauen unter Windows).
 
 use std::io::{BufRead, Read, Write};
 use std::net::TcpStream;
@@ -54,7 +58,7 @@ fn error_for(line: &str, err: &str) -> Option<String> {
 }
 
 /// Eine Nachricht per HTTP weitergeben. `Ok(None)` bei 202 (keine Antwort).
-fn forward(port: u16, body: &str) -> Result<Option<String>, String> {
+pub(crate) fn forward(port: u16, body: &str) -> Result<Option<String>, String> {
     let not_running = || {
         format!(
             "DMXCraft ist nicht erreichbar (127.0.0.1:{port}). Bitte DMXCraft starten und unter \
@@ -129,19 +133,5 @@ mod tests {
         let a = error_for(r#"{"jsonrpc":"2.0","id":7,"method":"ping"}"#, &e).unwrap();
         assert!(a.contains("\"id\":7"));
         assert!(error_for(r#"{"jsonrpc":"2.0","method":"x"}"#, &e).is_none());
-    }
-
-    #[test]
-    fn bridge_forwards_to_server() {
-        let host =
-            crate::Host::headless(dmxcraft_core::Engine::new(dmxcraft_core::Show::new("T", 1)));
-        let port = (40100..40200)
-            .find(|p| std::net::TcpListener::bind(("127.0.0.1", *p)).is_ok())
-            .unwrap();
-        let _srv = crate::server::McpServer::start(host, port).unwrap();
-        let r = forward(port, r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#)
-            .unwrap()
-            .unwrap();
-        assert!(r.contains("create_scene"));
     }
 }

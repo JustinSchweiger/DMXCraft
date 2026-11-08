@@ -134,6 +134,15 @@
                                 </Extension>
                             </ProgId>
                         </Component>
+                        <!-- DMXCraft: kleine stdio-Brücke für KI-Assistenten (MCP) -->
+                        <Component Id='binary1' Guid='*'>
+                            <File
+                                Id='exe1'
+                                Name='dmxcraft-mcp.exe'
+                                DiskId='1'
+                                Source='$(var.CargoTargetBinDir)\dmxcraft-mcp.exe'
+                                KeyPath='yes'/>
+                        </Component>
                     </Directory>
                 </Directory>
             </Directory>
@@ -177,6 +186,7 @@
             <!--<ComponentRef Id='License'/>-->
 
             <ComponentRef Id='binary0'/>
+            <ComponentRef Id='binary1'/>
             <ComponentRef Id='MenuShortcut'/>
             <ComponentRef Id='DesktopShortcut'/>
 

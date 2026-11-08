@@ -23,14 +23,18 @@ Programmdatei steht in den Einstellungen zum Kopieren bereit):
 ```json
 {
   "mcpServers": {
-    "dmxcraft": { "command": "/pfad/zu/dmxcraft", "args": ["mcp"] }
+    "dmxcraft": { "command": "C:\\Users\\…\\AppData\\Roaming\\dmxcraft\\dmxcraft-mcp.exe", "args": [] }
   }
 }
 ```
 
-`dmxcraft mcp` öffnet kein Fenster, sondern ist eine stdio-Brücke zum
-laufenden DMXCraft. DMXCraft muss also gestartet und der Server
-eingeschaltet sein.
+`dmxcraft-mcp` ist eine kleine stdio-Brücke zum laufenden DMXCraft (kein
+Fenster); bei anderem Port `"args": ["--port", "7474"]`. DMXCraft legt beim
+Start eine Kopie davon im Konfigurationsordner ab. Claude Desktop hält die
+Brücke dauerhaft offen – weil die Kopie benutzt wird, bleiben `dmxcraft.exe`
+und der Build-Ordner frei (Neubauen/Aktualisieren unter Windows). DMXCraft
+muss gestartet und der Server eingeschaltet sein. `dmxcraft mcp` funktioniert
+weiterhin, sperrt aber `dmxcraft.exe`, solange der Client läuft.
 
 **Andere Clients**: „Streamable HTTP“ mit der URL oben (JSON-Antworten, keine
 Sitzungen).

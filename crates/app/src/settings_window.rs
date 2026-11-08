@@ -225,7 +225,7 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
     });
     ui.add_space(theme::SP_M);
     let url = format!("http://127.0.0.1:{}/mcp", s.mcp_port);
-    let exe = crate::mcp::bridge_command();
+    let (exe, args) = crate::mcp::bridge_command(s.mcp_port);
     let snippets = [
         (
             t("Claude Code (Terminal)"),
@@ -234,7 +234,7 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
         (
             t("Claude Desktop (claude_desktop_config.json)"),
             serde_json::to_string_pretty(&serde_json::json!({
-                "mcpServers": { "dmxcraft": { "command": exe, "args": ["mcp"] } }
+                "mcpServers": { "dmxcraft": { "command": exe, "args": args } }
             }))
             .unwrap_or_default(),
         ),

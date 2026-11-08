@@ -107,8 +107,56 @@ impl McpLink {
 }
 
 /// Befehl, mit dem MCP-Clients DMXCraft als Prozess starten (stdio-Brücke).
-pub fn bridge_command() -> String {
-    std::env::current_exe()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "dmxcraft".into())
+/// Kopie der Brücke `dmxcraft-mcp` im Konfigurationsordner. Clients wie
+/// Claude Desktop starten diese Kopie und halten sie offen – so bleibt die
+/// Datei im Build- bzw. Programmordner frei (unter Windows lässt sich eine
+/// laufende .exe nicht ersetzen). Einmal je Start aktualisiert, wenn sie sich
+/// unterscheidet und gerade nicht läuft.
+fn installed_bridge() -> Option<std::path::PathBuf> {
+    static PATH: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    PATH.get_or_init(|| {
+        let name = format!("dmxcraft-mcp{}", std::env::consts::EXE_SUFFIX);
+        let src = std::env::current_exe().ok()?.with_file_name(&name);
+        let src_bytes = std::fs::read(&src).ok()?;
+        let dst = crate::settings::Settings::path()?.with_file_name(&name);
+        let same = std::fs::read(&dst).is_ok_and(|b| b == src_bytes);
+        if !same {
+            if let Some(dir) = dst.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            // schlägt fehl, solange die alte Kopie läuft – dann bleibt sie
+            let _ = std::fs::write(&dst, &src_bytes);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o755));
+            }
+        }
+        if dst.exists() {
+            Some(dst)
+        } else {
+            Some(src)
+        }
+    })
+    .clone()
+}
+
+/// Befehl und Argumente für Clients, die die stdio-Brücke starten: bevorzugt
+/// die Kopie von `dmxcraft-mcp` im Konfigurationsordner (sperrt weder
+/// `dmxcraft` noch den Build-Ordner), sonst `dmxcraft mcp`.
+pub fn bridge_command(port: u16) -> (String, Vec<String>) {
+    let exe = std::env::current_exe().ok();
+    let small = installed_bridge();
+    let port_args = if port == dmxcraft_mcp::DEFAULT_PORT {
+        Vec::new()
+    } else {
+        vec!["--port".to_string(), port.to_string()]
+    };
+    match small {
+        Some(p) => (p.display().to_string(), port_args),
+        None => (
+            exe.map_or_else(|| "dmxcraft".into(), |p| p.display().to_string()),
+            vec!["mcp".to_string()],
+        ),
+    }
 }

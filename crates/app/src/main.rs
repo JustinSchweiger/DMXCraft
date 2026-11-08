@@ -53,9 +53,16 @@ fn main() -> eframe::Result {
         persist_window: true,
         ..Default::default()
     };
-    eframe::run_native(
+    let result = eframe::run_native(
         "DMXCraft",
         options,
         Box::new(move |_cc| Ok(Box::new(app::DmxCraftApp::new(show_path, settings)))),
-    )
+    );
+    // Fenster ist zu und alles gespeichert: Prozess sicher beenden, auch wenn
+    // noch Hintergrund-Fäden (MCP-Verbindungen, Audio, Ausgabe) laufen
+    if let Err(e) = &result {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
+    std::process::exit(0)
 }
