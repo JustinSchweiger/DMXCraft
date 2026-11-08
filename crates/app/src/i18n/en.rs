@@ -1250,5 +1250,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Start einer SUPER SCENE setzt den Ton-Master auf die Höchstlautstärke", "Starting a SUPER SCENE resets the sound master to the maximum volume"),
     ("Ausfaden (Standard)", "Fade out (default)"),
     ("Dauer für „Ton ausfaden“, solange diese SUPER SCENE läuft. 0 = Standard aus den Einstellungen.", "Duration of “Fade out sound” while this SUPER SCENE is running. 0 = default from the settings."),
-    ("Höchstlautstärke {p} % (Einstellungen > Allgemein > Ton)", "Maximum volume {p} % (Settings > General > Sound)"),
+    ("Höchstlautstärke {p} % (Einstellungen > Ton)", "Maximum volume {p} % (Settings > Sound)"),
+    ("Gilt nur für die Wiedergabe der Audioblöcke in SUPER SCENES, nicht für die Systemlautstärke. Ton-Master, Stumm und Ausfaden findest du oben in der Titelleiste und als Ziele in der MIDI-Zuordnung.", "Only affects playback of the audio clips in SUPER SCENES, not the system volume. Sound master, mute and fade out are in the title bar and available as targets in MIDI mapping."),
 ];

@@ -344,7 +344,7 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
     if a.limit < 0.995 {
         tip.push_str("\n\n");
         tip.push_str(&tr!(
-            "Höchstlautstärke {p} % (Einstellungen > Allgemein > Ton)",
+            "Höchstlautstärke {p} % (Einstellungen > Ton)",
             p = format!("{:.0}", a.limit * 100.0)
         ));
     }

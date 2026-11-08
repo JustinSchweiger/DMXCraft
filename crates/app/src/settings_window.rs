@@ -32,18 +32,20 @@ pub enum Tab {
     Startup,
     Outputs,
     Midi,
+    Audio,
     Remote,
     Ai,
     Project,
 }
 
 impl Tab {
-    const ALL: [Tab; 8] = [
+    const ALL: [Tab; 9] = [
         Tab::General,
         Tab::Customize,
         Tab::Startup,
         Tab::Outputs,
         Tab::Midi,
+        Tab::Audio,
         Tab::Remote,
         Tab::Ai,
         Tab::Project,
@@ -56,6 +58,7 @@ impl Tab {
             Tab::Startup => t("Start"),
             Tab::Outputs => t("Ausgänge"),
             Tab::Midi => t("MIDI"),
+            Tab::Audio => t("Ton"),
             Tab::Remote => t("Fernbedienung"),
             Tab::Ai => t("MCP"),
             Tab::Project => t("Projekt"),
@@ -69,6 +72,7 @@ impl Tab {
             Tab::Startup => Icon::Play,
             Tab::Outputs => Icon::Levels,
             Tab::Midi => Icon::Midi,
+            Tab::Audio => Icon::SpeakerHigh,
             Tab::Remote => Icon::Remote,
             Tab::Ai => Icon::Robot,
             Tab::Project => Icon::FileOpen,
@@ -156,6 +160,7 @@ impl SettingsWindow {
                             Tab::Midi => {
                                 midi(ui, cx.settings, cx.midi_inputs, cx.midi_outputs, &mut ch)
                             }
+                            Tab::Audio => audio(ui, cx.settings, &mut ch),
                             Tab::Remote => remote(ui, cx.settings, cx.remote, &mut ch),
                             Tab::Ai => ai(ui, cx.settings, cx.mcp, &mut ch),
                             Tab::Project => project(ui, cx.engine, cx.show_path),
@@ -297,6 +302,67 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
     hint(
         ui,
         t("Claude Desktop startet DMXCraft dafür mit dem Argument „mcp“ als Brücke; DMXCraft selbst muss laufen und der Server eingeschaltet sein. Änderungen der KI lassen sich mit Strg+Z rückgängig machen; ist DMXCraft gesperrt, darf die KI nur lesen."),
+    );
+}
+
+/// Ton: Höchstlautstärke, Zurücksetzen beim Start, Ausfaden.
+fn audio(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
+    section(ui, t("Ton"));
+    form(ui, "settings_audio_limit", |f| {
+        f.row(t("Höchstlautstärke"), |ui| {
+            let r = ui.add(
+                egui::DragValue::new(&mut s.audio_limit_pct)
+                    .range(1..=100)
+                    .speed(0.5)
+                    .suffix(" %"),
+            );
+            if r.lost_focus() || r.drag_stopped() {
+                ch.save = true;
+            }
+        });
+    });
+    hint(
+        ui,
+        t("Ton-Master 100 % (und ein MIDI-Fader ganz oben) entspricht dieser Lautstärke – z. B. 30 % zum Testen, ohne die Systemlautstärke zu ändern."),
+    );
+    ui.add_space(theme::SP_S);
+    ch.save |= ui
+        .add(Toggle::new(
+            &mut s.audio_reset_on_start,
+            t("Start einer SUPER SCENE setzt den Ton-Master auf die Höchstlautstärke"),
+        ))
+        .changed();
+    hint(
+        ui,
+        t("Ein MIDI-Fader auf dem Ton-Master wirkt danach erst wieder, wenn er den aktuellen Wert erreicht – er springt also nicht."),
+    );
+    ui.add_space(theme::SP_S);
+    form(ui, "settings_audio", |f| {
+        f.row(t("Ausfaden (Standard)"), |ui| {
+            let mut secs = s.audio_fade_ms as f32 / 1000.0;
+            let r = ui.add(
+                egui::DragValue::new(&mut secs)
+                    .range(0.5..=60.0)
+                    .speed(0.1)
+                    .fixed_decimals(1)
+                    .suffix(" s"),
+            );
+            s.audio_fade_ms = (secs * 1000.0).round() as u32;
+            if r.lost_focus() || r.drag_stopped() {
+                ch.save = true;
+            }
+        });
+    });
+    ch.save |= ui
+        .add(Toggle::new(
+            &mut s.audio_fade_stop,
+            t("Nach dem Ausfaden die SUPER SCENES mit Ton stoppen"),
+        ))
+        .changed();
+    ui.add_space(theme::SP_M);
+    hint(
+        ui,
+        t("Gilt nur für die Wiedergabe der Audioblöcke in SUPER SCENES, nicht für die Systemlautstärke. Ton-Master, Stumm und Ausfaden findest du oben in der Titelleiste und als Ziele in der MIDI-Zuordnung."),
     );
 }
 
@@ -471,59 +537,6 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
             }
         });
     });
-    ui.add_space(theme::SP_L);
-    section(ui, t("Ton"));
-    form(ui, "settings_audio_limit", |f| {
-        f.row(t("Höchstlautstärke"), |ui| {
-            let r = ui.add(
-                egui::DragValue::new(&mut s.audio_limit_pct)
-                    .range(1..=100)
-                    .speed(0.5)
-                    .suffix(" %"),
-            );
-            if r.lost_focus() || r.drag_stopped() {
-                ch.save = true;
-            }
-        });
-    });
-    hint(
-        ui,
-        t("Ton-Master 100 % (und ein MIDI-Fader ganz oben) entspricht dieser Lautstärke – z. B. 30 % zum Testen, ohne die Systemlautstärke zu ändern."),
-    );
-    ui.add_space(theme::SP_S);
-    ch.save |= ui
-        .add(Toggle::new(
-            &mut s.audio_reset_on_start,
-            t("Start einer SUPER SCENE setzt den Ton-Master auf die Höchstlautstärke"),
-        ))
-        .changed();
-    hint(
-        ui,
-        t("Ein MIDI-Fader auf dem Ton-Master wirkt danach erst wieder, wenn er den aktuellen Wert erreicht – er springt also nicht."),
-    );
-    ui.add_space(theme::SP_S);
-    form(ui, "settings_audio", |f| {
-        f.row(t("Ausfaden (Standard)"), |ui| {
-            let mut secs = s.audio_fade_ms as f32 / 1000.0;
-            let r = ui.add(
-                egui::DragValue::new(&mut secs)
-                    .range(0.5..=60.0)
-                    .speed(0.1)
-                    .fixed_decimals(1)
-                    .suffix(" s"),
-            );
-            s.audio_fade_ms = (secs * 1000.0).round() as u32;
-            if r.lost_focus() || r.drag_stopped() {
-                ch.save = true;
-            }
-        });
-    });
-    ch.save |= ui
-        .add(Toggle::new(
-            &mut s.audio_fade_stop,
-            t("Nach dem Ausfaden die SUPER SCENES mit Ton stoppen"),
-        ))
-        .changed();
     ui.add_space(theme::SP_L);
     if let Some(p) = Settings::path() {
         hint(ui, &tr!("Gespeichert in {v}", v = p.display()));
