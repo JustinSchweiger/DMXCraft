@@ -11,6 +11,7 @@ pub mod engine;
 pub mod fixture;
 pub mod fx;
 pub mod library;
+pub mod mapping;
 pub mod plan;
 pub mod show;
 pub mod timeline;

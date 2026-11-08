@@ -703,6 +703,9 @@ pub struct Show {
     /// Veranstaltungsort für den 3D-Visualisierer.
     #[serde(default)]
     pub venue: crate::venue::Venue,
+    /// Tastatur- und MIDI-Zuordnungen.
+    #[serde(default, skip_serializing_if = "crate::mapping::Mappings::is_empty")]
+    pub mappings: crate::mapping::Mappings,
 }
 
 impl Default for Show {
@@ -724,6 +727,7 @@ impl Show {
             scenes: Vec::new(),
             groups: Vec::new(),
             venue: crate::venue::Venue::default(),
+            mappings: Default::default(),
         }
     }
 

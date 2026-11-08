@@ -67,6 +67,7 @@ pub struct DmxCraftApp {
     history: History,
     /// MCP-Server für KI-Assistenten.
     mcp: crate::mcp::McpLink,
+    mapper: crate::mapping::Mapper,
     /// 3D-Visualisierer.
     viz: crate::viz::VizView,
     /// Profile Builder (eigenes Fenster).
@@ -145,6 +146,7 @@ impl DmxCraftApp {
             windows: Windows::default(),
             history: History::default(),
             mcp: crate::mcp::McpLink::default(),
+            mapper: crate::mapping::Mapper::default(),
             viz: crate::viz::VizView::default(),
             builder: Default::default(),
             usb_ports: Vec::new(),
@@ -346,6 +348,16 @@ impl DmxCraftApp {
             MenuAction::CheckUpdates => self.updater.check(ctx.clone()),
             MenuAction::InstallUpdate => self.updater.install(ctx.clone()),
             MenuAction::About => self.about_open = true,
+            MenuAction::Mapping(kind) => {
+                let st = &mut self.state;
+                st.mapping = if st.mapping == Some(kind) {
+                    None
+                } else {
+                    Some(kind)
+                };
+                st.map_sel = None;
+                st.map_learn = false;
+            }
             MenuAction::ToggleLock => {
                 if self.state.locked {
                     self.lock_dialog = Some(LockDialog {
@@ -718,6 +730,14 @@ impl eframe::App for DmxCraftApp {
             self.close_dialog = true;
         }
 
+        // ----- Tastatur-/MIDI-Zuordnung: Überlagerung für dieses Bild -----
+        if self.state.locked {
+            self.state.mapping = None;
+            self.state.map_learn = false;
+        }
+        self.mapper
+            .begin_frame(&ctx, Self::lock(&self.engine).show(), &self.state);
+
         // ----- Titelleiste -----
         let (mut show_name, fps, status, blackout) = self.title_info();
         if self.dirty() {
@@ -747,6 +767,7 @@ impl eframe::App for DmxCraftApp {
             can_redo: self.history.can_redo(),
             message: message.as_ref().map(|(m, e)| (m.as_str(), *e)),
             update,
+            mapping: self.state.mapping,
         };
         let mut actions = Vec::new();
         egui::Panel::top("titlebar")
@@ -755,7 +776,9 @@ impl eframe::App for DmxCraftApp {
             .show(ui, |ui| {
                 actions = titlebar::show(ui, &info, &mut self.state.mode);
             });
-        actions.extend(self.shortcuts(&ctx));
+        if !self.state.map_learn {
+            actions.extend(self.shortcuts(&ctx));
+        }
         for a in actions {
             self.apply_menu(&ctx, a);
         }
@@ -826,6 +849,8 @@ impl eframe::App for DmxCraftApp {
                         .show(ui, |ui| control.grid.ui(ui, &mut cx));
                 }
             }
+            crate::mapping::window::show(&ctx, cx.engine, cx.state, &mut self.mapper);
+            self.mapper.end_frame(&ctx, cx.engine, cx.state);
             edit_preview(cx.engine, cx.state);
             cx.engine.set_timeline_cursor(cx.state.timeline_cursor);
             cx.state.audio.update(cx.engine);

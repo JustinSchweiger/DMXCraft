@@ -35,6 +35,16 @@ pub struct AppState {
     pub selection_order: Vec<FixtureId>,
     /// Markierte Szenen in STEUERN (für Löschen u. a.).
     pub selected_scenes: BTreeSet<SceneId>,
+    /// Zuordnungsmodus (Überlagerung und Fenster) – Tastatur oder MIDI.
+    pub mapping: Option<dmxcraft_core::mapping::MapKind>,
+    /// Gewählte Zuordnung im Zuordnungsfenster.
+    pub map_sel: Option<u32>,
+    /// Wartet auf die nächste Taste bzw. MIDI-Nachricht.
+    pub map_learn: bool,
+    /// Im Szenenraster angezeigte Bank (`None` = alle).
+    pub shown_bank: Option<dmxcraft_core::ZoneId>,
+    /// Anfrage an das Szenenraster, eine Bank anzuzeigen.
+    pub request_bank: Option<Option<dmxcraft_core::ZoneId>>,
     /// Zuletzt verarbeitete Szenen-Markierung (Edit-Modus: Geräte mitwählen).
     pub scene_selection_seen: BTreeSet<SceneId>,
     /// Zuletzt verarbeiteter Programmer-Modus.
@@ -133,6 +143,11 @@ impl AppState {
             selected: BTreeSet::new(),
             selection_order: Vec::new(),
             selected_scenes: BTreeSet::new(),
+            mapping: None,
+            map_sel: None,
+            map_learn: false,
+            shown_bank: None,
+            request_bank: None,
             programmer_mode: ProgrammerMode::default(),
             focus: Focus::default(),
             scene_selection_seen: BTreeSet::new(),

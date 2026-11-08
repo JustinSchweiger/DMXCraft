@@ -38,6 +38,7 @@ serde_json.workspace = true
 sha2 = "0.11"
 rfd = "0.17"
 glam = { version = "0.30", features = ["bytemuck"] }
+midir = "0.10"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 gltf = { version = "1", default-features = false, features = ["utils", "names"] }
 bytemuck = { version = "1", features = ["derive"] }

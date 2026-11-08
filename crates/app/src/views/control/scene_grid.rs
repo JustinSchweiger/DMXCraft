@@ -14,6 +14,8 @@
 use std::collections::BTreeSet;
 
 use crate::i18n::t;
+use crate::mapping;
+use dmxcraft_core::mapping::{Control, SceneTarget};
 use dmxcraft_core::{Engine, SceneId, Show, Step, ZoneId};
 use eframe::egui::{self, Color32, Sense, Stroke, StrokeKind, Vec2};
 
@@ -128,6 +130,19 @@ impl View for SceneGridView {
                 self.page = PageFilter::All;
             }
         }
+        // Bankwechsel über Tastatur/MIDI; angezeigte Bank für Zuordnungen
+        if let Some(req) = cx.state.request_bank.take() {
+            self.page = match req {
+                Some(z) if cx.engine.show().zone(z).is_some_and(|z| !z.hidden) => {
+                    PageFilter::Zone(z)
+                }
+                _ => PageFilter::All,
+            };
+        }
+        cx.state.shown_bank = match self.page {
+            PageFilter::All => None,
+            PageFilter::Zone(z) => Some(z),
+        };
         let columns: Vec<(ZoneId, String)> = cx
             .engine
             .show()
@@ -321,6 +336,7 @@ impl SceneGridView {
                 theme::text(),
                 false,
             );
+            mapping::target(ui, all.rect, Control::ShowBank { zone: None });
             if !locked && show.zones.iter().any(|z| z.hidden) {
                 menu::context(&all, |ui| {
                     menu::begin(ui);
@@ -356,6 +372,9 @@ impl SceneGridView {
                 }
                 let live = e.active_in_zone(z.id).is_some();
                 let resp = chip(ui, &mut self.page, PageFilter::Zone(z.id), &z.name, c, live);
+                if mapping::target(ui, resp.rect, Control::ShowBank { zone: Some(z.id) }) {
+                    continue;
+                }
                 if resp.clicked() {
                     actions.push(Action::FocusBank(z.id));
                 }
@@ -644,28 +663,30 @@ fn column(
                     ui.horizontal(|ui| {
                         let on = target.is_some();
                         let sid = target.unwrap_or(SceneId(0));
-                        if ui
+                        let r = ui
                             .add(
                                 IconButton::new(if paused { Icon::Play } else { Icon::Pause })
                                     .enabled(on)
                                     .active(paused),
                             )
-                            .on_hover_text(t("Pause / Weiter"))
-                            .clicked()
+                            .on_hover_text(t("Pause / Weiter"));
+                        if !mapping::target(ui, r.rect, Control::ZonePause { zone }) && r.clicked()
                         {
                             actions.push(Action::Pause(sid));
                         }
-                        if ui
+                        let r = ui
                             .add(IconButton::new(Icon::Prev).enabled(on))
-                            .on_hover_text(t("Vorheriger Schritt"))
-                            .clicked()
+                            .on_hover_text(t("Vorheriger Schritt"));
+                        if !mapping::target(ui, r.rect, Control::ZoneStep { zone, delta: -1 })
+                            && r.clicked()
                         {
                             actions.push(Action::Jump(sid, -1));
                         }
-                        if ui
+                        let r = ui
                             .add(IconButton::new(Icon::Next).enabled(on))
-                            .on_hover_text(t("Nächster Schritt"))
-                            .clicked()
+                            .on_hover_text(t("Nächster Schritt"));
+                        if !mapping::target(ui, r.rect, Control::ZoneStep { zone, delta: 1 })
+                            && r.clicked()
                         {
                             actions.push(Action::Jump(sid, 1));
                         }
@@ -906,6 +927,12 @@ fn scene_card(
     .show(ui);
     if e.fade_state(id).is_some() {
         ui.ctx().request_repaint();
+    }
+    let element = Control::Scene {
+        target: SceneTarget::Scene { id },
+    };
+    if mapping::target(ui, resp.whole().rect, element) {
+        return;
     }
     if !locked {
         resp.select.dnd_set_drag_payload(id);

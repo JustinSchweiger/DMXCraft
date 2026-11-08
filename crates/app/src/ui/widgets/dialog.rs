@@ -42,6 +42,8 @@ pub struct Dialog<'a> {
     /// Inhalt ohne Innenabstand (eigene Aufteilung wie Reiterleiste).
     flush: bool,
     buttons: Vec<Button>,
+    top_right: Option<egui::Pos2>,
+    escape: bool,
 }
 
 pub struct DialogResult {
@@ -66,6 +68,8 @@ impl<'a> Dialog<'a> {
             height: None,
             flush: false,
             buttons: Vec::new(),
+            top_right: None,
+            escape: true,
         }
     }
 
@@ -124,6 +128,18 @@ impl<'a> Dialog<'a> {
 
     /// Zeigt den Dialog. `body` bekommt `true` in den ersten Frames nach dem
     /// Öffnen (zum Fokussieren des ersten Felds – nur dann, sonst geht Tab nicht).
+    /// Startposition (rechte obere Ecke) statt Bildschirmmitte.
+    pub fn top_right(mut self, pos: egui::Pos2) -> Self {
+        self.top_right = Some(pos);
+        self
+    }
+
+    /// Esc schließt den Dialog nicht (z. B. wenn Esc eine Eingabe abbricht).
+    pub fn keep_on_escape(mut self) -> Self {
+        self.escape = false;
+        self
+    }
+
     pub fn show(
         self,
         ctx: &egui::Context,
@@ -146,7 +162,7 @@ impl<'a> Dialog<'a> {
         let first = frame_nr - opened <= 30 && focused == before;
 
         let mut clicked = None;
-        let mut close = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        let mut close = self.escape && ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let enter = frame_nr > opened && ctx.input(|i| i.key_pressed(egui::Key::Enter));
 
         let frame = Frame::new()
@@ -159,8 +175,12 @@ impl<'a> Dialog<'a> {
             .title_bar(false)
             .collapsible(false)
             .frame(frame)
-            .pivot(Align2::CENTER_CENTER)
-            .default_pos(ctx.content_rect().center());
+            .pivot(if self.top_right.is_some() {
+                Align2::RIGHT_TOP
+            } else {
+                Align2::CENTER_CENTER
+            })
+            .default_pos(self.top_right.unwrap_or(ctx.content_rect().center()));
         window = match self.size {
             Some(s) => window
                 .resizable(true)

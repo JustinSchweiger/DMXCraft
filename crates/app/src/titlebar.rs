@@ -31,6 +31,8 @@ pub struct TitleInfo<'a> {
     /// Kurzzeitige Meldung (Text, ist Fehler).
     pub message: Option<(&'a str, bool)>,
     pub update: UpdateBadge,
+    /// Aktiver Zuordnungsmodus.
+    pub mapping: Option<dmxcraft_core::mapping::MapKind>,
 }
 
 /// Update-Hinweis in der Titelleiste.
@@ -65,6 +67,8 @@ pub enum MenuAction {
     CheckUpdates,
     InstallUpdate,
     ToggleLock,
+    /// Tastatur- bzw. MIDI-Zuordnung ein/aus.
+    Mapping(dmxcraft_core::mapping::MapKind),
     About,
 }
 
@@ -210,6 +214,22 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                 .clicked()
             {
                 actions.push(MenuAction::ToggleLock);
+            }
+            if !info.locked {
+                use dmxcraft_core::mapping::MapKind;
+                for (kind, icon, tip) in [
+                    (MapKind::Midi, Icon::Midi, t("MIDI-Zuordnung")),
+                    (MapKind::Keyboard, Icon::Keyboard, t("Tastatur-Zuordnung")),
+                ] {
+                    let on = info.mapping == Some(kind);
+                    let mut b = IconButton::new(icon).size(28.0).flat().active(on);
+                    if on {
+                        b = b.tint(crate::mapping::color(kind));
+                    }
+                    if ui.add(b).on_hover_text(tip).clicked() {
+                        actions.push(MenuAction::Mapping(kind));
+                    }
+                }
             }
             ui.add_space(theme::SP_XS);
             load_meter(ui, info);
