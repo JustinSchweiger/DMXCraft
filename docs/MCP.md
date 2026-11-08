@@ -59,6 +59,13 @@ Sitzungen).
 Kanalwerte gibt man entweder einzeln an (`{fixture, channel, value}`, Kanal
 als Index, Art wie `"Red"` oder Name) oder bequem je Kanalart für mehrere
 Geräte: `{"fixtures": [1,2,3], "set": {"Dimmer": 255, "color": "#ff8800"}}`.
+Bei vielen Werten (z. B. beim Übernehmen ganzer Szenen) gibt es die Kurzform
+`[fixture, channel, value]`, etwa `"values": [[3, 1, 255], [3, "Dimmer", 128]]`.
+
+`create_scene`, `update_scene`, `add_effect`, `update_effect` und
+`create_super_scene` antworten mit einer kurzen Zusammenfassung (ID, Bank,
+Art, Anzahl der Werte je Schritt, Effekte, Länge der Zeitleiste). Die ganze
+Szene mit allen Kanalwerten liefert `get_scene` oder `"verbose": true`.
 
 **3D-Visualisierer:** `visualizer_screenshot` rendert die Ansicht direkt auf
 der Grafikkarte (das Fenster muss nicht offen sein) und liefert sie als Bild –

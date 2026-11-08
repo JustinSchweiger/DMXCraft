@@ -56,15 +56,25 @@ fn any_obj(d: &str) -> Value {
 fn values_schema() -> Value {
     json!({
         "type": "array",
-        "description": "Kanalwerte. Jeder Eintrag: {fixture: ID, channel: Index (ab 0) ODER Kanalart (\"Dimmer\", \"Red\", \"Green\", \"Blue\", \"White\", \"Amber\", \"Uv\", \"Pan\", \"Tilt\", \"Strobe\", \"ColorWheel\", \"Gobo\", \"Speed\") ODER Kanalname, value: 0–255}.",
+        "description": "Kanalwerte. Jeder Eintrag: {fixture: ID, channel: Index (ab 0) ODER Kanalart (\"Dimmer\", \"Red\", \"Green\", \"Blue\", \"White\", \"Amber\", \"Uv\", \"Pan\", \"Tilt\", \"Strobe\", \"ColorWheel\", \"Gobo\", \"Speed\") ODER Kanalname, value: 0–255} – oder kurz als [fixture, channel, value] (spart bei vielen Werten Platz).",
         "items": {
-            "type": "object",
-            "properties": {
-                "fixture": { "type": "integer" },
-                "channel": { "type": ["integer", "string"] },
-                "value": { "type": "integer", "minimum": 0, "maximum": 255 }
-            },
-            "required": ["fixture", "channel", "value"]
+            "anyOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "fixture": { "type": "integer" },
+                        "channel": { "type": ["integer", "string"] },
+                        "value": { "type": "integer", "minimum": 0, "maximum": 255 }
+                    },
+                    "required": ["fixture", "channel", "value"]
+                },
+                {
+                    "type": "array",
+                    "items": { "type": ["integer", "string"] },
+                    "minItems": 3,
+                    "maxItems": 3
+                }
+            ]
         }
     })
 }
@@ -251,6 +261,7 @@ const TOOLS: &[Tool] = &[
             "loop": boolean("Ablauf endlos wiederholen (Standard true)"),
             "settings": any_obj("Szeneneinstellungen, z. B. {\"fade_in_ms\":500,\"fade_out_ms\":500,\"dimmer\":255,\"speed_pct\":100,\"flash\":false}"),
             "select": boolean("in der Oberfläche auswählen (Standard true)"),
+            "verbose": boolean("vollständige Szene mit allen Kanalwerten zurückgeben (Standard: kurze Zusammenfassung; Details über get_scene)"),
         }, &["name", "bank", "steps"]),
         read_only: false,
     },
@@ -263,6 +274,7 @@ const TOOLS: &[Tool] = &[
             "bank": int("in diese Bank verschieben"), "hidden": boolean("ausblenden"),
             "loop": boolean("endlos wiederholen"), "settings": any_obj("Einstellungen (nur genannte Felder ändern sich)"),
             "steps": json!({ "type": "array", "items": step_schema(), "description": "neue Schritte (ersetzt alle)" }),
+            "verbose": boolean("vollständige Szene mit allen Kanalwerten zurückgeben (Standard: kurze Zusammenfassung; Details über get_scene)"),
         }, &["id"]),
         read_only: false,
     },
@@ -287,6 +299,7 @@ const TOOLS: &[Tool] = &[
         schema: || obj(props! {
             "scene": int("Szenen-ID"), "kind": string("Effekttyp, z. B. ColorFx"),
             "fixtures": ids("Geräte in Effekt-Reihenfolge"), "params": any_obj("Felder wie in describe_effect"),
+            "verbose": boolean("vollständige Szene mit allen Kanalwerten zurückgeben (Standard: kurze Zusammenfassung; Details über get_scene)"),
         }, &["scene", "kind", "fixtures"]),
         read_only: false,
     },
@@ -297,6 +310,7 @@ const TOOLS: &[Tool] = &[
         schema: || obj(props! {
             "scene": int("Szenen-ID"), "effect": int("Effekt-ID aus get_scene"),
             "fixtures": ids("neue Geräte (optional)"), "params": any_obj("geänderte Felder"),
+            "verbose": boolean("vollständige Szene mit allen Kanalwerten zurückgeben (Standard: kurze Zusammenfassung; Details über get_scene)"),
         }, &["scene", "effect"]),
         read_only: false,
     },
@@ -316,6 +330,7 @@ const TOOLS: &[Tool] = &[
             "clips": json!({ "type": "array", "items": clip_schema() }),
             "track_names": json!({ "type": "array", "items": { "type": "string" }, "description": "Namen der Spuren (optional)" }),
             "bpm": num("Tempo für das Beat-Raster (optional)"),
+            "verbose": boolean("vollständige Szene mit allen Kanalwerten zurückgeben (Standard: kurze Zusammenfassung; Details über get_scene)"),
         }, &["name", "bank"]),
         read_only: false,
     },
@@ -944,13 +959,23 @@ fn collect_values(show: &Show, a: &Value) -> Result<Vec<ChannelValue>, String> {
     };
     if let Some(vals) = a.get("values").and_then(Value::as_array) {
         for v in vals {
-            let fixture = FixtureId(req_u32(v, "fixture")?);
-            let channel = resolve_channel(show, fixture, v.get("channel").unwrap_or(&Value::Null))?;
-            let value = v
-                .get("value")
-                .and_then(Value::as_u64)
-                .ok_or("`value` fehlt")?
-                .min(255) as u8;
+            // kurz: [fixture, channel, value]
+            let (f, c, val) = match v.as_array() {
+                Some(t) if t.len() == 3 => (t[0].clone(), t[1].clone(), t[2].clone()),
+                Some(_) => return Err("Kurzform: [fixture, channel, value]".into()),
+                None => (
+                    v.get("fixture").cloned().unwrap_or(Value::Null),
+                    v.get("channel").cloned().unwrap_or(Value::Null),
+                    v.get("value").cloned().unwrap_or(Value::Null),
+                ),
+            };
+            let fixture = FixtureId(
+                f.as_u64()
+                    .and_then(|n| u32::try_from(n).ok())
+                    .ok_or("`fixture` fehlt")?,
+            );
+            let channel = resolve_channel(show, fixture, &c)?;
+            let value = val.as_u64().ok_or("`value` fehlt")?.min(255) as u8;
             put(ChannelValue {
                 fixture,
                 channel,
@@ -1113,6 +1138,31 @@ fn list_scenes(e: &Engine, a: &Value) -> R {
             .map(|s| scene_brief(e, s))
             .collect::<Vec<_>>()
     }))
+}
+
+/// Antwort nach einer Änderung: kurz (Zusammenfassung) oder mit `verbose`
+/// die ganze Szene – große Szenen sprengen sonst die Antwort.
+fn changed_scene(e: &Engine, id: SceneId, a: &Value) -> R {
+    if a.get("verbose").and_then(Value::as_bool).unwrap_or(false) {
+        return get_scene(e, id);
+    }
+    let s = e.show().scene(id).ok_or("Szene nicht gefunden")?;
+    let mut out = scene_brief(e, s);
+    out["values_per_step"] = json!(s.steps.iter().map(|st| st.values.len()).collect::<Vec<_>>());
+    out["settings"] = serde_json::to_value(&s.settings).unwrap_or_default();
+    out["effect_list"] = json!(s
+        .effects
+        .iter()
+        .filter(|f| f.kind != EffectKind::SuperScene && f.kind != EffectKind::Steps)
+        .map(|f| json!({ "id": f.id, "kind": kind_name(f.kind), "fixtures": f.fixtures.len() }))
+        .collect::<Vec<_>>());
+    if let Some(tl) = s.timeline() {
+        out["timeline"] = json!({
+            "length_ms": tl.length_ms(),
+            "clips": tl.tracks.iter().map(|t| t.clips.len()).sum::<usize>(),
+        });
+    }
+    Ok(out)
 }
 
 fn get_scene(e: &Engine, id: SceneId) -> R {
@@ -1352,7 +1402,7 @@ fn create_scene(host: &Host, e: &mut Engine, a: &Value) -> R {
     if a.get("select").and_then(Value::as_bool).unwrap_or(true) {
         (host.notify)(AppEvent::SelectScene(id));
     }
-    get_scene(e, id)
+    changed_scene(e, id, a)
 }
 
 fn apply_scene_fields(e: &mut Engine, id: SceneId, a: &Value) -> Result<(), String> {
@@ -1403,7 +1453,7 @@ fn update_scene(e: &mut Engine, a: &Value) -> R {
     }
     apply_scene_fields(e, id, a)?;
     e.sync();
-    get_scene(e, id)
+    changed_scene(e, id, a)
 }
 
 fn add_effect(e: &mut Engine, a: &Value) -> R {
@@ -1435,7 +1485,7 @@ fn add_effect(e: &mut Engine, a: &Value) -> R {
         }
         *fx = merged(fx, &p)?;
     }
-    get_scene(e, sid)
+    changed_scene(e, sid, a)
 }
 
 fn update_effect(e: &mut Engine, a: &Value) -> R {
@@ -1462,7 +1512,7 @@ fn update_effect(e: &mut Engine, a: &Value) -> R {
         }
         *fx = merged(fx, &p)?;
     }
-    get_scene(e, sid)
+    changed_scene(e, sid, a)
 }
 
 // ---------- SUPER SCENE ----------
@@ -1494,7 +1544,7 @@ fn create_super_scene(host: &Host, e: &mut Engine, a: &Value) -> R {
         add_clips(host, e, id, &clips.clone())?;
     }
     (host.notify)(AppEvent::SelectScene(id));
-    get_scene(e, id)
+    changed_scene(e, id, a)
 }
 
 fn add_clips(
@@ -1645,7 +1695,8 @@ mod tests {
             json!({
                 "name":"Rot","bank":bank,
                 "steps":[{"fixtures":ids,"set":{"Dimmer":255,"color":"#ff0000"}}],
-                "settings":{"fade_in_ms":500}
+                "settings":{"fade_in_ms":500},
+                "verbose":true
             }),
         );
         assert_eq!(red["kind"], "STATISCH");
@@ -1668,6 +1719,21 @@ mod tests {
             }),
         );
         assert_eq!(chase["steps"], 2);
+        // Kurzform der Werte und kurze Antwort ohne Kanalliste
+        let short = ok(
+            &h,
+            "create_scene",
+            json!({
+                "name":"Kurz","bank":bank,
+                "steps":[{"values":[[ids[0],"Dimmer",128],[ids[1],0,7]]}]
+            }),
+        );
+        assert_eq!(short["values_per_step"][0], 2);
+        assert!(short.get("step_list").is_none());
+        let full = ok(&h, "get_scene", json!({"id": short["id"]}));
+        let v = full["step_list"][0]["values"].as_array().unwrap();
+        assert!(v.iter().any(|x| x["kind"] == "Dimmer" && x["value"] == 128));
+        assert!(v.iter().any(|x| x["channel"] == 0 && x["value"] == 7));
         assert_eq!(chase["effects"][0], "Steps");
 
         // Effekt mit Parametern
@@ -1692,7 +1758,8 @@ mod tests {
             "create_super_scene",
             json!({
                 "name":"Show","bank":bank,
-                "clips":[{"scene":red_id,"start_ms":0,"duration_ms":2000},{"track":1,"scene":chase["id"],"start_ms":1000}]
+                "clips":[{"scene":red_id,"start_ms":0,"duration_ms":2000},{"track":1,"scene":chase["id"],"start_ms":1000}],
+                "verbose":true
             }),
         );
         assert_eq!(sup["kind"], "SUPER SCENE");
