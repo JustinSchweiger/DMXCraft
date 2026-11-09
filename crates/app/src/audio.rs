@@ -223,7 +223,7 @@ impl AudioPlayer {
         self.fade_ms = settings.audio_fade_ms;
         self.limit = f32::from(settings.audio_limit_pct.clamp(1, 100)) / 100.0;
         if self.tick(e, settings.audio_reset_on_start) && settings.audio_fade_stop {
-            // ausgeblendet: SUPER SCENES mit Ton stoppen
+            // ausgeblendet: SUPER SCENES mit Ton beenden (inkl. „Springe zu“)
             let with_audio: Vec<SceneId> = e
                 .show()
                 .scenes
@@ -233,7 +233,7 @@ impl AudioPlayer {
                 .filter(|id| e.is_active(*id))
                 .collect();
             for id in with_audio {
-                e.release(id);
+                e.end_scene(id);
             }
         }
         let gain = self.gain();

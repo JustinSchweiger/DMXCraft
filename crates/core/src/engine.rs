@@ -537,9 +537,25 @@ impl Engine {
             if st.release_at_end {
                 self.release(id);
             }
-            for next in st.jump_to_scenes.iter().filter(|n| **n != id) {
-                self.activate(*next);
-            }
+            self.jump_from(id, &st.jump_to_scenes);
+        }
+    }
+
+    /// Eine Szene vorzeitig beenden (z. B. „Ton ausfaden“): freigeben und wie
+    /// am regulären Ende zu den Szenen aus „Springe zu“ wechseln.
+    pub fn end_scene(&mut self, id: SceneId) {
+        let jumps = self
+            .show
+            .scene(id)
+            .map(|s| s.settings.jump_to_scenes.clone())
+            .unwrap_or_default();
+        self.release(id);
+        self.jump_from(id, &jumps);
+    }
+
+    fn jump_from(&mut self, id: SceneId, targets: &[SceneId]) {
+        for next in targets.iter().filter(|n| **n != id) {
+            self.activate(*next);
         }
     }
 
@@ -1216,6 +1232,19 @@ mod tests {
         assert!(e.timeline_time(sup).unwrap() < 500.0);
         e.toggle_timeline(sup, 0.0);
         assert!(!e.timeline_running(sup), "pausiert");
+    }
+
+    #[test]
+    fn end_scene_follows_jump_to() {
+        let (mut s, a, _) = setup();
+        let next = s.add_scene("B", None, vec![Step::new(vec![cv(a, 0, 50)])]);
+        let first = s.add_scene("A", None, vec![Step::new(vec![cv(a, 0, 200)])]);
+        s.scene_mut(first).unwrap().settings.jump_to_scenes = vec![next];
+        let mut e = Engine::new(s);
+        e.activate(first);
+        e.end_scene(first);
+        assert!(!e.is_active(first));
+        assert!(e.is_active(next));
     }
 
     #[test]
