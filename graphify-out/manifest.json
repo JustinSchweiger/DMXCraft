@@ -486,9 +486,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/scene_props.rs": {
-    "mtime": 1794172228.4260333,
-    "seen": 1794172246.619269,
-    "ast_hash": "e5c73e33178334c3540001f933f4b898",
+    "mtime": 1794222409.9508274,
+    "seen": 1794222620.9581056,
+    "ast_hash": "67e961fdf4a024bd4e5fe7f6ebe41401",
     "semantic_hash": ""
   },
   "crates/app/assets/fonts/Phosphor-LICENSE.txt": {

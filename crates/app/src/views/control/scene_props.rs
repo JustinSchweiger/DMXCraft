@@ -75,24 +75,31 @@ impl View for ScenePropsView {
                 .max_rect(tabs.shrink2(Vec2::new(3.0, 0.0)))
                 .layout(egui::Layout::top_down(egui::Align::Center)),
         );
+        // mehrere Szenen: Eigenschaften gelten für alle, Effekte nur einzeln
+        let multi = cx.state.selected_scenes.len() > 1;
+        if multi && self.tab == Tab::Effects {
+            self.tab = Tab::Properties;
+        }
         for (tab, icon, tip) in [
             (Tab::Properties, Icon::Sliders, t("Eigenschaften")),
             (Tab::Effects, Icon::Fx, t("Effekte")),
             (Tab::Third, Icon::Gear, t("Erweiterte Eigenschaften")),
         ] {
+            let enabled = !(multi && tab == Tab::Effects);
             let r = tab_ui
                 .add(
                     IconButton::new(icon)
                         .size(32.0)
                         .flat()
-                        .active(self.tab == tab),
+                        .active(self.tab == tab)
+                        .enabled(enabled),
                 )
                 .on_hover_text(tip);
             let key = format!("scene/tab/{}", tab as u8);
             let mapped = crate::mapping::button(&tab_ui, &r, &key, self.tab == tab, || {
                 (t("Seitenleiste").to_string(), tip.to_string())
             });
-            if r.clicked() || mapped {
+            if (r.clicked() || mapped) && enabled {
                 self.tab = tab;
             }
         }
@@ -103,12 +110,19 @@ impl View for ScenePropsView {
                 .layout(egui::Layout::top_down(egui::Align::Min)),
         );
         let ui = &mut ui;
-        let Some(id) = single_scene(cx) else {
+        let scenes = selected_scenes(cx);
+        let Some(&id) = scenes.first() else {
             return;
         };
-        header(ui, cx.engine, id);
+        if scenes.len() > 1 {
+            multi_header(ui, cx.engine, id, scenes.len());
+        } else {
+            header(ui, cx.engine, id);
+        }
         ui.add_space(theme::SP_S);
         let locked = cx.state.locked;
+        // Bearbeitet wird die erste Szene; geänderte Felder gehen danach an alle
+        let before = SceneEdit::of(cx.engine, id);
         picker_window(ui.ctx(), cx.engine, &mut self.picker);
         self.poll_dialog(cx);
         if self.tab == Tab::Effects {
@@ -123,16 +137,90 @@ impl View for ScenePropsView {
                 Tab::Third => advanced(ui, cx.engine, id, locked, &mut self.picker),
                 Tab::Effects => {}
             });
+        if let (Some(before), Some(after)) = (before, SceneEdit::of(cx.engine, id)) {
+            if before != after {
+                apply_to_others(cx.engine, &before, &after, &scenes[1..]);
+            }
+        }
     }
 }
 
-/// Genau eine markierte Szene.
-fn single_scene(cx: &ViewCtx<'_>) -> Option<SceneId> {
-    let sel = &cx.state.selected_scenes;
-    (sel.len() == 1)
-        .then(|| sel.iter().next().copied())
-        .flatten()
+/// Markierte Szenen, die es noch gibt (sortiert nach ID).
+fn selected_scenes(cx: &ViewCtx<'_>) -> Vec<SceneId> {
+    cx.state
+        .selected_scenes
+        .iter()
+        .copied()
         .filter(|id| cx.engine.show().scene(*id).is_some())
+        .collect()
+}
+
+/// Was die Reiter „Eigenschaften“ und „Erweitert“ an einer Szene ändern.
+#[derive(Clone, PartialEq)]
+struct SceneEdit {
+    settings: serde_json::Value,
+    loop_mode: LoopMode,
+    duration: u64,
+}
+
+impl SceneEdit {
+    fn of(e: &Engine, id: SceneId) -> Option<Self> {
+        let s = e.show().scene(id)?;
+        Some(Self {
+            settings: serde_json::to_value(&s.settings).ok()?,
+            loop_mode: s.loop_mode,
+            duration: s.duration_ms(),
+        })
+    }
+}
+
+/// Nur die an der ersten Szene geänderten Felder auf die übrigen übertragen.
+fn apply_to_others(e: &mut Engine, before: &SceneEdit, after: &SceneEdit, others: &[SceneId]) {
+    let changed: Vec<(&String, &serde_json::Value)> = match (&before.settings, &after.settings) {
+        (serde_json::Value::Object(b), serde_json::Value::Object(a)) => {
+            a.iter().filter(|(k, v)| b.get(*k) != Some(*v)).collect()
+        }
+        _ => Vec::new(),
+    };
+    for id in others {
+        let Some(s) = e.show_mut().scene_mut(*id) else {
+            continue;
+        };
+        if !changed.is_empty() {
+            if let Ok(serde_json::Value::Object(mut map)) = serde_json::to_value(&s.settings) {
+                for (k, v) in &changed {
+                    map.insert((*k).clone(), (*v).clone());
+                }
+                if let Ok(st) = serde_json::from_value(serde_json::Value::Object(map)) {
+                    s.settings = st;
+                }
+            }
+        }
+        if before.loop_mode != after.loop_mode {
+            s.loop_mode = after.loop_mode;
+        }
+        if before.duration != after.duration {
+            s.set_duration_ms(after.duration);
+        }
+    }
+}
+
+/// Kopf bei Mehrfachauswahl: Anzahl in der Farbe der ersten Szene.
+fn multi_header(ui: &mut egui::Ui, e: &Engine, first: SceneId, n: usize) {
+    let color = e.show().scene(first).map_or_else(theme::accent, |s| {
+        s.color
+            .map_or_else(|| theme::zone_color(e.show(), s.zone), theme::rgb)
+    });
+    ui.horizontal(|ui| {
+        ui.set_min_height(34.0);
+        ui.label(
+            egui::RichText::new(tr!("{n} Szenen", n = n))
+                .color(color)
+                .strong(),
+        );
+    });
+    let (line, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), Sense::hover());
+    ui.painter().rect_filled(line, 0.0, theme::border());
 }
 
 /// Name und Farbe der Szene, Play/Pause rechts, darunter eine Trennlinie.
@@ -1855,4 +1943,34 @@ fn scope_row(ui: &mut egui::Ui, label: &str, id: (&str, u32), scope: &mut BankSc
         });
     }
     open
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmxcraft_core::{Show, Step};
+
+    #[test]
+    fn only_changed_fields_reach_other_scenes() {
+        let mut show = Show::new("t", 1);
+        let a = show.add_scene("A", None, vec![Step::new(Vec::new())]);
+        let b = show.add_scene("B", None, vec![Step::new(Vec::new())]);
+        show.scene_mut(b).unwrap().settings.fade_in_ms = 700;
+        let mut e = Engine::new(show);
+        let before = SceneEdit::of(&e, a).unwrap();
+        {
+            let s = e.show_mut().scene_mut(a).unwrap();
+            s.settings.dimmer = 100;
+            s.loop_mode = LoopMode::Once;
+        }
+        let after = SceneEdit::of(&e, a).unwrap();
+        apply_to_others(&mut e, &before, &after, &[b]);
+        let sb = e.show().scene(b).unwrap();
+        assert_eq!(sb.settings.dimmer, 100);
+        assert_eq!(sb.loop_mode, LoopMode::Once);
+        assert_eq!(
+            sb.settings.fade_in_ms, 700,
+            "nicht geänderte Felder bleiben"
+        );
+    }
 }
