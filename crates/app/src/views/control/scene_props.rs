@@ -689,11 +689,13 @@ impl ScenePropsView {
                         .show()
                         .scene(*s)
                         .map_or_else(|| t("Gelöscht").to_string(), |s| s.name.clone()),
-                    dmxcraft_core::timeline::ClipContent::Audio { path, .. } => {
+                    dmxcraft_core::timeline::ClipContent::Audio { path, .. }
+                    | dmxcraft_core::timeline::ClipContent::Video { path, .. } => {
                         std::path::Path::new(path)
                             .file_name()
                             .map_or(path.clone(), |n| n.to_string_lossy().into_owned())
                     }
+                    dmxcraft_core::timeline::ClipContent::Obs(a) => super::timeline::obs_label(a),
                 };
                 Some((cid, name, tl.beat_ms()))
             });
@@ -702,6 +704,7 @@ impl ScenePropsView {
             super::audio_trigger_ui::trigger_cx(cx.engine, cx.state, ui.ctx(), id, *cid)
         });
         let mut trig_action = super::audio_trigger_ui::TriggerAction::None;
+        let obs_lists = (cx.state.obs.scenes(), cx.state.obs.inputs());
         let mut step_clicked = false;
         let mut toggle = None;
         let mut select = None;
@@ -776,6 +779,7 @@ impl ScenePropsView {
                                                 !locked,
                                                 trig_cx.as_ref(),
                                                 &mut trig_action,
+                                                &obs_lists,
                                             ) {
                                                 color_changes.push(e);
                                             }
@@ -1095,6 +1099,7 @@ impl ScenePropsView {
 
 /// BLOCK-EIGENSCHAFTEN einer SUPER SCENE: Start, Dauer, Ein-/Ausblenden,
 /// Tempo und Schleife des gewählten Blocks. `true` bei Änderung.
+#[allow(clippy::too_many_arguments)]
 fn block_props(
     ui: &mut egui::Ui,
     tl: &mut dmxcraft_core::timeline::Timeline,
@@ -1103,6 +1108,7 @@ fn block_props(
     enabled: bool,
     trig: Option<&super::audio_trigger_ui::TriggerCx>,
     trig_action: &mut super::audio_trigger_ui::TriggerAction,
+    obs: &(Vec<String>, Vec<String>),
 ) -> bool {
     let before = tl.clone();
     let caption = |ui: &mut egui::Ui, s: &str| {
@@ -1151,7 +1157,140 @@ fn block_props(
     {
         super::audio_trigger_ui::triggers_ui(ui, triggers, tcx, accent, enabled, trig_action);
     }
+    obs_props(ui, &mut c.content, obs, enabled);
     *tl != before
+}
+
+/// Video- und OBS-Blöcke: Ziel in OBS wählen.
+fn obs_props(
+    ui: &mut egui::Ui,
+    content: &mut dmxcraft_core::timeline::ClipContent,
+    (scenes, inputs): &(Vec<String>, Vec<String>),
+    enabled: bool,
+) {
+    use dmxcraft_core::obs::ObsAction;
+    use dmxcraft_core::timeline::ClipContent;
+    match content {
+        ClipContent::Video {
+            obs_scene, source, ..
+        } => {
+            row(ui, t("OBS-Szene"), |ui| {
+                name_pick(
+                    ui,
+                    "blk_obs_scene",
+                    obs_scene,
+                    scenes,
+                    Some(t("Keine")),
+                    enabled,
+                );
+            });
+            row(ui, t("Medienquelle"), |ui| {
+                name_pick(
+                    ui,
+                    "blk_obs_src",
+                    source,
+                    inputs,
+                    Some(t("Standard")),
+                    enabled,
+                );
+            });
+        }
+        ClipContent::Obs(action) => {
+            let mut kind = match action {
+                ObsAction::Scene(_) => 0,
+                ObsAction::Source { visible: true, .. } => 1,
+                ObsAction::Source { visible: false, .. } => 2,
+            };
+            let before = kind;
+            row(ui, t("Aktion"), |ui| {
+                ui.add_enabled_ui(enabled, |ui| {
+                    egui::ComboBox::from_id_salt("blk_obs_kind")
+                        .selected_text(
+                            [
+                                t("Szene wechseln"),
+                                t("Quelle einblenden"),
+                                t("Quelle ausblenden"),
+                            ][kind],
+                        )
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut kind, 0, t("Szene wechseln"));
+                            ui.selectable_value(&mut kind, 1, t("Quelle einblenden"));
+                            ui.selectable_value(&mut kind, 2, t("Quelle ausblenden"));
+                        });
+                });
+            });
+            if kind != before {
+                let scene = match action {
+                    ObsAction::Scene(s) | ObsAction::Source { scene: s, .. } => s.clone(),
+                };
+                let source = match action {
+                    ObsAction::Source { source, .. } => source.clone(),
+                    ObsAction::Scene(_) => String::new(),
+                };
+                *action = match kind {
+                    0 => ObsAction::Scene(scene),
+                    k => ObsAction::Source {
+                        scene,
+                        source,
+                        visible: k == 1,
+                    },
+                };
+            }
+            match action {
+                ObsAction::Scene(scene) => {
+                    row(ui, t("OBS-Szene"), |ui| {
+                        name_pick(ui, "blk_obs_scene", scene, scenes, None, enabled);
+                    });
+                }
+                ObsAction::Source { scene, source, .. } => {
+                    row(ui, t("OBS-Szene"), |ui| {
+                        name_pick(ui, "blk_obs_scene", scene, scenes, None, enabled);
+                    });
+                    row(ui, t("Quelle"), |ui| {
+                        name_pick(ui, "blk_obs_src", source, inputs, None, enabled);
+                    });
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Namen aus der Liste von OBS wählen; ohne Verbindung als Text eingeben.
+fn name_pick(
+    ui: &mut egui::Ui,
+    salt: &str,
+    value: &mut String,
+    options: &[String],
+    none: Option<&str>,
+    enabled: bool,
+) {
+    ui.add_enabled_ui(enabled, |ui| {
+        if options.is_empty() {
+            ui.add(
+                egui::TextEdit::singleline(value)
+                    .desired_width(140.0)
+                    .hint_text(none.unwrap_or("")),
+            );
+            return;
+        }
+        let shown = if value.is_empty() {
+            none.unwrap_or("").to_string()
+        } else {
+            value.clone()
+        };
+        egui::ComboBox::from_id_salt(salt)
+            .selected_text(shown)
+            .width(140.0)
+            .show_ui(ui, |ui| {
+                if let Some(n) = none {
+                    ui.selectable_value(value, String::new(), n);
+                }
+                for o in options {
+                    ui.selectable_value(value, o.clone(), o);
+                }
+            });
+    });
 }
 
 /// Rechteck eines neuen Mappings um seine Geräte legen.

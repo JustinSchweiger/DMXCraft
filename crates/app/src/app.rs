@@ -371,6 +371,7 @@ impl DmxCraftApp {
             MenuAction::AudioMaster(v) => self.state.audio.set_master(v),
             MenuAction::AudioMute => self.state.audio.mute = !self.state.audio.mute,
             MenuAction::MissingAudio => self.state.missing.open = true,
+            MenuAction::Obs => self.state.obs.open = true,
             MenuAction::AudioFade => {
                 let e = Self::lock(&self.engine);
                 self.state.audio.start_fade(&e);
@@ -792,6 +793,7 @@ impl eframe::App for DmxCraftApp {
             .state
             .current_message()
             .map(|(m, e)| (m.to_string(), e));
+        let obs_enabled = Self::lock(&self.engine).show().obs.enabled;
         let info = TitleInfo {
             show_name: &show_name,
             status,
@@ -816,6 +818,7 @@ impl eframe::App for DmxCraftApp {
                 limit: self.state.audio.limit,
             },
             missing_audio: self.state.missing.files.len(),
+            obs: obs_enabled.then(|| self.state.obs.status() == crate::obs::Status::Connected),
         };
         let mut actions = Vec::new();
         egui::Panel::top("titlebar")
@@ -861,6 +864,7 @@ impl eframe::App for DmxCraftApp {
             cx.state.missing.check(cx.engine.show(), false);
             cx.state.missing.publish(&ctx);
             crate::missing_audio::window(&ctx, &mut cx);
+            crate::obs::window(&ctx, &mut cx);
             let area = egui::Frame::new()
                 .fill(theme::surface())
                 .inner_margin(egui::Margin::same(6));
@@ -971,6 +975,8 @@ impl eframe::App for DmxCraftApp {
             }
             edit_preview(cx.engine, cx.state);
             cx.engine.set_timeline_cursor(cx.state.timeline_cursor);
+            let scrubbing = cx.state.audio.scrubbing;
+            cx.state.obs.update(cx.engine, scrubbing, &ctx);
             cx.state.audio.update(cx.engine, &self.settings);
             if cx.state.audio.fading() {
                 ctx.request_repaint();

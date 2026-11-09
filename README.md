@@ -17,12 +17,14 @@ mit Szenen, Programmer, Effekte und SUPER SCENES auf einer Zeitleiste. DMX geht
 * **SUPER SCENES**: Zeitleiste mit Szenen und Musik, Audioanalyse mit
   Beat-Raster und Audio-Triggern
 * **Bedienung** per Tastatur, MIDI und frei gestaltbarer Touch-Oberfläche
+* **OBS-Anbindung**: Videos aus SUPER SCENES über OBS abspielen, OBS-Szenen
+  wechseln
 * **3D-Visualisierer** für den Veranstaltungsort
 * **KI-Assistent** über MCP
 * Deutsch und Englisch, Installer und Auto-Update für alle drei Systeme
 
 Mehr in `docs/`: [Mapping](docs/MAPPING.md), [Touch](docs/TOUCH.md),
-[3D-Visualisierer](docs/VISUALIZER.md), [MCP](docs/MCP.md).
+[3D-Visualisierer](docs/VISUALIZER.md), [OBS](docs/OBS.md), [MCP](docs/MCP.md).
 
 ## Installieren
 

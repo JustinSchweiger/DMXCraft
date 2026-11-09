@@ -48,7 +48,7 @@ Sitzungen).
 | Gruppen, Bänke | `create_group`, `delete_group`, `create_bank`, `update_bank`, `delete_bank` |
 | Szenen | `create_scene`, `update_scene`, `delete_scenes`, `select_scene` |
 | Effekte | `describe_effect`, `add_effect`, `update_effect`, `remove_effect` |
-| SUPER SCENE | `create_super_scene`, `add_timeline_clips`, `remove_timeline_clips` |
+| SUPER SCENE | `create_super_scene`, `add_timeline_clips`, `remove_timeline_clips` (Blöcke: Szene, `audio_path`, `video_path` für OBS, `obs_scene`/`obs_source` für OBS-Aktionen, siehe `docs/OBS.md`) |
 | Wiedergabe | `play_scene`, `stop_scene`, `pause_scene`, `set_output` (Master, Blackout, Tempo) |
 | Live | `set_live_values`, `clear_live_values` |
 | 3D-Ort | `get_venue`, `set_venue`, `add_venue_object`, `update_venue_object`, `delete_venue_objects`, `place_fixtures` (Position, an Traverse hängen, auf Punkt ausrichten) |

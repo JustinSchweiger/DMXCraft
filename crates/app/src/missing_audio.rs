@@ -73,7 +73,7 @@ fn scan(show: &Show) -> BTreeMap<String, Vec<SceneId>> {
             continue;
         };
         for c in tl.tracks.iter().flat_map(|t| &t.clips) {
-            if let ClipContent::Audio { path, .. } = &c.content {
+            if let ClipContent::Audio { path, .. } | ClipContent::Video { path, .. } = &c.content {
                 let ok = *exists
                     .entry(path.as_str())
                     .or_insert_with(|| Path::new(path).is_file());
@@ -97,7 +97,9 @@ pub fn relink(show: &mut Show, old: &str, new: &str) -> usize {
             continue;
         };
         for c in tl.tracks.iter_mut().flat_map(|t| &mut t.clips) {
-            if let ClipContent::Audio { path, .. } = &mut c.content {
+            if let ClipContent::Audio { path, .. } | ClipContent::Video { path, .. } =
+                &mut c.content
+            {
                 if path == old {
                     *path = new.to_string();
                     n += 1;
@@ -141,7 +143,9 @@ fn file_name(path: &str) -> String {
     path.rsplit(['/', '\\']).next().unwrap_or(path).to_string()
 }
 
-const AUDIO_EXT: [&str; 6] = ["mp3", "wav", "flac", "ogg", "m4a", "aac"];
+const AUDIO_EXT: [&str; 11] = [
+    "mp3", "wav", "flac", "ogg", "m4a", "aac", "mp4", "mov", "m4v", "mkv", "webm",
+];
 
 /// Fenster „Fehlende Audiodateien“.
 pub fn window(ctx: &egui::Context, cx: &mut ViewCtx<'_>) {
@@ -226,7 +230,7 @@ pub fn window(ctx: &egui::Context, cx: &mut ViewCtx<'_>) {
                                         |ui| {
                                             if ui.button(t("Datei wählen …")).clicked() {
                                                 if let Some(p) = rfd::FileDialog::new()
-                                                    .add_filter(t("Audio"), &AUDIO_EXT)
+                                                    .add_filter(t("Audio / Video"), &AUDIO_EXT)
                                                     .pick_file()
                                                 {
                                                     relinks.push((

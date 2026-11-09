@@ -17,6 +17,7 @@ mod mcp;
 mod midi;
 mod midi_device;
 mod missing_audio;
+mod obs;
 mod palettes;
 mod profiles;
 mod remote;

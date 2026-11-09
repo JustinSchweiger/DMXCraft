@@ -2,6 +2,7 @@
 //! JSON und liefert JSON zurück (oder eine verständliche Fehlermeldung).
 
 use dmxcraft_core::fixture::ChannelKind;
+use dmxcraft_core::obs::ObsAction;
 use dmxcraft_core::timeline::{ClipContent, Timeline};
 use dmxcraft_core::{
     ChannelRef, ChannelValue, Effect, EffectKind, Engine, FixtureId, FixtureType, GroupId,
@@ -137,6 +138,10 @@ fn clip_schema() -> Value {
             "track": { "type": "integer", "description": "Spur (ab 0); fehlende Spuren werden angelegt" },
             "scene": { "type": "integer", "description": "Szenen-ID für einen Szenenblock" },
             "audio_path": { "type": "string", "description": "Pfad einer Audiodatei für einen Audioblock" },
+            "video_path": { "type": "string", "description": "Pfad einer Videodatei (MP4/MOV) für einen Videoblock, den OBS abspielt" },
+            "obs_scene": { "type": "string", "description": "Videoblock: OBS-Szene, zu der beim Start gewechselt wird. Allein (ohne scene/audio_path/video_path): OBS-Block, der zu dieser Szene wechselt" },
+            "obs_source": { "type": "string", "description": "Videoblock: Medienquelle in OBS (Standard aus den OBS-Einstellungen). Mit obs_scene + obs_visible: OBS-Block, der diese Quelle ein-/ausblendet" },
+            "obs_visible": { "type": "boolean", "description": "OBS-Block: Quelle einblenden (true) oder ausblenden (false)" },
             "start_ms": { "type": "integer", "description": "Beginn auf der Zeitleiste" },
             "duration_ms": { "type": "integer", "description": "Länge (Standard: Länge der Szene bzw. der Datei)" },
             "fade_in_ms": { "type": "integer" },
@@ -1214,6 +1219,9 @@ fn timeline_json(show: &Show, tl: &Timeline) -> Value {
                 let content = match &c.content {
                     ClipContent::Scene(id) => json!({ "scene": id.0, "scene_name": show.scene(*id).map(|s| s.name.clone()) }),
                     ClipContent::Audio { path, .. } => json!({ "audio_path": path }),
+                    ClipContent::Video { path, obs_scene, source, .. } => json!({ "video_path": path, "obs_scene": obs_scene, "obs_source": source }),
+                    ClipContent::Obs(ObsAction::Scene(scene)) => json!({ "obs_scene": scene }),
+                    ClipContent::Obs(ObsAction::Source { scene, source, visible }) => json!({ "obs_scene": scene, "obs_source": source, "obs_visible": visible }),
                 };
                 json!({
                     "id": c.id, "start_ms": c.start_ms, "duration_ms": c.duration_ms,
@@ -1558,11 +1566,17 @@ fn add_clips(
     clips: &[Value],
 ) -> Result<Vec<u32>, String> {
     // erst alles prüfen, dann einfügen
+    enum Part {
+        Scene(dmxcraft_core::Scene),
+        Audio(String),
+        Video(String),
+        Obs(ObsAction),
+    }
     let mut parts = Vec::new();
     for c in clips {
         let track = opt_u64(c, "track").unwrap_or(0) as usize;
         let start = opt_u64(c, "start_ms").ok_or("`start_ms` fehlt")?;
-        if let Some(scene) = opt_u64(c, "scene") {
+        let part = if let Some(scene) = opt_u64(c, "scene") {
             let sc = e
                 .show()
                 .scene(SceneId(scene as u32))
@@ -1570,44 +1584,84 @@ fn add_clips(
             if sc.id == sid {
                 return Err("Eine SUPER SCENE kann sich nicht selbst enthalten".into());
             }
-            parts.push((track, start, Some(sc.clone()), None::<String>, c));
+            Part::Scene(sc.clone())
         } else if let Some(p) = opt_str(c, "audio_path") {
             if !std::path::Path::new(&p).exists() {
                 return Err(format!("Audiodatei nicht gefunden: {p}"));
             }
-            parts.push((track, start, None, Some(p), c));
+            Part::Audio(p)
+        } else if let Some(p) = opt_str(c, "video_path") {
+            if !std::path::Path::new(&p).exists() {
+                return Err(format!("Videodatei nicht gefunden: {p}"));
+            }
+            Part::Video(p)
+        } else if let Some(scene) = opt_str(c, "obs_scene") {
+            match (
+                opt_str(c, "obs_source"),
+                c.get("obs_visible").and_then(Value::as_bool),
+            ) {
+                (Some(source), visible) => Part::Obs(ObsAction::Source {
+                    scene,
+                    source,
+                    visible: visible.unwrap_or(true),
+                }),
+                (None, _) => Part::Obs(ObsAction::Scene(scene)),
+            }
         } else {
-            return Err("Block braucht `scene` oder `audio_path`".into());
-        }
+            return Err(
+                "Block braucht `scene`, `audio_path`, `video_path` oder `obs_scene`".into(),
+            );
+        };
+        parts.push((track, start, part, c));
     }
     let durations: Vec<Option<u64>> = parts
         .iter()
-        .map(|(_, _, _, audio, _)| audio.as_deref().and_then(|p| (host.audio_duration_ms)(p)))
+        .map(|(_, _, p, _)| match p {
+            Part::Audio(path) => (host.audio_duration_ms)(path),
+            Part::Video(path) => std::fs::File::open(path)
+                .ok()
+                .and_then(|mut f| dmxcraft_core::obs::mp4_duration_ms(&mut f)),
+            _ => None,
+        })
         .collect();
     let s = e.show_mut().scene_mut(sid).ok_or("Szene nicht gefunden")?;
     let tl = s.timeline_mut().ok_or("Keine SUPER SCENE")?;
     let mut ids = Vec::new();
-    for ((track, start, scene, audio, c), len) in parts.into_iter().zip(durations) {
-        let id = match (scene, audio) {
-            (Some(sc), _) => tl.add_scene_clip(track, &sc, start),
-            (None, Some(path)) => {
-                let length = len.unwrap_or(0);
-                let dur = opt_u64(c, "duration_ms").or(len).unwrap_or(10_000);
-                tl.add_clip(
-                    track,
-                    ClipContent::Audio {
-                        path,
-                        offset_ms: 0,
-                        length_ms: length,
-                        grid: None,
-                        segment_grids: Vec::new(),
-                        triggers: Vec::new(),
-                    },
-                    start,
-                    dur,
-                )
-            }
-            _ => continue,
+    for ((track, start, part, c), len) in parts.into_iter().zip(durations) {
+        let dur = opt_u64(c, "duration_ms").or(len).unwrap_or(10_000);
+        let id = match part {
+            Part::Scene(sc) => tl.add_scene_clip(track, &sc, start),
+            Part::Audio(path) => tl.add_clip(
+                track,
+                ClipContent::Audio {
+                    path,
+                    offset_ms: 0,
+                    length_ms: len.unwrap_or(0),
+                    grid: None,
+                    segment_grids: Vec::new(),
+                    triggers: Vec::new(),
+                },
+                start,
+                dur,
+            ),
+            Part::Video(path) => tl.add_clip(
+                track,
+                ClipContent::Video {
+                    path,
+                    offset_ms: 0,
+                    length_ms: len.unwrap_or(0),
+                    obs_scene: opt_str(c, "obs_scene").unwrap_or_default(),
+                    source: opt_str(c, "obs_source").unwrap_or_default(),
+                },
+                start,
+                dur,
+            ),
+            Part::Obs(action) => tl.add_clip(
+                track,
+                ClipContent::Obs(action),
+                start,
+                opt_u64(c, "duration_ms").unwrap_or(1000),
+            ),
         };
         if let Some(cl) = tl.clip_mut(id) {
             if let Some(d) = opt_u64(c, "duration_ms") {
@@ -1674,6 +1728,31 @@ mod tests {
 
     fn ok(h: &Host, name: &str, a: Value) -> Value {
         call(h, name, &a).unwrap_or_else(|e| panic!("{name}: {e}"))
+    }
+
+    #[test]
+    fn obs_action_clips() {
+        let h = host();
+        let bank = ok(&h, "create_bank", json!({"name":"B"}))["bank"]
+            .as_u64()
+            .unwrap();
+        let id = ok(
+            &h,
+            "create_super_scene",
+            json!({"name":"S","bank":bank,"clips":[
+                {"obs_scene":"Countdown","start_ms":0},
+                {"obs_scene":"Live","obs_source":"Kamera","obs_visible":false,"start_ms":2000}
+            ]}),
+        )["id"]
+            .as_u64()
+            .unwrap();
+        let sc = ok(&h, "get_scene", json!({"id":id}));
+        let clips = sc["timeline"]["tracks"][0]["clips"]
+            .as_array()
+            .unwrap()
+            .clone();
+        assert_eq!(clips[0]["content"]["obs_scene"], "Countdown");
+        assert_eq!(clips[1]["content"]["obs_visible"], false);
     }
 
     #[test]

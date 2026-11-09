@@ -381,6 +381,28 @@ impl TimelineView {
                     }
                 }
             }
+            if menu::item(ui, MenuItem::new(t("Video hinzufügen…")).icon(Icon::Camera)) {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter(t("Video"), &VIDEO_EXT)
+                    .pick_file()
+                {
+                    let id = add_video(&mut tl, at.0, at.1, &path.to_string_lossy()).0;
+                    st.timeline_sel = [id].into();
+                }
+            }
+            if menu::item(
+                ui,
+                MenuItem::new(t("OBS-Aktion hinzufügen")).icon(Icon::Camera),
+            ) {
+                let first = st.obs.scenes().into_iter().next().unwrap_or_default();
+                let id = tl.add_clip(
+                    at.0,
+                    ClipContent::Obs(dmxcraft_core::obs::ObsAction::Scene(first)),
+                    at.1,
+                    1000,
+                );
+                st.timeline_sel = [id].into();
+            }
             menu::separator(ui);
             if menu::item(ui, MenuItem::new(t("Raster: Zeit")).icon(Icon::Clock)) {
                 tl.grid = GridMode::Time;
@@ -494,6 +516,14 @@ impl TimelineView {
                         Color32::from_gray(150),
                         0,
                     ),
+                    ClipContent::Video { path, .. } => (
+                        std::path::Path::new(path)
+                            .file_name()
+                            .map_or(path.clone(), |n| n.to_string_lossy().into_owned()),
+                        VIDEO_COLOR,
+                        0,
+                    ),
+                    ClipContent::Obs(a) => (obs_label(a), OBS_COLOR, 0),
                 };
                 paint_clip(ui, &lp, r, &c, &name, color, sel, scene_ms, st);
                 // Unterspur: Dimmer bzw. Lautstärke als Linie
@@ -718,7 +748,7 @@ impl TimelineView {
                         let delta = s as i64 - c.start_ms as i64;
                         n.start_ms = s;
                         n.duration_ms = end - s;
-                        if let ClipContent::Audio { offset_ms, .. } = &mut n.content {
+                        if let Some(offset_ms) = n.content.offset_mut() {
                             *offset_ms = (*offset_ms as i64 + delta).max(0) as u64;
                         }
                         self.apply_resize(&mut n, &c, &tl, e);
@@ -726,17 +756,12 @@ impl TimelineView {
                     Drag::Right => {
                         let end = (snap(ms, &tl, self) as u64).max(c.start_ms + 40);
                         n.duration_ms = end - c.start_ms;
-                        if let ClipContent::Audio {
-                            offset_ms,
-                            length_ms,
-                            ..
-                        } = &n.content
-                        {
-                            // Audio nicht über das Dateiende verlängern
-                            if *length_ms > 0 {
+                        if let Some((offset_ms, length_ms)) = n.content.media_len() {
+                            // Audio/Video nicht über das Dateiende verlängern
+                            if length_ms > 0 {
                                 n.duration_ms = n
                                     .duration_ms
-                                    .min(length_ms.saturating_sub(*offset_ms).max(40));
+                                    .min(length_ms.saturating_sub(offset_ms).max(40));
                             }
                         }
                         self.apply_resize(&mut n, &c, &tl, e);
@@ -815,7 +840,12 @@ impl TimelineView {
                 let first = !has_audio(&tl);
                 for f in dropped {
                     let path = f.path();
-                    if !path.as_os_str().is_empty() {
+                    if path.as_os_str().is_empty() {
+                        continue;
+                    }
+                    if is_video(path) {
+                        at += add_video(&mut tl, ti, at, &path.to_string_lossy()).1;
+                    } else {
                         let (id, len) = add_audio(&mut tl, ti, at, &path.to_string_lossy());
                         if first && self.pending_grid.is_none() {
                             self.pending_grid = Some(id);
@@ -1980,7 +2010,7 @@ fn paint_clip(
                     segment_grids,
                     ..
                 } => a.effective_segments(*grid, segment_grids),
-                ClipContent::Scene(_) => Vec::new(),
+                _ => Vec::new(),
             };
             if let ClipContent::Audio { triggers, .. } = &c.content {
                 paint_triggers(ui, p, wave, c, *offset_ms, path, triggers, st);
@@ -2256,6 +2286,52 @@ fn paint_beats(
             clip.line_segment([pos2(x, wave.bottom() - 5.0), pos2(x, wave.bottom())], s);
         }
     }
+}
+
+const VIDEO_COLOR: Color32 = Color32::from_rgb(130, 105, 190);
+const OBS_COLOR: Color32 = Color32::from_rgb(70, 130, 190);
+const VIDEO_EXT: [&str; 6] = ["mp4", "mov", "m4v", "mkv", "webm", "avi"];
+
+fn is_video(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| VIDEO_EXT.contains(&e.to_lowercase().as_str()))
+}
+
+/// Anzeigename eines OBS-Blocks.
+pub(crate) fn obs_label(a: &dmxcraft_core::obs::ObsAction) -> String {
+    use dmxcraft_core::obs::ObsAction;
+    match a {
+        ObsAction::Scene(s) => tr!("OBS: {scene}", scene = s),
+        ObsAction::Source {
+            source,
+            visible: true,
+            ..
+        } => tr!("OBS: {source} ein", source = source),
+        ObsAction::Source { source, .. } => tr!("OBS: {source} aus", source = source),
+    }
+}
+
+/// Videodatei als Block anlegen (OBS spielt sie ab); gibt ID und Länge zurück.
+fn add_video(tl: &mut Timeline, track: usize, at: u64, path: &str) -> (u32, u64) {
+    let len = std::fs::File::open(path)
+        .ok()
+        .and_then(|mut f| dmxcraft_core::obs::mp4_duration_ms(&mut f))
+        .filter(|l| *l > 0)
+        .unwrap_or(DEFAULT_CLIP_MS);
+    let id = tl.add_clip(
+        track,
+        ClipContent::Video {
+            path: path.to_string(),
+            offset_ms: 0,
+            length_ms: len,
+            obs_scene: String::new(),
+            source: String::new(),
+        },
+        at,
+        len,
+    );
+    (id, len)
 }
 
 /// Audiodatei als Block anlegen; gibt ID und Länge zurück.

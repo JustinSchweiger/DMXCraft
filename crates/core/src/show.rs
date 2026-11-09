@@ -730,6 +730,9 @@ pub struct Show {
     /// Touch-Oberfläche (Seiten mit frei angeordneten Bedienelementen).
     #[serde(default, skip_serializing_if = "crate::touch::TouchLayout::is_empty")]
     pub touch: crate::touch::TouchLayout,
+    /// Verbindung zu OBS (Videoblöcke, OBS-Aktionen).
+    #[serde(default, skip_serializing_if = "crate::obs::ObsSettings::is_default")]
+    pub obs: crate::obs::ObsSettings,
 }
 
 impl Default for Show {
@@ -753,6 +756,7 @@ impl Show {
             venue: crate::venue::Venue::default(),
             mappings: Default::default(),
             touch: Default::default(),
+            obs: Default::default(),
         }
     }
 

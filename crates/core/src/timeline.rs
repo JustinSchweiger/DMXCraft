@@ -106,6 +106,50 @@ pub enum ClipContent {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         triggers: Vec<AudioTrigger>,
     },
+    /// Video, das OBS in einer Medienquelle abspielt (`offset_ms`/`length_ms`
+    /// wie bei Audio).
+    Video {
+        path: String,
+        #[serde(default)]
+        offset_ms: u64,
+        #[serde(default)]
+        length_ms: u64,
+        /// OBS-Szene, zu der beim Start gewechselt wird (leer = keine).
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        obs_scene: String,
+        /// Medienquelle in OBS (leer = die aus den OBS-Einstellungen).
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        source: String,
+    },
+    /// Aktion in OBS beim Erreichen des Blocks.
+    Obs(crate::obs::ObsAction),
+}
+
+impl ClipContent {
+    /// Beginn innerhalb der Datei (Audio/Video).
+    pub fn offset_mut(&mut self) -> Option<&mut u64> {
+        match self {
+            Self::Audio { offset_ms, .. } | Self::Video { offset_ms, .. } => Some(offset_ms),
+            _ => None,
+        }
+    }
+
+    /// Länge der Datei (Audio/Video; 0 = unbekannt).
+    pub fn media_len(&self) -> Option<(u64, u64)> {
+        match self {
+            Self::Audio {
+                offset_ms,
+                length_ms,
+                ..
+            }
+            | Self::Video {
+                offset_ms,
+                length_ms,
+                ..
+            } => Some((*offset_ms, *length_ms)),
+            _ => None,
+        }
+    }
 }
 
 /// Trigger eines Audio-Blocks: ein gefiltertes Band der Datei; überschreitet
@@ -243,7 +287,7 @@ impl Clip {
     pub fn scene(&self) -> Option<SceneId> {
         match self.content {
             ClipContent::Scene(id) => Some(id),
-            ClipContent::Audio { .. } => None,
+            _ => None,
         }
     }
 
@@ -392,7 +436,7 @@ impl Timeline {
         second.start_ms = at;
         second.duration_ms = c.duration_ms - first;
         second.fade_in_ms = 0;
-        if let ClipContent::Audio { offset_ms, .. } = &mut second.content {
+        if let Some(offset_ms) = second.content.offset_mut() {
             *offset_ms += first;
         }
         if let Some(a) = self.clip_mut(id) {

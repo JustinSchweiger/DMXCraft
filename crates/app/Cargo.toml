@@ -47,6 +47,7 @@ bytemuck = { version = "1", features = ["derive"] }
 axoupdater = { version = "0.10", features = ["blocking"] }
 eframe = { version = "0.37", default-features = false, features = ["clipboard", "default_fonts", "wgpu", "links", "persistence", "wayland", "x11"] }
 rodio = { version = "0.21.1", default-features = false, features = ["playback", "symphonia-mp3", "symphonia-wav", "symphonia-pcm", "symphonia-flac", "symphonia-vorbis", "symphonia-ogg", "symphonia-aac", "symphonia-isomp4"] }
+tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"

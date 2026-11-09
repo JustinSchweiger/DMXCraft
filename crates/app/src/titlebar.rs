@@ -37,6 +37,8 @@ pub struct TitleInfo<'a> {
     pub audio: AudioInfo,
     /// Anzahl fehlender Audiodateien (rotes Ausrufezeichen).
     pub missing_audio: usize,
+    /// OBS-Verbindung (nur wenn eingeschaltet): verbunden?
+    pub obs: Option<bool>,
     /// 3D-Visualisierer und Profile Builder als Reiter.
     pub tools_as_tabs: bool,
 }
@@ -92,6 +94,8 @@ pub enum MenuAction {
     AudioFade,
     /// Fenster „Fehlende Audiodateien“.
     MissingAudio,
+    /// Fenster „OBS“ (Verbindung).
+    Obs,
     /// Tastatur- bzw. MIDI-Zuordnung ein/aus.
     Mapping(dmxcraft_core::mapping::MapKind),
     About,
@@ -266,6 +270,23 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             audio_control(ui, info.audio, &mut actions);
             if info.missing_audio > 0 {
                 missing_alert(ui, info.missing_audio, &mut actions);
+            }
+            if let Some(ok) = info.obs {
+                ui.add_space(theme::SP_S);
+                let color = if ok { theme::OK } else { theme::DANGER };
+                let r = ui
+                    .add(
+                        egui::Button::new(egui::RichText::new("OBS").color(color).strong())
+                            .frame(false),
+                    )
+                    .on_hover_text(if ok {
+                        t("OBS verbunden")
+                    } else {
+                        t("OBS nicht verbunden")
+                    });
+                if r.clicked() {
+                    actions.push(MenuAction::Obs);
+                }
             }
             if let Some((msg, err)) = info.message {
                 ui.separator();
@@ -645,6 +666,11 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
                     .icon(Icon::Builder)
                     .enabled(free),
                 MenuAction::ProfileBuilder,
+            );
+            act(
+                ui,
+                MenuItem::new(t("OBS …")).icon(Icon::Camera),
+                MenuAction::Obs,
             );
         });
         menu::sub(ui, MenuItem::new(t("Mappings")).plain(), |ui| {
