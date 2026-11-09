@@ -1,6 +1,6 @@
 # DMXCraft
 
-Eine freie, in Rust geschriebene DMX-Lichtsteuerung nach dem Vorbild von
+Eine in Rust geschriebene DMX-Lichtsteuerung nach dem Vorbild von
 Daslight 5. Sie läuft auf Linux, Windows und macOS und gibt DMX über
 günstige USB-DMX-Kabel (Open DMX / FTDI) aus – ein Kabel je Universum.
 
@@ -8,31 +8,34 @@ günstige USB-DMX-Kabel (Open DMX / FTDI) aus – ein Kabel je Universum.
 > kein Code, keine Gerätebibliothek und kein Grafik-Asset von Daslight
 > verwendet.
 
-## Stand (v0.1)
+## Stand (v0.3)
 
 | Bereich | Status |
 |---|---|
-| Patch (Geräte, Universen, Adressen, Kollisionsprüfung) | ✅ |
-| Eingebaute generische Gerätetypen (Dimmer, RGB, RGBW, Moving Head) | ✅ |
-| Szenen mit Schritten, Überblend- und Haltezeit, Schleife/Einmal | ✅ |
-| Zonen (Szenen einer Zone schließen sich aus) | ✅ |
-| Merge: HTP für Dimmer, LTP für alles andere | ✅ |
-| Programmer (Live-Fader, Farbwähler) → als Szene/Schritt speichern | ✅ |
-| Master, Blackout, Speed | ✅ |
-| Virtueller Dimmer für Farbgeräte ohne Dimmer-Kanal (skaliert die Farbe, Werte bleiben erhalten) | ✅ |
+| Patch mit 8 Universen, Kollisionsprüfung, Patch-Raster mit Ziehen, DIP-Schalter-Anzeige | ✅ |
+| Gerätebibliothek: generische Typen, 650+ Geräte aus der Open Fixture Library, 1.781 aus QLC+, eigene OFL-/QLC+-Dateien | ✅ |
+| Profile Builder für eigene Gerätetypen | ✅ |
+| Szenen mit Schritten, Überblend- und Haltezeit, Schleife/Einmal; Bänke und Zonen | ✅ |
+| Merge: HTP für Dimmer, LTP für alles andere; virtueller Dimmer für Farbgeräte ohne Dimmer-Kanal | ✅ |
+| Programmer (Dimmer, Farbe, Position, Gobo, Strahl, Sonstiges) → als Szene/Schritt speichern | ✅ |
+| Effekte: Farbeffekte (Rainbow, Burst, Plasma, Knight Rider, Sweep, Sparkle, Random Fill, Perlin) mit Symmetrie/Umkehr, Bewegungs- und Kurveneffekte | ✅ |
+| SUPER SCENES: Zeitleiste mit Szenen- und Audioblöcken, Lineal, Raster, Geschwindigkeit | ✅ |
+| Audioanalyse: Wellenform nach Bändern (Low/Mid/High), Stücke mit eigenem Tempo in zusammengeschnittenen Dateien, Beat-Raster mit Downbeats, Raster folgt dem Audio | ✅ |
+| Audio-Trigger: Band, Schwellwert, Hysterese, Mindestabstand, Vorlauf → Szene oder beliebiges Bedienelement | ✅ |
+| Fehlende Audiodateien: Warnung in Titelleiste und an der Szene, neu verknüpfen per Datei oder Ordnersuche | ✅ |
 | Tastatur- und MIDI-Zuordnung mit LED-Rückmeldung (siehe `docs/MAPPING.md`) | ✅ |
 | Touch-Oberfläche mit Seiten, frei angeordneten Knöpfen, Fadern, Farbrad, XY-Feld (siehe `docs/TOUCH.md`) | ✅ |
-| Audioanalyse in SUPER SCENES: Wellenform nach Bändern (Low/Mid/High), Stücke mit eigenem Tempo in zusammengeschnittenen Dateien, Beat-Raster mit Downbeats, Zeitleisten-Raster folgt dem Audio | ✅ |
-| Audio-Trigger: Band, Schwellwert, Hysterese, Mindestabstand, Vorlauf → Szene oder beliebiges Bedienelement | ✅ |
+| 3D-Visualisierer mit Veranstaltungsort, glTF-Modellen und Easy-View-2-Import (siehe `docs/VISUALIZER.md`) | ✅ |
+| KI-Assistent über MCP (siehe `docs/MCP.md`) | ✅ |
+| Master, Blackout, Speed, Sperre mit Einmal-Passwort | ✅ |
 | DMX-Monitor (512 Kanäle pro Universum) | ✅ |
 | Oberfläche auf Deutsch und Englisch, Themes Dunkelblau und Grau | ✅ |
-| Show-Datei (JSON) laden/speichern | ✅ |
+| Show-Datei (`.dmxcraft`, JSON) laden/speichern | ✅ |
 | Ausgabe-Thread mit 40 Hz, automatischer Reconnect | ✅ |
 | **USB-DMX-Kabel (Open DMX / FTDI)**, ein Kabel je Universum | ✅ |
-| Daslight DVC Gold | ❌ verschlüsselt, nicht ansprechbar (siehe `dvc_gold.rs`) |
-| Gerätebibliothek: 650+ Geräte aus der Open Fixture Library und 1.781 aus QLC+, eigene OFL- und QLC+-Dateien importieren | ✅ |
 | Installer für Linux/macOS/Windows, Auto-Update | ✅ |
-| Effekt-Generator, 3D-Ansicht | ✅ |
+| Touch-Mapping, Import von Daslight-Shows im Menü | 🚧 folgt |
+| Daslight DVC Gold | ❌ verschlüsselt, nicht ansprechbar (siehe `dvc_gold.rs`) |
 
 ## Installieren
 
@@ -60,7 +63,7 @@ oben der Button *Update installieren*. Alternativ geht es im Terminal mit `dmxcr
 ## Neue Version veröffentlichen
 
 1. Version in `Cargo.toml` (`[workspace.package] version`) erhöhen und committen.
-2. Tag setzen und pushen: `git tag v0.2.0 && git push origin v0.2.0`
+2. Tag setzen und pushen: `git tag v0.3.0 && git push origin v0.3.0`
 3. GitHub Actions (`.github/workflows/release.yml`, erzeugt mit
    [dist](https://opensource.axo.dev/cargo-dist/)) baut alle Plattformen und legt das
    Release mit den Installern an. Installierte Programme bieten das Update dann automatisch an.
@@ -110,9 +113,11 @@ Doppelklick maximiert.
 | Datei | Neu (Strg+N), Öffnen (Strg+O), Zuletzt geöffnet, Speichern (Strg+S), Speichern unter (Strg+Umschalt+S), Importieren von Daslight *(folgt)* |
 | Bearbeiten | Rückgängig (Strg+Z), Wiederherstellen (Strg+Y), Sperren (Strg+L), Einstellungen (Strg+,) |
 | Ansicht | Vollbild (F11), Größer (Strg++), Kleiner (Strg+-), Größe wiederherstellen (Strg+0) |
-| Tools | 3D-Visualisierer *(folgt)*, DMX-Werte (Strg+D, Patch-Raster im Modus „Ausgang“), Profile Builder *(folgt)* |
-| Mappings | Tastatur, MIDI, Touch *(folgen)* |
+| Tools | 3D-Visualisierer, DMX-Werte (Strg+D, Patch-Raster im Modus „Ausgang“), Profile Builder |
+| Mappings | Tastatur, MIDI, Touch *(folgt)* |
 | Hilfe | Nach Updates suchen, Über DMXCraft |
+
+Fehlen Audiodateien einer SUPER SCENE, blinkt in der Titelleiste ein rotes Ausrufezeichen; ein Klick öffnet das Fenster zum Neuverknüpfen.
 
 Außerdem: B schaltet Blackout. Unter macOS steht Cmd statt Strg. Zonen und Gruppen bearbeitet man
 über das Stift-Symbol neben den Zonen-Chips in STEUERN.
@@ -180,8 +185,11 @@ für Claude Code und Claude Desktop in [docs/MCP.md](docs/MCP.md).
 ```
 crates/
   core/    Datenmodell + Engine, ohne I/O, vollständig getestet
-           show.rs    Patch, Zonen, Szenen, JSON
-           engine.rs  Wiedergabe, Fades, HTP/LTP, Master, Programmer
+           show.rs      Patch, Zonen, Szenen, JSON
+           engine.rs    Wiedergabe, Fades, HTP/LTP, Master, Programmer
+           fx.rs, fx/   Effekt-Generator
+           timeline.rs  SUPER SCENES (Zeitleiste)
+           audio.rs     Audioanalyse: Bänder, Tempo, Beat-Raster, Stücke, Trigger
   output/  DmxOutput-Trait, Ausgabe-Thread (runtime.rs), Backends
            open_dmx.rs  USB-DMX über FTDI-Kabel (Open DMX)
            dvc_gold.rs  Ergebnisse zur DVC Gold (verschlüsselt)
@@ -191,7 +199,7 @@ crates/
            ui/      Design-System: theme.rs (Tokens) + widgets/ (Fader, SceneCard, StageCanvas, …)
            views/   Ansichten (je ein Typ mit `impl View`): control/ und setup/
            state.rs gemeinsamer UI-Zustand
-docs/UI-GUIDELINES.md   UI-Richtlinien
+docs/                   UI-Richtlinien, Mapping, Touch, Visualisierer, MCP
 graphify-out/           Code-Graph für KI-Assistenten (`graphify update .`)
 ```
 
@@ -217,3 +225,14 @@ Dateiendung **`.dmxcraft`**, Inhalt JSON (Version 1); ältere `.json`-Shows lass
 den Dateityp beim ersten Start ein (Doppelklick öffnet die Show). Die verwendeten Gerätetypen werden in jede Show kopiert,
 damit die Datei auf jedem Rechner identisch lädt. Universen sind in der Datei
 0-basiert, DMX-Adressen 1-basiert.
+
+## Lizenz
+
+Siehe [LICENSE](LICENSE). Mitgelieferte Gerätedaten haben eigene Lizenzen:
+QLC+-Geräte unter Apache-2.0 (`crates/ofl/data/QLC-LICENSE`, `QLC-NOTICE`),
+Open-Fixture-Library-Daten unter MIT (`crates/ofl/data/OFL-LICENSE`). Die
+verwendeten Rust-Bibliotheken stehen überwiegend unter MIT/Apache-2.0, einige
+(Symphonia, serialport) unter MPL-2.0.
+
+„Daslight“ ist eine Marke ihres Inhabers und wird hier nur zur Beschreibung
+der Kompatibilität genannt.
