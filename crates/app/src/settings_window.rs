@@ -33,19 +33,21 @@ pub enum Tab {
     Outputs,
     Midi,
     Audio,
+    Obs,
     Remote,
     Ai,
     Project,
 }
 
 impl Tab {
-    const ALL: [Tab; 9] = [
+    const ALL: [Tab; 10] = [
         Tab::General,
         Tab::Customize,
         Tab::Startup,
         Tab::Outputs,
         Tab::Midi,
         Tab::Audio,
+        Tab::Obs,
         Tab::Remote,
         Tab::Ai,
         Tab::Project,
@@ -59,6 +61,7 @@ impl Tab {
             Tab::Outputs => t("Ausgänge"),
             Tab::Midi => t("MIDI"),
             Tab::Audio => t("Ton"),
+            Tab::Obs => t("OBS"),
             Tab::Remote => t("Fernbedienung"),
             Tab::Ai => t("MCP"),
             Tab::Project => t("Projekt"),
@@ -73,6 +76,7 @@ impl Tab {
             Tab::Outputs => Icon::Levels,
             Tab::Midi => Icon::Midi,
             Tab::Audio => Icon::SpeakerHigh,
+            Tab::Obs => Icon::Camera,
             Tab::Remote => Icon::Remote,
             Tab::Ai => Icon::Robot,
             Tab::Project => Icon::FileOpen,
@@ -112,6 +116,7 @@ pub struct SettingsCx<'a> {
     /// Gefundene MIDI-Ein- und -Ausgänge.
     pub midi_inputs: &'a [String],
     pub midi_outputs: &'a [String],
+    pub obs: &'a crate::obs::Obs,
 }
 
 impl SettingsWindow {
@@ -161,6 +166,7 @@ impl SettingsWindow {
                                 midi(ui, cx.settings, cx.midi_inputs, cx.midi_outputs, &mut ch)
                             }
                             Tab::Audio => audio(ui, cx.settings, &mut ch),
+                            Tab::Obs => obs(ui, cx.engine, cx.obs),
                             Tab::Remote => remote(ui, cx.settings, cx.remote, &mut ch),
                             Tab::Ai => ai(ui, cx.settings, cx.mcp, &mut ch),
                             Tab::Project => project(ui, cx.engine, cx.show_path),
@@ -867,6 +873,61 @@ fn midi(
     if let Some(i) = remove {
         s.midi_devices.remove(i);
         ch.save = true;
+    }
+}
+
+/// OBS-Verbindung (gehört zur Show, wird mit ihr gespeichert).
+fn obs(ui: &mut Ui, e: &mut Engine, link: &crate::obs::Obs) {
+    use crate::obs::Status;
+    let mut cfg = e.show().obs.clone();
+    section(ui, t("OBS"));
+    ui.add(Toggle::new(&mut cfg.enabled, t("Mit OBS verbinden")));
+    ui.add_space(theme::SP_S);
+    form(ui, "settings_obs", |f| {
+        f.row(t("Adresse"), |ui| {
+            ui.add(egui::TextEdit::singleline(&mut cfg.host).desired_width(220.0));
+        });
+        f.row(t("Port"), |ui| {
+            ui.add(
+                egui::DragValue::new(&mut cfg.port)
+                    .range(1..=65535)
+                    .speed(1),
+            );
+        });
+        f.row(t("Passwort"), |ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut cfg.password)
+                    .password(true)
+                    .desired_width(220.0),
+            );
+        });
+        f.row(t("Medienquelle für Videos"), |ui| {
+            ui.add(egui::TextEdit::singleline(&mut cfg.video_source).desired_width(220.0));
+        });
+        f.row(t("Status"), |ui| {
+            let (text, color) = match link.status() {
+                Status::Off => (t("Nicht verbunden").to_string(), theme::text_dim()),
+                Status::Connecting => (t("Verbinde …").to_string(), theme::WARN),
+                Status::Connected => (
+                    tr!(
+                        "Verbunden – {scenes} Szenen, {inputs} Quellen",
+                        scenes = link.scenes().len(),
+                        inputs = link.inputs().len()
+                    ),
+                    theme::OK,
+                ),
+                Status::Failed(e) => (tr!("Fehler: {e}", e = e), theme::DANGER),
+            };
+            ui.label(egui::RichText::new(text).color(color));
+        });
+        if let (crate::obs::Status::Connected, Some(err)) = (link.status(), link.last_error()) {
+            f.row(t("Letzte Meldung"), |ui| {
+                ui.label(egui::RichText::new(err).color(theme::text_faint()));
+            });
+        }
+    });
+    if cfg != e.show().obs {
+        e.show_mut().obs = cfg;
     }
 }
 

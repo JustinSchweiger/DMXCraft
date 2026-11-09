@@ -94,7 +94,7 @@ pub enum MenuAction {
     AudioFade,
     /// Fenster „Fehlende Audiodateien“.
     MissingAudio,
-    /// Fenster „OBS“ (Verbindung).
+    /// Einstellungen, Reiter „OBS“.
     Obs,
     /// Tastatur- bzw. MIDI-Zuordnung ein/aus.
     Mapping(dmxcraft_core::mapping::MapKind),
@@ -666,11 +666,6 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
                     .icon(Icon::Builder)
                     .enabled(free),
                 MenuAction::ProfileBuilder,
-            );
-            act(
-                ui,
-                MenuItem::new(t("OBS …")).icon(Icon::Camera),
-                MenuAction::Obs,
             );
         });
         menu::sub(ui, MenuItem::new(t("Mappings")).plain(), |ui| {

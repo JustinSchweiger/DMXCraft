@@ -8,11 +8,11 @@ Datei, ab welcher Stelle und in welchem Tempo.
 
 1. In OBS: *Werkzeuge → WebSocket-Server-Einstellungen*, Server aktivieren,
    Port (Standard 4455) und Passwort notieren.
-2. In DMXCraft: *Tools → OBS …*, „Mit OBS verbinden“ einschalten, Adresse
+2. In DMXCraft: *Bearbeiten → Einstellungen → OBS*, „Mit OBS verbinden“ einschalten, Adresse
    (`localhost`, wenn OBS auf demselben Rechner läuft), Port und Passwort
    eintragen. Die Daten werden mit der Show gespeichert.
-3. Der Verbindungsstatus steht im Fenster und als „OBS“ in der Titelleiste
-   (grün = verbunden, rot = getrennt; Klick öffnet das Fenster). DMXCraft
+3. Der Verbindungsstatus steht in den Einstellungen und als „OBS“ in der Titelleiste
+   (grün = verbunden, rot = getrennt; Klick öffnet die Einstellungen). DMXCraft
    verbindet sich bei Abbruch alle paar Sekunden neu.
 
 ## Videoblöcke

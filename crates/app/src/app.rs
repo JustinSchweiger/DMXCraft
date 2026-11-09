@@ -371,7 +371,10 @@ impl DmxCraftApp {
             MenuAction::AudioMaster(v) => self.state.audio.set_master(v),
             MenuAction::AudioMute => self.state.audio.mute = !self.state.audio.mute,
             MenuAction::MissingAudio => self.state.missing.open = true,
-            MenuAction::Obs => self.state.obs.open = true,
+            MenuAction::Obs => {
+                self.settings_window.tab = crate::settings_window::Tab::Obs;
+                self.settings_open = true;
+            }
             MenuAction::AudioFade => {
                 let e = Self::lock(&self.engine);
                 self.state.audio.start_fade(&e);
@@ -627,6 +630,7 @@ impl DmxCraftApp {
                     remote: &self.remote,
                     midi_inputs: &self.mapper.midi.input_names,
                     midi_outputs: &self.mapper.midi.output_names,
+                    obs: &self.state.obs,
                 },
             );
             drop(e);
@@ -864,7 +868,6 @@ impl eframe::App for DmxCraftApp {
             cx.state.missing.check(cx.engine.show(), false);
             cx.state.missing.publish(&ctx);
             crate::missing_audio::window(&ctx, &mut cx);
-            crate::obs::window(&ctx, &mut cx);
             let area = egui::Frame::new()
                 .fill(theme::surface())
                 .inner_margin(egui::Margin::same(6));

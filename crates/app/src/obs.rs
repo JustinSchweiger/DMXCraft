@@ -74,8 +74,6 @@ struct VideoPlay {
 
 #[derive(Default)]
 pub struct Obs {
-    /// Fenster „OBS“ geöffnet.
-    pub open: bool,
     link: Option<Link>,
     shared: Arc<Mutex<Shared>>,
     videos: HashMap<(SceneId, u32), VideoPlay>,
@@ -405,82 +403,6 @@ fn seek(out: &mut Vec<(&str, Value)>, source: &str, ms: f64) {
         "SetMediaInputCursor",
         json!({ "inputName": source, "mediaCursor": ms.max(0.0) as u64 }),
     ));
-}
-
-/// Fenster „OBS“: Verbindung (wird mit der Show gespeichert) und Status.
-pub fn window(ctx: &eframe::egui::Context, cx: &mut crate::views::ViewCtx<'_>) {
-    use crate::i18n::t;
-    use crate::ui::theme;
-    use crate::ui::widgets::{Dialog, Toggle};
-    use eframe::egui;
-    if !cx.state.obs.open {
-        return;
-    }
-    let mut open = true;
-    let mut cfg = cx.engine.show().obs.clone();
-    let status = cx.state.obs.status();
-    let lists = (cx.state.obs.scenes().len(), cx.state.obs.inputs().len());
-    let err = cx.state.obs.last_error();
-    let locked = cx.state.locked;
-    Dialog::new(t("OBS"))
-        .id("obs_window")
-        .cancel(t("Schließen"))
-        .show(ctx, &mut open, |ui, _| {
-            ui.add_enabled_ui(!locked, |ui| {
-                egui::Grid::new("obs_grid")
-                    .num_columns(2)
-                    .spacing([theme::SP_M, theme::SP_S])
-                    .show(ui, |ui| {
-                        ui.label(t("Mit OBS verbinden"));
-                        ui.add(Toggle::new(&mut cfg.enabled, ""));
-                        ui.end_row();
-                        ui.label(t("Adresse"));
-                        ui.add(egui::TextEdit::singleline(&mut cfg.host).desired_width(200.0));
-                        ui.end_row();
-                        ui.label(t("Port"));
-                        ui.add(egui::DragValue::new(&mut cfg.port).range(1..=65535));
-                        ui.end_row();
-                        ui.label(t("Passwort"));
-                        ui.add(
-                            egui::TextEdit::singleline(&mut cfg.password)
-                                .password(true)
-                                .desired_width(200.0),
-                        );
-                        ui.end_row();
-                        ui.label(t("Medienquelle für Videos"));
-                        ui.add(
-                            egui::TextEdit::singleline(&mut cfg.video_source).desired_width(200.0),
-                        );
-                        ui.end_row();
-                    });
-            });
-            ui.add_space(theme::SP_S);
-            let (text, color) = match &status {
-                Status::Off => (t("Nicht verbunden").to_string(), theme::text_faint()),
-                Status::Connecting => (t("Verbinde …").to_string(), theme::WARN),
-                Status::Connected => (
-                    crate::tr!(
-                        "Verbunden – {scenes} Szenen, {inputs} Quellen",
-                        scenes = lists.0,
-                        inputs = lists.1
-                    ),
-                    theme::OK,
-                ),
-                Status::Failed(e) => (crate::tr!("Fehler: {e}", e = e), theme::DANGER),
-            };
-            ui.label(egui::RichText::new(text).color(color));
-            if let (Status::Connected, Some(e)) = (&status, err) {
-                ui.label(
-                    egui::RichText::new(e)
-                        .font(theme::caption())
-                        .color(theme::text_faint()),
-                );
-            }
-        });
-    if cfg != cx.engine.show().obs {
-        cx.engine.show_mut().obs = cfg;
-    }
-    cx.state.obs.open = open;
 }
 
 fn speed_pct(rate: f32) -> u32 {
