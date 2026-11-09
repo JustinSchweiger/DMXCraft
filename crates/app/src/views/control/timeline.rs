@@ -1678,12 +1678,7 @@ fn mark_clipboard(ctx: &egui::Context) {
 }
 
 fn toggle_play(e: &mut Engine, scene: SceneId, cursor: f64) {
-    if e.timeline_time(scene).is_some() {
-        e.toggle_pause(scene);
-    } else {
-        e.activate(scene);
-        e.seek_timeline(scene, cursor);
-    }
+    e.toggle_timeline(scene, cursor);
 }
 
 fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {

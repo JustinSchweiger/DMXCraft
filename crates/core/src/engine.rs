@@ -742,6 +742,30 @@ impl Engine {
             .any(|p| p.scene == id && p.releasing.is_none() && !p.paused && !p.finished)
     }
 
+    /// Play/Pause einer SUPER SCENE: läuft oder pausiert sie, wird pausiert
+    /// bzw. fortgesetzt; ist sie zu Ende oder gestoppt, startet sie neu – ab
+    /// `cursor`, nach dem Ende bzw. mit dem Cursor am Ende wieder von vorn.
+    pub fn toggle_timeline(&mut self, id: SceneId, cursor: f64) {
+        let paused = self.progress(id).is_some_and(|p| p.paused);
+        if self.timeline_running(id) || paused {
+            self.toggle_pause(id);
+            return;
+        }
+        let len = self
+            .show
+            .scene(id)
+            .and_then(|s| s.timeline())
+            .map_or(0, |tl| tl.length_ms()) as f64;
+        let finished = self.is_active(id);
+        let from = if finished || cursor >= len - 50.0 {
+            0.0
+        } else {
+            cursor
+        };
+        self.activate(id);
+        self.seek_timeline(id, from);
+    }
+
     /// Wiedergabe einer SUPER SCENE auf `ms` setzen.
     pub fn seek_timeline(&mut self, id: SceneId, ms: f64) {
         for p in self.playing.iter_mut().filter(|p| p.scene == id) {
@@ -1169,6 +1193,29 @@ mod tests {
         e.seek_timeline(sup, 3500.0);
         assert_eq!(e.render_frame().get(0, 1), Some(0));
         assert!((e.timeline_time(sup).unwrap() - 3500.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn finished_super_scene_restarts_on_play() {
+        let (mut s, a, _) = setup();
+        let inner = s.add_scene("A", None, vec![Step::new(vec![cv(a, 0, 200)])]);
+        let sup = s.add_scene("S", None, vec![Step::new(Vec::new())]);
+        let sc = s.scene_mut(sup).unwrap();
+        sc.add_effect(crate::show::EffectKind::SuperScene);
+        sc.loop_mode = crate::show::LoopMode::Once;
+        let tl = sc.timeline_mut().unwrap();
+        tl.add_clip(0, crate::timeline::ClipContent::Scene(inner), 0, 1000);
+        sc.sync_timeline_length();
+        let mut e = Engine::new(s);
+        e.toggle_timeline(sup, 0.0);
+        e.tick(Duration::from_millis(1500));
+        assert!(!e.timeline_running(sup), "zu Ende");
+        e.toggle_timeline(sup, 0.0);
+        assert!(e.timeline_running(sup), "startet neu");
+        e.tick(Duration::from_millis(300));
+        assert!(e.timeline_time(sup).unwrap() < 500.0);
+        e.toggle_timeline(sup, 0.0);
+        assert!(!e.timeline_running(sup), "pausiert");
     }
 
     #[test]
