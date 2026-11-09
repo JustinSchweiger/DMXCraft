@@ -564,8 +564,10 @@ mod tests {
     #[test]
     fn group_moves_together_without_covering_others() {
         use crate::show::SceneId;
-        let mut tl = Timeline::default();
-        tl.allow_overlap = false;
+        let mut tl = Timeline {
+            allow_overlap: false,
+            ..Default::default()
+        };
         let sc = |n| ClipContent::Scene(SceneId(n));
         let a = tl.add_clip(0, sc(1), 1000, 1000);
         let b = tl.add_clip(1, sc(2), 3000, 1000);
