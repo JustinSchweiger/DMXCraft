@@ -600,9 +600,9 @@
     "semantic_hash": ""
   },
   "crates/mcp/src/tools.rs": {
-    "mtime": 1794176646.0399673,
-    "seen": 1794176709.4379563,
-    "ast_hash": "fa6da4aed746af1344b0a2e9a202a0ee",
+    "mtime": 1794220005.7289908,
+    "seen": 1794220067.8693357,
+    "ast_hash": "0380084c9a436b18da95cc8d2f9cf8a3",
     "semantic_hash": ""
   },
   "docs/MCP.md": {

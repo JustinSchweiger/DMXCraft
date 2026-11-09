@@ -1541,7 +1541,11 @@ fn create_super_scene(host: &Host, e: &mut Engine, a: &Value) -> R {
         s.sync_timeline_length();
     }
     if let Some(clips) = a.get("clips").and_then(Value::as_array) {
-        add_clips(host, e, id, &clips.clone())?;
+        // ungültiger Block: keine halbe SUPER SCENE zurücklassen
+        if let Err(err) = add_clips(host, e, id, &clips.clone()) {
+            e.show_mut().remove_scene(id);
+            return Err(err);
+        }
     }
     (host.notify)(AppEvent::SelectScene(id));
     changed_scene(e, id, a)
@@ -1670,6 +1674,22 @@ mod tests {
 
     fn ok(h: &Host, name: &str, a: Value) -> Value {
         call(h, name, &a).unwrap_or_else(|e| panic!("{name}: {e}"))
+    }
+
+    #[test]
+    fn failed_super_scene_leaves_nothing() {
+        let h = host();
+        let bank = ok(&h, "create_bank", json!({"name":"B"}))["bank"]
+            .as_u64()
+            .unwrap();
+        let r = call(
+            &h,
+            "create_super_scene",
+            &json!({"name":"S","bank":bank,"clips":[{"audio_path":"/gibt/es/nicht.mp3","start_ms":0}]}),
+        );
+        assert!(r.is_err());
+        let list = ok(&h, "list_scenes", json!({"bank":bank}));
+        assert!(list["scenes"].as_array().unwrap().is_empty());
     }
 
     #[test]
