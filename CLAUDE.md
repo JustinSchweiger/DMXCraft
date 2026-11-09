@@ -1,7 +1,7 @@
 # DMXCraft – Hinweise für KI-Assistenten
 
 DMX-Lichtsteuerung in Rust (egui), Ziel: Daslight-5-Arbeitsablauf auf Linux,
-Windows und macOS, Ausgabe später über USB an eine Daslight DVC Gold.
+Windows und macOS, Ausgabe über USB-DMX-Kabel (Open DMX / FTDI).
 
 ## Orientierung (Tokens sparen)
 
@@ -14,7 +14,7 @@ Windows und macOS, Ausgabe später über USB an eine Daslight DVC Gold.
 
 ```
 crates/core    Datenmodell (Show, Patch, Szenen, Zonen, Gruppen) + Engine – ohne I/O, mit Tests
-crates/output  DmxOutput-Trait, Ausgabe-Thread, Backends (dvc_gold.rs = USB, noch Platzhalter)
+crates/output  DmxOutput-Trait, Ausgabe-Thread, Backends (open_dmx.rs = USB-DMX-Kabel)
 crates/ofl     Open-Fixture-Library-Konverter + eingebettete Bibliothek (data/)
 crates/mcp     MCP-Server (KI-Assistent): tools.rs, protocol.rs, server.rs, bridge.rs – docs/MCP.md
 crates/app     Oberfläche

@@ -5,7 +5,7 @@ members = ["crates/core", "crates/output", "crates/ofl", "crates/mcp", "crates/a
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
-license = "MIT"
+license = "GPL-3.0-only"
 repository = "https://github.com/JustinSchweiger/DMXCraft"
 homepage = "https://github.com/JustinSchweiger/DMXCraft"
 authors = ["Justin Schweiger"]

@@ -475,7 +475,7 @@ impl StageView {
 }
 
 /// FX-Knopf: übernimmt die aktuelle Geräteauswahl in den zuletzt
-/// angeklickten Effekt. Grau, solange die Auswahl den Geräten des Effekts
+/// angeklickten Effekt. Nur sichtbar, solange ein Effekt gewählt ist. Grau, solange die Auswahl den Geräten des Effekts
 /// entspricht; rot, wenn sie davon abweicht.
 fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppState) {
     let target = st.fx_target.filter(|(scene, fx)| {
@@ -483,6 +483,10 @@ fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppSt
             .scene(*scene)
             .is_some_and(|s| s.effects.iter().any(|f| f.id == *fx))
     });
+    // ohne angeklickten Effekt kein Knopf
+    if target.is_none() {
+        return;
+    }
     let current: Option<Vec<FixtureId>> = target.and_then(|(scene, fx)| {
         e.show()
             .scene(scene)?

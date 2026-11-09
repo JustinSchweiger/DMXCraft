@@ -683,7 +683,13 @@ impl DmxCraftApp {
                             .color(theme::text_dim()),
                         );
                         ui.add_space(theme::SP_S);
-                        ui.label(egui::RichText::new(t("Lizenz: MIT")).color(theme::text_dim()));
+                        ui.label(
+                            egui::RichText::new("© 2026 Justin Schweiger").color(theme::text_dim()),
+                        );
+                        ui.label(
+                            egui::RichText::new(t("Lizenz: GPL-3.0, ohne jede Gewährleistung"))
+                                .color(theme::text_dim()),
+                        );
                         ui.label(
                             egui::RichText::new(t(
                                 "Gerätedaten: Open Fixture Library (MIT), QLC+ (Apache 2.0)",

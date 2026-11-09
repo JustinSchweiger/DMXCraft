@@ -1,6 +1,6 @@
 [package]
 name = "dmxcraft-output"
-description = "Ausgabeschicht: DmxOutput-Trait, Ausgabe-Thread, Backends (Simulation, später DVC Gold USB)"
+description = "Ausgabeschicht: DmxOutput-Trait, Ausgabe-Thread, Backends (Simulation, USB-DMX-Kabel)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -3,10 +3,8 @@
 //! Alles, was DMX-Daten irgendwohin schickt, implementiert [`DmxOutput`].
 //! Der [`Runtime`]-Thread taktet die Engine und schickt jeden Frame an das
 //! gewählte Backend: Simulation oder USB-DMX-Kabel ([`open_dmx`]).
-//! Die Daslight DVC Gold ist nicht ansprechbar (siehe [`dvc_gold`]).
 
 pub mod backends;
-pub mod dvc_gold;
 pub mod open_dmx;
 pub mod runtime;
 
@@ -14,7 +12,6 @@ use dmxcraft_core::DmxFrame;
 use thiserror::Error;
 
 pub use backends::{NullOutput, RecordingOutput};
-pub use dvc_gold::DvcGoldUsb;
 pub use open_dmx::{list_ports, OpenDmx, UsbDmxPort};
 pub use runtime::{OutputStatus, Runtime};
 
@@ -22,8 +19,6 @@ pub use runtime::{OutputStatus, Runtime};
 pub enum OutputError {
     #[error("Gerät nicht gefunden: {0}")]
     NotFound(String),
-    #[error("Noch nicht implementiert: {0}")]
-    NotImplemented(&'static str),
     #[error("Übertragungsfehler: {0}")]
     Transfer(String),
 }
@@ -60,19 +55,16 @@ pub struct OutputConfig {
 pub enum OutputKind {
     Simulation,
     OpenDmx,
-    DvcGoldUsb,
 }
 
 impl OutputKind {
-    /// Zur Auswahl angebotene Ausgänge. Die DVC Gold fehlt bewusst: sie lässt
-    /// sich ohne die Schlüssel von Daslight nicht ansprechen.
+    /// Zur Auswahl angebotene Ausgänge.
     pub const ALL: [OutputKind; 2] = [OutputKind::Simulation, OutputKind::OpenDmx];
 
     pub fn label(self) -> &'static str {
         match self {
             OutputKind::Simulation => "Simulation (kein Gerät)",
             OutputKind::OpenDmx => "USB-DMX-Kabel (Open DMX / FTDI)",
-            OutputKind::DvcGoldUsb => "Daslight DVC Gold (USB)",
         }
     }
 
@@ -81,7 +73,6 @@ impl OutputKind {
         match self {
             OutputKind::Simulation => "simulation",
             OutputKind::OpenDmx => "open_dmx",
-            OutputKind::DvcGoldUsb => "dvc_gold",
         }
     }
 
@@ -96,7 +87,6 @@ impl OutputKind {
         match self {
             OutputKind::Simulation => Box::new(NullOutput::default()),
             OutputKind::OpenDmx => Box::new(OpenDmx::new(config.open_dmx.clone())),
-            OutputKind::DvcGoldUsb => Box::new(DvcGoldUsb::new()),
         }
     }
 }
