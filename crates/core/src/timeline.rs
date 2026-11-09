@@ -2,6 +2,8 @@
 //! wie in einem Schnittprogramm. Die Engine spielt die Blöcke der Szenen
 //! ab; Audio gibt die Oberfläche wieder.
 
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 
 use crate::audio::AudioGrid;
@@ -402,6 +404,66 @@ impl Timeline {
     }
 
     /// Würde der Block (Spur, Bereich) einen anderen überlappen?
+    /// Mehrere Blöcke gemeinsam um `dt` ms und `dtrack` Spuren verschieben.
+    /// Nicht vor 0 und nicht über die vorhandenen Spuren hinaus; ohne
+    /// erlaubte Überlappung nur, wenn kein fremder Block überdeckt wird.
+    /// Liefert, ob verschoben wurde.
+    pub fn move_group(&mut self, ids: &BTreeSet<u32>, dt: i64, dtrack: isize) -> bool {
+        let group: Vec<(usize, Clip)> = ids
+            .iter()
+            .filter_map(|id| self.clip(*id).map(|(t, c)| (t, c.clone())))
+            .collect();
+        if group.is_empty() {
+            return false;
+        }
+        let min_start = group.iter().map(|(_, c)| c.start_ms).min().unwrap_or(0) as i64;
+        let dt = dt.max(-min_start);
+        let (lo, hi) = group
+            .iter()
+            .fold((usize::MAX, 0), |(lo, hi), (t, _)| (lo.min(*t), hi.max(*t)));
+        let dtrack =
+            if (lo as isize + dtrack) < 0 || hi as isize + dtrack >= self.tracks.len() as isize {
+                0
+            } else {
+                dtrack
+            };
+        if dt == 0 && dtrack == 0 {
+            return false;
+        }
+        let moved: Vec<(usize, u64, u64, u32)> = group
+            .iter()
+            .map(|(t, c)| {
+                let start = (c.start_ms as i64 + dt) as u64;
+                (
+                    (*t as isize + dtrack) as usize,
+                    start,
+                    start + c.duration_ms,
+                    c.id,
+                )
+            })
+            .collect();
+        if !self.allow_overlap {
+            let blocked = moved.iter().any(|(t, s, e, _)| {
+                self.tracks[*t]
+                    .clips
+                    .iter()
+                    .any(|c| !ids.contains(&c.id) && c.start_ms < *e && *s < c.end_ms())
+            });
+            if blocked {
+                return false;
+            }
+        }
+        for (t, start, _, id) in moved {
+            if self.clip(id).is_some_and(|(cur, _)| cur != t) {
+                self.move_clip_to_track(id, t);
+            }
+            if let Some(c) = self.clip_mut(id) {
+                c.start_ms = start;
+            }
+        }
+        true
+    }
+
     pub fn overlaps(&self, track: usize, start: u64, end: u64, except: u32) -> bool {
         self.tracks.get(track).is_some_and(|t| {
             t.clips
@@ -499,6 +561,37 @@ impl Timeline {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn group_moves_together_without_covering_others() {
+        use crate::show::SceneId;
+        let mut tl = Timeline::default();
+        tl.allow_overlap = false;
+        let sc = |n| ClipContent::Scene(SceneId(n));
+        let a = tl.add_clip(0, sc(1), 1000, 1000);
+        let b = tl.add_clip(1, sc(2), 3000, 1000);
+        let other = tl.add_clip(0, sc(3), 6000, 1000);
+        let ids: BTreeSet<u32> = [a, b].into();
+        assert!(tl.move_group(&ids, 500, 0));
+        assert_eq!(tl.clip(a).unwrap().1.start_ms, 1500);
+        assert_eq!(tl.clip(b).unwrap().1.start_ms, 3500);
+        // nicht vor 0
+        assert!(tl.move_group(&ids, -5000, 0));
+        assert_eq!(tl.clip(a).unwrap().1.start_ms, 0);
+        assert_eq!(tl.clip(b).unwrap().1.start_ms, 2000);
+        // fremder Block blockiert
+        assert!(!tl.move_group(&ids, 5500, 0));
+        // Spurwechsel gemeinsam, nicht über die letzte Spur hinaus
+        while tl.tracks.len() < 3 {
+            tl.add_track(None);
+        }
+        assert!(tl.move_group(&ids, 0, 1));
+        assert_eq!(tl.clip(a).unwrap().0, 1);
+        assert_eq!(tl.clip(b).unwrap().0, 2);
+        let last = tl.tracks.len() as isize;
+        assert!(!tl.move_group(&ids, 0, last));
+        assert_eq!(tl.clip(other).unwrap().0, 0);
+    }
+
     #[test]
     fn audio_grid_sets_tempo_and_offset() {
         let mut tl = Timeline::default();

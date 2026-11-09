@@ -750,9 +750,19 @@ impl TimelineView {
                             (c.end_ms() as f64 - ms).clamp(0.0, c.duration_ms as f64) as u32;
                     }
                 }
-                let ok =
-                    tl.allow_overlap || !tl.overlaps(target_track, n.start_ms, n.end_ms(), cid);
-                if ok {
+                let group = matches!(d, Drag::Move { .. })
+                    && st.timeline_sel.len() > 1
+                    && st.timeline_sel.contains(&cid);
+                if group {
+                    // mehrere markierte Blöcke: alle um denselben Versatz
+                    tl.move_group(
+                        &st.timeline_sel,
+                        n.start_ms as i64 - c.start_ms as i64,
+                        target_track as isize - ti as isize,
+                    );
+                } else if tl.allow_overlap
+                    || !tl.overlaps(target_track, n.start_ms, n.end_ms(), cid)
+                {
                     if target_track != ti {
                         tl.move_clip_to_track(cid, target_track);
                     }
