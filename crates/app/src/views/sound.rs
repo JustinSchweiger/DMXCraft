@@ -587,9 +587,26 @@ impl SoundView {
         });
 
         let body = Rect::from_min_max(pos2(rect.left(), head.bottom() + 1.0), rect.max).shrink(4.0);
-        let body_resp = ui.interact(body, ui.scope_id().with(("pl_drop", d)), Sense::hover());
+        // Dateien aus Explorer/Finder: Zeiger-Stelle (während des Ziehens
+        // meldet nicht jedes System Bewegungen, daher die letzte bekannte)
+        let (pointer, hovering) = ui.input(|i| {
+            (
+                i.pointer.hover_pos().or(i.pointer.latest_pos()),
+                !i.raw.hovered_files.is_empty(),
+            )
+        });
+        let over = pointer.is_some_and(|q| rect.contains(q));
+        if hovering && over && !locked {
+            ui.painter().rect_stroke(
+                rect.shrink(2.0),
+                CornerRadius::same(theme::R_S),
+                Stroke::new(2.0, color),
+                StrokeKind::Inside,
+            );
+            ui.ctx().request_repaint();
+        }
         // Dateien auf die Liste ziehen
-        if !locked && body_resp.contains_pointer() {
+        if !locked && over {
             let dropped = ui.input(|i| i.raw.dropped_files.clone());
             for f in dropped {
                 let path = f.path().to_path_buf();
@@ -842,7 +859,12 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
     let cw = (body.width() - gap * (cols as f32 - 1.0)) / cols as f32;
     let ch = (body.height() - gap * (rows as f32 - 1.0)) / rows as f32;
     let dropped = ui.input(|i| i.raw.dropped_files.clone());
-    let hover = ui.input(|i| i.pointer.hover_pos());
+    let (hover, hovering) = ui.input(|i| {
+        (
+            i.pointer.hover_pos().or(i.pointer.latest_pos()),
+            !i.raw.hovered_files.is_empty(),
+        )
+    });
     for i in 0..board.pads.len() {
         let (c, r_) = (i % cols, i / cols);
         let r = Rect::from_min_size(
@@ -979,6 +1001,14 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
             }
         }
         // Datei auf ein Pad ziehen
+        if !locked && hovering && hover.is_some_and(|h| r.contains(h)) {
+            ui.painter().rect_stroke(
+                r,
+                CornerRadius::same(theme::R_S),
+                Stroke::new(2.0, theme::OK),
+                StrokeKind::Inside,
+            );
+        }
         if !locked && hover.is_some_and(|h| r.contains(h)) {
             if let Some(path) = dropped
                 .iter()
