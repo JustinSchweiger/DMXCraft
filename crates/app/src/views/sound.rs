@@ -92,21 +92,67 @@ impl View for SoundView {
 
         // Playlisten + Pads
         let bottom = Rect::from_min_max(pos2(full.left(), bar.bottom() + 1.0), full.max);
-        let cols = decks as f32 + 1.15;
-        let cw = bottom.width() / cols;
-        for d in 0..decks {
-            let r = Rect::from_min_size(
-                pos2(bottom.left() + cw * d as f32, bottom.top()),
-                vec2(cw, bottom.height()),
+        // Spalten mit verschiebbaren Trennern (Breitenanteile in der Show)
+        let n = decks + 1;
+        let weights: Vec<f32> = (0..n)
+            .map(|k| {
+                let k = if k == decks {
+                    board.widths.len() - 1
+                } else {
+                    k
+                };
+                board.widths[k]
+            })
+            .collect();
+        let total: f32 = weights.iter().sum();
+        let px = bottom.width() / total;
+        let mut x = bottom.left();
+        let mut cols: Vec<Rect> = Vec::with_capacity(n);
+        for w in &weights {
+            let r = Rect::from_min_size(pos2(x, bottom.top()), vec2(w * px, bottom.height()));
+            x = r.right();
+            cols.push(r);
+        }
+        for (k, col) in cols.iter().enumerate().take(n - 1) {
+            let edge = col.right();
+            p.vline(edge, bottom.y_range(), Stroke::new(1.0, theme::border()));
+            if locked {
+                continue;
+            }
+            let hit =
+                Rect::from_center_size(pos2(edge, bottom.center().y), vec2(8.0, bottom.height()));
+            let resp = ui.interact(
+                hit,
+                ui.scope_id().with(("sound_split", k)),
+                Sense::click_and_drag(),
             );
+            if resp.hovered() || resp.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                p.vline(edge, bottom.y_range(), Stroke::new(2.0, theme::accent()));
+            }
+            let (a, b) = (
+                k,
+                if k + 1 == decks {
+                    board.widths.len() - 1
+                } else {
+                    k + 1
+                },
+            );
+            if resp.double_clicked() {
+                board.widths = dmxcraft_core::sound::WIDTHS.to_vec();
+            } else if resp.dragged() {
+                let dw = resp.drag_delta().x / px;
+                let min = dmxcraft_core::sound::MIN_WIDTH;
+                let dw = dw.clamp(min - board.widths[a], board.widths[b] - min);
+                board.widths[a] += dw;
+                board.widths[b] -= dw;
+            }
+        }
+        for (d, &r) in cols.iter().enumerate().take(decks) {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
             self.playlist_ui(&mut child, cx, &mut board, d, r, locked);
-            p.vline(r.right(), r.y_range(), Stroke::new(1.0, theme::border()));
         }
-        let pads = Rect::from_min_max(
-            pos2(bottom.left() + cw * decks as f32, bottom.top()),
-            bottom.max,
-        );
+        let pads = Rect::from_min_max(pos2(cols[decks].left() + 1.0, bottom.top()), bottom.max);
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(pads));
         pads_ui(&mut child, cx, &mut board, pads, locked);
 
@@ -526,10 +572,14 @@ fn crossfade_bar(ui: &mut Ui, sp: &mut SoundPlayer, board: &mut SoundBoard) {
             board.crossfade_ms = (secs * 1000.0) as u32;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(
-                RichText::new(format!("{:.0} %", board.master * 100.0))
-                    .font(theme::caption())
-                    .color(theme::text_dim()),
+            // feste Breite, sonst wandert der Regler beim Ziehen mit
+            ui.add_sized(
+                vec2(40.0, 20.0),
+                egui::Label::new(
+                    RichText::new(format!("{:.0} %", board.master * 100.0))
+                        .font(theme::caption())
+                        .color(theme::text_dim()),
+                ),
             );
             horizontal_slider(ui, 160.0, &mut board.master, theme::accent(), false);
             ui.label(RichText::new(t("Master")).color(theme::text_dim()));
@@ -804,6 +854,9 @@ impl SoundView {
                         resp.on_hover_text(file.clone())
                     };
                     if resp.clicked() {
+                        // nur eine Auswahl über beide Playlisten, damit
+                        // Entf genau einen Titel trifft
+                        self.sel = [None, None];
                         self.sel[d] = Some(i);
                     }
                     if resp.double_clicked() {
@@ -900,6 +953,18 @@ impl SoundView {
                     }
                 }
             });
+        // Entf entfernt den ausgewählten Titel (nicht beim Tippen)
+        if action.is_none() && !locked && self.rename.is_none() {
+            if let Some(i) = self.sel[d] {
+                let typing = ui.memory(|m| m.focused().is_some());
+                if !typing
+                    && i < board.decks[d].playlist.len()
+                    && ui.input_mut(|inp| inp.consume_key(egui::Modifiers::NONE, egui::Key::Delete))
+                {
+                    action = Some((i, "remove"));
+                }
+            }
+        }
         if let Some((from_d, from_i, mut at)) = drop_track {
             if from_d < board.decks.len() && from_i < board.decks[from_d].playlist.len() {
                 let t = board.decks[from_d].playlist.remove(from_i);
@@ -1019,10 +1084,35 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
             {
                 cx.state.sound.stop_pads();
             }
+            ui.add_space(theme::SP_S);
+            // Raster: Spalten × Zeilen
+            ui.add_enabled_ui(!locked, |ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                let mut rows = board.pad_rows;
+                ui.add(
+                    egui::DragValue::new(&mut rows)
+                        .speed(0.05)
+                        .range(1..=dmxcraft_core::sound::PAD_GRID_MAX),
+                )
+                .on_hover_text(t("Zeilen"));
+                ui.label(RichText::new("x").color(theme::text_dim()));
+                let mut cols = board.pad_cols;
+                ui.add(
+                    egui::DragValue::new(&mut cols)
+                        .speed(0.05)
+                        .range(1..=dmxcraft_core::sound::PAD_GRID_MAX),
+                )
+                .on_hover_text(t("Spalten"));
+                if (cols, rows) != (board.pad_cols, board.pad_rows) {
+                    board.pad_cols = cols;
+                    board.pad_rows = rows;
+                    board.normalize();
+                }
+            });
         });
     });
     let body = Rect::from_min_max(pos2(rect.left(), head.bottom() + 1.0), rect.max).shrink(4.0);
-    let (cols, rows) = (3usize, board.pads.len().div_ceil(3).max(1));
+    let (cols, rows) = (board.pad_cols as usize, board.pad_rows as usize);
     let gap = 4.0;
     let cw = (body.width() - gap * (cols as f32 - 1.0)) / cols as f32;
     let ch = (body.height() - gap * (rows as f32 - 1.0)) / rows as f32;
@@ -1032,7 +1122,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
     if hovering {
         ui.ctx().request_repaint();
     }
-    for i in 0..board.pads.len() {
+    for i in 0..board.pad_count().min(board.pads.len()) {
         let (c, r_) = (i % cols, i / cols);
         let r = Rect::from_min_size(
             pos2(
@@ -1136,11 +1226,11 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
                 theme::caption(),
                 sc,
             );
-            if pad.length_ms > 0 {
+            if pad_len > 0 {
                 painter.text(
                     r.right_bottom() + vec2(-8.0, -8.0),
                     Align2::RIGHT_BOTTOM,
-                    short(pad.length_ms),
+                    short(pad_len),
                     theme::caption(),
                     theme::text_dim(),
                 );
@@ -1296,7 +1386,7 @@ pub fn poll(ctx: &egui::Context, board: &SoundBoard, sp: &mut SoundPlayer) {
     if fired(ctx, "sound/pads/stop", false) {
         sp.stop_pads();
     }
-    for i in 0..board.pads.len() {
+    for i in 0..board.pad_count().min(board.pads.len()) {
         let running = sp.pad_progress(i, 1).is_some();
         if fired(ctx, &format!("sound/pad/{i}"), running) {
             sp.pad(board, i);

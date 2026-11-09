@@ -17,7 +17,19 @@ pub struct SoundBoard {
     pub crossfade_ms: u32,
     /// Lautstärke aller Player und Pads (0–1).
     pub master: f32,
+    /// Raster der Pads (Spalten × Zeilen).
+    pub pad_cols: u8,
+    pub pad_rows: u8,
+    /// Breitenanteile der Spalten unten: Playlisten, dann Pads.
+    pub widths: Vec<f32>,
 }
+
+/// Grenzen für das Pad-Raster.
+pub const PAD_GRID_MAX: u8 = 8;
+/// Standardaufteilung unten (Playlist A, Playlist B, Pads).
+pub const WIDTHS: [f32; 3] = [1.0, 1.0, 1.15];
+/// Kleinster Breitenanteil einer Spalte.
+pub const MIN_WIDTH: f32 = 0.25;
 
 impl Default for SoundBoard {
     fn default() -> Self {
@@ -26,6 +38,9 @@ impl Default for SoundBoard {
             pads: vec![Pad::default(); PADS],
             crossfade_ms: 4000,
             master: 1.0,
+            pad_cols: 3,
+            pad_rows: 4,
+            widths: WIDTHS.to_vec(),
         }
     }
 }
@@ -39,7 +54,28 @@ impl SoundBoard {
     pub fn normalize(&mut self) {
         self.decks
             .resize(self.decks.len().max(DECKS), Deck::default());
-        self.pads.resize(self.pads.len().max(PADS), Pad::default());
+        self.pad_cols = self.pad_cols.clamp(1, PAD_GRID_MAX);
+        self.pad_rows = self.pad_rows.clamp(1, PAD_GRID_MAX);
+        let n = self.pad_count();
+        self.pads.resize(self.pads.len().max(n), Pad::default());
+        // leere Pads hinter dem Raster fallen weg; belegte bleiben erhalten
+        // und erscheinen wieder, wenn das Raster größer wird
+        while self.pads.len() > n && self.pads.last().is_some_and(|p| p.path.is_empty()) {
+            self.pads.pop();
+        }
+        if self.widths.len() != WIDTHS.len()
+            || self.widths.iter().any(|w| !w.is_finite() || *w <= 0.0)
+        {
+            self.widths = WIDTHS.to_vec();
+        }
+        for w in &mut self.widths {
+            *w = w.max(MIN_WIDTH);
+        }
+    }
+
+    /// Anzahl der sichtbaren Pads.
+    pub fn pad_count(&self) -> usize {
+        self.pad_cols as usize * self.pad_rows as usize
     }
 
     /// Alle verwendeten Dateien (für die Prüfung auf fehlende Dateien).
@@ -195,11 +231,33 @@ mod tests {
         old.normalize();
         assert_eq!(old.decks.len(), DECKS);
         assert_eq!(old.pads.len(), PADS);
+        assert_eq!(old.widths, WIDTHS.to_vec());
         assert_eq!(old.decks[0].playlist[0].label(), "a");
         old.decks[0].playlist[0].name = "Einmarsch".into();
         assert_eq!(old.decks[0].playlist[0].label(), "Einmarsch");
         assert_eq!(old.decks[0].playlist[0].file_name(), "a");
         assert_eq!(old.relink("/a.mp3", "/b.mp3"), 1);
         assert_eq!(old.paths().collect::<Vec<_>>(), vec!["/b.mp3"]);
+    }
+
+    #[test]
+    fn pad_grid_keeps_used_pads() {
+        let mut b = SoundBoard::default();
+        b.pads[10].path = "tusch.mp3".into();
+        b.pad_cols = 2;
+        b.pad_rows = 2;
+        b.normalize();
+        // Pad 11 leer → weg, Pad 10 belegt → bleibt (versteckt)
+        assert_eq!(b.pad_count(), 4);
+        assert_eq!(b.pads.len(), 11);
+        b.pad_rows = 6;
+        b.normalize();
+        assert_eq!(b.pads.len(), 12);
+        assert_eq!(b.pads[10].path, "tusch.mp3");
+        b.pad_cols = 0;
+        b.widths = vec![1.0];
+        b.normalize();
+        assert_eq!(b.pad_cols, 1);
+        assert_eq!(b.widths, WIDTHS.to_vec());
     }
 }

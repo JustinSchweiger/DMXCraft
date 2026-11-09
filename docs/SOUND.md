@@ -1,6 +1,6 @@
 # Reiter SOUND
 
-Zwei Player mit eigener Playlist, Überblenden und 12 Jingle-Pads. Alles wird
+Zwei Player mit eigener Playlist, Überblenden und Jingle-Pads (Raster einstellbar, Standard 3 × 4). Alles wird
 mit der Show gespeichert (Dateipfade, Lautstärken, Einstellungen); die
 Wiedergabe selbst nicht.
 
@@ -8,7 +8,12 @@ Wiedergabe selbst nicht.
 
 * **Playlist füllen:** Dateien oder Ordner über die Knöpfe oben rechts, oder
   Dateien/Ordner auf die Liste ziehen. Rechtsklick auf einen Titel: Laden,
-  Abspielen, nach oben/unten, Entfernen. Doppelklick lädt den Titel.
+  Abspielen, Umbenennen (der Dateiname bleibt im Tooltip sichtbar),
+  nach oben/unten, Entfernen. Doppelklick lädt den Titel, Entf entfernt den
+  markierten. Titel lassen sich per Drag & Drop innerhalb und zwischen den
+  Playlisten verschieben.
+* **Aufteilung:** Die Trenner zwischen Playlist A, B und den Pads lassen sich
+  ziehen (Doppelklick = Standard); die Aufteilung wird mit der Show gespeichert.
 * **Bedienung:** Zum Anfang, Abspielen/Pause, Stopp, CUE (steht der Titel:
   Cue-Marke setzen; läuft er: zurück zur Marke und anhalten), Ausfaden mit
   einstellbarer Dauer. Klick oder Ziehen in der Wellenform springt.
@@ -29,7 +34,9 @@ wirkt der Ton-Master der Titelleiste.
 Klick spielt das Pad, erneuter Klick stoppt es. Pads laufen über den
 Playern. Leeres Pad anklicken oder eine Datei darauf ziehen weist sie zu.
 Rechtsklick: Datei, Name, Pegel, Farbe, Wiederholen, „Andere Pads stoppen“
-(startet allein), Leeren.
+(startet allein), Leeren. Oben rechts das Raster (Spalten × Zeilen, je 1–8);
+belegte Pads außerhalb des Rasters bleiben erhalten und erscheinen wieder,
+wenn es größer wird.
 
 ## Tasten und MIDI
 

@@ -745,6 +745,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Pad {n}: {name}", "Pad {n}: {name}"),
     ("Dateiname verwenden", "Use file name"),
     ("Datei fehlt: {file}", "File missing: {file}"),
+    ("Zeilen", "Rows"),
+    ("Spalten", "Columns"),
     ("Zielpunkt auf dem Boden anklicken", "Click the target point on the floor"),
     ("Ausrichten ({n} Geräte)", "Aim ({n} fixtures)"),
     ("Ausrichten", "Aim"),

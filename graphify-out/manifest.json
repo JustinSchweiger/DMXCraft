@@ -438,9 +438,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/i18n/en.rs": {
-    "mtime": 1794247738.0205157,
-    "seen": 1794247764.1932235,
-    "ast_hash": "c681cbb5317343217d29f1bf62a52e0e",
+    "mtime": 1794249148.7143235,
+    "seen": 1794249184.7291422,
+    "ast_hash": "c8eebab0077b4f8ec64a8a9253936741",
     "semantic_hash": ""
   },
   "crates/app/src/i18n/mod.rs": {
@@ -870,21 +870,21 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/sound.rs": {
-    "mtime": 1794247685.684501,
-    "seen": 1794247764.1933246,
-    "ast_hash": "47914e051712a95f9407f12e2716ee9d",
+    "mtime": 1794249140.9275153,
+    "seen": 1794249184.729237,
+    "ast_hash": "c3ae366e751b51bb7871f84af396d5c7",
     "semantic_hash": ""
   },
   "crates/core/src/sound.rs": {
-    "mtime": 1794247095.7185585,
-    "seen": 1794247764.1933665,
-    "ast_hash": "949845a6845becdfc9395a8866769f21",
+    "mtime": 1794248918.3909786,
+    "seen": 1794249184.7292786,
+    "ast_hash": "41dcfd6fdc4f337a59e56da072b4412f",
     "semantic_hash": ""
   },
   "docs/SOUND.md": {
-    "mtime": 1794245834.036761,
-    "seen": 1794245884.6433415,
-    "ast_hash": "3f4cfbff77cb4bee6c29fabedb56f1e5",
+    "mtime": 1794249083.6531274,
+    "seen": 1794249184.7293215,
+    "ast_hash": "b61979f43fa5819268069ab803a25171",
     "semantic_hash": ""
   },
   "crates/app/src/ui/file_drop.rs": {
