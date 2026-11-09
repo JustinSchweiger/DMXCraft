@@ -60,9 +60,10 @@ pub struct AudioInfo {
 #[derive(Clone, Debug, PartialEq)]
 pub enum UpdateBadge {
     None,
-    Available,
+    Available(String),
     Busy(&'static str),
     Installed(String),
+    InstallerStarted(String),
     Error(String),
 }
 
@@ -138,16 +139,20 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
     );
     let w = g1.size().x + g2.size().x;
     let x0 = center.x - w / 2.0;
-    painter.galley(
-        egui::pos2(x0, center.y - g1.size().y / 2.0),
-        g1.clone(),
-        theme::text(),
-    );
-    painter.galley(
-        egui::pos2(x0 + g1.size().x, center.y - g2.size().y / 2.0),
-        g2,
-        theme::text_dim(),
-    );
+    // Eine Statusmeldung rechts kann bis zur Mitte reichen – solange sie
+    // steht, tritt der Titel zurück, statt sich mit ihr zu überlagern.
+    if info.message.is_none() {
+        painter.galley(
+            egui::pos2(x0, center.y - g1.size().y / 2.0),
+            g1.clone(),
+            theme::text(),
+        );
+        painter.galley(
+            egui::pos2(x0 + g1.size().x, center.y - g2.size().y / 2.0),
+            g2,
+            theme::text_dim(),
+        );
+    }
 
     ui.horizontal_centered(|ui| {
         ui.add_space(6.0);
@@ -208,8 +213,9 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             }
             match &info.update {
                 UpdateBadge::None => {}
-                UpdateBadge::Available => {
-                    let b = egui::Button::new(t("Update installieren")).fill(theme::accent_dim());
+                UpdateBadge::Available(v) => {
+                    let b =
+                        egui::Button::new(tr!("Update auf v{v}", v = v)).fill(theme::accent_dim());
                     if ui
                         .add(b)
                         .on_hover_text(t("Neue Version von GitHub laden"))
@@ -225,6 +231,15 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                     ui.label(
                         egui::RichText::new(tr!("v{v} installiert – neu starten", v = v))
                             .color(theme::OK),
+                    );
+                }
+                UpdateBadge::InstallerStarted(v) => {
+                    ui.label(
+                        egui::RichText::new(tr!(
+                            "Installer für v{v} gestartet – DMXCraft schließen",
+                            v = v
+                        ))
+                        .color(theme::OK),
                     );
                 }
                 UpdateBadge::Error(e) => {

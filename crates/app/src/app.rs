@@ -357,7 +357,7 @@ impl DmxCraftApp {
                 self.usb_ports = dmxcraft_output::list_ports();
                 self.settings_open = true;
             }
-            MenuAction::CheckUpdates => self.updater.check(ctx.clone()),
+            MenuAction::CheckUpdates => self.updater.check(ctx.clone(), true),
             MenuAction::InstallUpdate => self.updater.install(ctx.clone()),
             MenuAction::About => self.about_open = true,
             MenuAction::Mapping(kind) => {
@@ -729,7 +729,14 @@ impl eframe::App for DmxCraftApp {
             ctx.set_zoom_factor(self.settings.ui_scale.clamp(0.6, 2.0));
             self.logo = crate::icon::texture(&ctx);
             if self.settings.check_updates {
-                self.updater.check(ctx.clone());
+                self.updater.check(ctx.clone(), false);
+            }
+        }
+        if let Some((msg, err)) = self.updater.take_notice() {
+            if err {
+                self.state.error(msg);
+            } else {
+                self.state.info(msg);
             }
         }
 
@@ -789,9 +796,10 @@ impl eframe::App for DmxCraftApp {
             show_name.push_str(" *");
         }
         let update = match self.updater.state() {
-            UpdateState::Available => UpdateBadge::Available,
+            UpdateState::Available(r) => UpdateBadge::Available(r.version),
             UpdateState::Installing => UpdateBadge::Busy(t("installiere Update")),
             UpdateState::Installed(v) => UpdateBadge::Installed(v),
+            UpdateState::InstallerStarted(v) => UpdateBadge::InstallerStarted(v),
             UpdateState::Error(e) => UpdateBadge::Error(e),
             _ => UpdateBadge::None,
         };
