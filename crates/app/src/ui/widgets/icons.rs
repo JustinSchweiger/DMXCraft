@@ -98,6 +98,8 @@ pub enum Icon {
     MusicNote,
     /// Abspielen rückwärts (Dreieck nach links).
     PlayBack,
+    /// Stopp (gefülltes Quadrat, selbst gezeichnet).
+    Stop,
     /// Schriftzug „FX“ (Effekte).
     Fx,
 }
@@ -185,7 +187,7 @@ impl Icon {
             Icon::Waveform => Some(("\u{E802}", false)),
             Icon::Clock => Some(("\u{E19A}", false)),
             Icon::MusicNote => Some(("\u{E33C}", false)),
-            Icon::PlayBack | Icon::Fx => None,
+            Icon::PlayBack | Icon::Stop | Icon::Fx => None,
         }
     }
 
@@ -207,6 +209,10 @@ impl Icon {
                     pos2(c.x - s * 0.65, c.y),
                 ];
                 painter.add(Shape::convex_polygon(pts, color, Stroke::new(1.5, color)));
+            }
+            Icon::Stop => {
+                let s = size * 0.3;
+                painter.rect_filled(Rect::from_center_size(c, Vec2::splat(s * 2.0)), 2.0, color);
             }
             _ => {
                 painter.text(

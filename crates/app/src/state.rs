@@ -16,6 +16,8 @@ pub enum Mode {
     Visualizer,
     /// Profile Builder als Reiter (Einstellung „Tools als Reiter“).
     Builder,
+    /// Sound-Player mit Playlisten und Jingle-Pads.
+    Sound,
 }
 
 /// Formular „Geräte hinzufügen“ (geteilt zwischen Patch und Gerätebibliothek).
@@ -99,6 +101,8 @@ pub struct AppState {
     pub audio: crate::audio::AudioPlayer,
     /// Verbindung zu OBS (Videoblöcke, OBS-Aktionen).
     pub obs: crate::obs::Obs,
+    /// Wiedergabe des Reiters SOUND.
+    pub sound: crate::sound::SoundPlayer,
     /// Audio-Trigger der SUPER SCENES (Hüllkurven, Ereignisse, gedrückte Ziele).
     pub triggers: crate::audio_triggers::TriggerEngine,
     /// Ziel eines Audio-Triggers wird gewählt (Szene, Block, Trigger):
@@ -202,6 +206,7 @@ impl AppState {
             timeline_cursor: 0.0,
             audio: Default::default(),
             obs: Default::default(),
+            sound: Default::default(),
             triggers: Default::default(),
             trigger_pick: None,
             missing: Default::default(),
@@ -244,6 +249,7 @@ impl AppState {
     /// Nach dem Laden/Ersetzen einer Show.
     pub fn reset_for_new_show(&mut self) {
         self.selected.clear();
+        self.sound.stop_all();
     }
 }
 

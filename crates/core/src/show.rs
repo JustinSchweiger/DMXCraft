@@ -733,6 +733,9 @@ pub struct Show {
     /// Verbindung zu OBS (Videoblöcke, OBS-Aktionen).
     #[serde(default, skip_serializing_if = "crate::obs::ObsSettings::is_default")]
     pub obs: crate::obs::ObsSettings,
+    /// Reiter SOUND: Player, Playlisten, Jingle-Pads.
+    #[serde(default, skip_serializing_if = "crate::sound::SoundBoard::is_default")]
+    pub sound: crate::sound::SoundBoard,
 }
 
 impl Default for Show {
@@ -757,6 +760,7 @@ impl Show {
             mappings: Default::default(),
             touch: Default::default(),
             obs: Default::default(),
+            sound: Default::default(),
         }
     }
 

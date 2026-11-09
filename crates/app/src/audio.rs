@@ -27,13 +27,13 @@ pub enum WaveState {
 
 /// Ein laufender Spieler: `base` = Stelle in der Datei, an der er begann
 /// (nur bei Formaten ohne Sprungmöglichkeit ≠ 0).
-struct Player {
-    sink: Sink,
-    base: Duration,
+pub(crate) struct Player {
+    pub(crate) sink: Sink,
+    pub(crate) base: Duration,
 }
 
 impl Player {
-    fn pos(&self) -> Duration {
+    pub(crate) fn pos(&self) -> Duration {
         self.base + self.sink.get_pos()
     }
 }
@@ -341,7 +341,7 @@ pub(crate) fn open_decoder(path: &str) -> Option<Decoder<BufReader<File>>> {
 }
 
 /// Spieler an Stelle `pos` starten.
-fn start_player(stream: &OutputStream, path: &str, pos: Duration) -> Option<Player> {
+pub(crate) fn start_player(stream: &OutputStream, path: &str, pos: Duration) -> Option<Player> {
     let sink = Sink::connect_new(stream.mixer());
     sink.append(open_decoder(path)?);
     if pos.is_zero() || sink.try_seek(pos).is_ok() {

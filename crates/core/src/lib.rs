@@ -16,6 +16,7 @@ pub mod mapping;
 pub mod obs;
 pub mod plan;
 pub mod show;
+pub mod sound;
 pub mod timeline;
 pub mod touch;
 pub mod venue;

@@ -86,6 +86,15 @@ fn scan(show: &Show) -> BTreeMap<String, Vec<SceneId>> {
             }
         }
     }
+    // Reiter SOUND (ohne Szene)
+    for path in show.sound.paths() {
+        if !*exists
+            .entry(path)
+            .or_insert_with(|| Path::new(path).is_file())
+        {
+            out.entry(path.to_string()).or_default();
+        }
+    }
     out
 }
 
@@ -107,6 +116,7 @@ pub fn relink(show: &mut Show, old: &str, new: &str) -> usize {
             }
         }
     }
+    n += show.sound.relink(old, new);
     n
 }
 

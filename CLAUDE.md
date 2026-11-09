@@ -23,6 +23,7 @@ crates/app     Oberfläche
   src/titlebar.rs  eigene Titelleiste + Hauptmenü; src/settings.rs Programmeinstellungen
   src/state.rs   gemeinsamer UI-Zustand (AppState)
   src/viz/       3D-Visualisierer (wgpu): render.rs, shader.wgsl, rig.rs, panels.rs, gltf_import.rs – docs/VISUALIZER.md
+  src/sound.rs   Wiedergabe Reiter SOUND (Player, Pads), Ansicht views/sound.rs – docs/SOUND.md
   src/obs.rs     OBS-Anbindung (obs-websocket 5): Videoblöcke, OBS-Aktionen – docs/OBS.md
   src/app.rs     Rahmen: Kopfzeile, Modus, Layout, Runtime
 docs/UI-GUIDELINES.md  verbindliche UI-Regeln – vor UI-Arbeit lesen

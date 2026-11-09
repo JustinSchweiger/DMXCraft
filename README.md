@@ -16,6 +16,7 @@ mit Szenen, Programmer, Effekte und SUPER SCENES auf einer Zeitleiste. DMX geht
 * **Effekte**: Farb-, Bewegungs- und Kurveneffekte über beliebige Gerätegruppen
 * **SUPER SCENES**: Zeitleiste mit Szenen und Musik, Audioanalyse mit
   Beat-Raster und Audio-Triggern
+* **Sound-Player**: zwei Player mit Playlisten, Überblenden und Jingle-Pads
 * **Bedienung** per Tastatur, MIDI und frei gestaltbarer Touch-Oberfläche
 * **OBS-Anbindung**: Videos aus SUPER SCENES über OBS abspielen, OBS-Szenen
   wechseln
@@ -24,7 +25,7 @@ mit Szenen, Programmer, Effekte und SUPER SCENES auf einer Zeitleiste. DMX geht
 * Deutsch und Englisch, Installer und Auto-Update für alle drei Systeme
 
 Mehr in `docs/`: [Mapping](docs/MAPPING.md), [Touch](docs/TOUCH.md),
-[3D-Visualisierer](docs/VISUALIZER.md), [OBS](docs/OBS.md), [MCP](docs/MCP.md).
+[3D-Visualisierer](docs/VISUALIZER.md), [OBS](docs/OBS.md), [Sound](docs/SOUND.md), [MCP](docs/MCP.md).
 
 ## Installieren
 

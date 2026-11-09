@@ -23,6 +23,7 @@ mod profiles;
 mod remote;
 mod settings;
 mod settings_window;
+mod sound;
 mod state;
 mod titlebar;
 mod ui;

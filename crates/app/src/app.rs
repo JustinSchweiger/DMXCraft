@@ -64,6 +64,7 @@ pub struct DmxCraftApp {
     state: AppState,
     control: ControlViews,
     setup: SetupView,
+    sound: crate::views::sound::SoundView,
     windows: Windows,
     history: History,
     /// MCP-Server für KI-Assistenten.
@@ -148,6 +149,7 @@ impl DmxCraftApp {
             state,
             control: ControlViews::default(),
             setup: SetupView::default(),
+            sound: Default::default(),
             windows: Windows::default(),
             history: History::default(),
             mcp: crate::mcp::McpLink::default(),
@@ -912,6 +914,11 @@ impl eframe::App for DmxCraftApp {
                         self.builder.embedded(ui, cx.engine, cx.state);
                     }
                 }
+                Mode::Sound => {
+                    egui::CentralPanel::default_margins()
+                        .frame(egui::Frame::new().fill(theme::surface()))
+                        .show(ui, |ui| self.sound.ui(ui, &mut cx));
+                }
                 Mode::Setup => {
                     egui::CentralPanel::default_margins()
                         .frame(egui::Frame::new().fill(theme::surface()))
@@ -963,6 +970,17 @@ impl eframe::App for DmxCraftApp {
             triggers.update(&ctx, cx.engine, cx.state);
             cx.state.triggers = triggers;
             self.mapper.end_frame(&ctx, cx.engine, cx.state);
+            {
+                let board = {
+                    let mut b = cx.engine.show().sound.clone();
+                    b.normalize();
+                    b
+                };
+                crate::views::sound::poll(&ctx, &board, &mut cx.state.sound);
+                if cx.state.sound.update(&board, cx.state.audio.gain()) {
+                    ctx.request_repaint_after(std::time::Duration::from_millis(50));
+                }
+            }
             // Alt + Klick: Element zur Touch-Oberfläche bzw. als Trigger-Ziel
             for p in crate::mapping::take_touch_picks(&ctx) {
                 if cx.state.locked {

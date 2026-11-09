@@ -159,6 +159,7 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
         }
         tabs.push((Mode::Control, t("Steuern")));
         tabs.push((Mode::Touch, t("Touch")));
+        tabs.push((Mode::Sound, t("Sound")));
         if info.tools_as_tabs {
             tabs.push((Mode::Visualizer, t("3D-Visualisierer")));
             if !info.locked {

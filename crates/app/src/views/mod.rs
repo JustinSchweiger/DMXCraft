@@ -6,6 +6,7 @@ pub mod fixture_menu;
 pub mod profile_builder;
 pub mod quick;
 pub mod setup;
+pub mod sound;
 pub mod touch;
 pub mod windows;
 

@@ -107,6 +107,14 @@ fn report(ctx: &egui::Context, key: u64, on: bool) {
     });
 }
 
+/// Zugeordnete Taste eines Bedienelements auswerten, auch wenn es gerade
+/// nicht angezeigt wird (z. B. Sound-Pads aus einem anderen Reiter).
+pub fn poll(ctx: &egui::Context, key: &str, on: bool) -> bool {
+    let key = dmxcraft_core::mapping::ui_key(key);
+    report(ctx, key, on);
+    take_fire(ctx, key).is_some_and(|f| f.press || f.value.is_some_and(|v| v > 0.0))
+}
+
 /// Knopf der Oberfläche zuordenbar machen. `key` ist ein fester Name wie
 /// „programmer/mode/live“, `on` der Zustand für die LED, `name` liefert
 /// (Kategorie, Ziel) für die Liste. Gibt `true` zurück, wenn eine
