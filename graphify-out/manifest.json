@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "crates/app/Cargo.toml": {
-    "mtime": 1794234784.2092924,
-    "seen": 1794235368.8752348,
-    "ast_hash": "da3581ededceda79faf2dc4d9bb36214",
+    "mtime": 1794247114.120467,
+    "seen": 1794247764.1932027,
+    "ast_hash": "0bf52b6e74096e7d2beafaeb3c500446",
     "semantic_hash": ""
   },
   "crates/app/build.rs": {
@@ -186,9 +186,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/mod.rs": {
-    "mtime": 1793989100.02244,
-    "seen": 1793989543.5525513,
-    "ast_hash": "25657bb579d2ddbc6d67f258c913ceea",
+    "mtime": 1794247121.8418598,
+    "seen": 1794247764.1932619,
+    "ast_hash": "bf3d8234432eb117401dd60f50a30ee1",
     "semantic_hash": ""
   },
   "crates/app/src/ui/theme.rs": {
@@ -438,9 +438,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/i18n/en.rs": {
-    "mtime": 1794245703.892284,
-    "seen": 1794245884.6430595,
-    "ast_hash": "cafc1c706932d1b01a72844cea5de42c",
+    "mtime": 1794247738.0205157,
+    "seen": 1794247764.1932235,
+    "ast_hash": "c681cbb5317343217d29f1bf62a52e0e",
     "semantic_hash": ""
   },
   "crates/app/src/i18n/mod.rs": {
@@ -864,27 +864,33 @@
     "semantic_hash": ""
   },
   "crates/app/src/sound.rs": {
-    "mtime": 1794245787.723203,
-    "seen": 1794245884.643103,
-    "ast_hash": "8d25ab35a5bd31e6715ac0b2607da636",
+    "mtime": 1794247246.5372212,
+    "seen": 1794247764.1932545,
+    "ast_hash": "a11a32822daafa13277966a991885573",
     "semantic_hash": ""
   },
   "crates/app/src/views/sound.rs": {
-    "mtime": 1794246571.9536972,
-    "seen": 1794246614.8255556,
-    "ast_hash": "721ffd83861885e9bf575b636aaad147",
+    "mtime": 1794247685.684501,
+    "seen": 1794247764.1933246,
+    "ast_hash": "47914e051712a95f9407f12e2716ee9d",
     "semantic_hash": ""
   },
   "crates/core/src/sound.rs": {
-    "mtime": 1794245509.8287418,
-    "seen": 1794245884.6432714,
-    "ast_hash": "d6461e226a38f18a1902edc7298fcf43",
+    "mtime": 1794247095.7185585,
+    "seen": 1794247764.1933665,
+    "ast_hash": "949845a6845becdfc9395a8866769f21",
     "semantic_hash": ""
   },
   "docs/SOUND.md": {
     "mtime": 1794245834.036761,
     "seen": 1794245884.6433415,
     "ast_hash": "3f4cfbff77cb4bee6c29fabedb56f1e5",
+    "semantic_hash": ""
+  },
+  "crates/app/src/ui/file_drop.rs": {
+    "mtime": 1794247114.1302388,
+    "seen": 1794247764.1932592,
+    "ast_hash": "c861537a790fc59d279fc233ab2f40fd",
     "semantic_hash": ""
   }
 }

@@ -24,6 +24,8 @@ const BAR_H: f32 = 44.0;
 pub struct SoundView {
     /// Markierter Titel je Player.
     sel: [Option<usize>; 2],
+    /// Titel, der gerade umbenannt wird: Player, Index, Text, Fokus gesetzt.
+    rename: Option<(usize, usize, String, bool)>,
 }
 
 fn deck_color(d: usize) -> Color32 {
@@ -122,9 +124,16 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
     let color = deck_color(d);
     let sp = &mut cx.state.sound;
     let state = sp.state(d);
-    let track: Option<Track> = sp
-        .current(d)
-        .and_then(|i| board.decks[d].playlist.get(i).cloned());
+    // geladener Titel; auch wenn er inzwischen in eine andere Liste verschoben wurde
+    let track: Option<Track> = sp.current_path(d).map(|path| {
+        board
+            .decks
+            .iter()
+            .flat_map(|dk| dk.playlist.iter())
+            .find(|t| t.path == path)
+            .cloned()
+            .unwrap_or_else(|| Track::new(path))
+    });
     let wave = track
         .as_ref()
         .map(|t| cx.state.audio.wave(&t.path, ui.ctx()));
@@ -193,7 +202,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
                 );
             }
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                let name = track.as_ref().map(|t| t.name()).unwrap_or_default();
+                let name = track.as_ref().map(|t| t.label()).unwrap_or_default();
                 ui.add(egui::Label::new(RichText::new(name).size(14.0)).truncate());
             });
         });
@@ -567,10 +576,9 @@ impl SoundView {
                         .pick_files()
                     {
                         for f in files {
-                            board.decks[d].playlist.push(Track {
-                                path: f.to_string_lossy().into_owned(),
-                                length_ms: 0,
-                            });
+                            board.decks[d]
+                                .playlist
+                                .push(Track::new(f.to_string_lossy().into_owned()));
                         }
                     }
                 }
@@ -589,12 +597,8 @@ impl SoundView {
         let body = Rect::from_min_max(pos2(rect.left(), head.bottom() + 1.0), rect.max).shrink(4.0);
         // Dateien aus Explorer/Finder: Zeiger-Stelle (während des Ziehens
         // meldet nicht jedes System Bewegungen, daher die letzte bekannte)
-        let (pointer, hovering) = ui.input(|i| {
-            (
-                i.pointer.hover_pos().or(i.pointer.latest_pos()),
-                !i.raw.hovered_files.is_empty(),
-            )
-        });
+        let pointer = crate::ui::file_drop::pointer(ui.ctx());
+        let hovering = crate::ui::file_drop::hovering(ui.ctx());
         let over = pointer.is_some_and(|q| rect.contains(q));
         if hovering && over && !locked {
             ui.painter().rect_stroke(
@@ -614,10 +618,9 @@ impl SoundView {
                     if path.is_dir() {
                         board.decks[d].playlist.extend(audio_files(&path));
                     } else {
-                        board.decks[d].playlist.push(Track {
-                            path: path.to_string_lossy().into_owned(),
-                            length_ms: 0,
-                        });
+                        board.decks[d]
+                            .playlist
+                            .push(Track::new(path.to_string_lossy().into_owned()));
                     }
                 }
             }
@@ -634,6 +637,10 @@ impl SoundView {
             None
         };
         let mut action: Option<(usize, &str)> = None;
+        // Umbenennen beendet: Some(neuer Name) bzw. None = abgebrochen
+        let mut rename_done: Option<Option<String>> = None;
+        // abgelegter Titel: Quell-Player, Quell-Index, Einfügestelle
+        let mut drop_track: Option<(usize, usize, usize)> = None;
         egui::ScrollArea::vertical()
             .id_salt(("playlist", d))
             .auto_shrink([false, false])
@@ -644,11 +651,27 @@ impl SoundView {
                     .iter()
                     .map(|t| track_len_audio(&cx.state.audio, t, ui.ctx()))
                     .collect();
+                let dragging = egui::DragAndDrop::payload::<TrackDrag>(ui.ctx());
+                let pointer = ui.input(|i| i.pointer.interact_pos());
+                let mut rows: Vec<Rect> = Vec::new();
                 for (i, tr_) in board.decks[d].playlist.iter().enumerate() {
-                    let (r, resp) =
-                        ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::click());
+                    let sense = if locked
+                        || matches!(&self.rename, Some((rd, ri, _, _)) if *rd == d && *ri == i)
+                    {
+                        Sense::click()
+                    } else {
+                        Sense::click_and_drag()
+                    };
+                    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), sense);
+                    rows.push(r);
+                    resp.dnd_set_drag_payload(TrackDrag { deck: d, index: i });
+                    let moving = dragging
+                        .as_ref()
+                        .is_some_and(|p| p.deck == d && p.index == i);
                     let now = current == Some(i);
-                    let bg = if now {
+                    let bg = if moving {
+                        theme::surface()
+                    } else if now {
                         color.gamma_multiply(0.18)
                     } else if resp.hovered() {
                         theme::raised_hover()
@@ -679,7 +702,7 @@ impl SoundView {
                             StrokeKind::Inside,
                         );
                     }
-                    let fg = if sp.played(d, i) && !now {
+                    let fg = if sp.played(d, &tr_.path) && !now {
                         theme::text_faint()
                     } else {
                         theme::text()
@@ -709,22 +732,76 @@ impl SoundView {
                     );
                     let missing = !std::path::Path::new(&tr_.path).exists();
                     let name_c = if missing { theme::DANGER } else { fg };
-                    let galley = painter.layout(
-                        tr_.name(),
-                        FontId::proportional(13.0),
-                        name_c,
-                        f32::INFINITY,
-                    );
-                    let clip = painter.with_clip_rect(name_r);
-                    clip.galley(
-                        pos2(name_r.left(), r.center().y - galley.size().y / 2.0),
-                        galley,
-                        name_c,
-                    );
-                    let resp = if missing {
-                        resp.on_hover_text(t("Datei fehlt"))
+                    let renaming =
+                        matches!(&self.rename, Some((rd, ri, _, _)) if *rd == d && *ri == i);
+                    if renaming {
+                        if let Some((_, _, text, focused)) = &mut self.rename {
+                            // eigene Kind-Ebene, damit das Feld die Zeilen
+                            // darunter nicht verschiebt
+                            let mut fui = ui.new_child(
+                                egui::UiBuilder::new().max_rect(name_r.shrink2(vec2(0.0, 4.0))),
+                            );
+                            let id = egui::Id::unique(("sound_rename", d, i));
+                            let te = fui.add_sized(
+                                fui.available_size(),
+                                egui::TextEdit::singleline(text)
+                                    .id(id)
+                                    .hint_text(tr_.file_name()),
+                            );
+                            // Fokus so lange anfordern, bis das Feld ihn hat
+                            // (das schließende Kontextmenü kann ihn im ersten
+                            // Frame wieder nehmen); dann alles markieren,
+                            // damit Tippen den Namen ersetzt.
+                            if !*focused {
+                                te.request_focus();
+                                if te.has_focus() {
+                                    *focused = true;
+                                    if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), id) {
+                                        let n = text.chars().count();
+                                        st.cursor.set_char_range(Some(
+                                            egui::text::CCursorRange::two(
+                                                egui::text::CCursor::new(0),
+                                                egui::text::CCursor::new(n),
+                                            ),
+                                        ));
+                                        st.store(ui.ctx(), id);
+                                    }
+                                }
+                            }
+                            let (enter, esc) = ui.input(|i| {
+                                (
+                                    i.key_pressed(egui::Key::Enter),
+                                    i.key_pressed(egui::Key::Escape),
+                                )
+                            });
+                            if esc {
+                                rename_done = Some(None);
+                            } else if enter || te.lost_focus() {
+                                rename_done = Some(Some(text.clone()));
+                            }
+                        }
                     } else {
-                        resp
+                        let galley = painter.layout(
+                            tr_.label(),
+                            FontId::proportional(13.0),
+                            name_c,
+                            f32::INFINITY,
+                        );
+                        let clip = painter.with_clip_rect(name_r);
+                        clip.galley(
+                            pos2(name_r.left(), r.center().y - galley.size().y / 2.0),
+                            galley,
+                            name_c,
+                        );
+                    }
+                    // Dateiname bleibt beim Überfahren sichtbar
+                    let file = std::path::Path::new(&tr_.path)
+                        .file_name()
+                        .map_or(tr_.path.clone(), |n| n.to_string_lossy().into_owned());
+                    let resp = if missing {
+                        resp.on_hover_text(tr!("Datei fehlt: {file}", file = file))
+                    } else {
+                        resp.on_hover_text(file.clone())
                     };
                     if resp.clicked() {
                         self.sel[d] = Some(i);
@@ -732,12 +809,39 @@ impl SoundView {
                     if resp.double_clicked() {
                         action = Some((i, "load"));
                     }
+                    let has_name = !tr_.name.trim().is_empty();
                     menu::context(&resp, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.add_space(theme::SP_S);
+                            ui.label(
+                                RichText::new(&file)
+                                    .font(theme::caption())
+                                    .color(theme::text_dim()),
+                            );
+                        });
+                        menu::separator(ui);
                         if menu::item(ui, MenuItem::new(t("Laden")).icon(Icon::FileOpen)) {
                             action = Some((i, "load"));
                         }
                         if menu::item(ui, MenuItem::new(t("Abspielen")).icon(Icon::Play)) {
                             action = Some((i, "play"));
+                        }
+                        menu::separator(ui);
+                        if menu::item(
+                            ui,
+                            MenuItem::new(t("Umbenennen"))
+                                .icon(Icon::Edit)
+                                .enabled(!locked),
+                        ) {
+                            action = Some((i, "rename"));
+                        }
+                        if has_name
+                            && menu::item(
+                                ui,
+                                MenuItem::new(t("Dateiname verwenden")).enabled(!locked),
+                            )
+                        {
+                            action = Some((i, "unname"));
                         }
                         menu::separator(ui);
                         if menu::item(
@@ -768,10 +872,70 @@ impl SoundView {
                         }
                     });
                 }
+                // Einfügestelle beim Ziehen eines Titels
+                if let (Some(_), Some(q)) = (&dragging, pointer) {
+                    let list_rect = body;
+                    if list_rect.contains(q) {
+                        let at = rows
+                            .iter()
+                            .position(|r| q.y < r.center().y)
+                            .unwrap_or(rows.len());
+                        let y = match rows.get(at) {
+                            Some(r) => r.top() - 1.0,
+                            None => rows
+                                .last()
+                                .map_or(list_rect.top() + 2.0, |r| r.bottom() + 1.0),
+                        };
+                        ui.painter().hline(
+                            list_rect.x_range().shrink(4.0),
+                            y,
+                            Stroke::new(2.0, color),
+                        );
+                        if ui.input(|i| i.pointer.any_released()) {
+                            if let Some(p) = egui::DragAndDrop::take_payload::<TrackDrag>(ui.ctx())
+                            {
+                                drop_track = Some((p.deck, p.index, at));
+                            }
+                        }
+                    }
+                }
             });
+        if let Some((from_d, from_i, mut at)) = drop_track {
+            if from_d < board.decks.len() && from_i < board.decks[from_d].playlist.len() {
+                let t = board.decks[from_d].playlist.remove(from_i);
+                if from_d == d && from_i < at {
+                    at -= 1;
+                }
+                let list = &mut board.decks[d].playlist;
+                list.insert(at.min(list.len()), t);
+                self.sel = [None, None];
+                sp.sync(board);
+            }
+        }
+        if let Some(done) = rename_done {
+            if let (Some(name), Some((_, i, _, _))) = (done, &self.rename) {
+                if let Some(t) = board.decks[d].playlist.get_mut(*i) {
+                    t.name = if name.trim() == t.file_name() {
+                        String::new()
+                    } else {
+                        name.trim().to_string()
+                    };
+                }
+            }
+            self.rename = None;
+        }
         if let Some((i, what)) = action {
             let list = &mut board.decks[d].playlist;
             match what {
+                "rename" => {
+                    let text = list.get(i).map(|t| t.label()).unwrap_or_default();
+                    self.rename = Some((d, i, text, false));
+                }
+                "unname" => {
+                    if let Some(t) = list.get_mut(i) {
+                        t.name.clear();
+                    }
+                }
                 "load" => sp.load(board, d, i),
                 "play" => sp.play_track(board, d, i),
                 "up" if i > 0 => list.swap(i, i - 1),
@@ -787,6 +951,13 @@ impl SoundView {
             }
         }
     }
+}
+
+/// Ein Titel wird gezogen (innerhalb oder zwischen den Playlisten).
+#[derive(Clone, Copy)]
+struct TrackDrag {
+    deck: usize,
+    index: usize,
 }
 
 /// Länge eines Titels: gespeichert oder aus der (zwischengespeicherten)
@@ -821,10 +992,7 @@ fn audio_files(dir: &std::path::Path) -> Vec<Track> {
     files.sort();
     files
         .into_iter()
-        .map(|p| Track {
-            path: p.to_string_lossy().into_owned(),
-            length_ms: 0,
-        })
+        .map(|p| Track::new(p.to_string_lossy().into_owned()))
         .collect()
 }
 
@@ -859,12 +1027,11 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
     let cw = (body.width() - gap * (cols as f32 - 1.0)) / cols as f32;
     let ch = (body.height() - gap * (rows as f32 - 1.0)) / rows as f32;
     let dropped = ui.input(|i| i.raw.dropped_files.clone());
-    let (hover, hovering) = ui.input(|i| {
-        (
-            i.pointer.hover_pos().or(i.pointer.latest_pos()),
-            !i.raw.hovered_files.is_empty(),
-        )
-    });
+    let hover = crate::ui::file_drop::pointer(ui.ctx());
+    let hovering = crate::ui::file_drop::hovering(ui.ctx());
+    if hovering {
+        ui.ctx().request_repaint();
+    }
     for i in 0..board.pads.len() {
         let (c, r_) = (i % cols, i / cols);
         let r = Rect::from_min_size(
@@ -887,8 +1054,8 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
             track_len_audio(
                 &cx.state.audio,
                 &Track {
-                    path: pad.path.clone(),
                     length_ms: pad.length_ms,
+                    ..Track::new(pad.path.clone())
                 },
                 ui.ctx(),
             )

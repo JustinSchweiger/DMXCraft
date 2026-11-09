@@ -743,6 +743,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("PLAYLIST {d}", "PLAYLIST {d}"),
     ("{n} Titel · {len}", "{n} tracks · {len}"),
     ("Pad {n}: {name}", "Pad {n}: {name}"),
+    ("Dateiname verwenden", "Use file name"),
+    ("Datei fehlt: {file}", "File missing: {file}"),
     ("Zielpunkt auf dem Boden anklicken", "Click the target point on the floor"),
     ("Ausrichten ({n} Geräte)", "Aim ({n} fixtures)"),
     ("Ausrichten", "Aim"),

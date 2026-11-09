@@ -104,12 +104,32 @@ pub struct Track {
     /// Länge (0 = unbekannt).
     #[serde(default)]
     pub length_ms: u64,
+    /// Eigener Anzeigename (leer = Dateiname).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
 }
 
 impl Track {
-    /// Dateiname ohne Ordner.
-    pub fn name(&self) -> String {
+    pub fn new(path: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            length_ms: 0,
+            name: String::new(),
+        }
+    }
+
+    /// Dateiname ohne Ordner und Endung.
+    pub fn file_name(&self) -> String {
         file_name(&self.path)
+    }
+
+    /// Anzeigename: eigener Name, sonst Dateiname.
+    pub fn label(&self) -> String {
+        if self.name.trim().is_empty() {
+            self.file_name()
+        } else {
+            self.name.clone()
+        }
     }
 }
 
@@ -175,7 +195,10 @@ mod tests {
         old.normalize();
         assert_eq!(old.decks.len(), DECKS);
         assert_eq!(old.pads.len(), PADS);
-        assert_eq!(old.decks[0].playlist[0].name(), "a");
+        assert_eq!(old.decks[0].playlist[0].label(), "a");
+        old.decks[0].playlist[0].name = "Einmarsch".into();
+        assert_eq!(old.decks[0].playlist[0].label(), "Einmarsch");
+        assert_eq!(old.decks[0].playlist[0].file_name(), "a");
         assert_eq!(old.relink("/a.mp3", "/b.mp3"), 1);
         assert_eq!(old.paths().collect::<Vec<_>>(), vec!["/b.mp3"]);
     }

@@ -38,8 +38,8 @@ struct DeckRt {
     /// Laufendes Ausfaden: Beginn, Dauer.
     fade: Option<(Instant, Duration)>,
     ended: bool,
-    /// Gespielte Titel (abgeblendet in der Playlist).
-    played: HashSet<usize>,
+    /// Gespielte Titel (Pfade; abgeblendet in der Playlist).
+    played: HashSet<String>,
 }
 
 struct PadRt {
@@ -118,6 +118,36 @@ impl SoundPlayer {
         self.decks
             .get(d)
             .and_then(|r| r.current.as_ref().map(|c| c.0))
+            .filter(|i| *i != usize::MAX)
+    }
+
+    /// Pfad des geladenen Titels.
+    pub fn current_path(&self, d: usize) -> Option<String> {
+        self.decks
+            .get(d)
+            .and_then(|r| r.current.as_ref().map(|c| c.1.clone()))
+    }
+
+    /// Nach Änderungen an den Playlisten (Verschieben, Entfernen) den Index
+    /// des geladenen Titels über seinen Pfad neu bestimmen (`usize::MAX` =
+    /// nicht mehr in der eigenen Liste).
+    pub fn sync(&mut self, board: &SoundBoard) {
+        for (d, rt) in self.decks.iter_mut().enumerate() {
+            let Some((i, path)) = &mut rt.current else {
+                continue;
+            };
+            let list = board
+                .decks
+                .get(d)
+                .map(|dk| dk.playlist.as_slice())
+                .unwrap_or(&[]);
+            if list.get(*i).map(|t| &t.path) != Some(path) {
+                *i = list
+                    .iter()
+                    .position(|t| &t.path == path)
+                    .unwrap_or(usize::MAX);
+            }
+        }
     }
 
     /// Aktuelle Stelle (ms).
@@ -132,8 +162,8 @@ impl SoundPlayer {
         self.decks.get(d).map_or(0, |r| r.cue_ms)
     }
 
-    pub fn played(&self, d: usize, i: usize) -> bool {
-        self.decks.get(d).is_some_and(|r| r.played.contains(&i))
+    pub fn played(&self, d: usize, path: &str) -> bool {
+        self.decks.get(d).is_some_and(|r| r.played.contains(path))
     }
 
     /// Restzeit des Ausfadens (s), falls es läuft.
@@ -390,10 +420,10 @@ impl SoundPlayer {
         }
         let rt = self.decks.get(d);
         match rt.and_then(|r| r.current.as_ref()) {
-            Some((i, _)) if i + 1 < list.len() => Some(i + 1),
-            Some(_) => None,
-            None => (0..list.len())
-                .find(|i| !rt.is_some_and(|r| r.played.contains(i)))
+            Some((i, _)) if *i != usize::MAX && i + 1 < list.len() => Some(i + 1),
+            Some((i, _)) if *i != usize::MAX => None,
+            _ => (0..list.len())
+                .find(|i| !rt.is_some_and(|r| r.played.contains(&list[*i].path)))
                 .or(Some(0)),
         }
     }
@@ -401,6 +431,7 @@ impl SoundPlayer {
     /// Jedes Frame: Lautstärken setzen, Enden erkennen, automatisch weiter.
     /// `gain` = Ton-Master von DMXCraft.
     pub fn update(&mut self, board: &SoundBoard, gain: f32) -> bool {
+        self.sync(board);
         let master = board.master.clamp(0.0, 1.0) * gain;
         // Überblenden fortschreiben
         if let Some((a, b, start, dur, from)) = self.xfade_run {
@@ -437,9 +468,8 @@ impl SoundPlayer {
             }
         }
         for (d, faded) in ended {
-            let i = self.decks[d].current.as_ref().map(|c| c.0);
-            if let Some(i) = i {
-                self.decks[d].played.insert(i);
+            if let Some((_, path)) = self.decks[d].current.clone() {
+                self.decks[d].played.insert(path);
             }
             let deck = board.decks.get(d).cloned().unwrap_or_default();
             if !faded && deck.repeat {

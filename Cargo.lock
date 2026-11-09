@@ -770,6 +770,7 @@ dependencies = [
  "sha2",
  "tiny_http",
  "tungstenite",
+ "windows-sys 0.61.2",
  "winresource",
 ]
 
