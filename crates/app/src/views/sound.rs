@@ -141,7 +141,14 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
     let pos = sp.pos_ms(d);
     let p = ui.painter().clone();
     let vol_w = 52.0;
-    let main = Rect::from_min_max(rect.min, pos2(rect.right() - vol_w, rect.bottom()))
+    // Lautstärke zur Mitte hin: bei A rechts, bei B links
+    let vol_left = d % 2 == 1;
+    let (main_l, main_r) = if vol_left {
+        (rect.left() + vol_w, rect.right())
+    } else {
+        (rect.left(), rect.right() - vol_w)
+    };
+    let main = Rect::from_min_max(pos2(main_l, rect.top()), pos2(main_r, rect.bottom()))
         .shrink2(vec2(12.0, 8.0));
     let mut ui = ui.new_child(
         egui::UiBuilder::new()
@@ -368,8 +375,13 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
     });
 
     // Lautstärke
-    let vr = Rect::from_min_max(pos2(rect.right() - vol_w, rect.top()), rect.max);
-    p.vline(vr.left(), vr.y_range(), Stroke::new(1.0, theme::border()));
+    let vr = if vol_left {
+        Rect::from_min_max(rect.min, pos2(rect.left() + vol_w, rect.bottom()))
+    } else {
+        Rect::from_min_max(pos2(rect.right() - vol_w, rect.top()), rect.max)
+    };
+    let edge = if vol_left { vr.right() } else { vr.left() };
+    p.vline(edge, vr.y_range(), Stroke::new(1.0, theme::border()));
     let vol = &mut board.decks[d].volume;
     let db = if *vol <= 0.001 {
         t("aus").to_string()
