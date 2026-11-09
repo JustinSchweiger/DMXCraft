@@ -277,7 +277,7 @@ fn installed_by_msi() -> bool {
     };
     ["ProgramFiles", "ProgramW6432"]
         .iter()
-        .filter_map(|k| std::env::var_os(k))
+        .filter_map(std::env::var_os)
         .any(|dir| exe.starts_with(std::path::Path::new(&dir)))
 }
 
