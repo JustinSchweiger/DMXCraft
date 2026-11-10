@@ -29,7 +29,12 @@ Mehr in `docs/`: [Mapping](docs/MAPPING.md), [Touch](docs/TOUCH.md),
 
 ## Installieren
 
-**Linux / macOS** (Terminal):
+**macOS**: Unter [Releases](https://github.com/JustinSchweiger/DMXCraft/releases/latest) die
+`DMXCraft-macos-universal.dmg` laden, öffnen und DMXCraft in *Programme* ziehen. Die App ist
+nicht von Apple notarisiert: beim ersten Start *Systemeinstellungen → Datenschutz & Sicherheit →
+Trotzdem öffnen* (oder `xattr -dr com.apple.quarantine /Applications/DMXCraft.app`).
+
+**Linux / macOS** (Terminal, ohne App-Symbol):
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/JustinSchweiger/DMXCraft/releases/latest/download/dmxcraft-installer.sh | sh
