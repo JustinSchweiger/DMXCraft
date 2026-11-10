@@ -380,7 +380,7 @@ impl StageCanvas<'_> {
                 // 0 Hz = shutter closed
                 if hz <= 0.0 || (time * f64::from(hz)).fract() > 0.35 {
                     for c in &mut colors {
-                        *c = (c.0, 0.0);
+                        *c = (Color32::BLACK, 0.0);
                     }
                 }
                 ui.ctx().request_repaint();

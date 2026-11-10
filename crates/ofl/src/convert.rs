@@ -224,6 +224,51 @@ fn angle_range(fixture: &Value, ty: &str) -> Option<f32> {
     (hi > lo).then_some(hi - lo)
 }
 
+/// Start and end of the zoom: degrees, or 0/1 for “narrow”/“wide”. From the
+/// Zoom functions (and Focus functions given as angles, used as zoom by
+/// wash lights).
+fn zoom_angles(fixture: &Value) -> Option<(f32, f32)> {
+    let word = |v: &Value| -> Option<f32> {
+        if let Some(d) = degrees(v) {
+            return Some(d);
+        }
+        match v.as_str()?.trim().to_lowercase().as_str() {
+            "narrow" | "small" | "closed" => Some(0.0),
+            "wide" | "big" | "open" => Some(1.0),
+            _ => None,
+        }
+    };
+    for ch in fixture.get("availableChannels")?.as_object()?.values() {
+        let caps = capabilities(ch);
+        let zooms: Vec<&Value> = caps
+            .iter()
+            .copied()
+            .filter(|c| {
+                matches!(
+                    c.get("type").and_then(Value::as_str),
+                    Some("Zoom" | "Focus")
+                )
+            })
+            .collect();
+        let first = zooms.first().and_then(|c| {
+            c.get("angleStart")
+                .or_else(|| c.get("distanceStart"))
+                .and_then(word)
+        });
+        let last = zooms.last().and_then(|c| {
+            c.get("angleEnd")
+                .or_else(|| c.get("distanceEnd"))
+                .and_then(word)
+        });
+        if let (Some(a), Some(b)) = (first, last) {
+            if a != b {
+                return Some((a, b));
+            }
+        }
+    }
+    None
+}
+
 struct Lookup<'a> {
     channels: HashMap<String, Resolved<'a>>,
     switch_alias: HashMap<String, String>,
@@ -719,6 +764,15 @@ pub fn convert_fixture(
                 .flatten()
                 .any(|p| p.get("focus").and_then(|f| f.get(key)).is_some())
         };
+        // Zoom from wide to narrow (by the angles of the zoom function)
+        if let Some((start, end)) = zoom_angles(&fixture) {
+            let ph = physical.get_or_insert_with(Default::default);
+            ph.zoom_reversed = start > end;
+            // beam angles in degrees when the lens data does not give them
+            if start > 1.0 && end > 1.0 && ph.beam_angle[0] == ph.beam_angle[1] {
+                ph.beam_angle = [start.min(end), start.max(end)];
+            }
+        }
         for (ty, focus_key) in [("Pan", "panMax"), ("Tilt", "tiltMax")] {
             if has_focus(focus_key) {
                 continue;
@@ -758,6 +812,25 @@ pub fn convert_fixture(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ranges_and_zoom_direction_from_functions() {
+        let json = r#"{
+          "name": "Wash",
+          "categories": ["Moving Head"],
+          "availableChannels": {
+            "Pan": {"capability": {"type": "Pan", "angleStart": "0deg", "angleEnd": "540deg"}},
+            "Tilt": {"capability": {"type": "Tilt", "angleStart": "0deg", "angleEnd": "200deg"}},
+            "Focus": {"capability": {"type": "Focus", "distanceStart": "45deg", "distanceEnd": "5deg"}}
+          },
+          "modes": [{"name": "3ch", "channels": ["Pan", "Tilt", "Focus"]}]
+        }"#;
+        let f = convert_fixture("x", "X", "wash", json).unwrap();
+        let ph = f.modes[0].physical.unwrap();
+        assert_eq!((ph.pan_range, ph.tilt_range), (540.0, 200.0));
+        assert!(ph.zoom_reversed);
+        assert_eq!(ph.beam_angle, [5.0, 45.0]);
+    }
     use ChannelKind as K;
 
     fn kinds(t: &FixtureType) -> Vec<K> {

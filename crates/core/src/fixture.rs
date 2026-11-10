@@ -357,6 +357,8 @@ pub struct Physics {
     pub tilt_range: f32,
     /// Width, height, depth in mm (0 = unknown).
     pub size_mm: [f32; 3],
+    /// The zoom channel goes from wide (0) to narrow (255).
+    pub zoom_reversed: bool,
 }
 
 impl Default for Physics {
@@ -366,6 +368,7 @@ impl Default for Physics {
             pan_range: 540.0,
             tilt_range: 270.0,
             size_mm: [0.0; 3],
+            zoom_reversed: false,
         }
     }
 }

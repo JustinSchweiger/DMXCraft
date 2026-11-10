@@ -274,15 +274,32 @@ pub fn build(
         let focus = by_kind(K::Focus).first().map(|i| value(*i));
         // Beam angle from the fixture data (with a zoom channel between min and
         // max)
-        let zoom = ty
+        // Wash lights without zoom and gobo often call their zoom “focus”.
+        let zoom_ch = ty
             .channels
             .iter()
             .position(|c| c.kind == K::Zoom || c.name.to_lowercase().contains("zoom"))
-            .map(value);
+            .or_else(|| {
+                let range = ty
+                    .physical
+                    .is_some_and(|p| p.beam_angle[0] != p.beam_angle[1]);
+                (range && by_kind(K::Gobo).is_empty())
+                    .then(|| by_kind(K::Focus).first().copied())
+                    .flatten()
+            });
+        let zoom = zoom_ch.map(value);
         let phys_half = ty.physical.map(|p| {
             let [a, b] = p.beam_angle;
-            (a + (b - a) * zoom.unwrap_or(0.0)) * 0.5
+            let z = zoom.unwrap_or(0.0);
+            let z = if p.zoom_reversed { 1.0 - z } else { z };
+            (a + (b - a) * z) * 0.5
         });
+        // used as zoom: no focus effect on the spot
+        let focus = if zoom_ch.is_some() && zoom_ch == by_kind(K::Focus).first().copied() {
+            None
+        } else {
+            focus
+        };
         let gobo_v = by_kind(K::Gobo)
             .first()
             .map_or(0.0, |i| gobo_of(&ty.channels[*i], raw(*i)));
