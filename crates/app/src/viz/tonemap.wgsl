@@ -1,10 +1,10 @@
-// ---------- Tonemapping (Vollbild-Dreieck) ----------
+// ---------- Tone mapping (full-screen triangle) ----------
 
 @group(0) @binding(0) var hdr: texture_2d<f32>;
 @group(0) @binding(1) var hdr_sampler: sampler;
 @group(0) @binding(2) var bloom: texture_2d<f32>;
 struct Post {
-    // x Bloom-Stärke, y Belichtung
+    // x bloom strength, y exposure
     p: vec4<f32>,
 };
 @group(0) @binding(3) var<uniform> post: Post;
@@ -23,26 +23,41 @@ fn vs_full(@builtin(vertex_index) id: u32) -> FsOut {
     return o;
 }
 
-fn aces(x: vec3<f32>) -> vec3<f32> {
+fn aces1(x: f32) -> f32 {
     let a = 2.51;
     let b = 0.03;
     let c = 2.43;
     let d = 0.59;
     let e = 0.14;
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+// Hue-preserving tone mapping: the curve works on the brightest channel and
+// scales the color with it, so a blue beam stays blue and white light on wood
+// does not turn orange. Only very bright light bleaches towards white (like
+// an eye or a camera).
+fn tonemap(x: vec3<f32>) -> vec3<f32> {
+    let m = max(x.r, max(x.g, x.b));
+    if (m <= 1e-5) {
+        return vec3<f32>(0.0);
+    }
+    let t = aces1(m);
+    let hue = x * (t / m);
+    let bleach = smoothstep(3.0, 20.0, m) * 0.6;
+    return mix(hue, vec3<f32>(t), bleach);
 }
 
 @fragment
 fn fs_tonemap(i: FsOut) -> @location(0) vec4<f32> {
     let c = textureSample(hdr, hdr_sampler, i.uv).rgb;
     let b = textureSample(bloom, hdr_sampler, i.uv).rgb;
-    return vec4<f32>(aces((c + b * post.p.x) * post.p.y), 1.0);
+    return vec4<f32>(tonemap((c + b * post.p.x) * post.p.y), 1.0);
 }
 
-// ---------- Bloom (Dual-Filter: verkleinern, dann vergrößern) ----------
+// ---------- Bloom (dual filter: downsample, then upsample) ----------
 
 struct BloomPass {
-    // xy Texelgröße der Quelle, z Schwelle (nur erster Schritt), w –
+    // xy texel size of the source, z threshold (first step only), w –
     p: vec4<f32>,
 };
 @group(1) @binding(0) var src: texture_2d<f32>;

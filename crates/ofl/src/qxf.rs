@@ -331,6 +331,14 @@ fn qlc_physical(node: roxmltree::Node) -> Option<dmxcraft_core::fixture::Physics
             any = true;
         }
     }
+    if let Some(v) = num("Bulb", "Lumens").filter(|v| *v > 0.0) {
+        out.lumens = v;
+        any = true;
+    }
+    if let Some(v) = num("Technical", "PowerConsumption").filter(|v| *v > 0.0) {
+        out.power = v;
+        any = true;
+    }
     if let Some(v) = num("Focus", "PanMax") {
         out.pan_range = v;
         any = true;

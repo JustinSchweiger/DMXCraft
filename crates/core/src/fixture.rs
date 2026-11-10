@@ -359,6 +359,10 @@ pub struct Physics {
     pub size_mm: [f32; 3],
     /// The zoom channel goes from wide (0) to narrow (255).
     pub zoom_reversed: bool,
+    /// Luminous flux in lumens (0 = unknown).
+    pub lumens: f32,
+    /// Power consumption in watts (0 = unknown).
+    pub power: f32,
 }
 
 impl Default for Physics {
@@ -369,11 +373,25 @@ impl Default for Physics {
             tilt_range: 270.0,
             size_mm: [0.0; 3],
             zoom_reversed: false,
+            lumens: 0.0,
+            power: 0.0,
         }
     }
 }
 
 impl Physics {
+    /// Light output in lumens: as given, otherwise estimated from the power
+    /// (LED fixtures, about 25 lm/W including optics). None = unknown.
+    pub fn light_output(&self) -> Option<f32> {
+        if self.lumens > 0.0 {
+            Some(self.lumens)
+        } else if self.power > 0.0 {
+            Some(self.power * 25.0)
+        } else {
+            None
+        }
+    }
+
     /// From the `physical` block of an OFL fixture file (missing data = default).
     pub fn from_ofl(v: Option<&serde_json::Value>) -> Option<Self> {
         let v = v?;
@@ -407,6 +425,14 @@ impl Physics {
         }
         if let Some(t) = num(&["focus", "tiltMax"]) {
             out.tilt_range = t;
+            any = true;
+        }
+        if let Some(l) = num(&["bulb", "lumens"]).filter(|l| *l > 0.0) {
+            out.lumens = l;
+            any = true;
+        }
+        if let Some(w) = num(&["power"]).filter(|w| *w > 0.0) {
+            out.power = w;
             any = true;
         }
         if let Some(d) = v.get("dimensions").and_then(|d| d.as_array()) {

@@ -309,9 +309,25 @@ pub fn build(
         } else {
             Vec3::splat(0.03)
         };
+        // metal parts: slightly lighter than the housing
+        let trim = if sel { body * 1.4 } else { Vec3::splat(0.07) };
         let mut parts = Vec::new();
         let mut beams = Vec::new();
         let trs = |s: Vec3, r: Quat, tr: Vec3| Mat4::from_scale_rotation_translation(s, r, tr);
+        // Brightness from the profile (lumens, otherwise power) relative to a
+        // typical fixture of this kind
+        let output = ty
+            .physical
+            .and_then(|p| p.light_output())
+            .map_or(1.0, |lm| {
+                let typical = match kind {
+                    Kind::Moving => 3000.0,
+                    Kind::Bar => 800.0,
+                    Kind::Blinder => 4000.0,
+                    _ => 1500.0,
+                };
+                (lm / typical).clamp(0.2, 5.0)
+            });
         let mut lens_parts: Vec<Part> = Vec::new();
         let mut add_lens =
             |m: Mat4, light: Vec3, origin: Vec3, dir: Vec3, half: f32, lens: f32, power: f32| {
@@ -328,7 +344,7 @@ pub fn build(
                         origin,
                         dir,
                         half_angle: half,
-                        color: on * power,
+                        color: on * power * output,
                         lens,
                         gobo: gobo_v,
                         focus,
@@ -337,58 +353,127 @@ pub fn build(
             };
         let down = Vec3::NEG_Y;
         match kind {
-            Kind::Par | Kind::Blinder => {
-                let (r, len, half) = if kind == Kind::Blinder {
-                    (0.1, 0.12, 30.0)
-                } else {
-                    (0.11, 0.28, 13.0)
-                };
+            Kind::Blinder => {
+                // Housing with two lamps side by side
+                cube(
+                    &mut parts,
+                    base * trs(
+                        Vec3::new(0.46, 0.14, 0.24),
+                        Quat::IDENTITY,
+                        Vec3::new(0.0, -0.09, 0.0),
+                    ),
+                    body,
+                );
+                bracket(&mut parts, base, 0.5, body);
+                let light = cell_light(&get, wheel_c, 0, 1);
+                let half = phys_half.unwrap_or(30.0);
+                for x in [-0.11f32, 0.11] {
+                    cylinder(
+                        &mut parts,
+                        base * trs(
+                            Vec3::new(0.1, 0.03, 0.1),
+                            Quat::IDENTITY,
+                            Vec3::new(x, -0.175, 0.0),
+                        ),
+                        trim,
+                        0.7,
+                    );
+                    let o = base.transform_point3(Vec3::new(x, -0.193, 0.0));
+                    let d = base.transform_vector3(down).normalize();
+                    add_lens(
+                        base * trs(
+                            Vec3::new(0.085, 0.006, 0.085),
+                            Quat::IDENTITY,
+                            Vec3::new(x, -0.19, 0.0),
+                        ),
+                        light * 0.5,
+                        o,
+                        d,
+                        half,
+                        0.085,
+                        9.0,
+                    );
+                }
+            }
+            Kind::Par => {
                 let name = ty.model.to_lowercase();
-                let half = phys_half.unwrap_or(if name.contains("cob") || name.contains("revue") {
+                let cob = name.contains("cob") || name.contains("revue");
+                let half = phys_half.unwrap_or(if cob {
                     25.0
                 } else if name.contains("wash") {
                     18.0
                 } else {
-                    half
+                    13.0
                 });
-                parts.push(Part {
-                    prim: Prim::Cylinder,
-                    matrix: base
-                        * trs(
-                            Vec3::new(r, len, r),
-                            Quat::IDENTITY,
-                            Vec3::new(0.0, -len * 0.5, 0.0),
-                        ),
-                    color: body,
-                    gloss: 0.5,
-                    emissive: 0.0,
-                });
-                // Yoke
-                cube(
+                let (r, len) = (0.11, 0.26);
+                // Can: body, rear cap with cooling fins, front ring
+                cylinder(
                     &mut parts,
                     base * trs(
-                        Vec3::new(r * 2.3, 0.02, 0.03),
+                        Vec3::new(r, len, r),
                         Quat::IDENTITY,
-                        Vec3::new(0.0, 0.01, 0.0),
+                        Vec3::new(0.0, -len * 0.5 - 0.02, 0.0),
                     ),
                     body,
+                    0.5,
                 );
-                let light = cell_light(&get, wheel_c, 0, 1);
-                let o = base.transform_point3(Vec3::new(0.0, -len - 0.003, 0.0));
-                let d = base.transform_vector3(down).normalize();
-                add_lens(
+                cylinder(
+                    &mut parts,
                     base * trs(
-                        Vec3::new(r * 0.9, 0.006, r * 0.9),
+                        Vec3::new(r * 0.8, 0.04, r * 0.8),
                         Quat::IDENTITY,
-                        Vec3::new(0.0, -len, 0.0),
+                        Vec3::new(0.0, -0.01, 0.0),
                     ),
-                    light,
-                    o,
-                    d,
-                    half,
-                    r * 0.9,
-                    9.0,
+                    trim,
+                    0.3,
                 );
+                cylinder(
+                    &mut parts,
+                    base * trs(
+                        Vec3::new(r * 1.08, 0.025, r * 1.08),
+                        Quat::IDENTITY,
+                        Vec3::new(0.0, -len - 0.02, 0.0),
+                    ),
+                    trim,
+                    0.7,
+                );
+                // U-bracket with the side knobs
+                bracket(&mut parts, base, r * 2.4, body);
+                for sx in [-1.0f32, 1.0] {
+                    cube(
+                        &mut parts,
+                        base * trs(
+                            Vec3::new(0.012, len * 0.75, 0.04),
+                            Quat::IDENTITY,
+                            Vec3::new(sx * (r + 0.02), -len * 0.3, 0.0),
+                        ),
+                        body,
+                    );
+                    cylinder(
+                        &mut parts,
+                        base * Mat4::from_translation(Vec3::new(
+                            sx * (r + 0.035),
+                            -len * 0.55,
+                            0.0,
+                        )) * Mat4::from_rotation_z(std::f32::consts::FRAC_PI_2)
+                            * trs(Vec3::new(0.022, 0.02, 0.022), Quat::IDENTITY, Vec3::ZERO),
+                        trim,
+                        0.6,
+                    );
+                }
+                let light = cell_light(&get, wheel_c, 0, 1);
+                let o = base.transform_point3(Vec3::new(0.0, -len - 0.035, 0.0));
+                let d = base.transform_vector3(down).normalize();
+                let lens_m = base
+                    * trs(
+                        Vec3::new(r * 0.95, 0.006, r * 0.95),
+                        Quat::IDENTITY,
+                        Vec3::new(0.0, -len - 0.032, 0.0),
+                    );
+                add_lens(lens_m, light, o, d, half, r * 0.9, 9.0);
+                if !cob {
+                    led_dots(&mut parts, lens_m, light, shutter_on, 18);
+                }
             }
             Kind::Bar => {
                 let width = (cells as f32 * 0.22).clamp(0.5, 1.3);
@@ -397,26 +482,47 @@ pub fn build(
                     base * trs(
                         Vec3::new(width, 0.07, 0.1),
                         Quat::IDENTITY,
-                        Vec3::new(0.0, -0.035, 0.0),
+                        Vec3::new(0.0, -0.045, 0.0),
                     ),
                     body,
                 );
+                // end caps and mounting brackets
+                for sx in [-1.0f32, 1.0] {
+                    cube(
+                        &mut parts,
+                        base * trs(
+                            Vec3::new(0.02, 0.08, 0.11),
+                            Quat::IDENTITY,
+                            Vec3::new(sx * (width * 0.5 + 0.01), -0.045, 0.0),
+                        ),
+                        trim,
+                    );
+                    cube(
+                        &mut parts,
+                        base * trs(
+                            Vec3::new(0.04, 0.012, 0.06),
+                            Quat::IDENTITY,
+                            Vec3::new(sx * width * 0.3, -0.004, 0.0),
+                        ),
+                        trim,
+                    );
+                }
                 for c in 0..cells {
                     let x = -width * 0.5 + width * (c as f32 + 0.5) / cells as f32;
                     let light = cell_light(&get, wheel_c, c, cells);
-                    let o = base.transform_point3(Vec3::new(x, -0.072, 0.0));
+                    let o = base.transform_point3(Vec3::new(x, -0.082, 0.0));
                     let d = base.transform_vector3(down).normalize();
                     add_lens(
                         base * trs(
-                            Vec3::new(0.04, 0.006, 0.04),
+                            Vec3::new(0.03, 0.006, 0.03),
                             Quat::IDENTITY,
-                            Vec3::new(x, -0.07, 0.0),
+                            Vec3::new(x, -0.08, 0.0),
                         ),
                         light,
                         o,
                         d,
                         phys_half.unwrap_or(17.0),
-                        0.04,
+                        0.03,
                         5.0,
                     );
                 }
@@ -437,53 +543,132 @@ pub fn build(
                 let pan = (0.5 - fine(K::Pan, K::PanFine).unwrap_or(0.5)) * pan_range.to_radians();
                 let tilt =
                     (0.5 - fine(K::Tilt, K::TiltFine).unwrap_or(0.5)) * tilt_range.to_radians();
+                // Size from the profile (height of the fixture), otherwise ~42 cm
+                let k = ty
+                    .physical
+                    .map(|p| p.size_mm[1])
+                    .filter(|h| *h > 100.0)
+                    .map_or(1.0, |h| (h / 420.0).clamp(0.6, 1.6));
+                let wash = by_kind(K::Gobo).is_empty();
+                let sc = |v: Vec3| v * k;
+                // Base with display, turntable
                 cube(
                     &mut parts,
                     base * trs(
-                        Vec3::new(0.32, 0.1, 0.24),
+                        sc(Vec3::new(0.34, 0.11, 0.26)),
                         Quat::IDENTITY,
-                        Vec3::new(0.0, -0.05, 0.0),
+                        sc(Vec3::new(0.0, -0.055, 0.0)),
                     ),
                     body,
                 );
+                cube(
+                    &mut parts,
+                    base * trs(
+                        sc(Vec3::new(0.1, 0.05, 0.004)),
+                        Quat::IDENTITY,
+                        sc(Vec3::new(0.06, -0.055, 0.131)),
+                    ),
+                    Vec3::new(0.02, 0.05, 0.12),
+                );
+                cylinder(
+                    &mut parts,
+                    base * trs(
+                        sc(Vec3::new(0.09, 0.03, 0.09)),
+                        Quat::IDENTITY,
+                        sc(Vec3::new(0.0, -0.125, 0.0)),
+                    ),
+                    trim,
+                    0.5,
+                );
+                // Yoke: crossbar and two arms
                 let yoke = base * Mat4::from_rotation_y(pan);
+                cube(
+                    &mut parts,
+                    yoke * trs(
+                        sc(Vec3::new(0.34, 0.035, 0.1)),
+                        Quat::IDENTITY,
+                        sc(Vec3::new(0.0, -0.157, 0.0)),
+                    ),
+                    body,
+                );
                 for sx in [-1.0f32, 1.0] {
                     cube(
                         &mut parts,
                         yoke * trs(
-                            Vec3::new(0.03, 0.24, 0.08),
+                            sc(Vec3::new(0.04, 0.2, 0.1)),
                             Quat::IDENTITY,
-                            Vec3::new(sx * 0.15, -0.21, 0.0),
+                            sc(Vec3::new(sx * 0.15, -0.27, 0.0)),
                         ),
                         body,
                     );
+                    // tilt axle cover
+                    cylinder(
+                        &mut parts,
+                        yoke * Mat4::from_translation(sc(Vec3::new(sx * 0.15, -0.33, 0.0)))
+                            * Mat4::from_rotation_z(std::f32::consts::FRAC_PI_2)
+                            * trs(
+                                sc(Vec3::new(0.045, 0.05, 0.045)),
+                                Quat::IDENTITY,
+                                Vec3::ZERO,
+                            ),
+                        trim,
+                        0.6,
+                    );
                 }
+                // Head: wash = wide and short, spot = narrower and longer
                 let head = yoke
-                    * Mat4::from_translation(Vec3::new(0.0, -0.3, 0.0))
+                    * Mat4::from_translation(sc(Vec3::new(0.0, -0.33, 0.0)))
                     * Mat4::from_rotation_x(tilt);
-                parts.push(Part {
-                    prim: Prim::Cylinder,
-                    matrix: head * trs(Vec3::new(0.12, 0.26, 0.12), Quat::IDENTITY, Vec3::ZERO),
-                    color: body,
-                    gloss: 0.5,
-                    emissive: 0.0,
-                });
-                let light = cell_light(&get, wheel_c, 0, cells.max(1));
-                let o = head.transform_point3(Vec3::new(0.0, -0.135, 0.0));
-                let d = head.transform_vector3(down).normalize();
-                add_lens(
+                let (hr, hl) = if wash { (0.125, 0.2) } else { (0.1, 0.28) };
+                cylinder(
+                    &mut parts,
+                    head * trs(sc(Vec3::new(hr, hl, hr)), Quat::IDENTITY, Vec3::ZERO),
+                    body,
+                    0.5,
+                );
+                // back cap and front bezel
+                cylinder(
+                    &mut parts,
                     head * trs(
-                        Vec3::new(0.1, 0.006, 0.1),
+                        sc(Vec3::new(hr * 0.75, 0.03, hr * 0.75)),
                         Quat::IDENTITY,
-                        Vec3::new(0.0, -0.13, 0.0),
+                        sc(Vec3::new(0.0, hl * 0.5 + 0.012, 0.0)),
                     ),
+                    trim,
+                    0.4,
+                );
+                cylinder(
+                    &mut parts,
+                    head * trs(
+                        sc(Vec3::new(hr * 1.04, 0.02, hr * 1.04)),
+                        Quat::IDENTITY,
+                        sc(Vec3::new(0.0, -hl * 0.5 - 0.005, 0.0)),
+                    ),
+                    trim,
+                    0.7,
+                );
+                let light = cell_light(&get, wheel_c, 0, cells.max(1));
+                let o = head.transform_point3(sc(Vec3::new(0.0, -hl * 0.5 - 0.02, 0.0)));
+                let d = head.transform_vector3(down).normalize();
+                let lens_m = head
+                    * trs(
+                        sc(Vec3::new(hr * 0.92, 0.006, hr * 0.92)),
+                        Quat::IDENTITY,
+                        sc(Vec3::new(0.0, -hl * 0.5 - 0.016, 0.0)),
+                    );
+                add_lens(
+                    lens_m,
                     light,
                     o,
                     d,
-                    phys_half.unwrap_or(9.0),
-                    0.08,
+                    phys_half.unwrap_or(if wash { 15.0 } else { 9.0 }),
+                    hr * 0.8 * k,
                     12.0,
                 );
+                if wash {
+                    // LED wash: individual lenses in rings (1 + 6 + 12)
+                    led_dots(&mut parts, lens_m, light, shutter_on, 19);
+                }
             }
             Kind::Fog => {
                 cube(
@@ -553,6 +738,61 @@ pub fn build(
         out.push(RigFixture { parts, beams });
     }
     (out, fog_boost)
+}
+
+fn cylinder(parts: &mut Vec<Part>, m: Mat4, c: Vec3, gloss: f32) {
+    parts.push(Part {
+        prim: Prim::Cylinder,
+        matrix: m,
+        color: c,
+        gloss,
+        emissive: 0.0,
+    });
+}
+
+/// Mounting bracket (omega clamp plate) on top of a fixture.
+fn bracket(parts: &mut Vec<Part>, base: Mat4, width: f32, c: Vec3) {
+    cube(
+        parts,
+        base * Mat4::from_scale_rotation_translation(
+            Vec3::new(width, 0.015, 0.05),
+            Quat::IDENTITY,
+            Vec3::new(0.0, 0.0, 0.0),
+        ),
+        c,
+    );
+}
+
+/// Individual LED lenses on a lens disk (`lens` = matrix of the disk, unit
+/// radius): 1 + 6 + 12 … in rings, glowing in the light color.
+fn led_dots(parts: &mut Vec<Part>, lens: Mat4, light: Vec3, shutter_on: bool, count: usize) {
+    let on = if shutter_on { light } else { Vec3::ZERO };
+    let mut spots = vec![(0.0f32, 0.0f32)];
+    let mut ring = 1;
+    while spots.len() < count {
+        let n = ring * 6;
+        let r = ring as f32 * 0.31;
+        for i in 0..n {
+            let a = std::f32::consts::TAU * i as f32 / n as f32;
+            spots.push((r * a.cos(), r * a.sin()));
+        }
+        ring += 1;
+    }
+    spots.truncate(count);
+    for (x, z) in spots {
+        parts.push(Part {
+            prim: Prim::Cylinder,
+            matrix: lens
+                * Mat4::from_scale_rotation_translation(
+                    Vec3::new(0.12, 1.4, 0.12),
+                    Quat::IDENTITY,
+                    Vec3::new(x, -0.8, z),
+                ),
+            color: on.max(Vec3::splat(0.04)),
+            gloss: 0.9,
+            emissive: on.max_element().min(1.0) * 3.0,
+        });
+    }
 }
 
 fn cube(parts: &mut Vec<Part>, m: Mat4, c: Vec3) {

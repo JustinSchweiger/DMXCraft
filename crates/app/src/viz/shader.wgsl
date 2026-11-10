@@ -1,22 +1,22 @@
-// 3D-Visualisierer: Szene (beleuchtet), Lichtstrahlen (additiv) und Tonemapping.
+// 3D visualizer: scene (lit), light beams (additive) and tone mapping.
 
 struct Globals {
     view_proj: mat4x4<f32>,
     camera: vec4<f32>,
-    // x = Umgebungslicht, y = Strahlen, z = Nebel, w = Anzahl Lichter
+    // x = ambient light, y = beams, z = fog, w = number of lights
     env: vec4<f32>,
-    // x = Zeit (s), y = Belichtung
+    // x = time (s), y = exposure
     misc: vec4<f32>,
 };
 
 struct Light {
-    // xyz Position, w Reichweite
+    // xyz position, w range
     pos: vec4<f32>,
-    // xyz Richtung (normiert), w cos(äußerer Winkel)
+    // xyz direction (normalized), w cos(outer angle)
     dir: vec4<f32>,
-    // rgb Farbe · Helligkeit, w cos(innerer Winkel)
+    // rgb color · brightness, w cos(inner angle)
     color: vec4<f32>,
-    // x Schattenebene (< 0 = ohne Schatten)
+    // x shadow layer (< 0 = no shadow), y outer angle (deg), z gobo, w gobo sharpness
     extra: vec4<f32>,
 };
 
@@ -26,12 +26,12 @@ struct Light {
 @group(0) @binding(3) var shadow_sampler: sampler_comparison;
 @group(0) @binding(4) var<storage, read> shadow_mats: array<mat4x4<f32>>;
 
-// Anteil Licht (0 = im Schatten), weich über 3×3 Abtastungen
+// Share of light (0 = in shadow), soft over 3×3 samples
 fn shadow(layer: i32, p: vec3<f32>, n: vec3<f32>, ld: vec3<f32>) -> f32 {
     if (layer < 0) {
         return 1.0;
     }
-    // etwas entlang der Normalen versetzen gegen Schattenakne
+    // offset a little along the normal against shadow acne
     let q = shadow_mats[layer] * vec4<f32>(p + n * 0.03, 1.0);
     if (q.w <= 0.0) {
         return 1.0;
@@ -60,15 +60,15 @@ struct VIn {
     @location(3) m1: vec4<f32>,
     @location(4) m2: vec4<f32>,
     @location(5) m3: vec4<f32>,
-    // rgb linear, a Deckkraft
+    // rgb linear, a opacity
     @location(6) color: vec4<f32>,
-    // x Glanz, y Selbstleuchten (0–1, bzw. > 1 = HDR),
-    // z Kachelgröße (m) bzw. Gobo, w Bild: 0 keins, 1 aufprojiziert, 2 Bildkoordinaten
+    // x gloss, y self-illumination (0–1, or > 1 = HDR),
+    // z tile size (m) or gobo, w image: 0 none, 1 projected, 2 image coordinates
     @location(7) params: vec4<f32>,
     @location(8) uv: vec2<f32>,
 };
 
-// Bild des Materials (ohne Bild: 1 × 1 weiß)
+// Image of the material (without image: 1 × 1 white)
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var tex_sampler: sampler;
 
@@ -80,7 +80,7 @@ struct VOut {
     @location(3) params: vec4<f32>,
     @location(4) local: vec3<f32>,
     @location(5) uv: vec2<f32>,
-    // Lage im Objekt in Metern (Skalierung eingerechnet) und Normale im Objekt
+    // position in the object in meters (scale included) and normal in the object
     @location(6) metric: vec3<f32>,
     @location(7) lnormal: vec3<f32>,
 };
@@ -89,7 +89,7 @@ struct VOut {
 fn vs_main(v: VIn) -> VOut {
     let m = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
     let w = m * vec4<f32>(v.pos, 1.0);
-    // Normale mit der inversen Transponierten (ohne Verschiebung)
+    // normal with the inverse transpose (without translation)
     let n3 = mat3x3<f32>(m[0].xyz, m[1].xyz, m[2].xyz);
     let nrm = normalize(transpose(inverse3(n3)) * v.normal);
     var o: VOut;
@@ -105,10 +105,10 @@ fn vs_main(v: VIn) -> VOut {
     return o;
 }
 
-// Farbe aus dem Bild: aufprojiziert (drei Richtungen, gewichtet nach der
-// Normalen) oder über die Bildkoordinaten des Modells
+// Color from the image: projected (three directions, weighted by the
+// normal) or via the image coordinates of the model
 fn texel(i: VOut) -> vec3<f32> {
-    // immer abtasten (gleichförmiger Ablauf), danach auswählen
+    // always sample (uniform control flow), then choose
     let s = i.metric / max(i.params.z, 0.01);
     var w = pow(abs(normalize(i.lnormal)), vec3<f32>(4.0));
     w = w / max(w.x + w.y + w.z, 1e-4);
@@ -138,27 +138,27 @@ fn inverse3(m: mat3x3<f32>) -> mat3x3<f32> {
     return transpose(mat3x3<f32>(r0 * inv, r1 * inv, r2 * inv));
 }
 
-// Gobo-Muster (angenähert): Winkel um die Achse, Abstand von der Mitte 0–1
+// Gobo pattern (approximated): angle around the axis, distance from the center 0–1
 fn gobo(id: f32, ang: f32, r: f32) -> f32 {
     let k = i32(id + 0.5);
     var v = 1.0;
     if (k == 1) {
-        v = smoothstep(-0.1, 0.3, cos(ang * 6.0)); // Stern
+        v = smoothstep(-0.1, 0.3, cos(ang * 6.0)); // star
     } else if (k == 2) {
-        v = smoothstep(0.2, 0.5, sin(r * 20.0)) * smoothstep(-0.2, 0.2, cos(ang * 8.0)); // Punkte
+        v = smoothstep(0.2, 0.5, sin(r * 20.0)) * smoothstep(-0.2, 0.2, cos(ang * 8.0)); // dots
     } else if (k == 3) {
-        v = smoothstep(-0.2, 0.4, sin(r * 26.0)); // Ringe
+        v = smoothstep(-0.2, 0.4, sin(r * 26.0)); // rings
     } else if (k == 4) {
-        v = smoothstep(-0.1, 0.4, sin(ang * 5.0 + r * 9.0) * sin(ang * 3.0 - r * 13.0) + 0.2); // Breakup
+        v = smoothstep(-0.1, 0.4, sin(ang * 5.0 + r * 9.0) * sin(ang * 3.0 - r * 13.0) + 0.2); // breakup
     } else if (k == 5) {
-        v = smoothstep(-0.2, 0.2, cos(ang * 2.0)) * 0.9 + 0.1; // Balken
+        v = smoothstep(-0.2, 0.2, cos(ang * 2.0)) * 0.9 + 0.1; // bars
     } else if (k == 6) {
-        v = smoothstep(-0.2, 0.3, sin(ang * 3.0 + r * 14.0)); // Spirale
+        v = smoothstep(-0.2, 0.3, sin(ang * 3.0 + r * 14.0)); // spiral
     }
     return v;
 }
 
-// Lichtkegel eines Scheinwerfers auf einer Fläche
+// Light cone of a spotlight on a surface
 fn spot(l: Light, p: vec3<f32>, n: vec3<f32>, view: vec3<f32>, gloss: f32) -> vec3<f32> {
     let to = l.pos.xyz - p;
     let d = length(to);
@@ -171,9 +171,9 @@ fn spot(l: Light, p: vec3<f32>, n: vec3<f32>, view: vec3<f32>, gloss: f32) -> ve
     if (cone <= 0.0) {
         return vec3<f32>(0.0);
     }
-    // physikalisch: Abnahme mit dem Quadrat, sanft bis zur Reichweite
+    // physical: falls off with the square of the distance, softly up to the range
     let fall = 1.0 / (1.0 + d * d * 0.15);
-    // nur kurz vor der Reichweite ausblenden (Reichweite endet am Hindernis)
+    // fade out only just before the range (the range ends at the obstacle)
     let edge = smoothstep(l.pos.w, l.pos.w - 0.6, d);
     let diff = max(dot(n, ld), 0.0);
     let h = normalize(ld + view);
@@ -187,7 +187,7 @@ fn spot(l: Light, p: vec3<f32>, n: vec3<f32>, view: vec3<f32>, gloss: f32) -> ve
         let w = cross(ax, u);
         let q = -ld;
         let r = acos(clamp(cosang, -1.0, 1.0)) / max(acos(clamp(l.dir.w, -1.0, 1.0)), 1e-3);
-        // unscharf (Fokus): Muster verwischt zum Mittelwert
+        // out of focus: the pattern blurs towards its mean
         pattern = mix(0.6, gobo(l.extra.z, atan2(dot(q, w), dot(q, u)), r), clamp(l.extra.w, 0.0, 1.0));
     }
     return l.color.rgb * cone * fall * edge * (diff + spec) * sh * pattern;
@@ -201,36 +201,43 @@ fn fs_scene(i: VOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f3
     }
     let view = normalize(g.camera.xyz - i.world);
     let base = i.color.rgb * texel(i);
-    // Raumlicht: leicht von oben, damit Formen lesbar bleiben
+    // room light: slightly from above so shapes stay readable
     let sky = 0.75 + 0.25 * n.y;
     var c = base * (0.02 + g.env.x * 1.4) * sky;
+    // Direct light: real surfaces reflect stage light much less tinted than
+    // their color suggests (rough, partly specular), so the spot keeps most of
+    // the light's color; very dark materials stay dark.
+    let lum = dot(base, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let refl = mix(vec3<f32>(lum), base, 0.4) * 1.1;
+    var direct = vec3<f32>(0.0);
     let count = u32(g.env.w);
     for (var k = 0u; k < count; k = k + 1u) {
-        c = c + base * spot(lights[k], i.world, n, view, i.params.x);
+        direct = direct + spot(lights[k], i.world, n, view, i.params.x);
     }
+    c = c + refl * direct;
     c = c + base * i.params.y * 4.0;
-    // Dunst: Ferne wird matter
+    // haze: the distance gets dimmer
     let dist = length(g.camera.xyz - i.world);
     let haze = 1.0 - exp(-dist * 0.02 * g.env.z);
     c = mix(c, vec3<f32>(0.02, 0.02, 0.025) * g.env.x, haze);
     return vec4<f32>(c, i.color.a);
 }
 
-// ---------- Lichtstrahl (Kegel, additiv) ----------
-// Netz: Spitze im Ursprung, Achse −y, Länge 1, Radius 1 am Ende.
+// ---------- Light beam (cone, additive) ----------
+// Mesh: tip at the origin, axis −y, length 1, radius 1 at the end.
 
 @fragment
 fn fs_beam(i: VOut) -> @location(0) vec4<f32> {
     let t = clamp(-i.local.y, 0.0, 1.0);
     let view = normalize(g.camera.xyz - i.world);
-    // weiche Ränder: am Rand des Kegels (Blick streift) dunkler
+    // soft edges: darker at the rim of the cone (grazing view)
     let rim = pow(abs(dot(normalize(i.normal), view)), 1.6);
-    // nahe der Linse heller, zum Ende auslaufen
+    // brighter near the lens, fading out towards the end
     let along = pow(1.0 - t, 1.8) * smoothstep(0.0, 0.03, t);
     let air = g.env.y * (0.15 + 0.85 * g.env.z);
     var a = rim * along * air * i.color.a;
     if (i.params.z > 0.5) {
-        // Gobo im Strahl: Schächte um die Achse
+        // gobo in the beam: shafts around the axis
         let gb = mix(0.6, gobo(i.params.z, atan2(i.local.z, i.local.x), 0.9), clamp(i.params.w, 0.0, 1.0));
         a = a * mix(0.15, 1.0, gb);
     }
@@ -238,7 +245,7 @@ fn fs_beam(i: VOut) -> @location(0) vec4<f32> {
 }
 
 
-// ---------- Schattenkarten (nur Tiefe) ----------
+// ---------- Shadow maps (depth only) ----------
 
 struct ShadowPass {
     view_proj: mat4x4<f32>,

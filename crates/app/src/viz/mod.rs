@@ -1030,7 +1030,11 @@ impl VizView {
                 // Focus: sharpness where the beam hits
                 let sharp = b.sharpness(len);
                 let gobo_sharp = if b.focus.is_some() { sharp } else { 1.0 };
-                let mut inst = Instance::new(m, b.color, 1.0, 0.0, 0.0);
+                // The same light in a narrow beam is brighter than in a wide one
+                // (intensity ∝ 1 / solid angle; reference: 26° beam)
+                let solid = 1.0 - b.half_angle.max(1.0).to_radians().cos();
+                let conc = ((1.0 - 13f32.to_radians().cos()) / solid).clamp(0.2, 8.0);
+                let mut inst = Instance::new(m, b.color * conc.sqrt(), 1.0, 0.0, 0.0);
                 inst.params[2] = b.gobo;
                 inst.params[3] = gobo_sharp;
                 f.beams.push(inst);
@@ -1044,7 +1048,7 @@ impl VizView {
                             .dir
                             .extend((b.half_angle * 1.25).to_radians().cos())
                             .into(),
-                        color: (b.color * 2.5)
+                        color: (b.color * 2.5 * conc)
                             .extend((b.half_angle * (0.3 + 0.65 * sharp)).to_radians().cos())
                             .into(),
                         extra: [-1.0, b.half_angle * 1.25, b.gobo, gobo_sharp],

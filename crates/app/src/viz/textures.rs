@@ -150,6 +150,124 @@ fn molton(u: f32, v: f32) -> [f32; 3] {
     [g, g, g * 1.1]
 }
 
+fn light_wood(u: f32, v: f32) -> [f32; 3] {
+    let c = wood(u, v);
+    // brighter, slightly yellow oak
+    [c[0] * 1.45 + 0.08, c[1] * 1.5 + 0.07, c[2] * 1.45 + 0.04]
+}
+
+fn parquet(u: f32, v: f32) -> [f32; 3] {
+    // herringbone: 4 × 4 blocks of three staves each, alternating direction
+    let n = 4.0;
+    let (bx, by) = ((u * n).floor(), (v * n).floor());
+    let (fu, fv) = ((u * n).fract(), (v * n).fract());
+    let vertical = (bx + by) as i32 % 2 == 0;
+    let (along, across) = if vertical { (fv, fu) } else { (fu, fv) };
+    let stave = (across * 3.0).floor();
+    let fa = (across * 3.0).fract();
+    let tone = hash(bx as i32 * 7 + stave as i32, by as i32, 23);
+    let grain = fbm(u * 2.0 + stave * 0.1, v * 2.0, 8, 29);
+    let c = mix(
+        [0.46, 0.29, 0.15],
+        [0.66, 0.45, 0.26],
+        tone * 0.7 + grain * 0.3,
+    );
+    if !(0.03..=0.97).contains(&fa) || !(0.01..=0.99).contains(&along) {
+        mix(c, [0.12, 0.07, 0.04], 0.6)
+    } else {
+        c
+    }
+}
+
+fn marble(u: f32, v: f32) -> [f32; 3] {
+    let n = fbm(u, v, 4, 81);
+    let veins = ((u + v + n * 2.5) * std::f32::consts::TAU * 2.0)
+        .sin()
+        .abs();
+    let vein = (1.0 - veins).powf(10.0);
+    let g = 0.88 - vein * 0.45 + (fbm(u, v, 16, 83) - 0.5) * 0.06;
+    [g, g * 0.99, g * 0.97]
+}
+
+fn plaster(u: f32, v: f32) -> [f32; 3] {
+    let n = fbm(u, v, 8, 91) - 0.5;
+    let fine = hash((u * N as f32) as i32, (v * N as f32) as i32, 93) - 0.5;
+    let g = 0.86 + n * 0.08 + fine * 0.025;
+    [g, g * 0.985, g * 0.95]
+}
+
+fn stone_wall(u: f32, v: f32) -> [f32; 3] {
+    // irregular stones: 3 rows, varying widths, grey-brown
+    let rows = 3.0;
+    let r = (v * rows).floor();
+    let fv = v * rows - r;
+    let off = hash(r as i32, 0, 101) * 0.5;
+    let count = 3.0;
+    let x = (u + off).fract() * count;
+    let col = x.floor();
+    let fu = x - col;
+    let edge = fu.min(1.0 - fu).min(fv.min(1.0 - fv)) + (fbm(u, v, 16, 103) - 0.5) * 0.06;
+    let tone = hash(r as i32, col as i32, 107);
+    let n = fbm(u, v, 8, 109);
+    let c = mix([0.34, 0.31, 0.28], [0.58, 0.54, 0.48], tone * 0.6 + n * 0.4);
+    if edge < 0.05 {
+        mix(c, [0.16, 0.15, 0.14], 0.8)
+    } else {
+        c
+    }
+}
+
+fn velvet(u: f32, v: f32) -> [f32; 3] {
+    // red stage curtain with soft vertical folds
+    let fold = ((u * 10.0 + fbm(u, v, 2, 111) * 1.2) * std::f32::consts::TAU).sin() * 0.5 + 0.5;
+    let g =
+        0.35 + fold * 0.45 + (hash((u * N as f32) as i32, (v * N as f32) as i32, 113) - 0.5) * 0.04;
+    [0.42 * g, 0.03 * g, 0.05 * g]
+}
+
+fn metal(u: f32, v: f32) -> [f32; 3] {
+    // brushed metal: fine horizontal streaks
+    let streak = fbm(u * 0.5, v * 64.0, 4, 121);
+    let g = 0.56 + (streak - 0.5) * 0.18;
+    [g, g * 1.01, g * 1.04]
+}
+
+fn checker(u: f32, v: f32) -> [f32; 3] {
+    let n = 4.0;
+    let dark = ((u * n).floor() as i32 + (v * n).floor() as i32) % 2 == 0;
+    let g = if dark { 0.06 } else { 0.85 };
+    let n = (fbm(u, v, 8, 131) - 0.5) * 0.04;
+    [g + n, g + n, g + n]
+}
+
+fn paneling(u: f32, v: f32) -> [f32; 3] {
+    // vertical wooden boards
+    wood(v, u)
+}
+
+fn asphalt(u: f32, v: f32) -> [f32; 3] {
+    let n = fbm(u, v, 8, 141);
+    let grain = hash((u * N as f32) as i32, (v * N as f32) as i32, 143);
+    let g = 0.13 + n * 0.06 + grain * 0.06;
+    [g, g, g * 1.02]
+}
+
+fn cobblestone(u: f32, v: f32) -> [f32; 3] {
+    // rounded stones in a grid of 6 × 6 cells, jittered
+    let n = 6.0;
+    let (cx, cy) = ((u * n).floor(), (v * n).floor());
+    let (fu, fv) = ((u * n).fract() - 0.5, (v * n).fract() - 0.5);
+    let d = (fu * fu + fv * fv).sqrt() + (fbm(u, v, 24, 151) - 0.5) * 0.15;
+    let tone = hash(cx as i32, cy as i32, 153);
+    if d > 0.46 {
+        [0.18, 0.17, 0.15]
+    } else {
+        let shade = 1.0 - d * 0.6;
+        let c = mix([0.38, 0.36, 0.33], [0.55, 0.52, 0.47], tone);
+        [c[0] * shade, c[1] * shade, c[2] * shade]
+    }
+}
+
 /// Generator of an image: (u, v) in 0–1 → color.
 pub type Pattern = fn(f32, f32) -> [f32; 3];
 
@@ -163,6 +281,17 @@ pub fn builtin() -> Vec<(&'static str, f32, Pattern)> {
         (t("Brick"), 1.0, brick),
         (t("Tiles"), 1.2, tiles),
         (t("Molton"), 1.5, molton),
+        (t("Light wood"), 2.0, light_wood),
+        (t("Parquet"), 1.0, parquet),
+        (t("Wood paneling"), 2.0, paneling),
+        (t("Marble"), 1.5, marble),
+        (t("Plaster"), 2.0, plaster),
+        (t("Stone wall"), 1.5, stone_wall),
+        (t("Cobblestone"), 1.0, cobblestone),
+        (t("Asphalt"), 2.0, asphalt),
+        (t("Checkered floor"), 2.0, checker),
+        (t("Velvet curtain"), 1.5, velvet),
+        (t("Brushed metal"), 1.0, metal),
     ]
 }
 
@@ -215,6 +344,10 @@ mod tests {
                     .max()
                     .unwrap()
             };
+            // a checkerboard alternates at the edge by design
+            if name == t("Checkered floor") {
+                continue;
+            }
             let mut worst = 0;
             for y in 0..N {
                 worst = worst.max(diff(img.get_pixel(0, y), img.get_pixel(N - 1, y)));
