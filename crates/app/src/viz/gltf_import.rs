@@ -113,7 +113,7 @@ pub fn load(path: &Path) -> Result<Model, String> {
             };
             idx.truncate(idx.len() / 3 * 3);
             if flip {
-                for t in idx.chunks_exact_mut(3) {
+                for t in idx.as_chunks_mut::<3>().0 {
                     t.swap(1, 2);
                 }
             }
@@ -209,7 +209,7 @@ pub fn load(path: &Path) -> Result<Model, String> {
 
 fn smooth_normals(pos: &[Vec3], idx: &[u32]) -> Vec<Vec3> {
     let mut n = vec![Vec3::ZERO; pos.len()];
-    for t in idx.chunks_exact(3) {
+    for t in idx.as_chunks::<3>().0 {
         let [a, b, c] = [t[0], t[1], t[2]].map(|i| i as usize);
         if a.max(b).max(c) >= pos.len() {
             continue;
