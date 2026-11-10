@@ -350,12 +350,20 @@ impl LibraryPanel {
         open: bool,
         body: impl FnOnce(&mut Self, &mut egui::Ui),
     ) {
+        // While searching, the hits are shown expanded with their own state, so
+        // the search does not leave groups open afterwards.
+        let salt = if open {
+            ("lib_search", title)
+        } else {
+            ("lib_manufacturer", title)
+        };
         // The library has hundreds of manufacturers: closed headers outside the
         // visible area only take up their space.
         let closed = !open
             && !egui::collapsing_header::CollapsingState::load(
                 ui.ctx(),
-                ui.make_persistent_id(("lib_group", title)),
+                // same id as the CollapsingHeader below
+                ui.make_persistent_id(egui::IdSalt::new(salt)),
             )
             .is_some_and(|s| s.is_open());
         if closed && self.header_h > 0.0 {
@@ -369,18 +377,14 @@ impl LibraryPanel {
             }
         }
         let top = ui.cursor().min.y;
-        let header = egui::CollapsingHeader::new(
+        let r = egui::CollapsingHeader::new(
             egui::RichText::new(title)
                 .strong()
                 .size(theme::FS_CAPTION + 1.0),
         )
-        .id_salt(("lib_group", title));
-        let header = if open {
-            header.open(Some(true))
-        } else {
-            header
-        };
-        let r = header.show(ui, |ui| body(self, ui));
+        .id_salt(salt)
+        .default_open(open)
+        .show(ui, |ui| body(self, ui));
         if closed && r.body_returned.is_none() {
             self.header_h = ui.cursor().min.y - top;
         }

@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/library_panel.rs": {
-    "mtime": 1794318384.8920293,
-    "seen": 1794318479.1583533,
-    "ast_hash": "536299b74b6b8fdd21788e3728e21231",
+    "mtime": 1794320299.7812848,
+    "seen": 1794320381.0859444,
+    "ast_hash": "5a0dacf10b4bab8fa87b90131768fe58",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/patch_grid.rs": {
