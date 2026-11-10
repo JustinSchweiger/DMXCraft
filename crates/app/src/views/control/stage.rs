@@ -9,7 +9,8 @@
 use crate::i18n::t;
 use std::collections::BTreeSet;
 
-use dmxcraft_core::{Engine, FixtureId, GroupId};
+use dmxcraft_core::look::{Look, LookPart, LookTarget};
+use dmxcraft_core::{ChannelRef, Engine, FixtureId, GroupId};
 use eframe::egui::{self, Color32, Sense, Stroke, StrokeKind, Vec2};
 
 use crate::state::AppState;
@@ -26,6 +27,12 @@ pub struct StageView {
     /// Ongoing rename of a group.
     rename: Option<(GroupId, String)>,
     rename_focus: bool,
+}
+
+/// Copy/paste of a fixture look (from the right-click menu or shortcuts).
+enum LookAction {
+    Copy(FixtureId),
+    Paste(LookPart, BTreeSet<FixtureId>),
 }
 
 enum GroupAction {
@@ -94,6 +101,8 @@ impl View for StageView {
         let live_fixtures: BTreeSet<FixtureId> =
             cx.engine.live().keys().map(|c| c.fixture).collect();
         let mut clear_live: Option<BTreeSet<FixtureId>> = None;
+        let mut look_action: Option<LookAction> = None;
+        let look_source = cx.state.look_clipboard.as_ref().map(|l| l.source.clone());
         // No moves happen in selection mode.
         let _ = canvas.show(
             ui,
@@ -124,6 +133,41 @@ impl View for StageView {
                 {
                     action = Some(a);
                 }
+                menu::separator(ui);
+                // Copy / paste the look (color, intensity, position)
+                if menu::item(
+                    ui,
+                    MenuItem::new(t("Copy look"))
+                        .icon(Icon::Copy)
+                        .shortcut("Ctrl+Shift+C")
+                        .enabled(target.is_some()),
+                ) {
+                    if let Some(t) = target {
+                        look_action = Some(LookAction::Copy(t));
+                    }
+                }
+                let paste_label = match &look_source {
+                    Some(src) => tr!("Paste look from {name}", name = src),
+                    None => t("Paste look").to_string(),
+                };
+                menu::sub(
+                    ui,
+                    MenuItem::new(&paste_label)
+                        .icon(Icon::Paste)
+                        .enabled(look_source.is_some() && !ids.is_empty()),
+                    |ui| {
+                        menu::begin(ui);
+                        for part in LookPart::ALL {
+                            let mut item = MenuItem::new(part_label(part));
+                            if part == LookPart::All {
+                                item = item.shortcut("Ctrl+Shift+V");
+                            }
+                            if menu::item(ui, item) {
+                                look_action = Some(LookAction::Paste(part, ids.clone()));
+                            }
+                        }
+                    },
+                );
                 menu::separator(ui);
                 if menu::item(
                     ui,
@@ -182,6 +226,40 @@ impl View for StageView {
         }
         if let Some(a) = action {
             fixture_menu::apply(cx.engine, cx.state, a);
+        }
+        // Ctrl+Shift+C / Ctrl+Shift+V on the stage: copy from / paste onto the selection
+        if !locked && ui.rect_contains_pointer(area) && !ui.ctx().egui_wants_keyboard_input() {
+            let (copy, paste) = ui.input(|i| {
+                let combo = i.modifiers.command && i.modifiers.shift;
+                let ev = |key: egui::Key, f: fn(&egui::Event) -> bool| {
+                    combo && (i.key_pressed(key) || i.events.iter().any(f))
+                };
+                (
+                    ev(egui::Key::C, |e| matches!(e, egui::Event::Copy)),
+                    ev(egui::Key::V, |e| matches!(e, egui::Event::Paste(_))),
+                )
+            });
+            let sel = &cx.state.selected;
+            if copy {
+                // the first selected fixture (in selection order)
+                let first = cx
+                    .state
+                    .selection_order
+                    .iter()
+                    .find(|id| sel.contains(id))
+                    .or_else(|| sel.iter().next())
+                    .copied();
+                if let Some(id) = first {
+                    look_action = Some(LookAction::Copy(id));
+                }
+            } else if paste && !sel.is_empty() {
+                look_action = Some(LookAction::Paste(LookPart::All, sel.clone()));
+            }
+        }
+        match look_action {
+            Some(LookAction::Copy(id)) => copy_look(cx, id),
+            Some(LookAction::Paste(part, ids)) => paste_look(cx, part, &ids),
+            None => {}
         }
         if let (Some((scene, fx, mut m)), Some((rect, cam))) = (mapping, self.interaction.view) {
             if !locked && mapping_handles(ui, rect, cam, &mut m) {
@@ -657,5 +735,81 @@ impl PillResult {
             }));
         }
         Self { resp, action }
+    }
+}
+
+fn part_label(p: LookPart) -> &'static str {
+    match p {
+        LookPart::All => t("Everything"),
+        LookPart::Color => t("Color"),
+        LookPart::Intensity => t("Intensity"),
+        LookPart::Position => t("Position"),
+    }
+}
+
+/// Remember the current look of a fixture (programmer/live value, otherwise
+/// what is output right now).
+fn copy_look(cx: &mut ViewCtx<'_>, id: FixtureId) {
+    let e = &*cx.engine;
+    let show = e.show();
+    let Some((f, ty)) = show.fixture(id).and_then(|f| Some((f, show.type_of(f)?))) else {
+        return;
+    };
+    let layer = crate::views::quick::Layer::of(cx.state.programmer_mode);
+    let value = |i: u16| {
+        let ch = ChannelRef {
+            fixture: id,
+            channel: i,
+        };
+        layer
+            .get(e, ch)
+            .or_else(|| e.output_value(cx.frame, ch))
+            .unwrap_or_else(|| ty.channels[usize::from(i)].default)
+    };
+    let virtual_dimmer = show
+        .virtual_dimmer(id)
+        .map(|ch| layer.get(e, ch).unwrap_or(255));
+    let look = Look::capture(f.name.clone(), ty, value, virtual_dimmer);
+    cx.state.info(tr!("Look of {name} copied", name = f.name));
+    cx.state.look_clipboard = Some(look);
+}
+
+/// Apply the copied look to fixtures, translated to their type.
+fn paste_look(cx: &mut ViewCtx<'_>, part: LookPart, ids: &BTreeSet<FixtureId>) {
+    let Some(look) = cx.state.look_clipboard.clone() else {
+        return;
+    };
+    let layer = crate::views::quick::Layer::of(cx.state.programmer_mode);
+    let mut n = 0;
+    for id in ids {
+        let show = cx.engine.show();
+        let Some(ty) = show.fixture(*id).and_then(|f| show.type_of(f)).cloned() else {
+            continue;
+        };
+        let values = look.apply(&ty, part);
+        if values.is_empty() {
+            continue;
+        }
+        n += 1;
+        for (target, v) in values {
+            let ch = match target {
+                LookTarget::Channel(c) => ChannelRef {
+                    fixture: *id,
+                    channel: c,
+                },
+                LookTarget::VirtualDimmer => ChannelRef::virtual_dimmer(*id),
+            };
+            layer.set(cx.engine, ch, v);
+        }
+    }
+    if n == 0 {
+        cx.state
+            .error(t("The selected fixtures have nothing to paste this onto"));
+    } else {
+        cx.state.info(tr!(
+            "Look of {name} pasted onto {n} fixture(s)",
+            name = look.source,
+            n = n
+        ));
     }
 }

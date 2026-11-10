@@ -1265,4 +1265,11 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Hide “{tab}”", "„{tab}“ ausblenden"),
     ("One USB DMX cable (Open DMX / FTDI) per universe. The assignment follows the cable's serial number and survives replugging.", "Ein USB-DMX-Kabel (Open DMX / FTDI) je Universum. Die Zuordnung hängt an der Seriennummer des Kabels und bleibt beim Umstecken erhalten."),
     ("free", "frei"),
+    ("Copy look", "Look kopieren"),
+    ("Paste look", "Look einfügen"),
+    ("Everything", "Alles"),
+    ("The selected fixtures have nothing to paste this onto", "Die ausgewählten Geräte haben dafür keine passenden Kanäle"),
+    ("Paste look from {name}", "Look von {name} einfügen"),
+    ("Look of {name} copied", "Look von {name} kopiert"),
+    ("Look of {name} pasted onto {n} fixture(s)", "Look von {name} auf {n} Gerät(e) übertragen"),
 ];

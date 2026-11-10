@@ -170,6 +170,8 @@ pub struct AppState {
     pub layout_clipboard: Option<Vec<[f32; 2]>>,
     /// Cut/copied fixtures (patch: Ctrl+X/C/V).
     pub fixture_clipboard: Vec<dmxcraft_core::Fixture>,
+    /// Copied look of a fixture (stage view: copy/paste look).
+    pub look_clipboard: Option<dmxcraft_core::look::Look>,
     /// Last clicked cell in the patch (universe, address): target for pasting.
     pub patch_cursor: Option<(u8, u16)>,
     /// Fixture the DMX patch should show the next time it opens.
@@ -264,6 +266,7 @@ impl AppState {
             rename_request: None,
             layout_clipboard: None,
             fixture_clipboard: Vec::new(),
+            look_clipboard: None,
             patch_cursor: None,
             monitor_focus: None,
             show_dmx_levels: false,
