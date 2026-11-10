@@ -1881,5 +1881,12 @@ mod tests {
         assert_eq!(p.modes[0].channels, ["Tilt", "Tilt fine"]);
         assert_eq!(p.physical.beam_angle, [4.0, 4.0]);
         assert_eq!(p.problems(), vec![]);
+        // the tilt range of the angles reaches the fixture type (visualizer)
+        let ty = &p.fixture_types().unwrap()[0];
+        assert_eq!(ty.physical.unwrap().tilt_range, 270.0);
+        let mut p = p;
+        p.channels[0].capabilities[1].to = "200deg".into();
+        let ty = &p.fixture_types().unwrap()[0];
+        assert_eq!(ty.physical.unwrap().tilt_range, 200.0);
     }
 }

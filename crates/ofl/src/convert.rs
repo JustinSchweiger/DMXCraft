@@ -195,6 +195,35 @@ fn capabilities(ch: &Value) -> Vec<&Value> {
     }
 }
 
+/// Degrees from an OFL angle such as “270deg” (other units: None).
+fn degrees(v: &Value) -> Option<f32> {
+    v.as_str()?.trim().strip_suffix("deg")?.trim().parse().ok()
+}
+
+/// Range in degrees of all functions of type `ty` (“Pan”/“Tilt”): from the
+/// smallest to the largest angle (`angle`, `angleStart`, `angleEnd`).
+fn angle_range(fixture: &Value, ty: &str) -> Option<f32> {
+    let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
+    for ch in fixture.get("availableChannels")?.as_object()?.values() {
+        for cap in capabilities(ch) {
+            if cap.get("type").and_then(Value::as_str) != Some(ty) {
+                continue;
+            }
+            for k in ["angle", "angleStart", "angleEnd"] {
+                if let Some(d) = cap.get(k).and_then(degrees) {
+                    lo = lo.min(d);
+                    hi = hi.max(d);
+                }
+            }
+            // a single angle (“angle”) is the whole range from 0
+            if cap.get("angle").is_some() && cap.get("angleStart").is_none() {
+                lo = lo.min(0.0);
+            }
+        }
+    }
+    (hi > lo).then_some(hi - lo)
+}
+
 struct Lookup<'a> {
     channels: HashMap<String, Resolved<'a>>,
     switch_alias: HashMap<String, String>,
@@ -680,8 +709,29 @@ pub fn convert_fixture(
         *n += 1;
         let key = if *n == 1 { base } else { format!("{base}-{n}") };
         // physical data: overridden in the mode, otherwise that of the fixture
-        let physical = dmxcraft_core::fixture::Physics::from_ofl(mode.get("physical"))
+        let mut physical = dmxcraft_core::fixture::Physics::from_ofl(mode.get("physical"))
             .or_else(|| dmxcraft_core::fixture::Physics::from_ofl(fixture.get("physical")));
+        // Pan/tilt range: from the angles of the pan/tilt functions when the
+        // physical data does not state it (focus.panMax/tiltMax)
+        let has_focus = |key: &str| {
+            [mode.get("physical"), fixture.get("physical")]
+                .into_iter()
+                .flatten()
+                .any(|p| p.get("focus").and_then(|f| f.get(key)).is_some())
+        };
+        for (ty, focus_key) in [("Pan", "panMax"), ("Tilt", "tiltMax")] {
+            if has_focus(focus_key) {
+                continue;
+            }
+            if let Some(range) = angle_range(&fixture, ty) {
+                let ph = physical.get_or_insert_with(Default::default);
+                if ty == "Pan" {
+                    ph.pan_range = range;
+                } else {
+                    ph.tilt_range = range;
+                }
+            }
+        }
         out_modes.push(FixtureType {
             physical,
             key,
