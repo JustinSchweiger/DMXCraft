@@ -130,6 +130,9 @@ cargo run --release -p dmxcraft -- show.dmxcraft # opens a show file
 cargo test --workspace
 ```
 
+On Windows, `.\scripts\dev.ps1` does the same after a `git pull` and first stops any DMXCraft
+process still running from the build folder (a running `.exe` cannot be overwritten).
+
 <details>
 <summary><b>Project layout</b></summary>
 
