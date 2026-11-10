@@ -665,8 +665,9 @@ impl Engine {
         out
     }
 
-    /// Values of a timeline at time `t` (ms): blocks of later tracks override
-    /// earlier ones; fade in/out and dimmer of the blocks affect the brightness.
+    /// Values of a timeline at time `t` (ms): blocks of upper tracks override
+    /// lower ones (track 1 wins); fade in/out and dimmer of the blocks affect
+    /// the brightness.
     fn timeline_values(
         &self,
         show: &Show,
@@ -679,7 +680,10 @@ impl Engine {
             return out;
         }
         let now = t.max(0.0) as u64;
-        for (_, clip) in tl.active_at(now) {
+        // Lower tracks first, so the upper ones (track 1 = highest priority)
+        // are applied last and win.
+        let clips: Vec<_> = tl.active_at(now).collect();
+        for (_, clip) in clips.into_iter().rev() {
             let Some(id) = clip.scene() else {
                 continue;
             };
@@ -1202,6 +1206,24 @@ mod tests {
         e.seek_timeline(sup, 3500.0);
         assert_eq!(e.render_frame().get(0, 1), Some(0));
         assert!((e.timeline_time(sup).unwrap() - 3500.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn upper_track_wins_in_super_scene() {
+        let (mut s, a, _) = setup();
+        let top = s.add_scene("Top", None, vec![Step::new(vec![cv(a, 0, 50)])]);
+        let below = s.add_scene("Below", None, vec![Step::new(vec![cv(a, 0, 200)])]);
+        let sup = s.add_scene("S", None, vec![Step::new(Vec::new())]);
+        let sc = s.scene_mut(sup).unwrap();
+        sc.add_effect(crate::show::EffectKind::SuperScene);
+        let tl = sc.timeline_mut().unwrap();
+        tl.add_clip(1, crate::timeline::ClipContent::Scene(below), 0, 2000);
+        tl.add_clip(0, crate::timeline::ClipContent::Scene(top), 0, 2000);
+        sc.sync_timeline_length();
+        let mut e = Engine::new(s);
+        e.activate(sup);
+        e.tick(Duration::from_millis(500));
+        assert_eq!(e.render_frame().get(0, 1), Some(50), "track 1 has priority");
     }
 
     #[test]

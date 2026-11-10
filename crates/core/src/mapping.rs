@@ -175,6 +175,10 @@ pub enum Control {
     AudioMute,
     /// Fade out the sound evenly (duration in the settings).
     AudioFade,
+    /// Volume of a player in the SOUND tab (`None` = master of the tab).
+    SoundVolume {
+        deck: Option<u8>,
+    },
 }
 
 /// Which scene: this one, the selected one, or by position in a bank.

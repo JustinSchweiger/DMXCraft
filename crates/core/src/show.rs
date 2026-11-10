@@ -803,8 +803,18 @@ impl Show {
         Ok(show)
     }
 
+    /// Writes the show. Goes through a temporary file next to it, so a crash
+    /// or a full disk while writing never leaves a half-written show.
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), ShowError> {
-        std::fs::write(path, self.to_json()?)?;
+        let path = path.as_ref();
+        let mut tmp = path.as_os_str().to_owned();
+        tmp.push(".tmp");
+        let tmp = std::path::PathBuf::from(tmp);
+        std::fs::write(&tmp, self.to_json()?)?;
+        if let Err(e) = std::fs::rename(&tmp, path) {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e.into());
+        }
         Ok(())
     }
 

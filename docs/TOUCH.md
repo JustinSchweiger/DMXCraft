@@ -12,7 +12,9 @@ and can also be operated from a phone or tablet via the touch remote
   * scenes, bank chips, pause/step in the bank header,
   * groups, fixtures,
   * programmer faders,
-  * buttons of the sidebar.
+  * buttons of the sidebar,
+  * the **Sound** tab: player buttons, volume faders of the players, the
+    master, crossfade and the pads. They work while another tab is shown.
 
   If there is no page yet, “Page 1” is created.
   * **Programmer faders** then control exactly the fixtures that were

@@ -5,6 +5,7 @@ mod i18n;
 mod app;
 mod audio;
 mod audio_triggers;
+mod autosave;
 mod demo;
 mod desktop;
 mod file_dialog;

@@ -330,7 +330,7 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "create_super_scene",
         title: "Create SUPER SCENE",
-        description: "Creates a SUPER SCENE: a timeline whose tracks hold scene and audio blocks (later tracks override earlier ones). Without `clips` an empty timeline is created.",
+        description: "Creates a SUPER SCENE: a timeline whose tracks hold scene and audio blocks (upper tracks override lower ones: track 0 has the highest priority). Without `clips` an empty timeline is created.",
         schema: || obj(props! {
             "name": string("Name"), "bank": int("Bank ID"),
             "clips": json!({ "type": "array", "items": clip_schema() }),

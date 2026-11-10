@@ -1948,6 +1948,7 @@ pub(crate) fn item_value(e: &Engine, st: &AppState, item: &TouchItem) -> f32 {
     match item.control {
         Some(Control::Master) => e.master(),
         Some(Control::AudioMaster) => st.audio.master,
+        Some(Control::SoundVolume { deck }) => crate::mapping::sound_volume(e, deck),
         Some(Control::Channels) => item.channels.first().map_or(0.0, live),
         Some(Control::Channel { channel }) => live(&channel),
         _ => st.touch_values.get(&item.id).copied().unwrap_or(0.0),
@@ -2082,6 +2083,9 @@ pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::Touch
     item.fixtures = pick.fixtures;
     if pick.kind.uses_fixtures() {
         item.label = kind_name(pick.kind).to_string();
+    } else if matches!(control, Some(Control::Ui { .. })) {
+        // interface controls have no name of their own in the show
+        item.label = label.clone();
     } else if pick.kind == TouchKind::Fader {
         item.label = label
             .split_once(": ")

@@ -1,6 +1,7 @@
 //! SOUND tab: two players with waveform and playlist, crossfade and jingle
 //! pads. Playback happens in [`crate::sound::SoundPlayer`].
 
+use dmxcraft_core::mapping::Control;
 use dmxcraft_core::sound::{SoundBoard, Track};
 use eframe::egui::{
     self, pos2, vec2, Align2, Color32, CornerRadius, FontId, Rect, RichText, Sense, Stroke,
@@ -32,7 +33,7 @@ fn deck_color(d: usize) -> Color32 {
     theme::rgb(theme::ZONE_PALETTE[d % theme::ZONE_PALETTE.len()])
 }
 
-fn deck_name(d: usize) -> &'static str {
+pub fn deck_name(d: usize) -> &'static str {
     ["A", "B", "C", "D"].get(d).copied().unwrap_or("?")
 }
 
@@ -462,23 +463,43 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
         pos2(vr.center().x - 11.0, vr.top() + 26.0),
         pos2(vr.center().x + 11.0, vr.bottom() - 26.0),
     );
-    vertical_slider(ui, track_r, vol, color, ("sound/deck/vol", d));
+    vertical_slider(
+        ui,
+        track_r,
+        vol,
+        color,
+        ("sound/deck/vol", d),
+        Control::SoundVolume {
+            deck: Some(d as u8),
+        },
+    );
 }
 
 /// Vertical volume slider (0–1).
-fn vertical_slider(ui: &mut Ui, r: Rect, v: &mut f32, color: Color32, id: (&str, usize)) {
+/// `control`: target for keyboard/MIDI mapping and the touch surface.
+fn vertical_slider(
+    ui: &mut Ui,
+    r: Rect,
+    v: &mut f32,
+    color: Color32,
+    id: (&str, usize),
+    control: Control,
+) {
     let resp = ui.interact(
         r.expand(4.0),
         ui.scope_id().with(id),
         Sense::click_and_drag(),
     );
-    if let Some(p) = resp.interact_pointer_pos() {
-        if resp.dragged() || resp.clicked() {
-            *v = ((r.bottom() - p.y) / r.height()).clamp(0.0, 1.0);
+    let overlay = crate::mapping::target(ui, r.expand(4.0), control);
+    if !overlay {
+        if let Some(p) = resp.interact_pointer_pos() {
+            if resp.dragged() || resp.clicked() {
+                *v = ((r.bottom() - p.y) / r.height()).clamp(0.0, 1.0);
+            }
         }
-    }
-    if resp.double_clicked() {
-        *v = 0.85;
+        if resp.double_clicked() {
+            *v = 0.85;
+        }
     }
     let painter = ui.painter();
     painter.rect_filled(r, CornerRadius::same(theme::R_S), theme::bg());
@@ -582,7 +603,12 @@ fn crossfade_bar(ui: &mut Ui, sp: &mut SoundPlayer, board: &mut SoundBoard) {
                         .color(theme::text_dim()),
                 ),
             );
-            horizontal_slider(ui, 160.0, &mut board.master, theme::accent(), false);
+            let mut v = board.master;
+            let r = horizontal_slider(ui, 160.0, &mut v, theme::accent(), false);
+            // mapping overlay / Alt + click: the overlay gets the click
+            if !crate::mapping::target(ui, r.rect, Control::SoundVolume { deck: None }) {
+                board.master = v;
+            }
             ui.label(RichText::new(t("Master")).color(theme::text_dim()));
         });
     });

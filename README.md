@@ -12,7 +12,7 @@ a sound player and a live 3D visualizer. Output goes through inexpensive USB-DMX
 [![Downloads](https://img.shields.io/github/downloads/JustinSchweiger/DMXCraft/total)](https://github.com/JustinSchweiger/DMXCraft/releases)
 [![License: GPL v3](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-555)
-![Rust](https://img.shields.io/badge/rust-1.85%2B-orange?logo=rust)
+![Rust](https://img.shields.io/badge/rust-1.89%2B-orange?logo=rust)
 
 [Download](https://github.com/JustinSchweiger/DMXCraft/releases/latest) ·
 [Features](#features) ·
@@ -42,6 +42,7 @@ a sound player and a live 3D visualizer. Output goes through inexpensive USB-DMX
 | 📺 **OBS** | Play videos from SUPER SCENES through OBS and switch OBS scenes |
 | 🤖 **AI assistant** | Built-in MCP server: let an AI assistant patch fixtures and program scenes |
 | 🔌 **Output** | Up to 8 universes over USB-DMX (Open DMX / FTDI), one cable per universe, or simulation |
+| 💾 **Safe** | Auto-save and recovery of unsaved changes after a crash |
 | 🌍 **Everywhere** | English and German UI, installers and auto-update for all three systems |
 
 ## Screenshots
@@ -122,7 +123,7 @@ sudo usermod -aG dialout $USER   # then log out and back in
 
 ## Build from source
 
-Requires Rust 1.85 or newer.
+Requires Rust 1.89 or newer.
 
 ```sh
 cargo run --release -p dmxcraft                  # starts with a demo show

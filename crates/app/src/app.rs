@@ -90,6 +90,10 @@ pub struct DmxCraftApp {
     allow_close: bool,
     /// Close in the next frame.
     request_close: bool,
+    /// Auto-save and crash recovery.
+    autosave: crate::autosave::AutoSave,
+    /// Recovery copy found at startup (question “Restore?” open).
+    recovery: Option<crate::autosave::RecoveryInfo>,
 }
 
 /// Fill in missing data of the fixture types (library and custom profiles).
@@ -120,6 +124,7 @@ impl DmxCraftApp {
             None => demo::demo_show(),
         };
         let saved_show = show.clone();
+        let autosave = crate::autosave::AutoSave::start();
         let engine = Arc::new(Mutex::new(Engine::new(show)));
         let output_kind = settings.output_kind();
         let runtime = Runtime::start(
@@ -165,6 +170,8 @@ impl DmxCraftApp {
             close_after_save: false,
             allow_close: false,
             request_close: false,
+            recovery: autosave.pending(),
+            autosave,
         }
     }
 
@@ -186,6 +193,8 @@ impl DmxCraftApp {
     /// Remember the current state as saved.
     fn mark_saved(&mut self) {
         self.saved_show = Self::lock(&self.engine).show().clone();
+        // saved, loaded or new: nothing left to recover
+        self.autosave.clear();
     }
 
     fn lock(engine: &Arc<Mutex<Engine>>) -> MutexGuard<'_, Engine> {
@@ -230,6 +239,55 @@ impl DmxCraftApp {
             }
             Err(err) => self.state.error(format!("{path}: {err}")),
         }
+    }
+
+    /// Recovery copy and auto-save (called every frame, the intervals are
+    /// checked inside).
+    fn autosave_tick(&mut self) {
+        // do not overwrite the copy before the question about it is answered
+        if self.recovery.is_some() {
+            return;
+        }
+        let dirty = self.dirty();
+        let path = self.state.show_path.clone();
+        self.autosave
+            .recovery_tick(Self::lock(&self.engine).show(), dirty, &path);
+        let has_path = !path.trim().is_empty();
+        if self
+            .autosave
+            .autosave_due(self.settings.autosave_minutes, dirty, has_path)
+        {
+            let result = Self::lock(&self.engine).show().save(&path);
+            match result {
+                Ok(()) => {
+                    self.mark_saved();
+                    self.state.info(t("Show saved automatically"));
+                }
+                Err(err) => self
+                    .state
+                    .error(tr!("Auto-save failed: {e}", e = err.to_string())),
+            }
+        }
+    }
+
+    /// Load the recovery copy; it counts as unsaved against its file.
+    fn restore_recovery(&mut self, info: &crate::autosave::RecoveryInfo) {
+        let Some(mut s) = self.autosave.load() else {
+            self.state.error(t("The recovery copy could not be read"));
+            return;
+        };
+        demo::ensure_builtin_types(&mut s);
+        fill_types(&mut s);
+        Self::lock(&self.engine).replace_show(s);
+        self.history.reset(&Snapshot::of(&Self::lock(&self.engine)));
+        self.state.reset_for_new_show();
+        self.state.show_path = info.path.clone();
+        // compared against the file on disk, so the title shows “*”
+        self.saved_show = (!info.path.is_empty())
+            .then(|| Show::load(&info.path).ok())
+            .flatten()
+            .unwrap_or_else(demo::empty_show);
+        self.state.info(t("Unsaved changes restored"));
     }
 
     fn save_show(&mut self, path: &str) {
@@ -623,6 +681,51 @@ impl DmxCraftApp {
             self.close_dialog = open;
         }
 
+        // After a crash: restore the unsaved changes?
+        if let Some(info) = self.recovery.clone() {
+            let mut open = true;
+            let res = Dialog::new(t("Restore unsaved changes?"))
+                .id("recovery")
+                .keep_on_escape()
+                .width(420.0)
+                .secondary(t("Discard"))
+                .primary(t("Restore"))
+                .show(ctx, &mut open, |ui, _| {
+                    ui.label(t("DMXCraft was not closed properly last time."));
+                    ui.add_space(theme::SP_S);
+                    let name = if info.path.is_empty() {
+                        info.name.clone()
+                    } else {
+                        info.path.clone()
+                    };
+                    ui.label(match info.minutes_ago() {
+                        0 => tr!(
+                            "Unsaved changes to “{name}” from just now can be restored.",
+                            name = name
+                        ),
+                        n => tr!(
+                            "Unsaved changes to “{name}” from {n} min ago can be restored.",
+                            name = name,
+                            n = n
+                        ),
+                    });
+                });
+            if res.clicked(0) {
+                self.autosave.clear();
+            } else if res.clicked(1) {
+                self.restore_recovery(&info);
+            } else if !open {
+                // closed without a choice: keep the copy aside, do not lose it
+                if let Some(p) = self.autosave.keep_aside() {
+                    self.state
+                        .info(tr!("Recovery copy kept: {path}", path = p.display()));
+                }
+            }
+            if !open || res.clicked.is_some() {
+                self.recovery = None;
+            }
+        }
+
         // Settings
         if self.settings_open {
             let mut open = true;
@@ -723,6 +826,12 @@ impl DmxCraftApp {
 }
 
 impl eframe::App for DmxCraftApp {
+    /// Closed normally: no recovery copy needed (the changes were saved or
+    /// deliberately discarded).
+    fn on_exit(&mut self) {
+        self.autosave.clear();
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, frame_: &mut eframe::Frame) {
         let rs = frame_.wgpu_render_state().cloned();
         let ctx = ui.ctx().clone();
@@ -1135,6 +1244,7 @@ impl eframe::App for DmxCraftApp {
         self.state.can_undo = self.history.can_undo();
         self.state.can_redo = self.history.can_redo();
         self.dialogs(&ctx);
+        self.autosave_tick();
         self.lock_window(&ctx);
         titlebar::resize_handles(&ctx, self.fullscreen.is_on());
 

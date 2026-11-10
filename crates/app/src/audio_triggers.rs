@@ -40,14 +40,7 @@ fn env_key(path: &str, t: &AudioTrigger) -> EnvKey {
 
 /// Is the target a knob (value instead of key)?
 fn is_fader(c: Control) -> bool {
-    matches!(
-        c,
-        Control::Master
-            | Control::AudioMaster
-            | Control::Channel { .. }
-            | Control::Channels
-            | Control::Ui { fader: true, .. }
-    )
+    crate::mapping::is_value_control(c)
 }
 
 fn mapping(t: &AudioTrigger, control: Control) -> Mapping {

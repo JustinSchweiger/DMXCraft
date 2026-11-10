@@ -50,6 +50,9 @@ pub struct Settings {
     /// Only read to take it over into `hidden_tabs`.
     #[serde(skip_serializing)]
     pub tools_as_tabs: bool,
+    /// Save the show to its file every n minutes when it has unsaved changes
+    /// (0 = off).
+    pub autosave_minutes: u32,
     /// Tabs hidden in the title bar (keys of `state::Mode`).
     pub hidden_tabs: Vec<String>,
     /// Port of the remote (http://<computer>:<port>).
@@ -94,6 +97,7 @@ impl Default for Settings {
             remote_enabled: false,
             tools_as_tabs: false,
             hidden_tabs: vec!["visualizer".into(), "builder".into()],
+            autosave_minutes: 5,
             remote_port: crate::remote::DEFAULT_PORT,
             remote_pin: String::new(),
             audio_reset_on_start: true,

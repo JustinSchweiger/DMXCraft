@@ -512,6 +512,9 @@ fn full_combo(
         .show_ui(ui, add);
 }
 
+/// Choices for the auto-save interval (0 = off).
+const AUTOSAVE_MINUTES: [u32; 6] = [0, 1, 2, 5, 10, 15];
+
 fn general(
     ui: &mut Ui,
     s: &mut Settings,
@@ -546,7 +549,30 @@ fn general(
                 ch.save = true;
             }
         });
+        f.row(t("Auto-save"), |ui| {
+            let label = |m: u32| {
+                if m == 0 {
+                    t("Off").to_string()
+                } else {
+                    tr!("Every {n} min", n = m)
+                }
+            };
+            let mut picked = s.autosave_minutes;
+            full_combo(ui, "settings_autosave", label(picked), |ui| {
+                for m in AUTOSAVE_MINUTES {
+                    ui.selectable_value(&mut picked, m, label(m));
+                }
+            });
+            if picked != s.autosave_minutes {
+                s.autosave_minutes = picked;
+                ch.save = true;
+            }
+        });
     });
+    hint(
+        ui,
+        t("Auto-save writes the show to its file when it has unsaved changes. Independent of this, unsaved changes are kept for recovery after a crash."),
+    );
     ui.add_space(theme::SP_M);
     show_info(ui, e, show_path);
     ui.add_space(theme::SP_L);

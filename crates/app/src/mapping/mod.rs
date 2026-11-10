@@ -405,14 +405,7 @@ fn alt_click(
         ));
     }
     if resp.clicked() {
-        let fader = matches!(
-            control,
-            Control::Master
-                | Control::AudioMaster
-                | Control::Channel { .. }
-                | Control::Channels
-                | Control::Ui { fader: true, .. }
-        );
+        let fader = is_value_control(control);
         let mut p = TouchPick {
             kind: if fader {
                 dmxcraft_core::touch::TouchKind::Fader
@@ -428,6 +421,19 @@ fn alt_click(
         }
         touch_pick(ui.ctx(), p);
     }
+}
+
+/// Controls that take a value (fader/knob) instead of a key press.
+pub(crate) fn is_value_control(c: Control) -> bool {
+    matches!(
+        c,
+        Control::Master
+            | Control::AudioMaster
+            | Control::SoundVolume { .. }
+            | Control::Channel { .. }
+            | Control::Channels
+            | Control::Ui { fader: true, .. }
+    )
 }
 
 fn t_touch_hint() -> &'static str {
@@ -551,6 +557,16 @@ pub fn describe(show: &Show, c: &Control) -> (String, String) {
         Control::AudioMaster => (t("Audio").to_string(), t("Sound master").to_string()),
         Control::AudioMute => (t("Audio").to_string(), t("Mute sound").to_string()),
         Control::AudioFade => (t("Audio").to_string(), t("Fade out sound").to_string()),
+        Control::SoundVolume { deck } => (
+            t("Sound").to_string(),
+            match deck {
+                None => t("Sound tab master").to_string(),
+                Some(d) => crate::tr!(
+                    "Player {d}: volume",
+                    d = crate::views::sound::deck_name(usize::from(*d))
+                ),
+            },
+        ),
         Control::StopAll => (t("Global").to_string(), t("Stop all scenes").to_string()),
         Control::Ui { .. } => (t("Interface").to_string(), t("UI element").to_string()),
         Control::Group { id } => (
@@ -639,6 +655,29 @@ pub fn resolve(show: &Show, st: &AppState, t: &SceneTarget) -> Vec<SceneId> {
     }
 }
 
+/// Volume of a player of the SOUND tab (`None` = its master), 0–1.
+pub(crate) fn sound_volume(e: &Engine, deck: Option<u8>) -> f32 {
+    let board = &e.show().sound;
+    match deck {
+        None => board.master,
+        Some(d) => board.decks.get(usize::from(d)).map_or(0.0, |d| d.volume),
+    }
+}
+
+/// Set the volume of a player of the SOUND tab (`None` = its master).
+pub(crate) fn set_sound_volume(e: &mut Engine, deck: Option<u8>, v: f32) {
+    let v = v.clamp(0.0, 1.0);
+    let board = &mut e.show_mut().sound;
+    match deck {
+        None => board.master = v,
+        Some(d) => {
+            if let Some(d) = board.decks.get_mut(usize::from(d)) {
+                d.volume = v;
+            }
+        }
+    }
+}
+
 /// “On” state of an element (for LED feedback).
 pub(crate) fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, m: &Mapping) -> bool {
     match &m.control {
@@ -658,6 +697,7 @@ pub(crate) fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, m: &
         Control::AudioMaster => st.audio.gain() > 0.0,
         Control::AudioMute => st.audio.mute,
         Control::AudioFade => st.audio.fading(),
+        Control::SoundVolume { deck } => sound_volume(e, *deck) > 0.0,
         Control::Ui { key, .. } => states.get(key).copied().unwrap_or(false),
         Control::Fixture { id } => st.selected.contains(id),
         Control::Group { id } => {
@@ -781,6 +821,21 @@ fn fire(
         Control::AudioFade => {
             if pressed {
                 st.audio.start_fade(e);
+            }
+        }
+        Control::SoundVolume { deck } => {
+            let v = match m.mode {
+                ButtonMode::Value => Some(f32::from(value) / 127.0),
+                ButtonMode::Toggle => pressed.then(|| {
+                    if sound_volume(e, *deck) > 0.5 {
+                        0.0
+                    } else {
+                        1.0
+                    }
+                }),
+            };
+            if let Some(v) = v {
+                set_sound_volume(e, *deck, v);
             }
         }
         Control::Group { id } => {
@@ -1016,14 +1071,7 @@ impl Mapper {
                             m.control = Control::Channels;
                             m.channels = channels;
                         }
-                        if matches!(
-                            c,
-                            Control::Master
-                                | Control::AudioMaster
-                                | Control::Channel { .. }
-                                | Control::Ui { fader: true, .. }
-                        ) && kind == MapKind::Midi
-                        {
+                        if is_value_control(c) && kind == MapKind::Midi {
                             m.mode = ButtonMode::Value;
                         }
                     }
@@ -1208,15 +1256,7 @@ impl Mapper {
                             message: ev.message,
                             number: ev.number,
                         });
-                        if ev.message == MidiMessage::Cc
-                            && matches!(
-                                m.control,
-                                Control::Master
-                                    | Control::AudioMaster
-                                    | Control::Channel { .. }
-                                    | Control::Ui { fader: true, .. }
-                            )
-                        {
+                        if ev.message == MidiMessage::Cc && is_value_control(m.control) {
                             m.mode = ButtonMode::Value;
                         }
                         // Suggest LED feedback: output of the device

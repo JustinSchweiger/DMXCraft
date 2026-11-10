@@ -454,7 +454,7 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
             ui,
             MenuItem::new(&tr!(
                 "Fade out sound ({s} s)",
-                s = if a.fade_ms % 1000 == 0 {
+                s = if a.fade_ms.is_multiple_of(1000) {
                     (a.fade_ms / 1000).to_string()
                 } else {
                     format!("{:.1}", a.fade_ms as f32 / 1000.0)

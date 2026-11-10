@@ -119,6 +119,7 @@ fn presets(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, 
                 (Control::AudioMaster, t("Sound master")),
                 (Control::AudioMute, t("Mute sound")),
                 (Control::AudioFade, t("Fade out sound")),
+                (Control::SoundVolume { deck: None }, t("Sound tab master")),
                 (Control::BankStep { delta: 1 }, t("Next bank")),
                 (Control::BankStep { delta: -1 }, t("Previous bank")),
                 (
