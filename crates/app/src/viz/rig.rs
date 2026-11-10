@@ -405,7 +405,10 @@ pub fn build(
                 }
             }
             Kind::Moving => {
-                // Pan/tilt (with fine channel), center = 50 %
+                // Pan/tilt (with fine channel), center = 50 %. The DMX direction
+                // of moving heads is defined for a standing fixture; hanging
+                // (the default here) both axes turn the other way round.
+                // Checked against real heads aimed at known points.
                 let fine = |coarse: K, fine: K| {
                     let c = by_kind(coarse).first().map(|i| value(*i))?;
                     let f = by_kind(fine).first().map(|i| value(*i)).unwrap_or(0.0);
@@ -414,9 +417,9 @@ pub fn build(
                 let (pan_range, tilt_range) = ty
                     .physical
                     .map_or((540.0, 270.0), |p| (p.pan_range, p.tilt_range));
-                let pan = (fine(K::Pan, K::PanFine).unwrap_or(0.5) - 0.5) * pan_range.to_radians();
+                let pan = (0.5 - fine(K::Pan, K::PanFine).unwrap_or(0.5)) * pan_range.to_radians();
                 let tilt =
-                    (fine(K::Tilt, K::TiltFine).unwrap_or(0.5) - 0.5) * tilt_range.to_radians();
+                    (0.5 - fine(K::Tilt, K::TiltFine).unwrap_or(0.5)) * tilt_range.to_radians();
                 cube(
                     &mut parts,
                     base * trs(
@@ -548,4 +551,50 @@ fn cube(parts: &mut Vec<Part>, m: Mat4, c: Vec3) {
 /// Linear color from sRGB bytes (for materials).
 pub fn linear(c: [u8; 3]) -> Vec3 {
     srgb_to_linear(c)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmxcraft_core::{ChannelRef, Show};
+
+    /// Beam direction of a hanging moving head (rotation 0) for pan/tilt.
+    fn beam(pan: u8, tilt: u8) -> Vec3 {
+        let mut show = Show::new("t", 1);
+        show.fixture_types = dmxcraft_core::library::builtin_fixture_types();
+        let id = show
+            .add_fixture("MH", "generic/moving-head-spot-11ch", 0, 1)
+            .unwrap();
+        show.fixture_mut(id).unwrap().place3d = Some(dmxcraft_core::venue::Placement {
+            position: [0.0, 5.0, 0.0],
+            rotation: [0.0; 3],
+        });
+        let mut e = Engine::new(show);
+        for (ch, v) in [(0, pan), (2, tilt), (5, 255)] {
+            e.set_programmer(
+                ChannelRef {
+                    fixture: id,
+                    channel: ch,
+                },
+                v,
+            );
+        }
+        let frame = e.render_monitor();
+        let (rig, _) = build(&e, &frame, &Default::default(), 0.0);
+        rig[0].beams[0].dir
+    }
+
+    #[test]
+    fn hanging_moving_head_directions() {
+        // center: straight down
+        let d = beam(128, 128);
+        assert!(d.y < -0.99, "{d}");
+        // higher tilt: towards +z (front of the hanging fixture)
+        let d = beam(128, 200);
+        assert!(d.z > 0.5 && d.x.abs() < 0.05, "{d}");
+        // pan a quarter turn further (540° range: 255/6): the tilt direction
+        // turns clockwise seen from above (+z towards -x)
+        let d = beam(128 + 43, 200);
+        assert!(d.x < -0.5 && d.z.abs() < 0.1, "{d}");
+    }
 }

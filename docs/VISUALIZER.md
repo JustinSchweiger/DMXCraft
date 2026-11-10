@@ -21,6 +21,10 @@ second screen; fullscreen via the button at the top right).
   (256 lights, 16 shadows at 1024 px), Ultra (150 % resolution, 32 shadows).
 * Values come directly from the DMX output: dimmer, RGB/W/amber/UV (also per
   cell for bars), strobe, pan/tilt (with fine channel) for moving heads.
+  Moving heads hang by default (rotation 0 = beam down); pan and tilt turn
+  the way real hanging heads do. Their angles come from the profile
+  (*Physical*: pan and tilt range) and the output after the fixture limits,
+  so a wrong tilt range shows up as beams that are too high or too low.
 * **Value ranges** of the channels (from OFL, QLC+ and the Profile Builder):
   shutter open/closed and strobe rate, color wheel slots with their color,
   gobo slots. Without ranges it is approximated (strobe below 10 open, color
