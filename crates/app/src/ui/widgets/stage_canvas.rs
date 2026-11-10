@@ -379,9 +379,7 @@ impl StageCanvas<'_> {
                 let time = ui.input(|i| i.time);
                 // 0 Hz = shutter closed
                 if hz <= 0.0 || (time * f64::from(hz)).fract() > 0.35 {
-                    for c in &mut colors {
-                        *c = (Color32::BLACK, 0.0);
-                    }
+                    colors.fill((Color32::BLACK, 0.0));
                 }
                 ui.ctx().request_repaint();
             }
