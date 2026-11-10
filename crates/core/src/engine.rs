@@ -77,8 +77,6 @@ pub struct Engine {
     master: f32,
     blackout: bool,
     speed: f32,
-    /// Running clock for the effect preview of scenes not started.
-    clock_ms: f64,
     /// Preview position in timelines (SUPER SCENE, ms).
     timeline_cursor: f64,
 }
@@ -97,7 +95,6 @@ impl Engine {
             master: 1.0,
             blackout: false,
             speed: 1.0,
-            clock_ms: 0.0,
             timeline_cursor: 0.0,
         }
     }
@@ -467,7 +464,6 @@ impl Engine {
             }
             None => true,
         });
-        self.clock_ms += dt_ms;
         let mut ended = Vec::new();
         for p in &mut self.playing {
             let Some(scene) = self.show.scene(p.scene) else {
@@ -802,8 +798,9 @@ impl Engine {
         ms / dur + f64::from(scene.settings.phase_deg) / 360.0
     }
 
-    /// Effect time of a scene: its own if it is running, otherwise the preview
-    /// clock.
+    /// Effect time of a scene: its own while it is active (stands still when
+    /// paused). Effects of a scene that is not active do not run – the preview
+    /// in edit mode shows them at their start.
     pub fn fx_cycles(&self, id: SceneId) -> f64 {
         let Some(scene) = self.show.scene(id) else {
             return 0.0;
@@ -812,10 +809,7 @@ impl Engine {
             .playing
             .iter()
             .find(|p| p.scene == id && p.releasing.is_none())
-            .map_or(
-                self.clock_ms * f64::from(scene.settings.speed_pct) / 100.0,
-                |p| p.fx_ms,
-            );
+            .map_or(0.0, |p| p.fx_ms);
         self.fx_cycles_of(scene, ms)
     }
 
@@ -1265,6 +1259,34 @@ mod tests {
             Some(255),
             "Dimmer from the step"
         );
+    }
+
+    #[test]
+    fn preview_effects_only_run_when_active() {
+        let (mut s, a, b) = setup();
+        let id = s.add_scene("FX", None, vec![Step::new(vec![cv(a, 0, 255)])]);
+        let sc = s.scene_mut(id).unwrap();
+        let fx = sc.add_effect(crate::show::EffectKind::ColorFx);
+        sc.effects.iter_mut().find(|e| e.id == fx).unwrap().fixtures = vec![a, b];
+        let mut e = Engine::new(s);
+        let rgb = |e: &Engine| {
+            let f = e.render_monitor();
+            (f.get(0, 2), f.get(0, 3), f.get(0, 4), f.get(1, 10))
+        };
+        // edit mode, scene not active: effect shown, but standing still
+        e.set_preview(vec![id]);
+        let first = rgb(&e);
+        e.tick(Duration::from_millis(300));
+        assert_eq!(first, rgb(&e), "inactive: effect stands still");
+        // active: runs
+        e.activate(id);
+        e.tick(Duration::from_millis(300));
+        let running = rgb(&e);
+        assert_ne!(first, running, "active: effect runs");
+        // paused: stands still
+        e.toggle_pause(id);
+        e.tick(Duration::from_millis(300));
+        assert_eq!(running, rgb(&e), "paused: effect stands still");
     }
 
     #[test]
