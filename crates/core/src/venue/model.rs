@@ -98,7 +98,9 @@ impl ModelPart {
 
     pub fn uvs(&self) -> Option<Vec<[f32; 2]>> {
         self.uv.as_ref().map(|b| {
-            b.0.chunks_exact(8)
+            b.0.as_chunks::<8>()
+                .0
+                .iter()
                 .map(|c| {
                     [
                         f32::from_le_bytes(c[0..4].try_into().unwrap()),
@@ -112,7 +114,9 @@ impl ModelPart {
     pub fn vertices(&self) -> Vec<[f32; 6]> {
         self.vertices
             .0
-            .chunks_exact(24)
+            .as_chunks::<24>()
+            .0
+            .iter()
             .map(|c| {
                 std::array::from_fn(|k| f32::from_le_bytes(c[k * 4..k * 4 + 4].try_into().unwrap()))
             })
@@ -122,8 +126,10 @@ impl ModelPart {
     pub fn indices(&self) -> Vec<u32> {
         self.indices
             .0
-            .chunks_exact(4)
-            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| u32::from_le_bytes(*c))
             .collect()
     }
 
