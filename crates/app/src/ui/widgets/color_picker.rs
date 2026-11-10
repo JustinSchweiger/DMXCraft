@@ -288,7 +288,7 @@ pub fn color_swatches(
                 }
                 let resp = match field {
                     Swatch::Auto => resp.on_hover_text(auto_tip),
-                    Swatch::Custom => resp.on_hover_text(t("Eigene Farbe")),
+                    Swatch::Custom => resp.on_hover_text(t("Custom color")),
                     Swatch::Color(_) => resp,
                 };
                 if resp.clicked() {

@@ -68,11 +68,11 @@ impl Tab {
 
     fn label(self) -> &'static str {
         match self {
-            Tab::General => t("Allgemein"),
-            Tab::Physical => t("Physisch"),
-            Tab::Channels => t("Kanäle"),
-            Tab::Modes => t("Modi"),
-            Tab::Check => t("Prüfen"),
+            Tab::General => t("General"),
+            Tab::Physical => t("Physical"),
+            Tab::Channels => t("Channels"),
+            Tab::Modes => t("Modes"),
+            Tab::Check => t("Check"),
         }
     }
 
@@ -178,9 +178,9 @@ impl ProfileBuilder {
     pub fn title(&self) -> String {
         let name = self.draft.display_name();
         let base = if name.is_empty() {
-            format!("DMXCraft – {}", t("Profile Builder"))
+            format!("DMXCraft – {}", t("Profile builder"))
         } else {
-            format!("DMXCraft – {} – {name}", t("Profile Builder"))
+            format!("DMXCraft – {} – {name}", t("Profile builder"))
         };
         if self.dirty() {
             format!("{base} *")
@@ -237,18 +237,18 @@ impl ProfileBuilder {
                 );
                 row.spacing_mut().item_spacing = vec2(theme::SP_S, 0.0);
                 let buttons = [
-                    (t("Speichern"), true, 3),
+                    (t("Save"), true, 3),
                     (
                         if embedded {
-                            t("Im Fenster öffnen")
+                            t("Open in window")
                         } else {
-                            t("Schließen")
+                            t("Close")
                         },
                         false,
                         2,
                     ),
-                    (t("Exportieren …"), false, 1),
-                    (t("Importieren …"), false, 0),
+                    (t("Export …"), false, 1),
+                    (t("Import …"), false, 0),
                 ];
                 for (label, primary, i) in buttons {
                     let enabled = i >= 2 || !busy;
@@ -309,14 +309,14 @@ impl ProfileBuilder {
     /// Rückfrage, bevor ein ungespeicherter Entwurf ersetzt wird.
     fn confirm(&mut self, ctx: &egui::Context) {
         let mut open = true;
-        let res = Dialog::new(t("Ungespeicherte Änderungen"))
+        let res = Dialog::new(t("Unsaved changes"))
             .id("profile_builder_confirm")
             .width(380.0)
-            .cancel(t("Abbrechen"))
-            .primary(t("Verwerfen"))
+            .cancel(t("Cancel"))
+            .primary(t("Discard"))
             .show(ctx, &mut open, |ui, _| {
                 ui.label(tr!(
-                    "Änderungen an „{v}“ verwerfen?",
+                    "Discard changes to “{v}”?",
                     v = self.draft.display_name()
                 ));
             });
@@ -334,7 +334,7 @@ impl ProfileBuilder {
         if !problems.is_empty() {
             self.tab = Tab::Check;
             st.error(tr!(
-                "Nicht gespeichert: {n} Problem(e), siehe Prüfen",
+                "Not saved: {n} problem(s), see Check",
                 n = problems.len()
             ));
             return;
@@ -354,7 +354,7 @@ impl ProfileBuilder {
         let others: Vec<Profile> = st.user_profiles.iter().map(|u| u.profile.clone()).collect();
         let mut draft = self.draft.clone();
         if let Err(e) = profiles::save(&mut draft, &others) {
-            st.error(tr!("Nicht gespeichert: {e}", e = e));
+            st.error(tr!("Not saved: {e}", e = e));
             return;
         }
         // Schlüssel steht erst jetzt fest
@@ -393,13 +393,13 @@ impl ProfileBuilder {
         profiles::sort_user(&mut st.user_profiles);
         if updated > 0 {
             st.info(tr!(
-                "„{v}“ gespeichert – {n} Gerät(e) in der Show aktualisiert",
+                "“{v}” saved – {n} fixture(s) in the show updated",
                 v = self.draft.display_name(),
                 n = updated
             ));
         } else {
             st.info(tr!(
-                "„{v}“ gespeichert – in der Bibliothek unter Eigene Geräte",
+                "“{v}” saved – find it in the library under My fixtures",
                 v = self.draft.display_name()
             ));
         }
@@ -419,15 +419,12 @@ impl ProfileBuilder {
         };
         match job {
             FileJob::Export => match std::fs::write(&path, self.draft.to_ofl_string()) {
-                Ok(()) => st.info(tr!("Exportiert: {path}", path = path.display())),
+                Ok(()) => st.info(tr!("Exported: {path}", path = path.display())),
                 Err(e) => st.error(format!("{}: {e}", path.display())),
             },
             FileJob::Import => match import(&path) {
                 Ok(p) => {
-                    st.info(tr!(
-                        "„{v}“ importiert – noch nicht gespeichert",
-                        v = p.display_name()
-                    ));
+                    st.info(tr!("“{v}” imported – not saved yet", v = p.display_name()));
                     if self.dirty() {
                         self.pending = Some(p);
                     } else {
@@ -469,11 +466,11 @@ impl ProfileBuilder {
         let mut action: Option<ListAction> = None;
         lui.horizontal(|ui| {
             ui.set_height(ROW_H);
-            ui.label(theme::heading_text(t("Kanäle")));
+            ui.label(theme::heading_text(t("Channels")));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
                     .add(IconButton::new(Icon::Plus))
-                    .on_hover_text(t("Kanal hinzufügen"))
+                    .on_hover_text(t("Add channel"))
                     .clicked()
                 {
                     action = Some(ListAction::Add);
@@ -502,11 +499,11 @@ impl ProfileBuilder {
                     crate::ui::widgets::menu::context(&r, |ui| {
                         use crate::ui::widgets::menu::{self, MenuItem};
                         menu::begin(ui);
-                        if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
+                        if menu::item(ui, MenuItem::new(t("Duplicate")).icon(Icon::Copy)) {
                             action = Some(ListAction::Duplicate(i));
                         }
                         menu::separator(ui);
-                        if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash).danger()) {
+                        if menu::item(ui, MenuItem::new(t("Delete")).icon(Icon::Trash).danger()) {
                             action = Some(ListAction::Remove(i));
                         }
                     });
@@ -519,7 +516,7 @@ impl ProfileBuilder {
         let p = &mut self.draft;
         match action {
             Some(ListAction::Add) => {
-                let name = unique(&p.available_names(), t("Kanal"));
+                let name = unique(&p.available_names(), t("Channel"));
                 p.channels.push(ProfileChannel {
                     name,
                     ..ProfileChannel::default()
@@ -558,11 +555,11 @@ impl ProfileBuilder {
         let mut add = false;
         rui.horizontal(|ui| {
             ui.set_height(ROW_H);
-            ui.label(theme::heading_text(t("Bereiche")));
+            ui.label(theme::heading_text(t("Ranges")));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
                     .add(IconButton::new(Icon::Plus).enabled(ch.capabilities.len() < 256))
-                    .on_hover_text(t("Bereich hinzufügen"))
+                    .on_hover_text(t("Add range"))
                     .clicked()
                 {
                     add = true;
@@ -650,7 +647,7 @@ impl ProfileBuilder {
                             .is_some_and(|p| p.y < handle.center().y);
                         op = Some((ci, if up { -1 } else { 1 }));
                     }
-                    resp.on_hover_text(t("Grenze ziehen oder oben/unten klicken (±1)"));
+                    resp.on_hover_text(t("Drag the boundary or click top/bottom (±1)"));
                 }
             });
         if let Some(ci) = select {
@@ -681,7 +678,7 @@ impl ProfileBuilder {
                 let p = &mut self.draft;
                 ui.horizontal(|ui| {
                     ui.set_height(ROW_H);
-                    ui.label(theme::heading_text(t("Kanal")));
+                    ui.label(theme::heading_text(t("Channel")));
                 });
                 form(ui, "builder_channel", |f| {
                     f.row(t("Name"), |ui| {
@@ -695,18 +692,18 @@ impl ProfileBuilder {
                             p.rename_channel(i, &name);
                         }
                     });
-                    f.row(t("Auflösung"), |ui| {
+                    f.row(t("Resolution"), |ui| {
                         let mut fine = p.channels[i].fine;
                         let items = [(0u8, "8 Bit"), (1, "16 Bit"), (2, "24 Bit")];
                         if Segmented::new(&items).show(ui, &mut fine) {
                             p.set_fine(i, fine);
                         }
                     });
-                    f.row(t("Standardwert"), |ui| {
+                    f.row(t("Default value"), |ui| {
                         ui.add(egui::DragValue::new(&mut p.channels[i].default).range(0..=255))
-                            .on_hover_text(t("Wert, solange keine Szene den Kanal setzt"));
+                            .on_hover_text(t("Value while no scene sets the channel"));
                     });
-                    f.row(t("Erkannt als"), |ui| {
+                    f.row(t("Detected as"), |ui| {
                         let k = p.channels[i].kind();
                         let (r, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
                         paint_symbol(ui.painter(), r, k, kind_color(k));
@@ -720,12 +717,12 @@ impl ProfileBuilder {
                 let last = ci + 1 == count;
                 ui.horizontal(|ui| {
                     ui.set_height(ROW_H);
-                    ui.label(theme::heading_text(&tr!("Bereich {n}", n = ci + 1)));
+                    ui.label(theme::heading_text(&tr!("Range {n}", n = ci + 1)));
                 });
                 let mut new_end = None;
                 let cap = &mut ch.capabilities[ci];
                 form(ui, "builder_range", |f| {
-                    f.row(t("Werte"), |ui| {
+                    f.row(t("Values"), |ui| {
                         ui.label(
                             egui::RichText::new(cap.start.to_string()).color(theme::text_dim()),
                         );
@@ -734,15 +731,15 @@ impl ProfileBuilder {
                         let r = ui
                             .add(egui::DragValue::new(&mut end).range(cap.start..=255))
                             .on_hover_text(if last {
-                                t("Ende – kleiner als 255 legt für den Rest einen neuen Bereich an")
+                                t("End – less than 255 creates a new range for the rest")
                             } else {
-                                t("Ende – die folgenden Bereiche rücken automatisch nach")
+                                t("End – the following ranges move along automatically")
                             });
                         if end != cap.end && (r.changed() || r.lost_focus()) {
                             new_end = Some(end);
                         }
                     });
-                    f.row(t("Typ"), |ui| {
+                    f.row(t("Type"), |ui| {
                         let mut kind = cap.kind;
                         full_combo(ui, ("builder_cap_kind", i, ci), kind_label(kind), |ui| {
                             for k in CapabilityKind::ALL {
@@ -753,7 +750,7 @@ impl ProfileBuilder {
                             cap.set_kind(kind);
                         }
                     });
-                    f.row(t("Kommentar"), |ui| {
+                    f.row(t("Comment"), |ui| {
                         ui.add(text_field(&mut cap.comment).desired_width(f32::INFINITY));
                     });
                 });
@@ -766,13 +763,13 @@ impl ProfileBuilder {
                     ch.set_range_end(ci, end);
                 }
                 ui.add_space(theme::SP_L);
-                if wide_button(ui, t("Bereich löschen"), false, count > 1).clicked() {
+                if wide_button(ui, t("Delete range"), false, count > 1).clicked() {
                     remove_range = true;
                 }
-                if wide_button(ui, t("Kanal duplizieren"), false, true).clicked() {
+                if wide_button(ui, t("Duplicate channel"), false, true).clicked() {
                     channel_action = Some(ListAction::Duplicate(i));
                 }
-                if wide_button(ui, t("Kanal löschen"), true, true).clicked() {
+                if wide_button(ui, t("Delete channel"), true, true).clicked() {
                     channel_action = Some(ListAction::Remove(i));
                 }
             });
@@ -791,15 +788,13 @@ impl ProfileBuilder {
         let p = &mut self.draft;
         let mut lui = ui.new_child(egui::UiBuilder::new().max_rect(list_rect));
         let mut action: Option<ListAction> = None;
-        list_header(&mut lui, t("Modus hinzufügen"), || {
-            action = Some(ListAction::Add)
-        });
+        list_header(&mut lui, t("Add mode"), || action = Some(ListAction::Add));
         egui::ScrollArea::vertical()
             .id_salt("builder_modes")
             .auto_shrink([false, false])
             .show(&mut lui, |ui| {
                 for (i, m) in p.modes.iter().enumerate() {
-                    let n = tr!("{n} Kan.", n = m.channels.len());
+                    let n = tr!("{n} ch.", n = m.channels.len());
                     let name = if m.name.is_empty() { "–" } else { &m.name };
                     let r = list_row(ui, i == self.sel_mode, name, &n);
                     if r.clicked() {
@@ -808,11 +803,11 @@ impl ProfileBuilder {
                     crate::ui::widgets::menu::context(&r, |ui| {
                         use crate::ui::widgets::menu::{self, MenuItem};
                         menu::begin(ui);
-                        if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
+                        if menu::item(ui, MenuItem::new(t("Duplicate")).icon(Icon::Copy)) {
                             action = Some(ListAction::Duplicate(i));
                         }
                         menu::separator(ui);
-                        if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash).danger()) {
+                        if menu::item(ui, MenuItem::new(t("Delete")).icon(Icon::Trash).danger()) {
                             action = Some(ListAction::Remove(i));
                         }
                     });
@@ -826,7 +821,7 @@ impl ProfileBuilder {
                 let names: Vec<String> = p.modes.iter().map(|m| m.name.clone()).collect();
                 p.modes.push(ProfileMode {
                     id,
-                    name: unique(&names, &tr!("{n}-Kanal", n = channels.len())),
+                    name: unique(&names, &tr!("{n}-channel", n = channels.len())),
                     short_name: String::new(),
                     channels,
                 });
@@ -869,10 +864,10 @@ impl ProfileBuilder {
                     crate::ui::widgets::dialog::select_all(ui.ctx(), r.id, &p.modes[i].name);
                 }
             });
-            f.row(t("Kurzname"), |ui| {
+            f.row(t("Short name"), |ui| {
                 ui.add(
                     text_field(&mut p.modes[i].short_name)
-                        .hint_text(t("optional, z. B. 9ch"))
+                        .hint_text(t("optional, e.g. 9ch"))
                         .desired_width(f32::INFINITY),
                 );
             });
@@ -891,7 +886,7 @@ impl ProfileBuilder {
         let mut lui = dui.new_child(egui::UiBuilder::new().max_rect(left));
         lui.horizontal(|ui| {
             ui.set_height(ROW_H);
-            ui.label(theme::heading_text(t("Kanalreihenfolge")));
+            ui.label(theme::heading_text(t("Channel order")));
         });
         let mut op: Option<ModeOp> = None;
         egui::ScrollArea::vertical()
@@ -909,7 +904,7 @@ impl ProfileBuilder {
                             ),
                         );
                         let (text, color) = if entry.is_empty() {
-                            (t("(unbenutzt)").to_string(), theme::text_faint())
+                            (t("(unused)").to_string(), theme::text_faint())
                         } else if available.contains(entry) {
                             (entry.clone(), theme::text())
                         } else {
@@ -919,7 +914,7 @@ impl ProfileBuilder {
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if ui
                                 .add(IconButton::new(Icon::Close).flat().size(22.0))
-                                .on_hover_text(t("Aus dem Modus entfernen"))
+                                .on_hover_text(t("Remove from mode"))
                                 .clicked()
                             {
                                 op = Some(ModeOp::Remove(ci));
@@ -931,7 +926,7 @@ impl ProfileBuilder {
                                         .size(22.0)
                                         .enabled(ci + 1 < mode.channels.len()),
                                 )
-                                .on_hover_text(t("Nach unten"))
+                                .on_hover_text(t("Move down"))
                                 .clicked()
                             {
                                 op = Some(ModeOp::Down(ci));
@@ -943,7 +938,7 @@ impl ProfileBuilder {
                                         .size(22.0)
                                         .enabled(ci > 0),
                                 )
-                                .on_hover_text(t("Nach oben"))
+                                .on_hover_text(t("Move up"))
                                 .clicked()
                             {
                                 op = Some(ModeOp::Up(ci));
@@ -956,11 +951,11 @@ impl ProfileBuilder {
         let mut rui = dui.new_child(egui::UiBuilder::new().max_rect(right));
         rui.horizontal(|ui| {
             ui.set_height(ROW_H);
-            ui.label(theme::heading_text(t("Verfügbar")));
+            ui.label(theme::heading_text(t("Available")));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
                     .add(IconButton::new(Icon::Plus))
-                    .on_hover_text(t("Unbenutzten Kanal anhängen"))
+                    .on_hover_text(t("Append unused channel"))
                     .clicked()
                 {
                     op = Some(ModeOp::Add(String::new()));
@@ -988,7 +983,7 @@ impl ProfileBuilder {
                             .inner
                         })
                         .inner;
-                    if r.on_hover_text(t("Anhängen")).clicked() {
+                    if r.on_hover_text(t("Append")).clicked() {
                         op = Some(ModeOp::Add(name.clone()));
                     }
                 }
@@ -1025,7 +1020,7 @@ fn new_profile() -> Profile {
         categories: vec!["Dimmer".into()],
         modes: vec![ProfileMode {
             id: 1,
-            name: tr!("{n}-Kanal", n = 1),
+            name: tr!("{n}-channel", n = 1),
             short_name: String::new(),
             channels: vec![dimmer.name.clone()],
         }],
@@ -1037,7 +1032,7 @@ fn new_profile() -> Profile {
 /// Vorlage aus einem Bibliotheksgerät bzw. einer Geräteliste.
 pub fn template(manufacturer: &str, name: &str, types: &[FixtureType]) -> Profile {
     let mut p = Profile::from_types(manufacturer, name, types);
-    p.name = tr!("{v} (Kopie)", v = name);
+    p.name = tr!("{v} (copy)", v = name);
     p
 }
 
@@ -1213,41 +1208,41 @@ fn full_combo(
 // ------------------------------------------------------------ Allgemein
 
 fn general(ui: &mut Ui, p: &mut Profile) {
-    section(ui, t("Gerät"));
+    section(ui, t("Device"));
     form(ui, "builder_general", |f| {
-        f.row(t("Hersteller"), |ui| {
+        f.row(t("Manufacturer"), |ui| {
             ui.add(
                 text_field(&mut p.manufacturer)
-                    .hint_text(t("z. B. Cameo"))
+                    .hint_text(t("e.g. Cameo"))
                     .desired_width(ui.available_width() - 32.0),
             );
             manufacturer_picker(ui, &mut p.manufacturer);
         });
-        f.row(t("Modell"), |ui| {
+        f.row(t("Model"), |ui| {
             ui.add(text_field(&mut p.name).desired_width(f32::INFINITY));
         });
-        f.row(t("Kurzname"), |ui| {
+        f.row(t("Short name"), |ui| {
             ui.add(
                 text_field(&mut p.short_name)
                     .hint_text(t("optional"))
                     .desired_width(f32::INFINITY),
             );
         });
-        f.row(t("Autor"), |ui| {
+        f.row(t("Author"), |ui| {
             ui.add(
                 text_field(&mut p.author)
-                    .hint_text(t("Dein Name"))
+                    .hint_text(t("Your name"))
                     .desired_width(f32::INFINITY),
             );
         });
-        f.row(t("Handbuch"), |ui| {
+        f.row(t("Manual"), |ui| {
             ui.add(
                 text_field(&mut p.manual_url)
                     .hint_text("https://")
                     .desired_width(f32::INFINITY),
             );
         });
-        f.row(t("Produktseite"), |ui| {
+        f.row(t("Product page"), |ui| {
             ui.add(
                 text_field(&mut p.product_url)
                     .hint_text("https://")
@@ -1255,7 +1250,7 @@ fn general(ui: &mut Ui, p: &mut Profile) {
             );
         });
     });
-    section(ui, t("Kategorien"));
+    section(ui, t("Categories"));
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(theme::SP_XS, theme::SP_XS);
         for c in CATEGORIES {
@@ -1272,7 +1267,7 @@ fn general(ui: &mut Ui, p: &mut Profile) {
             }
         }
     });
-    section(ui, t("Kommentar"));
+    section(ui, t("Comment"));
     ui.add(
         egui::TextEdit::multiline(&mut p.comment)
             .desired_rows(4)
@@ -1283,7 +1278,7 @@ fn general(ui: &mut Ui, p: &mut Profile) {
         ui.add_space(theme::SP_S);
         hint(
             ui,
-            &tr!("Angelegt {c} · geändert {m}", c = p.created, m = p.modified),
+            &tr!("Created {c} · modified {m}", c = p.created, m = p.modified),
         );
     }
 }
@@ -1292,7 +1287,7 @@ fn general(ui: &mut Ui, p: &mut Profile) {
 fn manufacturer_picker(ui: &mut Ui, value: &mut String) {
     let r = ui
         .add(IconButton::new(Icon::ChevronDown))
-        .on_hover_text(t("Hersteller aus der Bibliothek"));
+        .on_hover_text(t("Manufacturer from the library"));
     crate::ui::widgets::menu::dropdown(&r, |ui| {
         let q = value.to_lowercase();
         let mut names: Vec<&str> = Library::embedded()
@@ -1353,10 +1348,10 @@ fn pill(ui: &mut Ui, label: &str, on: bool) -> egui::Response {
 
 fn physical(ui: &mut Ui, p: &mut Profile) {
     let ph = &mut p.physical;
-    section(ui, t("Gehäuse"));
+    section(ui, t("Housing"));
     form(ui, "builder_physical", |f| {
-        f.row(t("Abmessungen"), |ui| {
-            for (i, l) in [t("B"), t("H"), t("T")].into_iter().enumerate() {
+        f.row(t("Dimensions"), |ui| {
+            for (i, l) in [t("W"), t("H"), t("D")].into_iter().enumerate() {
                 ui.label(egui::RichText::new(l).color(theme::text_faint()));
                 ui.add(
                     egui::DragValue::new(&mut ph.dimensions[i])
@@ -1367,7 +1362,7 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
                 ui.add_space(theme::SP_S);
             }
         });
-        f.row(t("Gewicht"), |ui| {
+        f.row(t("Weight"), |ui| {
             ui.add(
                 egui::DragValue::new(&mut ph.weight)
                     .range(0.0..=1000.0)
@@ -1376,7 +1371,7 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
                     .suffix(" kg"),
             );
         });
-        f.row(t("Leistung"), |ui| {
+        f.row(t("Power"), |ui| {
             ui.add(
                 egui::DragValue::new(&mut ph.power)
                     .range(0.0..=100_000.0)
@@ -1384,31 +1379,31 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
                     .suffix(" W"),
             );
         });
-        f.row(t("DMX-Anschluss"), |ui| {
+        f.row(t("DMX connector"), |ui| {
             let current = if ph.dmx_connector.is_empty() {
-                t("unbekannt")
+                t("unknown")
             } else {
                 ph.dmx_connector.as_str()
             }
             .to_string();
             full_combo(ui, "builder_connector", &current, |ui| {
-                ui.selectable_value(&mut ph.dmx_connector, String::new(), t("unbekannt"));
+                ui.selectable_value(&mut ph.dmx_connector, String::new(), t("unknown"));
                 for c in DMX_CONNECTORS {
                     ui.selectable_value(&mut ph.dmx_connector, c.to_string(), c);
                 }
             });
         });
     });
-    section(ui, t("Licht"));
+    section(ui, t("Lighting"));
     form(ui, "builder_light", |f| {
-        f.row(t("Leuchtmittel"), |ui| {
+        f.row(t("Light source"), |ui| {
             ui.add(
                 text_field(&mut ph.bulb)
-                    .hint_text(t("z. B. LED"))
+                    .hint_text(t("e.g. LED"))
                     .desired_width(f32::INFINITY),
             );
         });
-        f.row(t("Farbtemperatur"), |ui| {
+        f.row(t("Color temperature"), |ui| {
             ui.add(
                 egui::DragValue::new(&mut ph.color_temperature)
                     .range(0.0..=20_000.0)
@@ -1416,7 +1411,7 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
                     .suffix(" K"),
             );
         });
-        f.row(t("Lichtstrom"), |ui| {
+        f.row(t("Luminous flux"), |ui| {
             ui.add(
                 egui::DragValue::new(&mut ph.lumens)
                     .range(0.0..=1_000_000.0)
@@ -1424,15 +1419,15 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
                     .suffix(" lm"),
             );
         });
-        f.row(t("Optik"), |ui| {
+        f.row(t("Lens"), |ui| {
             ui.add(
                 text_field(&mut ph.lens)
-                    .hint_text(t("optional, z. B. Fresnel"))
+                    .hint_text(t("optional, e.g. Fresnel"))
                     .desired_width(f32::INFINITY),
             );
         });
-        f.row(t("Abstrahlwinkel"), |ui| {
-            ui.label(egui::RichText::new(t("von")).color(theme::text_faint()));
+        f.row(t("Beam angle"), |ui| {
+            ui.label(egui::RichText::new(t("from")).color(theme::text_faint()));
             ui.add(
                 egui::DragValue::new(&mut ph.beam_angle[0])
                     .range(0.0..=360.0)
@@ -1440,7 +1435,7 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
                     .suffix(" °"),
             );
             ui.add_space(theme::SP_S);
-            ui.label(egui::RichText::new(t("bis")).color(theme::text_faint()));
+            ui.label(egui::RichText::new(t("to")).color(theme::text_faint()));
             ui.add(
                 egui::DragValue::new(&mut ph.beam_angle[1])
                     .range(0.0..=360.0)
@@ -1452,7 +1447,7 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
     ui.add_space(theme::SP_S);
     hint(
         ui,
-        t("Unbekannte Werte auf 0 lassen – sie werden nicht exportiert. Abstrahlwinkel und Abmessungen nutzt der 3D-Visualisierer."),
+        t("Leave unknown values at 0 – they are not exported. The 3D visualizer uses the beam angle and dimensions."),
     );
 }
 
@@ -1724,7 +1719,7 @@ fn capability_fields(ui: &mut Ui, salt: (usize, usize), cap: &mut Capability) {
         C::ColorPreset => {
             ui.add(
                 text_field(&mut cap.label)
-                    .hint_text(t("Farbname"))
+                    .hint_text(t("Color name"))
                     .desired_width(110.0),
             );
             hex_field(ui, &mut cap.hex);
@@ -1732,7 +1727,7 @@ fn capability_fields(ui: &mut Ui, salt: (usize, usize), cap: &mut Capability) {
         C::Effect => {
             ui.add(
                 text_field(&mut cap.label)
-                    .hint_text(t("Effektname"))
+                    .hint_text(t("Effect name"))
                     .desired_width(130.0),
             );
         }
@@ -1744,13 +1739,13 @@ fn capability_fields(ui: &mut Ui, salt: (usize, usize), cap: &mut Capability) {
             .on_hover_text(example);
         ui.add(
             text_field(&mut cap.from)
-                .hint_text(t("von"))
+                .hint_text(t("from"))
                 .desired_width(80.0),
         )
         .on_hover_text(example);
         ui.add(
             text_field(&mut cap.to)
-                .hint_text(t("bis"))
+                .hint_text(t("to"))
                 .desired_width(80.0),
         )
         .on_hover_text(example);
@@ -1769,7 +1764,7 @@ fn hex_field(ui: &mut Ui, hex: &mut String) {
     if !hex.is_empty()
         && ui
             .add(IconButton::new(Icon::Close).flat().size(20.0))
-            .on_hover_text(t("Farbe entfernen"))
+            .on_hover_text(t("Remove color"))
             .clicked()
     {
         hex.clear();
@@ -1780,7 +1775,7 @@ fn hex_field(ui: &mut Ui, hex: &mut String) {
 
 fn check(ui: &mut Ui, p: &Profile) {
     let problems = p.problems();
-    section(ui, t("Probleme"));
+    section(ui, t("Problems"));
     if problems.is_empty() {
         ui.horizontal(|ui| {
             Icon::ListChecks.paint(
@@ -1789,7 +1784,7 @@ fn check(ui: &mut Ui, p: &Profile) {
                 theme::OK,
             );
             ui.add_space(24.0);
-            ui.label(egui::RichText::new(t("Bereit zum Speichern")).color(theme::OK));
+            ui.label(egui::RichText::new(t("Ready to save")).color(theme::OK));
         });
     }
     for pr in &problems {
@@ -1800,15 +1795,11 @@ fn check(ui: &mut Ui, p: &Profile) {
         });
     }
     ui.add_space(theme::SP_M);
-    section(ui, t("So erkennt DMXCraft die Kanäle"));
+    section(ui, t("How DMXCraft detects the channels"));
     for m in &p.modes {
         ui.label(
-            egui::RichText::new(tr!(
-                "{mode} · {n} Kan.",
-                mode = m.name,
-                n = m.channels.len()
-            ))
-            .strong(),
+            egui::RichText::new(tr!("{mode} · {n} ch.", mode = m.name, n = m.channels.len()))
+                .strong(),
         );
         egui::Grid::new(("builder_check_mode", m.id))
             .num_columns(3)
@@ -1818,7 +1809,7 @@ fn check(ui: &mut Ui, p: &Profile) {
                 for (i, e) in m.channels.iter().enumerate() {
                     ui.label(egui::RichText::new((i + 1).to_string()).color(theme::text_faint()));
                     if e.is_empty() {
-                        ui.label(egui::RichText::new(t("(unbenutzt)")).color(theme::text_faint()));
+                        ui.label(egui::RichText::new(t("(unused)")).color(theme::text_faint()));
                     } else {
                         ui.label(e);
                     }
@@ -1828,7 +1819,7 @@ fn check(ui: &mut Ui, p: &Profile) {
             });
         ui.add_space(theme::SP_S);
     }
-    section(ui, t("OFL-Datei"));
+    section(ui, t("OFL file"));
     let json = p.to_ofl_string();
     ui.horizontal_top(|ui| {
         let w = ui.available_width() - 40.0;
@@ -1841,7 +1832,7 @@ fn check(ui: &mut Ui, p: &Profile) {
         );
         if ui
             .add(IconButton::new(Icon::Copy))
-            .on_hover_text(t("Kopieren"))
+            .on_hover_text(t("Copy"))
             .clicked()
         {
             ui.ctx().copy_text(json.clone());
@@ -1849,44 +1840,44 @@ fn check(ui: &mut Ui, p: &Profile) {
     });
     hint(
         ui,
-        t("Diese Datei lässt sich mit anderen teilen oder auf open-fixture-library.org einreichen."),
+        t("You can share this file or submit it to open-fixture-library.org."),
     );
 }
 
 fn problem_text(p: &Problem) -> String {
     match p {
-        Problem::NoManufacturer => t("Hersteller fehlt").into(),
-        Problem::NoName => t("Modellname fehlt").into(),
-        Problem::NoCategory => t("Mindestens eine Kategorie wählen").into(),
-        Problem::NoChannels => t("Keine Kanäle").into(),
-        Problem::NoModes => t("Kein Modus").into(),
-        Problem::EmptyChannelName => t("Kanal ohne Namen").into(),
-        Problem::DuplicateChannel(c) => tr!("Kanalname „{c}“ doppelt", c = c),
-        Problem::NoCapabilities(c) => tr!("„{c}“ hat keine Funktion", c = c),
-        Problem::Gap(c, v) => tr!(
-            "„{c}“: Wert {v} ist keinem Bereich zugeordnet",
-            c = c,
-            v = v
-        ),
+        Problem::NoManufacturer => t("Manufacturer missing").into(),
+        Problem::NoName => t("Model name missing").into(),
+        Problem::NoCategory => t("Choose at least one category").into(),
+        Problem::NoChannels => t("No channels").into(),
+        Problem::NoModes => t("No mode").into(),
+        Problem::EmptyChannelName => t("Channel without a name").into(),
+        Problem::DuplicateChannel(c) => tr!("Channel name “{c}” used twice", c = c),
+        Problem::NoCapabilities(c) => tr!("“{c}” has no capability", c = c),
+        Problem::Gap(c, v) => tr!("“{c}”: value {v} is not in any range", c = c, v = v),
         Problem::Overlap(c, v) => tr!(
-            "„{c}“: Bereiche überschneiden sich oder sind vertauscht (bei {v})",
+            "“{c}”: ranges overlap or are reversed (at {v})",
             c = c,
             v = v
         ),
         Problem::MissingValue(c, v) => tr!(
-            "„{c}“: Bereich ab {v} braucht einen Wert (z. B. Winkel oder Geschwindigkeit)",
+            "“{c}”: range from {v} needs a value (e.g. angle or speed)",
             c = c,
             v = v
         ),
-        Problem::EmptyModeName => t("Modus ohne Namen").into(),
-        Problem::DuplicateMode(m) => tr!("Modusname „{m}“ doppelt", m = m),
-        Problem::EmptyMode(m) => tr!("Modus „{m}“ hat keine Kanäle", m = m),
-        Problem::TooManyChannels(m) => tr!("Modus „{m}“ hat mehr als 512 Kanäle", m = m),
+        Problem::EmptyModeName => t("Mode without a name").into(),
+        Problem::DuplicateMode(m) => tr!("Mode name “{m}” used twice", m = m),
+        Problem::EmptyMode(m) => tr!("Mode “{m}” has no channels", m = m),
+        Problem::TooManyChannels(m) => tr!("Mode “{m}” has more than 512 channels", m = m),
         Problem::UnknownChannel(m, c) => {
-            tr!("Modus „{m}“: Kanal „{c}“ gibt es nicht", m = m, c = c)
+            tr!("Mode “{m}”: channel “{c}” does not exist", m = m, c = c)
         }
         Problem::DuplicateInMode(m, c) => {
-            tr!("Modus „{m}“: Kanal „{c}“ mehrfach", m = m, c = c)
+            tr!(
+                "Mode “{m}”: channel “{c}” used more than once",
+                m = m,
+                c = c
+            )
         }
     }
 }
@@ -1898,8 +1889,8 @@ fn pick_import(ctx: &egui::Context) -> Receiver<Option<PathBuf>> {
     let ctx = ctx.clone();
     std::thread::spawn(move || {
         let path = rfd::FileDialog::new()
-            .set_title(t("Gerät in den Profile Builder laden"))
-            .add_filter(t("Gerätedateien"), &[PROFILE_EXT, "json", "qxf"])
+            .set_title(t("Load fixture into the Profile Builder"))
+            .add_filter(t("Fixture files"), &[PROFILE_EXT, "json", "qxf"])
             .pick_file();
         let _ = tx.send(path);
         ctx.request_repaint();
@@ -1913,7 +1904,7 @@ fn pick_export(ctx: &egui::Context, p: &Profile) -> Receiver<Option<PathBuf>> {
     let name = format!("{}.json", dmxcraft_ofl::profile::file_slug(&p.name));
     std::thread::spawn(move || {
         let path = rfd::FileDialog::new()
-            .set_title(t("Als OFL-Datei exportieren"))
+            .set_title(t("Export as OFL file"))
             .add_filter(t("Open Fixture Library (JSON)"), &["json"])
             .set_file_name(name)
             .save_file();
@@ -1959,115 +1950,112 @@ fn import(path: &std::path::Path) -> Result<Profile, String> {
 fn kind_label(k: CapabilityKind) -> &'static str {
     use CapabilityKind as C;
     match k {
-        C::NoFunction => t("Keine Funktion"),
-        C::Intensity => t("Helligkeit"),
-        C::ColorIntensity => t("Farbanteil"),
-        C::ColorPreset => t("Farbvorgabe"),
-        C::ColorTemperature => t("Farbtemperatur"),
-        C::ShutterStrobe => t("Shutter / Strobe"),
-        C::StrobeSpeed => t("Strobe-Geschwindigkeit"),
+        C::NoFunction => t("No function"),
+        C::Intensity => t("Intensity"),
+        C::ColorIntensity => t("Color intensity"),
+        C::ColorPreset => t("Color preset"),
+        C::ColorTemperature => t("Color temperature"),
+        C::ShutterStrobe => t("Shutter / strobe"),
+        C::StrobeSpeed => t("Strobe speed"),
         C::Pan => t("Pan"),
-        C::PanContinuous => t("Pan endlos"),
+        C::PanContinuous => t("Pan continuous"),
         C::Tilt => t("Tilt"),
-        C::TiltContinuous => t("Tilt endlos"),
-        C::PanTiltSpeed => t("Pan/Tilt-Geschwindigkeit"),
-        C::WheelSlot => t("Rad-Slot"),
-        C::WheelRotation => t("Raddrehung"),
-        C::Effect => t("Effekt"),
-        C::EffectSpeed => t("Effekt-Geschwindigkeit"),
-        C::Prism => t("Prisma"),
-        C::PrismRotation => t("Prismendrehung"),
-        C::Focus => t("Fokus"),
+        C::TiltContinuous => t("Tilt continuous"),
+        C::PanTiltSpeed => t("Pan/tilt speed"),
+        C::WheelSlot => t("Wheel slot"),
+        C::WheelRotation => t("Wheel rotation"),
+        C::Effect => t("Effect"),
+        C::EffectSpeed => t("Effect speed"),
+        C::Prism => t("Prism"),
+        C::PrismRotation => t("Prism rotation"),
+        C::Focus => t("Focus"),
         C::Zoom => t("Zoom"),
         C::Iris => t("Iris"),
         C::Frost => t("Frost"),
-        C::Fog => t("Nebel"),
-        C::FogOutput => t("Nebelmenge"),
-        C::Rotation => t("Drehung"),
-        C::Speed => t("Geschwindigkeit"),
-        C::Maintenance => t("Wartung"),
-        C::Generic => t("Generisch"),
+        C::Fog => t("Fog"),
+        C::FogOutput => t("Fog output"),
+        C::Rotation => t("Rotation"),
+        C::Speed => t("Speed"),
+        C::Maintenance => t("Maintenance"),
+        C::Generic => t("Generic"),
     }
 }
 
 fn property_label(prop: &str) -> (&'static str, &'static str) {
     match prop {
-        "brightness" => (t("Helligkeit"), t("z. B. off, dark, bright oder 0%, 100%")),
-        "colorTemperature" => (t("Farbtemperatur"), t("z. B. warm, cold oder 3200K, 5600K")),
-        "angle" => (t("Winkel"), t("z. B. 0deg, 540deg oder narrow, wide")),
-        "speed" => (
-            t("Geschwindigkeit"),
-            t("z. B. slow, fast, stop oder 1Hz, 20Hz"),
-        ),
-        "distance" => (t("Entfernung"), t("z. B. near, far oder 1m, 10m")),
-        "openPercent" => (t("Öffnung"), t("z. B. closed, open oder 0%, 100%")),
-        "frostIntensity" => (t("Stärke"), t("z. B. 0%, 100%")),
-        _ => (t("Menge"), t("z. B. weak, strong oder 0%, 100%")),
+        "brightness" => (t("Intensity"), t("e.g. off, dark, bright or 0%, 100%")),
+        "colorTemperature" => (t("Color temperature"), t("e.g. warm, cold or 3200K, 5600K")),
+        "angle" => (t("Angle"), t("e.g. 0deg, 540deg or narrow, wide")),
+        "speed" => (t("Speed"), t("e.g. slow, fast, stop or 1Hz, 20Hz")),
+        "distance" => (t("Distance"), t("e.g. near, far or 1m, 10m")),
+        "openPercent" => (t("Opening"), t("e.g. closed, open or 0%, 100%")),
+        "frostIntensity" => (t("Strength"), t("e.g. 0%, 100%")),
+        _ => (t("Amount"), t("e.g. weak, strong or 0%, 100%")),
     }
 }
 
 fn shutter_label(s: ShutterEffect) -> &'static str {
     match s {
-        ShutterEffect::Open => t("Offen"),
-        ShutterEffect::Closed => t("Geschlossen"),
+        ShutterEffect::Open => t("Open"),
+        ShutterEffect::Closed => t("Closed"),
         ShutterEffect::Strobe => t("Strobe"),
-        ShutterEffect::Pulse => t("Puls"),
-        ShutterEffect::RampUp => t("Rampe auf"),
-        ShutterEffect::RampDown => t("Rampe ab"),
-        ShutterEffect::RampUpDown => t("Rampe auf und ab"),
-        ShutterEffect::Lightning => t("Blitz"),
-        ShutterEffect::Spikes => t("Spitzen"),
+        ShutterEffect::Pulse => t("Pulse"),
+        ShutterEffect::RampUp => t("Ramp up"),
+        ShutterEffect::RampDown => t("Ramp down"),
+        ShutterEffect::RampUpDown => t("Ramp up and down"),
+        ShutterEffect::Lightning => t("Lightning"),
+        ShutterEffect::Spikes => t("Spikes"),
         ShutterEffect::Burst => t("Burst"),
     }
 }
 
 fn slot_label(s: SlotKind) -> &'static str {
     match s {
-        SlotKind::Open => t("Offen"),
-        SlotKind::Color => t("Farbe"),
+        SlotKind::Open => t("Open"),
+        SlotKind::Color => t("Color"),
         SlotKind::Gobo => t("Gobo"),
-        SlotKind::Prism => t("Prisma"),
+        SlotKind::Prism => t("Prism"),
         SlotKind::Frost => t("Frost"),
     }
 }
 
 fn color_label(c: &str) -> &'static str {
     match c {
-        "Red" => t("Rot"),
-        "Green" => t("Grün"),
-        "Blue" => t("Blau"),
-        "White" => t("Weiß"),
-        "Warm White" => t("Warmweiß"),
-        "Cold White" => t("Kaltweiß"),
-        "Amber" => t("Amber"),
+        "Red" => t("Red"),
+        "Green" => t("Green"),
+        "Blue" => t("Blue"),
+        "White" => t("White"),
+        "Warm White" => t("Warm white"),
+        "Cold White" => t("Cold white"),
+        "Amber" => "Amber",
         "UV" => t("UV"),
         "Cyan" => t("Cyan"),
         "Magenta" => t("Magenta"),
-        "Yellow" => t("Gelb"),
-        "Lime" => t("Limette"),
+        "Yellow" => t("Yellow"),
+        "Lime" => t("Lime"),
         "Indigo" => t("Indigo"),
-        _ => t("Farbe wählen"),
+        _ => t("Choose color"),
     }
 }
 
 fn category_label(c: &str) -> &'static str {
     match c {
-        "Barrel Scanner" => t("Barrel-Scanner"),
+        "Barrel Scanner" => t("Barrel scanner"),
         "Blinder" => t("Blinder"),
-        "Color Changer" => t("Farbwechsler"),
+        "Color Changer" => t("Color changer"),
         "Dimmer" => t("Dimmer"),
-        "Effect" => t("Effekt"),
-        "Fan" => t("Ventilator"),
+        "Effect" => t("Effect"),
+        "Fan" => t("Fan"),
         "Flower" => t("Flower"),
         "Hazer" => t("Hazer"),
         "Laser" => t("Laser"),
         "Matrix" => t("Matrix"),
-        "Moving Head" => t("Moving Head"),
-        "Pixel Bar" => t("Pixel-Bar"),
+        "Moving Head" => t("Moving head"),
+        "Pixel Bar" => t("Pixel bar"),
         "Scanner" => t("Scanner"),
-        "Smoke" => t("Nebelmaschine"),
-        "Stand" => t("Stativ"),
+        "Smoke" => t("Smoke machine"),
+        "Stand" => t("Stand"),
         "Strobe" => t("Strobe"),
-        _ => t("Sonstiges"),
+        _ => t("Other"),
     }
 }

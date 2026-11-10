@@ -88,7 +88,7 @@ impl DipSwitch {
                 .collect::<Vec<_>>()
                 .join(" + ")
         };
-        resp.on_hover_text(tr!("Adresse {address} = Schalter {text}\n(Schalter n hat den Wert 2^(n-1); Schalter 10 bleibt aus)", text = text, address = self.address))
+        resp.on_hover_text(tr!("Address {address} = switches {text}\n(switch n has the value 2^(n-1); switch 10 stays off)", text = text, address = self.address))
     }
 
     /// Flache Leiste mit fester Höhe von 24 px für Kopfzeilen.
@@ -135,7 +135,7 @@ impl DipSwitch {
             );
         }
         resp.on_hover_text(tr!(
-            "DIP-Schalter für Adresse {address}",
+            "DIP switches for address {address}",
             address = self.address
         ))
     }

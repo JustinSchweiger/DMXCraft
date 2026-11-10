@@ -51,20 +51,25 @@ impl View for LibraryPanel {
             let busy = self.import_dialog.is_some();
             let r = ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
-                    .add(crate::ui::widgets::IconButton::new(crate::ui::widgets::Icon::Builder))
-                    .on_hover_text(t("Neues Gerät im Profile Builder anlegen"))
+                    .add(crate::ui::widgets::IconButton::new(
+                        crate::ui::widgets::Icon::Builder,
+                    ))
+                    .on_hover_text(t("Create a new fixture in the Profile Builder"))
                     .clicked()
                 {
                     self.action = Some(LibAction::Builder(BuilderRequest::New));
                 }
                 let r = ui
-                    .add(crate::ui::widgets::IconButton::new(crate::ui::widgets::Icon::Import).enabled(!busy))
+                    .add(
+                        crate::ui::widgets::IconButton::new(crate::ui::widgets::Icon::Import)
+                            .enabled(!busy),
+                    )
                     .on_hover_text(t(
-                        "Eigene Gerätedatei importieren (Open Fixture Library .json oder QLC+ .qxf)",
+                        "Import your own fixture file (Open Fixture Library .json or QLC+ .qxf)",
                     ));
                 ui.add(
                     text_field(&mut self.query)
-                        .hint_text(t("Geräte suchen (Hersteller, Modell, Kategorie)"))
+                        .hint_text(t("Search fixtures (manufacturer, model, category)"))
                         .desired_width(f32::INFINITY),
                 );
                 r
@@ -74,8 +79,8 @@ impl View for LibraryPanel {
                 let ctx = ui.ctx().clone();
                 std::thread::spawn(move || {
                     let path = rfd::FileDialog::new()
-                        .set_title(t("Gerätedatei importieren"))
-                        .add_filter(t("Gerätedateien"), &["json", "qxf"])
+                        .set_title(t("Import fixture file"))
+                        .add_filter(t("Fixture files"), &["json", "qxf"])
                         .pick_file();
                     let _ = tx.send(path);
                     ctx.request_repaint();
@@ -128,7 +133,7 @@ impl View for LibraryPanel {
                         self.chosen = None;
                     }
                     cx.state.info(tr!(
-                        "„{v}“ aus der Bibliothek entfernt",
+                        "“{v}” removed from the library",
                         v = u.profile.display_name()
                     ));
                 }
@@ -160,7 +165,7 @@ impl LibraryPanel {
             .filter(|u| !searching || matches(&u.profile.display_name()))
             .collect();
         if !own.is_empty() {
-            self.group(ui, t("_Eigene Geräte"), searching, |me, ui| {
+            self.group(ui, t("_My fixtures"), searching, |me, ui| {
                 for u in own {
                     me.user_row(ui, u);
                 }
@@ -177,9 +182,9 @@ impl LibraryPanel {
             .cloned()
             .collect();
         for (title, types) in [
-            (t("_Generisch"), builtin),
-            (t("_Importiert"), imported.to_vec()),
-            (t("_In dieser Show"), in_show),
+            (t("_Generic"), builtin),
+            (t("_Imported"), imported.to_vec()),
+            (t("_In this show"), in_show),
         ] {
             let list: Vec<FixtureType> = types
                 .into_iter()
@@ -220,8 +225,7 @@ impl LibraryPanel {
                     // unterscheidbar sind
                     let tag = (f.source == Source::Qlc).then(|| f.source.label());
                     if f.modes.len() == 1 {
-                        let label =
-                            tr!("{v} ({n} Kan.)", v = f.name, n = f.modes[0].channels.len());
+                        let label = tr!("{v} ({n} ch.)", v = f.name, n = f.modes[0].channels.len());
                         let r = me.type_row(ui, &label, &f.modes[0], tag);
                         me.template_menu(&r, &f.manufacturer, &f.name, &f.modes);
                     } else {
@@ -246,7 +250,7 @@ impl LibraryPanel {
                         .body(|ui| {
                             for m in &f.modes {
                                 let label =
-                                    tr!("{mode} ({n} Kan.)", mode = m.mode, n = m.channels.len());
+                                    tr!("{mode} ({n} ch.)", mode = m.mode, n = m.channels.len());
                                 let r = me.type_row(ui, &label, m, None);
                                 me.template_menu(&r, &f.manufacturer, &f.name, &f.modes);
                             }
@@ -257,7 +261,7 @@ impl LibraryPanel {
         }
         if searching && count >= MAX_FIXTURES_PER_SEARCH {
             ui.label(
-                egui::RichText::new(t("Weitere Treffer – Suche eingrenzen"))
+                egui::RichText::new(t("More results – narrow your search"))
                     .color(theme::text_faint()),
             );
         }
@@ -297,7 +301,7 @@ impl LibraryPanel {
             menu::begin(ui);
             if menu::item(
                 ui,
-                MenuItem::new(t("Als Vorlage im Profile Builder …"))
+                MenuItem::new(t("Use as template in the Profile Builder …"))
                     .icon(crate::ui::widgets::Icon::Builder),
             ) {
                 let p = template(manufacturer, name, modes);
@@ -315,20 +319,20 @@ impl LibraryPanel {
             menu::context(r, |ui| {
                 menu::begin(ui);
                 menu::title(ui, &name);
-                if menu::item(ui, MenuItem::new(t("Bearbeiten …")).icon(Icon::Edit)) {
+                if menu::item(ui, MenuItem::new(t("Edit …")).icon(Icon::Edit)) {
                     me.action = Some(LibAction::Builder(BuilderRequest::Edit(Box::new(
                         u.profile.clone(),
                     ))));
                 }
-                if menu::item(ui, MenuItem::new(t("Duplizieren …")).icon(Icon::Copy)) {
+                if menu::item(ui, MenuItem::new(t("Duplicate …")).icon(Icon::Copy)) {
                     let mut p = u.profile.clone();
                     p.key.clear();
                     p.created.clear();
-                    p.name = tr!("{v} (Kopie)", v = p.name);
+                    p.name = tr!("{v} (copy)", v = p.name);
                     me.action = Some(LibAction::Builder(BuilderRequest::Template(Box::new(p))));
                 }
                 menu::separator(ui);
-                if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash).danger()) {
+                if menu::item(ui, MenuItem::new(t("Delete")).icon(Icon::Trash).danger()) {
                     me.action = Some(LibAction::Delete(u.profile.key.clone()));
                 }
             });
@@ -340,12 +344,12 @@ impl LibraryPanel {
                         .sense(egui::Sense::click()),
                 );
                 let r = r.on_hover_text(t(
-                    "Profil fehlerhaft – im Profile Builder öffnen und prüfen",
+                    "Profile has errors – open it in the Profile Builder and check",
                 ));
                 menu(self, &r);
             }
             [ty] => {
-                let label = tr!("{v} ({n} Kan.)", v = name, n = ty.channels.len());
+                let label = tr!("{v} ({n} ch.)", v = name, n = ty.channels.len());
                 let r = self.type_row(ui, &label, ty, None);
                 menu(self, &r);
             }
@@ -363,7 +367,7 @@ impl LibraryPanel {
                 })
                 .body(|ui| {
                     for ty in types {
-                        let label = tr!("{mode} ({n} Kan.)", mode = ty.mode, n = ty.channels.len());
+                        let label = tr!("{mode} ({n} ch.)", mode = ty.mode, n = ty.channels.len());
                         let r = self.type_row(ui, &label, ty, None);
                         menu(self, &r);
                     }
@@ -424,38 +428,38 @@ impl LibraryPanel {
                 }
                 ui.text_edit_singleline(&mut st.patch.name);
                 ui.end_row();
-                ui.label(t("Universum"));
+                ui.label(t("Universe"));
                 ui.add(egui::DragValue::new(&mut st.patch.universe).range(1..=universes));
                 ui.end_row();
-                ui.label(t("Startadresse"));
+                ui.label(t("Start address"));
                 ui.horizontal(|ui| {
                     ui.add(egui::DragValue::new(&mut st.patch.address).range(1..=512));
                     if ui
                         .small_button("frei")
-                        .on_hover_text(t("Erste passende freie Adresse"))
+                        .on_hover_text(t("First matching free address"))
                         .clicked()
                     {
                         match e.show().next_free_address(st.patch.universe - 1, channels) {
                             Some(a) => st.patch.address = a,
-                            None => st.error(t("Kein Platz mehr in diesem Universum")),
+                            None => st.error(t("No more room in this universe")),
                         }
                     }
                 });
                 ui.end_row();
-                ui.label(t("Anzahl"));
+                ui.label(t("Count"));
                 ui.add(egui::DragValue::new(&mut st.patch.count).range(1..=128));
                 ui.end_row();
             });
         let total = u32::from(channels) * u32::from(st.patch.count);
         ui.label(
             egui::RichText::new(tr!(
-                "{channels} Kanäle je Gerät · zusammen {total}",
+                "{channels} channels per fixture · {total} in total",
                 total = total,
                 channels = channels
             ))
             .color(theme::text_faint()),
         );
-        let b = egui::Button::new(egui::RichText::new(t("Patchen")).strong())
+        let b = egui::Button::new(egui::RichText::new(t("Patch")).strong())
             .fill(theme::accent_dim())
             .min_size(egui::vec2(ui.available_width(), 30.0));
         if ui.add(b).clicked() {
@@ -489,7 +493,7 @@ impl LibraryPanel {
         };
         match converted {
             Ok(f) => {
-                st.info(tr!("„{v}“ geladen – Modus wählen und patchen", v = f.name));
+                st.info(tr!("“{v}” loaded – choose a mode and patch", v = f.name));
                 self.query = f.name.clone();
                 self.chosen = f.modes.first().cloned();
                 st.imported_types.extend(f.modes);
@@ -523,7 +527,7 @@ fn patch(e: &mut Engine, st: &mut AppState, ty: &FixtureType) {
                 address = address.saturating_add(ty.channel_count());
             }
             Err(err) => {
-                st.error(tr!("Gerät {i_nr}: {err}", err = err, i_nr = i + 1));
+                st.error(tr!("Fixture {i_nr}: {err}", err = err, i_nr = i + 1));
                 break;
             }
         }
@@ -532,7 +536,7 @@ fn patch(e: &mut Engine, st: &mut AppState, ty: &FixtureType) {
         st.patch.address = address.min(512);
         st.selected = added.iter().copied().collect();
         if added.len() == usize::from(count) {
-            st.info(tr!("{n} Gerät(e) gepatcht", n = added.len()));
+            st.info(tr!("{n} fixture(s) patched", n = added.len()));
         }
     }
 }
@@ -559,7 +563,7 @@ fn drag_ghost(ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.add(
                         egui::Label::new(tr!(
-                            "{v} ({n} Kan.)",
+                            "{v} ({n} ch.)",
                             v = d.0.model,
                             n = d.0.channel_count()
                         ))

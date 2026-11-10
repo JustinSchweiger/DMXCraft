@@ -28,12 +28,12 @@ pub enum Category {
 impl Category {
     const ITEMS: [(Category, &'static str); 7] = [
         (Category::Dimmer, "Dimmer"),
-        (Category::Color, "Farbe"),
+        (Category::Color, "Color"),
         (Category::Position, "Position"),
         (Category::Gobo, "Gobo"),
-        (Category::Beam, "Strahl"),
-        (Category::Other, "Sonstiges"),
-        (Category::All, "Alle Kanäle"),
+        (Category::Beam, "Beam"),
+        (Category::Other, "Other"),
+        (Category::All, "All channels"),
     ];
 
     pub fn contains(self, k: ChannelKind) -> bool {
@@ -95,7 +95,7 @@ pub fn fader_groups(e: &Engine, st: &AppState) -> Vec<FaderGroup> {
             {
                 Some(g) => g.channels.push(ch),
                 None => groups.push(FaderGroup {
-                    name: t("Dimmer (virtuell)").to_string(),
+                    name: t("Dimmer (virtual)").to_string(),
                     kind: ChannelKind::Dimmer,
                     number: 0,
                     type_key: f.type_key.clone(),
@@ -325,7 +325,7 @@ fn merged_block<'a>(e: &Engine, st: &AppState, faders: &[&'a FaderGroup]) -> Vec
             || f.type_key.clone(),
             |t| format!("{} {}", t.manufacturer, t.model).trim().to_string(),
         ),
-        _ => tr!("Alle ausgewählten Geräte ({n})", n = fixtures.len()),
+        _ => tr!("All selected fixtures ({n})", n = fixtures.len()),
     };
     vec![FixtureBlock {
         type_name,
@@ -511,14 +511,14 @@ pub fn fader_ranges(c: &dmxcraft_core::ChannelDef) -> Vec<crate::ui::widgets::fa
                 r.label.clone()
             } else {
                 match r.effect {
-                    E::Open | E::WheelOpen => t("Offen").to_string(),
-                    E::Closed => t("Zu").to_string(),
+                    E::Open | E::WheelOpen => t("Open").to_string(),
+                    E::Closed => t("Closed").to_string(),
                     E::Strobe { from_hz, to_hz } => tr!(
                         "Strobe {a}–{b} Hz",
                         a = format!("{from_hz:.0}"),
                         b = format!("{to_hz:.0}")
                     ),
-                    E::Color { .. } => t("Farbe").to_string(),
+                    E::Color { .. } => t("Color").to_string(),
                     E::Gobo { slot } => tr!("Gobo {n}", n = slot),
                     E::Other => String::new(),
                 }
@@ -563,7 +563,7 @@ fn fader_label(e: &Engine, grp: &FaderGroup) -> String {
             .show()
             .fixture(*f)
             .map_or_else(String::new, |f| f.name.clone()),
-        _ => tr!("{n} Geräte", n = fixtures.len()),
+        _ => tr!("{n} fixtures", n = fixtures.len()),
     };
     format!("{}: {}", who, grp.name)
 }
@@ -614,7 +614,7 @@ fn color_bar(
         // aktuelle Farbe; Klick öffnet den Farbwähler (wie bei Szenen/Bänken)
         let current = ui
             .add(Swatch(theme::rgb(rgb)))
-            .on_hover_text(t("Eigene Farbe wählen"));
+            .on_hover_text(t("Choose a custom color"));
         crate::ui::widgets::menu::dropdown(&current, |ui| {
             ui.set_min_width(212.0);
             changed |= crate::ui::widgets::color_picker::color_picker(
@@ -625,22 +625,22 @@ fn color_bar(
         });
         ui.add_space(theme::SP_S);
         const PRESETS: [(&str, [u8; 3]); 10] = [
-            ("Rot", [255, 0, 0]),
+            ("Red", [255, 0, 0]),
             ("Orange", [255, 90, 0]),
-            ("Bernstein", [255, 150, 0]),
-            ("Gelb", [255, 210, 0]),
-            ("Grün", [0, 255, 0]),
-            ("Türkis", [0, 255, 160]),
+            ("Amber", [255, 150, 0]),
+            ("Yellow", [255, 210, 0]),
+            ("Green", [0, 255, 0]),
+            ("Turquoise", [0, 255, 160]),
             ("Cyan", [0, 220, 255]),
-            ("Blau", [0, 0, 255]),
+            ("Blue", [0, 0, 255]),
             ("Magenta", [255, 0, 200]),
-            ("Weiß", [255, 255, 255]),
+            ("White", [255, 255, 255]),
         ];
         for (name, c) in PRESETS {
             let resp = ui.add(Swatch(theme::rgb(c))).on_hover_text(t(name));
             let key = format!("programmer/color/{name}");
             let mapped = crate::mapping::button(ui, &resp, &key, rgb == c, || {
-                (t("Farbe").to_string(), t(name).to_string())
+                (t("Color").to_string(), t(name).to_string())
             });
             if resp.clicked() || mapped {
                 rgb = c;
@@ -738,12 +738,12 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
         tool_separator(ui);
         let mut quick = None;
         for (q, icon, tip) in [
-            (Quick::Off, Icon::LightOff, t("Beams ausschalten")),
-            (Quick::On, Icon::LightOn, t("Beams anschalten")),
+            (Quick::Off, Icon::LightOff, t("Beams off")),
+            (Quick::On, Icon::LightOn, t("Beams on")),
             (
                 Quick::Center,
                 Icon::Center,
-                t("Beams zentrieren (Pan/Tilt 50 %)"),
+                t("Center beams (pan/tilt 50 %)"),
             ),
         ] {
             let resp = ui
@@ -770,16 +770,16 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
         let resp = ui
             .add(
                 IconButton::new(Icon::Undo)
-                    .caption(t("ALLE"))
+                    .caption(t("ALL"))
                     .size(34.0)
                     .flat()
                     .enabled(any && !locked),
             )
-            .on_hover_text(t("Alle Beams zurücksetzen"));
+            .on_hover_text(t("Reset all beams"));
         let mapped = crate::mapping::button(ui, &resp, "programmer/reset_all", any, || {
             (
                 t("Programmer").to_string(),
-                t("Alle Beams zurücksetzen").to_string(),
+                t("Reset all beams").to_string(),
             )
         });
         if resp.clicked() || (mapped && any && !locked) {
@@ -795,18 +795,18 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
         let resp = ui
             .add(
                 IconButton::new(Icon::Undo)
-                    .caption(t("AUSW."))
+                    .caption(t("SEL"))
                     .size(34.0)
                     .flat()
                     .enabled(!sel.is_empty() && !locked),
             )
-            .on_hover_text(t("Ausgewählte Beams zurücksetzen"));
+            .on_hover_text(t("Reset selected beams"));
         let some_sel = !sel.is_empty();
         let mapped =
             crate::mapping::button(ui, &resp, "programmer/reset_selected", some_sel, || {
                 (
                     t("Programmer").to_string(),
-                    t("Ausgewählte Beams zurücksetzen").to_string(),
+                    t("Reset selected beams").to_string(),
                 )
             });
         if resp.clicked() || (mapped && some_sel && !locked) {
@@ -837,21 +837,21 @@ pub(super) fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: 
             Some(t("EDIT")),
             None,
             theme::OK,
-            t("Edit: Werte bearbeiten und sofort ausgeben"),
+            t("Edit: change values and output them immediately"),
         ),
         (
             ProgrammerMode::Blind,
             None,
             Some(Icon::EyeOff),
             theme::OK,
-            t("Blind Edit: wie Edit, aber der DMX-Ausgang bleibt unverändert"),
+            t("Blind edit: like edit, but the DMX output stays unchanged"),
         ),
         (
             ProgrammerMode::Live,
             Some(t("LIVE")),
             None,
             theme::WARN,
-            t("Live: Show-Betrieb"),
+            t("Live: show operation"),
         ),
     ];
     let h = 34.0;
@@ -937,8 +937,8 @@ pub(super) fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: 
         let key = format!("programmer/mode/{m:?}");
         let mapped = crate::mapping::button(ui, &resp, &key, active, || {
             let name = match m {
-                ProgrammerMode::Edit => t("Edit"),
-                ProgrammerMode::Blind => t("Blind Edit"),
+                ProgrammerMode::Edit => "Edit",
+                ProgrammerMode::Blind => t("Blind edit"),
                 ProgrammerMode::Live => t("Live"),
             };
             (t("Programmer").to_string(), name.to_string())

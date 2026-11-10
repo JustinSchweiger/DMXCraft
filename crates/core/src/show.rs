@@ -170,12 +170,12 @@ impl PlanShape {
 
     pub fn label(self) -> &'static str {
         match self {
-            PlanShape::Round => "Rund (PAR/Spot)",
-            PlanShape::Square => "Quadrat (Fluter/Panel)",
-            PlanShape::Matrix => "Pixel-Raster (Matrix)",
-            PlanShape::BarHorizontal => "Leiste waagerecht",
-            PlanShape::BarVertical => "Leiste senkrecht",
-            PlanShape::Effect => "Effekt/Laser",
+            PlanShape::Round => "Round (PAR/spot)",
+            PlanShape::Square => "Square (flood/panel)",
+            PlanShape::Matrix => "Pixel grid (matrix)",
+            PlanShape::BarHorizontal => "Bar, horizontal",
+            PlanShape::BarVertical => "Bar, vertical",
+            PlanShape::Effect => "Effect/laser",
         }
     }
 

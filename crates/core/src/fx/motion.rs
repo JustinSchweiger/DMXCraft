@@ -33,11 +33,11 @@ impl MoveShape {
 
     pub fn label(self) -> &'static str {
         match self {
-            MoveShape::Circle => "Kreis",
-            MoveShape::Curve => "Kurve",
-            MoveShape::Polygon => "Vieleck",
-            MoveShape::Line => "Linie",
-            MoveShape::Points => "Punkte",
+            MoveShape::Circle => "Circle",
+            MoveShape::Curve => "Curve",
+            MoveShape::Polygon => "Polygon",
+            MoveShape::Line => "Line",
+            MoveShape::Points => "Points",
         }
     }
 

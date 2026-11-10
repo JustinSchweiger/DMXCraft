@@ -98,11 +98,11 @@ pub enum Transform {
 impl Transform {
     pub fn label(self) -> &'static str {
         match self {
-            Transform::None => "Keine",
-            Transform::VerticalSymmetry => "Vertikale Symmetrie",
-            Transform::HorizontalSymmetry => "Horizontale Symmetrie",
-            Transform::Center => "Von der Mitte",
-            Transform::Reverse => "Umkehren",
+            Transform::None => "None",
+            Transform::VerticalSymmetry => "Vertical symmetry",
+            Transform::HorizontalSymmetry => "Horizontal symmetry",
+            Transform::Center => "From the center",
+            Transform::Reverse => "Reverse",
         }
     }
 

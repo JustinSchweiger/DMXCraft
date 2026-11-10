@@ -22,7 +22,7 @@ fn named(name: &str, colors: &[[u8; 3]]) -> NamedPalette {
 pub fn builtin() -> Vec<NamedPalette> {
     vec![
         named(
-            t("Regenbogen"),
+            t("Rainbow"),
             &[
                 [255, 0, 0],
                 [255, 160, 0],
@@ -34,13 +34,13 @@ pub fn builtin() -> Vec<NamedPalette> {
                 [255, 0, 160],
             ],
         ),
-        named(t("Schwarz-Weiß"), &[[0, 0, 0], [255, 255, 255]]),
+        named(t("Black and white"), &[[0, 0, 0], [255, 255, 255]]),
         named(
-            t("Grundfarben"),
+            t("Primary colors"),
             &[[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]],
         ),
         named(
-            t("Pastell"),
+            t("Pastel"),
             &[
                 [255, 170, 170],
                 [255, 220, 170],
@@ -51,11 +51,11 @@ pub fn builtin() -> Vec<NamedPalette> {
             ],
         ),
         named(
-            t("Feuer"),
+            t("Fire"),
             &[[255, 0, 0], [255, 70, 0], [255, 140, 0], [255, 210, 40]],
         ),
         named(
-            t("Eis"),
+            t("Ice"),
             &[
                 [255, 255, 255],
                 [150, 220, 255],
@@ -64,15 +64,15 @@ pub fn builtin() -> Vec<NamedPalette> {
             ],
         ),
         named(
-            t("Ozean"),
+            t("Ocean"),
             &[[0, 30, 120], [0, 110, 200], [0, 200, 200], [0, 255, 160]],
         ),
         named(
-            t("Wald"),
+            t("Forest"),
             &[[0, 80, 0], [40, 160, 0], [150, 220, 0], [255, 200, 0]],
         ),
         named(
-            t("Sonnenuntergang"),
+            t("Sunset"),
             &[[255, 120, 0], [255, 40, 80], [180, 0, 160], [60, 0, 160]],
         ),
         named(
@@ -89,11 +89,11 @@ pub fn builtin() -> Vec<NamedPalette> {
             ],
         ),
         named(
-            t("Blau-Magenta"),
+            t("Blue-magenta"),
             &[[0, 0, 255], [120, 0, 255], [255, 0, 220]],
         ),
         named(
-            t("Graustufen"),
+            t("Grayscale"),
             &[[0, 0, 0], [80, 80, 80], [160, 160, 160], [255, 255, 255]],
         ),
     ]
@@ -112,7 +112,7 @@ pub fn load_user() -> Vec<NamedPalette> {
 }
 
 pub fn save_user(list: &[NamedPalette]) -> Result<(), String> {
-    let path = path().ok_or(t("Kein Konfigurationsordner gefunden"))?;
+    let path = path().ok_or(t("No configuration folder found"))?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }

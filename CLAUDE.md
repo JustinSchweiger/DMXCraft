@@ -34,7 +34,7 @@ docs/UI-GUIDELINES.md  verbindliche UI-Regeln – vor UI-Arbeit lesen
 * UI-Änderungen folgen `docs/UI-GUIDELINES.md` (Tokens, Komponenten, keine
   Sonderzeichen-Glyphen, Flächen füllen).
 * **Texte** der Oberfläche immer über `t("…")` bzw. `tr!("… {name}", name = x)`
-  (deutsche Quelle) und die englische Übersetzung in `crates/app/src/i18n/en.rs`
+  (englische Quelle) und die deutsche Übersetzung in `crates/app/src/i18n/de.rs`
   ergänzen – der Test `all_texts_translated` prüft das.
 * **Farben** nur über `theme::bg()`, `theme::text()` … (abhängig vom Theme);
   feste Signalfarben `theme::DANGER/OK/WARN`.

@@ -16,11 +16,11 @@ use crate::ui::widgets::Icon;
 
 /// Größenstufen für Menüs und Werkzeugleiste.
 pub const SIZES: [(&str, f32); 5] = [
-    ("Klein", 0.7),
+    ("Small", 0.7),
     ("Normal", 1.0),
-    ("Groß", 1.5),
-    ("Sehr groß", 2.2),
-    ("Riesig", 3.2),
+    ("Large", 1.5),
+    ("Very large", 2.2),
+    ("Huge", 3.2),
 ];
 
 /// Wo das Menü geöffnet wurde (bestimmt die angebotenen Einträge).
@@ -84,7 +84,7 @@ pub fn menu(
 
     if let Some(f) = target.and_then(|t| show.fixture(t)) {
         let title = if n > 1 {
-            tr!("{n} Geräte ausgewählt", n = n)
+            tr!("{n} fixtures selected", n = n)
         } else {
             format!("{} · U{}/{}", f.name, f.universe + 1, f.address)
         };
@@ -94,7 +94,7 @@ pub fn menu(
     // Gruppen
     menu::sub(
         ui,
-        MenuItem::new(t("Zu Gruppe hinzufügen"))
+        MenuItem::new(t("Add to group"))
             .icon(Icon::Group)
             .enabled(some && !show.groups.is_empty()),
         |ui| {
@@ -110,7 +110,7 @@ pub fn menu(
         .collect();
     menu::sub(
         ui,
-        MenuItem::new(t("Aus Gruppe entfernen")).enabled(!containing.is_empty()),
+        MenuItem::new(t("Remove from group")).enabled(!containing.is_empty()),
         |ui| {
             for g in &containing {
                 act(
@@ -123,7 +123,7 @@ pub fn menu(
     );
     act(
         ui,
-        MenuItem::new(t("Neue Gruppe aus Auswahl"))
+        MenuItem::new(t("New group from selection"))
             .icon(Icon::Plus)
             .enabled(some),
         FixtureAction::NewGroup,
@@ -133,22 +133,18 @@ pub fn menu(
     // Auswahl
     act(
         ui,
-        MenuItem::new(t("Gleichen Gerätetyp auswählen")).enabled(some),
+        MenuItem::new(t("Select same fixture type")).enabled(some),
         FixtureAction::SelectSameType,
     );
+    act(ui, MenuItem::new(t("Select all")), FixtureAction::SelectAll);
     act(
         ui,
-        MenuItem::new(t("Alle auswählen")),
-        FixtureAction::SelectAll,
-    );
-    act(
-        ui,
-        MenuItem::new(t("Auswahl aufheben")).enabled(some),
+        MenuItem::new(t("Clear selection")).enabled(some),
         FixtureAction::SelectNone,
     );
     act(
         ui,
-        MenuItem::new(t("Reihenfolge umkehren")).enabled(n > 1),
+        MenuItem::new(t("Reverse order")).enabled(n > 1),
         FixtureAction::InvertOrder,
     );
 
@@ -158,10 +154,10 @@ pub fn menu(
         let current_shape = (n == 1)
             .then(|| selected.iter().next().map(|id| show.plan_shape(*id)))
             .flatten();
-        menu::sub(ui, MenuItem::new(t("Form")).enabled(some), |ui| {
+        menu::sub(ui, MenuItem::new(t("Shape")).enabled(some), |ui| {
             act(
                 ui,
-                MenuItem::new(t("Automatisch (nach Typ)"))
+                MenuItem::new(t("Automatic (by type)"))
                     .icon_fn(|p, r, c| paint_shape_icon(p, None, r, c)),
                 FixtureAction::SetShape(None),
             );
@@ -179,7 +175,7 @@ pub fn menu(
         let current_size = (n == 1)
             .then(|| selected.iter().next().map(|id| show.plan_size(*id)))
             .flatten();
-        menu::sub(ui, MenuItem::new(t("Größe")).enabled(some), |ui| {
+        menu::sub(ui, MenuItem::new(t("Size")).enabled(some), |ui| {
             for (label, f) in SIZES {
                 act(
                     ui,
@@ -194,7 +190,7 @@ pub fn menu(
             .flatten();
         menu::sub(
             ui,
-            MenuItem::new(t("Drehen")).icon(Icon::Reset).enabled(some),
+            MenuItem::new(t("Rotate")).icon(Icon::Reset).enabled(some),
             |ui| {
                 for deg in [0.0f32, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0] {
                     act(
@@ -206,10 +202,10 @@ pub fn menu(
                 }
                 menu::separator(ui);
                 for (label, d) in [
-                    (t("15° nach links"), -15.0),
-                    (t("5° nach links"), -5.0),
-                    (t("5° nach rechts"), 5.0),
-                    (t("15° nach rechts"), 15.0),
+                    (t("15° left"), -15.0),
+                    (t("5° left"), -5.0),
+                    (t("5° right"), 5.0),
+                    (t("15° right"), 15.0),
                 ] {
                     act(ui, MenuItem::new(label), FixtureAction::RotateBy(d));
                 }
@@ -222,35 +218,35 @@ pub fn menu(
         menu::separator(ui);
         act(
             ui,
-            MenuItem::new(t("Layout kopieren"))
+            MenuItem::new(t("Copy layout"))
                 .icon(Icon::Copy)
                 .enabled(some),
             FixtureAction::CopyLayout,
         );
         act(
             ui,
-            MenuItem::new(t("Layout einfügen"))
+            MenuItem::new(t("Paste layout"))
                 .icon(Icon::Paste)
                 .enabled(some && has_layout_clipboard),
             FixtureAction::PasteLayout,
         );
         act(
             ui,
-            MenuItem::new(t("Waagerecht spiegeln"))
+            MenuItem::new(t("Mirror horizontally"))
                 .icon(Icon::AlignV)
                 .enabled(n > 1),
             FixtureAction::MirrorH,
         );
         act(
             ui,
-            MenuItem::new(t("Senkrecht spiegeln"))
+            MenuItem::new(t("Mirror vertically"))
                 .icon(Icon::AlignH)
                 .enabled(n > 1),
             FixtureAction::MirrorV,
         );
         act(
             ui,
-            MenuItem::new(t("Position zurücksetzen"))
+            MenuItem::new(t("Reset position"))
                 .icon(Icon::Reset)
                 .enabled(some),
             FixtureAction::ResetPosition,
@@ -260,7 +256,7 @@ pub fn menu(
         menu::separator(ui);
         act(
             ui,
-            MenuItem::new(t("Auf nächste freie Adresse"))
+            MenuItem::new(t("Move to next free address"))
                 .icon(Icon::Next)
                 .enabled(some),
             FixtureAction::NextFreeAddress,
@@ -273,7 +269,7 @@ pub fn menu(
         menu::separator(ui);
         act(
             ui,
-            MenuItem::new(t("Ausschneiden"))
+            MenuItem::new(t("Cut"))
                 .icon(Icon::Scissors)
                 .shortcut(&kx)
                 .enabled(some),
@@ -281,7 +277,7 @@ pub fn menu(
         );
         act(
             ui,
-            MenuItem::new(t("Kopieren"))
+            MenuItem::new(t("Copy"))
                 .icon(Icon::Copy)
                 .shortcut(&kc)
                 .enabled(some),
@@ -289,7 +285,7 @@ pub fn menu(
         );
         act(
             ui,
-            MenuItem::new(t("Einfügen"))
+            MenuItem::new(t("Paste"))
                 .icon(Icon::Paste)
                 .shortcut(&kv)
                 .enabled(has_fixture_clipboard),
@@ -297,7 +293,7 @@ pub fn menu(
         );
         act(
             ui,
-            MenuItem::new(t("Duplizieren"))
+            MenuItem::new(t("Duplicate"))
                 .icon(Icon::Copy)
                 .shortcut(&kd)
                 .enabled(some),
@@ -308,7 +304,7 @@ pub fn menu(
     if place == MenuPlace::Stage {
         act(
             ui,
-            MenuItem::new(t("Unter Einrichten bearbeiten"))
+            MenuItem::new(t("Edit in setup"))
                 .icon(Icon::Edit)
                 .enabled(some),
             FixtureAction::ShowInSetup,
@@ -316,16 +312,14 @@ pub fn menu(
     } else {
         act(
             ui,
-            MenuItem::new(t("Umbenennen"))
-                .icon(Icon::Edit)
-                .enabled(n == 1),
+            MenuItem::new(t("Rename")).icon(Icon::Edit).enabled(n == 1),
             FixtureAction::Rename,
         );
     }
     if place != MenuPlace::Stage {
         act(
             ui,
-            MenuItem::new(t("Löschen"))
+            MenuItem::new(t("Delete"))
                 .icon(Icon::Trash)
                 .shortcut(crate::titlebar::keys::delete())
                 .danger()
@@ -354,7 +348,7 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
                     }
                 }
                 st.info(tr!(
-                    "{n} Gerät(e) zu „{v}“ hinzugefügt",
+                    "{n} fixture(s) added to “{v}”",
                     n = ids.len(),
                     v = group.name
                 ));
@@ -366,10 +360,10 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
             }
         }
         FixtureAction::NewGroup => {
-            let name = tr!("Gruppe {n}", n = e.show().groups.len() + 1);
+            let name = tr!("Group {n}", n = e.show().groups.len() + 1);
             e.show_mut().add_group(name.clone(), ids);
             st.info(tr!(
-                "„{name}“ angelegt – Doppelklick auf die Gruppe zum Umbenennen",
+                "Created “{name}” – double-click the group to rename it",
                 name = name
             ));
         }
@@ -412,7 +406,7 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
                         .map(|p| [p[0] - first[0], p[1] - first[1]])
                         .collect(),
                 );
-                st.info(tr!("Layout von {n} Gerät(en) kopiert", n = pos.len()));
+                st.info(tr!("Layout of {n} fixture(s) copied", n = pos.len()));
             }
         }
         FixtureAction::PasteLayout => {
@@ -499,7 +493,7 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
                             st.error(err.to_string());
                         }
                     }
-                    None => st.error(t("Kein freier Bereich in diesem Universum")),
+                    None => st.error(t("No free range in this universe")),
                 }
             }
         }
@@ -519,7 +513,7 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
             if action == FixtureAction::Cut {
                 apply(e, st, FixtureAction::Delete);
             } else {
-                st.info(tr!("{n} Gerät(e) kopiert", n = ids.len()));
+                st.info(tr!("{n} fixture(s) copied", n = ids.len()));
             }
         }
         FixtureAction::Paste | FixtureAction::Duplicate => {
@@ -540,7 +534,7 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
             };
             let new = e.show_mut().paste_fixtures(&src, u, a);
             if new.len() < src.len() {
-                st.error(t("Nicht alle Geräte passen in den Patch"));
+                st.error(t("Not all fixtures fit into the patch"));
             }
             if !new.is_empty() {
                 st.selected = new.into_iter().collect();
@@ -553,7 +547,7 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
             }
             e.sync();
             st.selected.clear();
-            st.info(tr!("{n} Gerät(e) gelöscht", n = n));
+            st.info(tr!("{n} fixture(s) deleted", n = n));
         }
     }
 }

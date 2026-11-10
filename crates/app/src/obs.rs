@@ -494,7 +494,7 @@ fn open(cfg: &ObsSettings) -> Result<Ws, String> {
         .next()
         .ok_or("Adresse nicht gefunden")?;
     let tcp = TcpStream::connect_timeout(&addr, Duration::from_secs(2))
-        .map_err(|_| crate::i18n::t("OBS nicht erreichbar").to_string())?;
+        .map_err(|_| crate::i18n::t("OBS not reachable").to_string())?;
     tcp.set_read_timeout(Some(Duration::from_secs(3))).ok();
     tcp.set_nodelay(true).ok();
     let url = format!("ws://{}:{}", cfg.host, cfg.port);
@@ -515,7 +515,7 @@ fn open(cfg: &ObsSettings) -> Result<Ws, String> {
         Ok(v) if v["op"] == 2 => {}
         Ok(_) => return Err("Unerwartete Antwort".into()),
         Err(e) if e.contains("4009") => {
-            return Err(crate::i18n::t("Passwort falsch").to_string());
+            return Err(crate::i18n::t("Incorrect password").to_string());
         }
         Err(e) => return Err(e),
     }
@@ -799,7 +799,7 @@ mod tests {
         });
         assert_eq!(
             obs.status(),
-            Status::Failed(crate::i18n::t("Passwort falsch").to_string())
+            Status::Failed(crate::i18n::t("Incorrect password").to_string())
         );
     }
 

@@ -301,17 +301,17 @@ impl CurveShape {
 
     pub fn label(self) -> &'static str {
         match self {
-            CurveShape::Sine => "Sinus",
-            CurveShape::Sine3 => "Sinus³",
-            CurveShape::Tangent => "Tangens",
-            CurveShape::Triangle => "Dreieck",
-            CurveShape::Pulse => "Puls",
-            CurveShape::Square => "Rechteck",
-            CurveShape::Ramp => "Rampe",
-            CurveShape::InverseRamp => "Rampe abwärts",
-            CurveShape::Random => "Zufall",
+            CurveShape::Sine => "Sine",
+            CurveShape::Sine3 => "Sine³",
+            CurveShape::Tangent => "Tangent",
+            CurveShape::Triangle => "Triangle",
+            CurveShape::Pulse => "Pulse",
+            CurveShape::Square => "Square",
+            CurveShape::Ramp => "Ramp",
+            CurveShape::InverseRamp => "Inverse ramp",
+            CurveShape::Random => "Random",
             CurveShape::Strobe => "Strobe",
-            CurveShape::Custom => "Eigene",
+            CurveShape::Custom => "Custom",
         }
     }
 }

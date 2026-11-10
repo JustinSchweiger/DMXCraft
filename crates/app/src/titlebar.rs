@@ -160,15 +160,15 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
         ui.add_space(theme::SP_XS);
         let mut tabs: Vec<(Mode, &str)> = Vec::new();
         if !info.locked {
-            tabs.push((Mode::Setup, t("Einrichten")));
+            tabs.push((Mode::Setup, t("Setup")));
         }
-        tabs.push((Mode::Control, t("Steuern")));
+        tabs.push((Mode::Control, t("Control")));
         tabs.push((Mode::Touch, t("Touch")));
         tabs.push((Mode::Sound, t("Sound")));
         if info.tools_as_tabs {
-            tabs.push((Mode::Visualizer, t("3D-Visualisierer")));
+            tabs.push((Mode::Visualizer, t("3D visualizer")));
             if !info.locked {
-                tabs.push((Mode::Builder, t("Profile Builder")));
+                tabs.push((Mode::Builder, t("Profile builder")));
             }
         }
         Segmented::new(&tabs).show(ui, mode);
@@ -177,15 +177,15 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             ui.spacing_mut().item_spacing.x = 0.0;
             if ui
                 .add(IconButton::new(Icon::Close).size(HEIGHT).flat().danger())
-                .on_hover_text(t("Schließen"))
+                .on_hover_text(t("Close"))
                 .clicked()
             {
                 actions.push(MenuAction::Quit);
             }
             let (icon, tip) = if maximized {
-                (Icon::Restore, t("Wiederherstellen"))
+                (Icon::Restore, t("Restore"))
             } else {
-                (Icon::Maximize, t("Maximieren"))
+                (Icon::Maximize, t("Maximize"))
             };
             if ui
                 .add(IconButton::new(icon).size(HEIGHT).flat())
@@ -197,7 +197,7 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             }
             if ui
                 .add(IconButton::new(Icon::Minimize).size(HEIGHT).flat())
-                .on_hover_text(t("Minimieren"))
+                .on_hover_text(t("Minimize"))
                 .clicked()
             {
                 ui.ctx().send_viewport_cmd(ViewportCommand::Minimized(true));
@@ -215,10 +215,10 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                 UpdateBadge::None => {}
                 UpdateBadge::Available(v) => {
                     let b =
-                        egui::Button::new(tr!("Update auf v{v}", v = v)).fill(theme::accent_dim());
+                        egui::Button::new(tr!("Update to v{v}", v = v)).fill(theme::accent_dim());
                     if ui
                         .add(b)
-                        .on_hover_text(t("Neue Version von GitHub laden"))
+                        .on_hover_text(t("Download new version from GitHub"))
                         .clicked()
                     {
                         actions.push(MenuAction::InstallUpdate);
@@ -229,14 +229,14 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                 }
                 UpdateBadge::Installed(v) => {
                     ui.label(
-                        egui::RichText::new(tr!("v{v} installiert – neu starten", v = v))
+                        egui::RichText::new(tr!("v{v} installed – restart", v = v))
                             .color(theme::OK),
                     );
                 }
                 UpdateBadge::InstallerStarted(v) => {
                     ui.label(
                         egui::RichText::new(tr!(
-                            "Installer für v{v} gestartet – DMXCraft schließen",
+                            "Installer for v{v} started – close DMXCraft",
                             v = v
                         ))
                         .color(theme::OK),
@@ -244,8 +244,8 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                 }
                 UpdateBadge::Error(e) => {
                     if ui
-                        .small_button(t("Update-Fehler"))
-                        .on_hover_text(tr!("{e}\nKlicken für neuen Versuch", e = e))
+                        .small_button(t("Update error"))
+                        .on_hover_text(tr!("{e}\nClick to try again", e = e))
                         .clicked()
                     {
                         actions.push(MenuAction::CheckUpdates);
@@ -253,9 +253,9 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                 }
             }
             let (icon, tip) = if info.locked {
-                (Icon::Locked, t("Oberfläche entsperren"))
+                (Icon::Locked, t("Unlock interface"))
             } else {
-                (Icon::Unlocked, t("Oberfläche sperren (Passwort)"))
+                (Icon::Unlocked, t("Lock interface (password)"))
             };
             if ui
                 .add(IconButton::new(icon).size(28.0).flat().active(info.locked))
@@ -267,8 +267,8 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             if !info.locked {
                 use dmxcraft_core::mapping::MapKind;
                 for (kind, icon, tip) in [
-                    (MapKind::Midi, Icon::Midi, t("MIDI-Zuordnung")),
-                    (MapKind::Keyboard, Icon::Keyboard, t("Tastatur-Zuordnung")),
+                    (MapKind::Midi, Icon::Midi, t("MIDI mapping")),
+                    (MapKind::Keyboard, Icon::Keyboard, t("Keyboard mapping")),
                 ] {
                     let on = info.mapping == Some(kind);
                     let mut b = IconButton::new(icon).size(28.0).flat().active(on);
@@ -296,9 +296,9 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
                             .frame(false),
                     )
                     .on_hover_text(if ok {
-                        t("OBS verbunden")
+                        t("OBS connected")
                     } else {
-                        t("OBS nicht verbunden")
+                        t("OBS not connected")
                     });
                 if r.clicked() {
                     actions.push(MenuAction::Obs);
@@ -332,9 +332,9 @@ fn missing_alert(ui: &mut egui::Ui, n: usize, actions: &mut Vec<MenuAction>) {
         },
     );
     let tip = if n == 1 {
-        t("1 Audiodatei fehlt").to_string()
+        t("1 audio file is missing").to_string()
     } else {
-        crate::tr!("{n} Audiodateien fehlen", n = n)
+        crate::tr!("{n} audio files are missing", n = n)
     };
     let resp = resp.on_hover_text(tip);
     if resp.clicked() {
@@ -348,7 +348,7 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
     use dmxcraft_core::mapping::Control;
     // Rechts nach links: Prozent, Schieber, Symbol
     let pct = if a.mute {
-        t("stumm").to_string()
+        t("muted").to_string()
     } else {
         format!("{:.0} %", a.master * a.limit * 100.0)
     };
@@ -416,18 +416,18 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
         },
         theme::text(),
     );
-    let mut tip = t("Ton-Master – nur die Wiedergabe von DMXCraft, nicht die Systemlautstärke.\nDoppelklick: 100 %, Mausrad: fein einstellen").to_string();
+    let mut tip = t("Sound master – only DMXCraft playback, not the system volume.\nDouble-click: 100 %, mouse wheel: fine adjustment").to_string();
     if a.limit < 0.995 {
         tip.push_str("\n\n");
         tip.push_str(&tr!(
-            "Höchstlautstärke {p} % (Einstellungen > Ton)",
+            "Maximum volume {p} % (Settings > Sound)",
             p = format!("{:.0}", a.limit * 100.0)
         ));
     }
     if a.pickup {
         tip.push_str("\n\n");
         tip.push_str(t(
-            "Zurückgesetzt: ein MIDI-Fader wirkt erst wieder, wenn er den aktuellen Wert erreicht.",
+            "Reset: a MIDI fader only takes effect again once it reaches the current value.",
         ));
     }
     resp.on_hover_text(tip);
@@ -448,7 +448,7 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
     }
     let r = ui.add(b);
     let overlay = crate::mapping::target(ui, r.rect, Control::AudioMute);
-    let r = r.on_hover_text(t("Ton stumm schalten (Rechtsklick: Ausfaden)"));
+    let r = r.on_hover_text(t("Mute sound (right-click: fade out)"));
     if !overlay && r.clicked() {
         actions.push(MenuAction::AudioMute);
     }
@@ -457,7 +457,7 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
         if menu::item(
             ui,
             MenuItem::new(&tr!(
-                "Ton ausfaden ({s} s)",
+                "Fade out sound ({s} s)",
                 s = if a.fade_ms % 1000 == 0 {
                     (a.fade_ms / 1000).to_string()
                 } else {
@@ -468,7 +468,7 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
         ) {
             actions.push(MenuAction::AudioFade);
         }
-        if menu::item(ui, MenuItem::new(t("Auf 100 %"))) {
+        if menu::item(ui, MenuItem::new(t("Set to 100 %"))) {
             actions.push(MenuAction::AudioMaster(1.0));
         }
     });
@@ -486,7 +486,7 @@ fn load_meter(ui: &mut egui::Ui, info: &TitleInfo<'_>) {
     p.text(
         egui::pos2(rect.left() + 14.0, rect.center().y),
         egui::Align2::LEFT_CENTER,
-        t("LAST"),
+        t("LOAD"),
         theme::heading_font(),
         theme::text_dim(),
     );
@@ -511,7 +511,7 @@ fn load_meter(ui: &mut egui::Ui, info: &TitleInfo<'_>) {
         p.rect_filled(fill, 2.0, color);
     }
     resp.on_hover_text(tr!(
-        "{status}\n{output} · {fps} fps · Auslastung {load} %",
+        "{status}\n{output} · {fps} fps · load {load} %",
         status = info.status.0,
         output = t(info.output.label()),
         fps = format!("{:.0}", info.fps),
@@ -523,19 +523,18 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
     let free = !info.locked;
     let resp = ui
         .add(IconButton::new(Icon::Menu).size(28.0).flat())
-        .on_hover_text(t("Menü"));
+        .on_hover_text(t("Menu"));
     menu::dropdown(&resp, |ui| {
         menu::begin(ui);
-        let soon = t("Noch nicht verfügbar");
         let mut act = |ui: &mut egui::Ui, item: MenuItem<'_>, a: MenuAction| {
             if menu::item(ui, item) {
                 actions.push(a);
             }
         };
-        menu::sub(ui, MenuItem::new(t("Datei")).plain(), |ui| {
+        menu::sub(ui, MenuItem::new(t("File")).plain(), |ui| {
             act(
                 ui,
-                MenuItem::new(t("Neu"))
+                MenuItem::new(t("New"))
                     .icon(Icon::FileNew)
                     .shortcut(&keys::new())
                     .enabled(free),
@@ -543,7 +542,7 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             );
             act(
                 ui,
-                MenuItem::new(t("Öffnen …"))
+                MenuItem::new(t("Open …"))
                     .icon(Icon::FileOpen)
                     .shortcut(&keys::open())
                     .enabled(free),
@@ -551,7 +550,7 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             );
             menu::sub(
                 ui,
-                MenuItem::new(t("Zuletzt geöffnet"))
+                MenuItem::new(t("Open recent"))
                     .icon(Icon::Recent)
                     .enabled(free && !info.recent.is_empty()),
                 |ui| {
@@ -571,31 +570,24 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             menu::separator(ui);
             act(
                 ui,
-                MenuItem::new(t("Speichern"))
+                MenuItem::new(t("Save"))
                     .icon(Icon::Save)
                     .shortcut(&keys::save()),
                 MenuAction::SaveShow,
             );
             act(
                 ui,
-                MenuItem::new(t("Speichern unter …"))
+                MenuItem::new(t("Save as …"))
                     .icon(Icon::SaveAs)
                     .shortcut(&keys::save_as())
                     .enabled(free),
                 MenuAction::SaveShowAs,
             );
-            menu::separator(ui);
-            ui.add(
-                MenuItem::new(t("Importieren von Daslight …"))
-                    .icon(Icon::Import)
-                    .enabled(false)
-                    .tooltip(soon),
-            );
         });
-        menu::sub(ui, MenuItem::new(t("Bearbeiten")).plain(), |ui| {
+        menu::sub(ui, MenuItem::new(t("Edit")).plain(), |ui| {
             act(
                 ui,
-                MenuItem::new(t("Rückgängig"))
+                MenuItem::new(t("Undo"))
                     .icon(Icon::Undo)
                     .shortcut(&keys::undo())
                     .enabled(free && info.can_undo),
@@ -603,7 +595,7 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             );
             act(
                 ui,
-                MenuItem::new(t("Wiederherstellen"))
+                MenuItem::new(t("Redo"))
                     .icon(Icon::Redo)
                     .shortcut(&keys::redo())
                     .enabled(free && info.can_redo),
@@ -611,9 +603,9 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             );
             menu::separator(ui);
             let (lock_label, lock_icon) = if info.locked {
-                (t("Entsperren …"), Icon::Unlocked)
+                (t("Unlock …"), Icon::Unlocked)
             } else {
-                (t("Sperren"), Icon::Locked)
+                (t("Lock"), Icon::Locked)
             };
             act(
                 ui,
@@ -624,17 +616,17 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             );
             act(
                 ui,
-                MenuItem::new(t("Einstellungen …"))
+                MenuItem::new(t("Settings …"))
                     .icon(Icon::Settings)
                     .shortcut(&keys::settings())
                     .enabled(free),
                 MenuAction::Settings,
             );
         });
-        menu::sub(ui, MenuItem::new(t("Ansicht")).plain(), |ui| {
+        menu::sub(ui, MenuItem::new(t("View")).plain(), |ui| {
             act(
                 ui,
-                MenuItem::new(t("Vollbild"))
+                MenuItem::new(t("Full screen"))
                     .icon(Icon::Fullscreen)
                     .shortcut("F11"),
                 MenuAction::ToggleFullscreen,
@@ -642,21 +634,21 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             menu::separator(ui);
             act(
                 ui,
-                MenuItem::new(t("Größer"))
+                MenuItem::new(t("Larger"))
                     .icon(Icon::ZoomIn)
                     .shortcut(&keys::zoom_in()),
                 MenuAction::Zoom(0.1),
             );
             act(
                 ui,
-                MenuItem::new(t("Kleiner"))
+                MenuItem::new(t("Smaller"))
                     .icon(Icon::ZoomOut)
                     .shortcut(&keys::zoom_out()),
                 MenuAction::Zoom(-0.1),
             );
             act(
                 ui,
-                MenuItem::new(t("Größe wiederherstellen"))
+                MenuItem::new(t("Reset size"))
                     .icon(Icon::ZoomReset)
                     .shortcut(&keys::zoom_reset()),
                 MenuAction::Zoom(0.0),
@@ -665,12 +657,12 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
         menu::sub(ui, MenuItem::new(t("Tools")).plain(), |ui| {
             act(
                 ui,
-                MenuItem::new(t("3D-Visualisierer")).icon(Icon::Cube),
+                MenuItem::new(t("3D visualizer")).icon(Icon::Cube),
                 MenuAction::Visualizer,
             );
             act(
                 ui,
-                MenuItem::new(t("DMX-Werte"))
+                MenuItem::new(t("DMX levels"))
                     .icon(Icon::Levels)
                     .shortcut(&keys::levels())
                     .enabled(free),
@@ -687,8 +679,8 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
         menu::sub(ui, MenuItem::new(t("Mappings")).plain(), |ui| {
             use dmxcraft_core::mapping::MapKind;
             for (label, icon, kind) in [
-                (t("Tastatur-Mapping"), Icon::Keyboard, MapKind::Keyboard),
-                (t("MIDI-Mapping"), Icon::Midi, MapKind::Midi),
+                (t("Keyboard mapping"), Icon::Keyboard, MapKind::Keyboard),
+                (t("MIDI mapping"), Icon::Midi, MapKind::Midi),
             ] {
                 act(
                     ui,
@@ -696,22 +688,16 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
                     MenuAction::Mapping(kind),
                 );
             }
-            ui.add(
-                MenuItem::new(t("Touch-Mapping"))
-                    .icon(Icon::Touch)
-                    .enabled(false)
-                    .tooltip(soon),
-            );
         });
-        menu::sub(ui, MenuItem::new(t("Hilfe")).plain(), |ui| {
+        menu::sub(ui, MenuItem::new(t("Help")).plain(), |ui| {
             act(
                 ui,
-                MenuItem::new(t("Nach Updates suchen")).icon(Icon::Update),
+                MenuItem::new(t("Check for updates")).icon(Icon::Update),
                 MenuAction::CheckUpdates,
             );
             act(
                 ui,
-                MenuItem::new(t("Über DMXCraft")).icon(Icon::Info),
+                MenuItem::new(t("About DMXCraft")).icon(Icon::Info),
                 MenuAction::About,
             );
         });
@@ -726,7 +712,7 @@ pub mod keys {
         if cfg!(target_os = "macos") {
             "Cmd"
         } else {
-            t("Strg")
+            t("Ctrl")
         }
     }
 
@@ -744,7 +730,7 @@ pub mod keys {
         k("S")
     }
     pub fn save_as() -> String {
-        format!("{}+{}+S", modifier(), t("Umschalt"))
+        format!("{}+{}+S", modifier(), t("Shift"))
     }
     /// Zwischenablage-Kürzel: „Strg+X“ usw.
     pub fn clip(key: &str) -> String {
@@ -775,7 +761,7 @@ pub mod keys {
         k("D")
     }
     pub fn delete() -> &'static str {
-        t("Entf")
+        t("Del")
     }
 }
 

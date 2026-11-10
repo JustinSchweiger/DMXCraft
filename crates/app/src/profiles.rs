@@ -89,7 +89,7 @@ pub fn save(p: &mut Profile, taken: &[Profile]) -> Result<PathBuf, String> {
         }
         p.key = key;
     }
-    let path = file(&p.key).ok_or(t("Kein Konfigurationsordner gefunden"))?;
+    let path = file(&p.key).ok_or(t("No configuration folder found"))?;
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }

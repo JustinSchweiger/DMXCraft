@@ -226,7 +226,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
                         .active(deck.auto_next)
                         .tint(color),
                 )
-                .on_hover_text(t("Automatisch weiter"));
+                .on_hover_text(t("Auto advance"));
             if r.clicked() {
                 deck.auto_next = !deck.auto_next;
             }
@@ -236,7 +236,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
                         .active(deck.repeat)
                         .tint(color),
                 )
-                .on_hover_text(t("Titel wiederholen"));
+                .on_hover_text(t("Repeat track"));
             if r.clicked() {
                 deck.repeat = !deck.repeat;
             }
@@ -336,13 +336,13 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let (txt, c) = match state {
                 DeckState::Empty => (String::new(), theme::text_dim()),
-                DeckState::Ready => (t("BEREIT").to_string(), theme::text_dim()),
-                DeckState::Playing => (t("LÄUFT").to_string(), color),
-                DeckState::Paused => (t("PAUSE").to_string(), theme::text_dim()),
-                DeckState::Ended => (t("ENDE").to_string(), theme::text_dim()),
+                DeckState::Ready => (t("READY").to_string(), theme::text_dim()),
+                DeckState::Playing => (t("PLAYING").to_string(), color),
+                DeckState::Paused => (t("PAUSED").to_string(), theme::text_dim()),
+                DeckState::Ended => (t("END").to_string(), theme::text_dim()),
                 DeckState::Fading => (
                     tr!(
-                        "BLENDET AUS · {s} s",
+                        "FADING · {s} s",
                         s = format!("{:.1}", sp.fade_left(d).unwrap_or(0.0))
                     ),
                     theme::WARN,
@@ -366,8 +366,9 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
         };
         let r = ui
             .add(IconButton::new(Icon::Prev).size(40.0))
-            .on_hover_text(t("Zum Anfang"));
-        if r.clicked() | crate::mapping::button(ui, &r, &key("start"), false, name(t("Zum Anfang")))
+            .on_hover_text(t("Go to start"));
+        if r.clicked()
+            | crate::mapping::button(ui, &r, &key("start"), false, name(t("Go to start")))
         {
             sp.rewind(d);
         }
@@ -379,16 +380,16 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
                     .active(playing)
                     .tint(color),
             )
-            .on_hover_text(t("Abspielen / Pause"));
+            .on_hover_text(t("Play / pause"));
         if r.clicked()
-            | crate::mapping::button(ui, &r, &key("play"), playing, name(t("Abspielen / Pause")))
+            | crate::mapping::button(ui, &r, &key("play"), playing, name(t("Play / pause")))
         {
             sp.play_pause(board, d);
         }
         let r = ui
             .add(IconButton::new(Icon::Stop).size(40.0))
-            .on_hover_text(t("Stopp"));
-        if r.clicked() | crate::mapping::button(ui, &r, &key("stop"), false, name(t("Stopp"))) {
+            .on_hover_text(t("Stop"));
+        if r.clicked() | crate::mapping::button(ui, &r, &key("stop"), false, name(t("Stop"))) {
             sp.stop(d);
         }
         let r = ui
@@ -396,7 +397,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
                 vec2(52.0, 40.0),
                 egui::Button::new(theme::heading_text("CUE")),
             )
-            .on_hover_text(t("Cue-Marke setzen bzw. zur Cue-Marke springen"));
+            .on_hover_text(t("Set cue point or jump back to it"));
         if r.clicked() | crate::mapping::button(ui, &r, &key("cue"), false, name("CUE")) {
             sp.cue(d);
         }
@@ -414,14 +415,14 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
             {
                 board.decks[d].fade_ms = (secs * 1000.0) as u32;
             }
-            let r = ui.add_sized(vec2(96.0, 40.0), egui::Button::new(t("Ausfaden")));
+            let r = ui.add_sized(vec2(96.0, 40.0), egui::Button::new(t("Fade out")));
             if r.clicked()
                 | crate::mapping::button(
                     ui,
                     &r,
                     &key("fade"),
                     state == DeckState::Fading,
-                    name(t("Ausfaden")),
+                    name(t("Fade out")),
                 )
             {
                 sp.fade_out(board, d);
@@ -439,7 +440,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
     p.vline(edge, vr.y_range(), Stroke::new(1.0, theme::border()));
     let vol = &mut board.decks[d].volume;
     let db = if *vol <= 0.001 {
-        t("aus").to_string()
+        t("off").to_string()
     } else {
         format!("{:.0} dB", 20.0 * vol.log10())
     };
@@ -549,11 +550,11 @@ fn crossfade_bar(ui: &mut Ui, sp: &mut SoundPlayer, board: &mut SoundBoard) {
         let to = deck_name(sp.xfade_target());
         let r = ui.add_sized(
             vec2(170.0, 28.0),
-            egui::Button::new(tr!("Überblenden zu {dir}", dir = to)),
+            egui::Button::new(tr!("Crossfade to {dir}", dir = to)),
         );
         if r.clicked()
             | crate::mapping::button(ui, &r, "sound/xfade", sp.xfading(), || {
-                (t("Sound").to_string(), t("Überblenden").to_string())
+                (t("Sound").to_string(), t("Crossfade").to_string())
             })
         {
             sp.crossfade(board);
@@ -611,18 +612,22 @@ impl SoundView {
             let list = &board.decks[d].playlist;
             let total: u64 = list.iter().map(|t| track_len(cx, t, ui.ctx())).sum();
             ui.label(
-                RichText::new(tr!("{n} Titel · {len}", n = list.len(), len = short(total)))
-                    .font(theme::caption())
-                    .color(theme::text_dim()),
+                RichText::new(tr!(
+                    "{n} tracks · {len}",
+                    n = list.len(),
+                    len = short(total)
+                ))
+                .font(theme::caption())
+                .color(theme::text_dim()),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
                     .add(IconButton::new(Icon::Plus).flat().enabled(!locked))
-                    .on_hover_text(t("Dateien hinzufügen …"))
+                    .on_hover_text(t("Add files …"))
                     .clicked()
                 {
                     if let Some(files) = rfd::FileDialog::new()
-                        .add_filter(t("Audio"), &AUDIO_EXT)
+                        .add_filter("Audio", &AUDIO_EXT)
                         .pick_files()
                     {
                         for f in files {
@@ -634,7 +639,7 @@ impl SoundView {
                 }
                 if ui
                     .add(IconButton::new(Icon::FileOpen).flat().enabled(!locked))
-                    .on_hover_text(t("Ordner hinzufügen …"))
+                    .on_hover_text(t("Add folder …"))
                     .clicked()
                 {
                     if let Some(dir) = rfd::FileDialog::new().pick_folder() {
@@ -849,7 +854,7 @@ impl SoundView {
                         .file_name()
                         .map_or(tr_.path.clone(), |n| n.to_string_lossy().into_owned());
                     let resp = if missing {
-                        resp.on_hover_text(tr!("Datei fehlt: {file}", file = file))
+                        resp.on_hover_text(tr!("File missing: {file}", file = file))
                     } else {
                         resp.on_hover_text(file.clone())
                     };
@@ -873,33 +878,28 @@ impl SoundView {
                             );
                         });
                         menu::separator(ui);
-                        if menu::item(ui, MenuItem::new(t("Laden")).icon(Icon::FileOpen)) {
+                        if menu::item(ui, MenuItem::new(t("Load")).icon(Icon::FileOpen)) {
                             action = Some((i, "load"));
                         }
-                        if menu::item(ui, MenuItem::new(t("Abspielen")).icon(Icon::Play)) {
+                        if menu::item(ui, MenuItem::new(t("Play")).icon(Icon::Play)) {
                             action = Some((i, "play"));
                         }
                         menu::separator(ui);
                         if menu::item(
                             ui,
-                            MenuItem::new(t("Umbenennen"))
-                                .icon(Icon::Edit)
-                                .enabled(!locked),
+                            MenuItem::new(t("Rename")).icon(Icon::Edit).enabled(!locked),
                         ) {
                             action = Some((i, "rename"));
                         }
                         if has_name
-                            && menu::item(
-                                ui,
-                                MenuItem::new(t("Dateiname verwenden")).enabled(!locked),
-                            )
+                            && menu::item(ui, MenuItem::new(t("Use file name")).enabled(!locked))
                         {
                             action = Some((i, "unname"));
                         }
                         menu::separator(ui);
                         if menu::item(
                             ui,
-                            MenuItem::new(t("Nach oben"))
+                            MenuItem::new(t("Move up"))
                                 .icon(Icon::ChevronUp)
                                 .enabled(!locked && i > 0),
                         ) {
@@ -907,7 +907,7 @@ impl SoundView {
                         }
                         if menu::item(
                             ui,
-                            MenuItem::new(t("Nach unten"))
+                            MenuItem::new(t("Move down"))
                                 .icon(Icon::ChevronDown)
                                 .enabled(!locked),
                         ) {
@@ -916,7 +916,7 @@ impl SoundView {
                         menu::separator(ui);
                         if menu::item(
                             ui,
-                            MenuItem::new(t("Entfernen"))
+                            MenuItem::new(t("Remove"))
                                 .icon(Icon::Trash)
                                 .danger()
                                 .enabled(!locked),
@@ -1076,10 +1076,10 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let r = ui
                 .add(IconButton::new(Icon::Stop).flat())
-                .on_hover_text(t("Alle Pads stoppen"));
+                .on_hover_text(t("Stop all pads"));
             if r.clicked()
                 | crate::mapping::button(ui, &r, "sound/pads/stop", false, || {
-                    (t("Sound").to_string(), t("Alle Pads stoppen").to_string())
+                    (t("Sound").to_string(), t("Stop all pads").to_string())
                 })
             {
                 cx.state.sound.stop_pads();
@@ -1094,7 +1094,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
                         .speed(0.05)
                         .range(1..=dmxcraft_core::sound::PAD_GRID_MAX),
                 )
-                .on_hover_text(t("Zeilen"));
+                .on_hover_text(t("Rows"));
                 ui.label(RichText::new("x").color(theme::text_dim()));
                 let mut cols = board.pad_cols;
                 ui.add(
@@ -1102,7 +1102,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
                         .speed(0.05)
                         .range(1..=dmxcraft_core::sound::PAD_GRID_MAX),
                 )
-                .on_hover_text(t("Spalten"));
+                .on_hover_text(t("Columns"));
                 if (cols, rows) != (board.pad_cols, board.pad_rows) {
                     board.pad_cols = cols;
                     board.pad_rows = rows;
@@ -1163,7 +1163,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
             painter.text(
                 r.left_top() + vec2(8.0, 8.0),
                 Align2::LEFT_TOP,
-                t("Leer"),
+                t("Empty"),
                 theme::body(),
                 theme::text_faint(),
             );
@@ -1211,11 +1211,11 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
                 theme::text(),
             );
             let (status, sc) = if missing {
-                (t("Datei fehlt").to_string(), theme::DANGER)
+                (t("File missing").to_string(), theme::DANGER)
             } else if progress.is_some() {
-                (t("LÄUFT").to_string(), pc)
+                (t("PLAYING").to_string(), pc)
             } else if pad.repeat {
-                (t("Schleife").to_string(), theme::text_dim())
+                (t("Loop").to_string(), theme::text_dim())
             } else {
                 (String::new(), theme::text_dim())
             };
@@ -1247,7 +1247,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
         if resp.clicked() || mapped {
             if empty && !locked && resp.clicked() {
                 if let Some(f) = rfd::FileDialog::new()
-                    .add_filter(t("Audio"), &AUDIO_EXT)
+                    .add_filter("Audio", &AUDIO_EXT)
                     .pick_file()
                 {
                     board.pads[i].path = f.to_string_lossy().into_owned();
@@ -1280,12 +1280,12 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
             let pad = &mut board.pads[i];
             if menu::item(
                 ui,
-                MenuItem::new(t("Datei wählen …"))
+                MenuItem::new(t("Choose file …"))
                     .icon(Icon::FileOpen)
                     .enabled(!locked),
             ) {
                 if let Some(f) = rfd::FileDialog::new()
-                    .add_filter(t("Audio"), &AUDIO_EXT)
+                    .add_filter("Audio", &AUDIO_EXT)
                     .pick_file()
                 {
                     pad.path = f.to_string_lossy().into_owned();
@@ -1304,7 +1304,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
                 });
                 ui.horizontal(|ui| {
                     ui.add_space(theme::SP_S);
-                    ui.label(RichText::new(t("Pegel")).color(theme::text_dim()));
+                    ui.label(RichText::new(t("Level")).color(theme::text_dim()));
                     let mut v = pad.volume;
                     horizontal_slider(ui, 150.0, &mut v, theme::accent(), false);
                     pad.volume = v;
@@ -1318,7 +1318,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
                     ui,
                     ui.make_persistent_id(("pad_color", i)),
                     pad.color,
-                    t("Automatisch"),
+                    t("Automatic"),
                 ) {
                     pad.color = c;
                 }
@@ -1326,7 +1326,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
             menu::separator(ui);
             if menu::item(
                 ui,
-                MenuItem::new(t("Wiederholen"))
+                MenuItem::new(t("Repeat"))
                     .checked(pad.repeat)
                     .enabled(!locked),
             ) {
@@ -1334,7 +1334,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
             }
             if menu::item(
                 ui,
-                MenuItem::new(t("Andere Pads stoppen"))
+                MenuItem::new(t("Stop other pads"))
                     .checked(pad.exclusive)
                     .enabled(!locked),
             ) {
@@ -1343,7 +1343,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
             menu::separator(ui);
             if menu::item(
                 ui,
-                MenuItem::new(t("Leeren"))
+                MenuItem::new(t("Clear"))
                     .icon(Icon::Trash)
                     .danger()
                     .enabled(!locked && !pad.path.is_empty()),

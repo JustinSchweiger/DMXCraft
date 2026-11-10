@@ -202,9 +202,9 @@ impl Fader {
             let r = ui
                 .interact(badge.expand(2.0), id.with("fx"), Sense::click())
                 .on_hover_text(if on {
-                    t("Vom Effekt entfernen")
+                    t("Remove from effect")
                 } else {
-                    t("Dem Effekt zuordnen")
+                    t("Assign to effect")
                 });
             if r.clicked() {
                 event = FaderEvent::ToggleFx;
@@ -377,7 +377,7 @@ impl Fader {
         crate::ui::widgets::menu::context(&resp, |ui| {
             use crate::ui::widgets::menu::{self, MenuItem};
             menu::begin(ui);
-            if menu::item(ui, MenuItem::new(t("Freigeben")).icon(super::Icon::Reset)) {
+            if menu::item(ui, MenuItem::new(t("Release")).icon(super::Icon::Reset)) {
                 event = FaderEvent::Release;
             }
             menu::separator(ui);
@@ -399,7 +399,7 @@ impl Fader {
                     });
                 menu::separator(ui);
             }
-            if menu::item(ui, MenuItem::new(t("Aus (0)")).icon(super::Icon::LightOff)) {
+            if menu::item(ui, MenuItem::new(t("Off (0)")).icon(super::Icon::LightOff)) {
                 event = FaderEvent::Changed(0);
             }
             for (label, v) in [("25 %", 64u8), ("50 %", 128), ("75 %", 191)] {
@@ -409,7 +409,7 @@ impl Fader {
             }
             if menu::item(
                 ui,
-                MenuItem::new(t("Voll (255)")).icon(super::Icon::LightOn),
+                MenuItem::new(t("Full (255)")).icon(super::Icon::LightOn),
             ) {
                 event = FaderEvent::Changed(255);
             }

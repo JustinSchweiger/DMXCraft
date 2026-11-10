@@ -433,7 +433,7 @@ impl StageCanvas<'_> {
                 .unwrap_or_else(|| f.type_key.clone());
             let ch = self.show.fixture_channels(f.id);
             let addr = tr!(
-                "Universum {u} · Adresse {a}–{b}",
+                "Universe {u} · address {a}–{b}",
                 u = f.universe + 1,
                 a = f.address,
                 b = f.address + ch.max(1) - 1
@@ -455,7 +455,7 @@ impl StageCanvas<'_> {
                             channel: c,
                         };
                         if ch.is_virtual() {
-                            crate::i18n::t("Dimmer (virtuell)").to_string()
+                            crate::i18n::t("Dimmer (virtual)").to_string()
                         } else {
                             self.show
                                 .channel_def(ch)

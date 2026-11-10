@@ -129,7 +129,7 @@ pub fn load_user() -> Vec<UserPrefab> {
 }
 
 pub fn save_user(p: &Prefab) -> Result<PathBuf, String> {
-    let dir = dir().ok_or(t("Kein Konfigurationsordner gefunden"))?;
+    let dir = dir().ok_or(t("No configuration folder found"))?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let stem: String = p
         .name
@@ -222,7 +222,7 @@ impl Builder {
 
     fn truss(self, len: f32, pos: [f32; 3], rot: [f32; 3]) -> Self {
         self.part(
-            t("Traverse"),
+            t("Truss"),
             Shape::Truss {
                 length: len,
                 profile: TrussProfile::Square,
@@ -254,44 +254,44 @@ impl Builder {
 /// Mitgelieferte Objekte (Namen übersetzt).
 pub fn builtin() -> Vec<Prefab> {
     let tower = |b: Builder, x: f32, h: f32| {
-        b.cube(t("Bodenplatte"), [0.8, 0.02, 0.8], [x, 0.01, 0.0], METAL)
+        b.cube(t("Base plate"), [0.8, 0.02, 0.8], [x, 0.01, 0.0], METAL)
             .truss(h, [x, h * 0.5 + 0.02, 0.0], [0.0, 0.0, 90.0])
     };
     vec![
         Builder::new()
-            .cube(t("Podest"), [2.0, 0.4, 1.0], [0.0, 0.2, 0.0], DARK)
-            .done(t("Bühnenpodest 2 × 1 m")),
+            .cube(t("Riser"), [2.0, 0.4, 1.0], [0.0, 0.2, 0.0], DARK)
+            .done(t("Stage riser 2 × 1 m")),
         Builder::new()
-            .cube(t("Bühne"), [6.0, 0.6, 4.0], [0.0, 0.3, 0.0], DARK)
-            .cube(t("Stufe"), [1.0, 0.3, 0.4], [2.2, 0.15, 2.2], DARK)
-            .done(t("Bühne 6 × 4 m")),
+            .cube(t("Stage"), [6.0, 0.6, 4.0], [0.0, 0.3, 0.0], DARK)
+            .cube(t("Riser"), [1.0, 0.3, 0.4], [2.2, 0.15, 2.2], DARK)
+            .done(t("Stage 6 × 4 m")),
         Builder::new()
-            .cube(t("Stufe"), [1.0, 0.2, 0.3], [0.0, 0.1, 0.3], DARK)
-            .cube(t("Stufe"), [1.0, 0.4, 0.3], [0.0, 0.2, 0.0], DARK)
-            .cube(t("Stufe"), [1.0, 0.6, 0.3], [0.0, 0.3, -0.3], DARK)
-            .done(t("Treppe")),
+            .cube(t("Riser"), [1.0, 0.2, 0.3], [0.0, 0.1, 0.3], DARK)
+            .cube(t("Riser"), [1.0, 0.4, 0.3], [0.0, 0.2, 0.0], DARK)
+            .cube(t("Riser"), [1.0, 0.6, 0.3], [0.0, 0.3, -0.3], DARK)
+            .done(t("Stairs")),
         Builder::new()
-            .cube(t("Front"), [1.8, 0.88, 0.04], [0.0, 0.44, 0.38], BLACK)
-            .cube(t("Seite"), [0.04, 0.88, 0.8], [-0.88, 0.44, 0.0], BLACK)
-            .cube(t("Seite"), [0.04, 0.88, 0.8], [0.88, 0.44, 0.0], BLACK)
-            .cube(t("Platte"), [1.8, 0.04, 0.8], [0.0, 0.9, 0.0], DARK)
-            .cube(t("Mischpult"), [0.6, 0.08, 0.4], [0.0, 0.96, -0.1], GREY)
-            .done(t("DJ-Pult")),
+            .cube("Front", [1.8, 0.88, 0.04], [0.0, 0.44, 0.38], BLACK)
+            .cube(t("Side"), [0.04, 0.88, 0.8], [-0.88, 0.44, 0.0], BLACK)
+            .cube(t("Side"), [0.04, 0.88, 0.8], [0.88, 0.44, 0.0], BLACK)
+            .cube(t("Top"), [1.8, 0.04, 0.8], [0.0, 0.9, 0.0], DARK)
+            .cube(t("Mixer"), [0.6, 0.08, 0.4], [0.0, 0.96, -0.1], GREY)
+            .done(t("DJ booth")),
         Builder::new()
-            .cyl(t("Stativ"), 0.02, 1.4, [0.0, 0.7, 0.0], BLACK)
-            .cyl(t("Fuß"), 0.35, 0.02, [0.0, 0.01, 0.0], BLACK)
-            .cube(t("Box"), [0.45, 0.75, 0.4], [0.0, 1.78, 0.0], BLACK)
-            .done(t("Lautsprecher auf Stativ")),
+            .cyl(t("Stand"), 0.02, 1.4, [0.0, 0.7, 0.0], BLACK)
+            .cyl(t("Base"), 0.35, 0.02, [0.0, 0.01, 0.0], BLACK)
+            .cube(t("Cabinet"), [0.45, 0.75, 0.4], [0.0, 1.78, 0.0], BLACK)
+            .done(t("Speaker on stand")),
         Builder::new()
-            .cube(t("Box"), [0.6, 0.6, 0.7], [0.0, 0.3, 0.0], BLACK)
+            .cube(t("Cabinet"), [0.6, 0.6, 0.7], [0.0, 0.3, 0.0], BLACK)
             .done(t("Subwoofer")),
-        tower(Builder::new(), 0.0, 3.0).done(t("Traversen-Turm 3 m")),
+        tower(Builder::new(), 0.0, 3.0).done(t("Truss tower 3 m")),
         tower(tower(Builder::new(), -2.0, 3.0), 2.0, 3.0)
             .truss(4.29, [0.0, 3.17, 0.0], [0.0; 3])
-            .done(t("Traversen-Rahmen 4 × 3 m")),
+            .done(t("Truss goalpost 4 × 3 m")),
         Builder::new()
             .part(
-                t("Leinwand"),
+                t("Screen"),
                 Shape::Plane { size: [3.0, 2.0] },
                 [0.0, 1.9, 0.0],
                 [90.0, 0.0, 0.0],
@@ -302,29 +302,29 @@ pub fn builtin() -> Vec<Prefab> {
                     ..Material::default()
                 },
             )
-            .cyl(t("Stütze"), 0.02, 2.9, [-1.55, 1.45, 0.0], BLACK)
-            .cyl(t("Stütze"), 0.02, 2.9, [1.55, 1.45, 0.0], BLACK)
-            .done(t("Leinwand 3 × 2 m")),
+            .cyl(t("Post"), 0.02, 2.9, [-1.55, 1.45, 0.0], BLACK)
+            .cyl(t("Post"), 0.02, 2.9, [1.55, 1.45, 0.0], BLACK)
+            .done(t("Screen 3 × 2 m")),
         Builder::new()
-            .cyl(t("Platte"), 0.35, 0.03, [0.0, 1.1, 0.0], WOOD)
-            .cyl(t("Bein"), 0.04, 1.1, [0.0, 0.55, 0.0], METAL)
-            .cyl(t("Fuß"), 0.25, 0.02, [0.0, 0.01, 0.0], METAL)
-            .done(t("Stehtisch")),
+            .cyl(t("Top"), 0.35, 0.03, [0.0, 1.1, 0.0], WOOD)
+            .cyl(t("Leg"), 0.04, 1.1, [0.0, 0.55, 0.0], METAL)
+            .cyl(t("Base"), 0.25, 0.02, [0.0, 0.01, 0.0], METAL)
+            .done(t("Bar table")),
         Builder::new()
-            .cube(t("Platte"), [2.0, 0.04, 0.8], [0.0, 0.74, 0.0], WOOD)
-            .cube(t("Bein"), [0.05, 0.72, 0.05], [-0.95, 0.36, -0.35], METAL)
-            .cube(t("Bein"), [0.05, 0.72, 0.05], [0.95, 0.36, -0.35], METAL)
-            .cube(t("Bein"), [0.05, 0.72, 0.05], [-0.95, 0.36, 0.35], METAL)
-            .cube(t("Bein"), [0.05, 0.72, 0.05], [0.95, 0.36, 0.35], METAL)
-            .done(t("Tisch 2 × 0,8 m")),
+            .cube(t("Top"), [2.0, 0.04, 0.8], [0.0, 0.74, 0.0], WOOD)
+            .cube(t("Leg"), [0.05, 0.72, 0.05], [-0.95, 0.36, -0.35], METAL)
+            .cube(t("Leg"), [0.05, 0.72, 0.05], [0.95, 0.36, -0.35], METAL)
+            .cube(t("Leg"), [0.05, 0.72, 0.05], [-0.95, 0.36, 0.35], METAL)
+            .cube(t("Leg"), [0.05, 0.72, 0.05], [0.95, 0.36, 0.35], METAL)
+            .done(t("Table 2 × 0.8 m")),
         Builder::new()
-            .cube(t("Korpus"), [3.0, 1.08, 0.6], [0.0, 0.54, 0.0], WOOD)
-            .cube(t("Platte"), [3.1, 0.05, 0.7], [0.0, 1.105, 0.0], DARK)
-            .done(t("Theke 3 m")),
+            .cube(t("Body"), [3.0, 1.08, 0.6], [0.0, 0.54, 0.0], WOOD)
+            .cube(t("Top"), [3.1, 0.05, 0.7], [0.0, 1.105, 0.0], DARK)
+            .done(t("Bar counter 3 m")),
         Builder::new()
-            .cyl(t("Körper"), 0.18, 1.45, [0.0, 0.725, 0.0], GREY)
-            .cyl(t("Kopf"), 0.1, 0.24, [0.0, 1.6, 0.0], GREY)
-            .done(t("Person 1,75 m")),
+            .cyl(t("Torso"), 0.18, 1.45, [0.0, 0.725, 0.0], GREY)
+            .cyl(t("Head"), 0.1, 0.24, [0.0, 1.6, 0.0], GREY)
+            .done(t("Person 1.75 m")),
     ]
 }
 

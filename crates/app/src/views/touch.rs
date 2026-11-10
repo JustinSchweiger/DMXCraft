@@ -166,8 +166,7 @@ impl View for TouchView {
             self.page_tabs(ui, cx, &pages, editing);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if !cx.state.locked {
-                    let r =
-                        ui.add(egui::Button::new(t("Bearbeiten")).selected(cx.state.touch_edit));
+                    let r = ui.add(egui::Button::new(t("Edit")).selected(cx.state.touch_edit));
                     if r.clicked() {
                         cx.state.touch_edit = !cx.state.touch_edit;
                         cx.state.touch_sel = None;
@@ -176,7 +175,7 @@ impl View for TouchView {
                 ui.add_space(theme::SP_S);
                 if ui
                     .add(IconButton::new(Icon::ZoomIn).flat())
-                    .on_hover_text(t("Vergrößern"))
+                    .on_hover_text(t("Zoom in"))
                     .clicked()
                 {
                     self.zoom = (self.zoom + 0.1).min(2.5);
@@ -189,13 +188,13 @@ impl View for TouchView {
                         )
                         .sense(Sense::click()),
                     )
-                    .on_hover_text(t("Zurücksetzen"));
+                    .on_hover_text(t("Reset"));
                 if r.clicked() {
                     self.zoom = 1.0;
                 }
                 if ui
                     .add(IconButton::new(Icon::ZoomOut).flat())
-                    .on_hover_text(t("Verkleinern"))
+                    .on_hover_text(t("Zoom out"))
                     .clicked()
                 {
                     self.zoom = (self.zoom - 0.1).max(0.4);
@@ -282,11 +281,11 @@ impl TouchView {
                 }
                 menu::context(&r, |ui| {
                     menu::begin(ui);
-                    if menu::item(ui, MenuItem::new(t("Umbenennen")).icon(Icon::Edit)) {
+                    if menu::item(ui, MenuItem::new(t("Rename")).icon(Icon::Edit)) {
                         self.rename_page = Some((*id, name.clone()));
                         self.rename_focus = true;
                     }
-                    if menu::item(ui, MenuItem::new(t("Seite löschen")).icon(Icon::Trash)) {
+                    if menu::item(ui, MenuItem::new(t("Delete page")).icon(Icon::Trash)) {
                         delete = Some(*id);
                     }
                 });
@@ -295,7 +294,7 @@ impl TouchView {
         if editing
             && ui
                 .add(IconButton::new(Icon::Plus).flat())
-                .on_hover_text(t("Seite hinzufügen"))
+                .on_hover_text(t("Add page"))
                 .clicked()
         {
             add_page(cx);
@@ -319,12 +318,12 @@ impl TouchView {
         );
         child.add_space(rect.height() * 0.35);
         child.label(
-            egui::RichText::new(t("Noch keine Touch-Oberfläche"))
+            egui::RichText::new(t("No touch surface yet"))
                 .color(theme::text_dim())
                 .size(theme::FS_TITLE),
         );
         child.add_space(theme::SP_M);
-        if !cx.state.locked && child.button(t("Seite hinzufügen")).clicked() {
+        if !cx.state.locked && child.button(t("Add page")).clicked() {
             add_page(cx);
             cx.state.touch_edit = true;
         }
@@ -536,16 +535,16 @@ impl TouchView {
                 menu::context(&resp, |ui| {
                     menu::begin(ui);
                     if group.len() > 1 {
-                        menu::title(ui, &tr!("{n} Elemente", n = group.len()));
+                        menu::title(ui, &tr!("{n} items", n = group.len()));
                     } else {
                         menu::title(ui, &item_title(item));
                         target_entry(ui, cx.engine.show(), item);
                     }
                     menu::separator(ui);
-                    if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
+                    if menu::item(ui, MenuItem::new(t("Duplicate")).icon(Icon::Copy)) {
                         duplicate = group.clone();
                     }
-                    if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash)) {
+                    if menu::item(ui, MenuItem::new(t("Delete")).icon(Icon::Trash)) {
                         remove = group.clone();
                     }
                     menu::separator(ui);
@@ -865,14 +864,14 @@ impl TouchView {
                     return;
                 };
                 // ----- Hinzufügen -----
-                section_header(ui, t("Hinzufügen"), |_| {});
+                section_header(ui, t("Add"), |_| {});
                 let kinds = [
-                    (TouchKind::Button, "square", t("Schaltfläche")),
+                    (TouchKind::Button, "square", t("Button")),
                     (TouchKind::Fader, "sliders", t("Fader")),
-                    (TouchKind::Knob, "circle", t("Drehregler")),
-                    (TouchKind::Label, "x", t("Beschriftung")),
-                    (TouchKind::Color, "palette", t("Farbrad")),
-                    (TouchKind::Xy, "plus", t("XY-Feld")),
+                    (TouchKind::Knob, "circle", t("Knob")),
+                    (TouchKind::Label, "x", t("Label")),
+                    (TouchKind::Color, "palette", t("Color wheel")),
+                    (TouchKind::Xy, "plus", t("XY pad")),
                 ];
                 let w = (ui.available_width() - 2.0 * theme::SP_S) / 3.0;
                 for row in kinds.chunks(3) {
@@ -882,7 +881,7 @@ impl TouchView {
                             if add_tile(ui, w, *k, icon, label) {
                                 let mut item = TouchItem::new(*k);
                                 if *k == TouchKind::Label {
-                                    item.label = t("Beschriftung").to_string();
+                                    item.label = t("Label").to_string();
                                 }
                                 if k.uses_fixtures() {
                                     item.fixtures = cx.state.selection_order.clone();
@@ -911,7 +910,7 @@ impl TouchView {
 
                 // ----- Seite -----
                 ui.add_space(theme::SP_S);
-                section_header(ui, t("Seite"), |_| {});
+                section_header(ui, t("Side"), |_| {});
                 let (mut bg, mut img) = cx
                     .engine
                     .show()
@@ -919,15 +918,15 @@ impl TouchView {
                     .page(page)
                     .map_or((None, None), |p| (p.background_color, p.background));
                 form(ui, "touch_page", |f| {
-                    f.row(t("Hintergrund"), |ui| {
+                    f.row(t("Background"), |ui| {
                         swatch_row(ui, &mut bg, true);
                     });
-                    f.row(t("Bild"), |ui| {
-                        if ui.button(t("Laden …")).clicked() {
+                    f.row(t("Image"), |ui| {
+                        if ui.button(t("Load …")).clicked() {
                             self.image_dialog =
                                 Some((ImageTarget::Page(page), pick_image(ui.ctx())));
                         }
-                        if img.is_some() && ui.button(t("Entfernen")).clicked() {
+                        if img.is_some() && ui.button(t("Remove")).clicked() {
                             img = None;
                         }
                     });
@@ -945,17 +944,17 @@ impl TouchView {
 
                 // ----- Raster -----
                 ui.add_space(theme::SP_M);
-                section_header(ui, t("Raster"), |_| {});
+                section_header(ui, t("Grid"), |_| {});
                 let tl = cx.engine.show().touch.clone();
                 let (mut show_grid, mut snap, mut cell) = (tl.show_grid, tl.snap, tl.cell);
                 form(ui, "touch_grid", |f| {
-                    f.row(t("Anzeigen"), |ui| {
+                    f.row(t("Visible"), |ui| {
                         ui.add(Toggle::new(&mut show_grid, ""));
                     });
-                    f.row(t("Einrasten"), |ui| {
+                    f.row(t("Snap"), |ui| {
                         ui.add(Toggle::new(&mut snap, ""));
                     });
-                    f.row(t("Schrittweite"), |ui| {
+                    f.row(t("Step size"), |ui| {
                         egui::ComboBox::from_id_salt("touch_step")
                             .selected_text(format!("{cell:.0} px"))
                             .width(ui.available_width())
@@ -979,10 +978,10 @@ impl TouchView {
     /// Mehrere Elemente gewählt: Anzahl, Farbe für alle, Duplizieren, Löschen.
     fn multi_panel(&mut self, ui: &mut Ui, cx: &mut ViewCtx<'_>, page: u32) {
         let ids = cx.state.touch_multi.clone();
-        section_header(ui, &tr!("{n} Elemente ausgewählt", n = ids.len()), |_| {});
+        section_header(ui, &tr!("{n} items selected", n = ids.len()), |_| {});
         ui.label(
             egui::RichText::new(t(
-                "Ziehen verschiebt alle, Pfeiltasten ebenso, Entf löscht. Umschalt/Strg + Klick fügt hinzu oder entfernt.",
+                "Drag moves all of them, so do the arrow keys; Delete removes them. Shift/Ctrl + click adds or removes.",
             ))
             .small()
             .color(theme::text_dim()),
@@ -997,7 +996,7 @@ impl TouchView {
             .and_then(|i| i.color);
         let mut c = first_color;
         form(ui, "touch_multi", |f| {
-            f.row(t("Farbe"), |ui| {
+            f.row(t("Color"), |ui| {
                 if swatch_row(ui, &mut c, true) {
                     if let Some(p) = cx.engine.show_mut().touch.page_mut(page) {
                         for i in p.items.iter_mut().filter(|i| ids.contains(&i.id)) {
@@ -1009,7 +1008,7 @@ impl TouchView {
         });
         ui.add_space(theme::SP_S);
         ui.horizontal(|ui| {
-            if ui.button(t("Duplizieren")).clicked() {
+            if ui.button(t("Duplicate")).clicked() {
                 let touch = &mut cx.engine.show_mut().touch;
                 let copies: Vec<u32> = ids
                     .iter()
@@ -1018,7 +1017,7 @@ impl TouchView {
                 cx.state.touch_sel = copies.first().copied();
                 cx.state.touch_multi = copies;
             }
-            if ui.button(t("Löschen")).clicked() {
+            if ui.button(t("Delete")).clicked() {
                 let touch = &mut cx.engine.show_mut().touch;
                 if let Some(p) = touch.page_mut(page) {
                     p.items.retain(|i| !ids.contains(&i.id));
@@ -1048,21 +1047,21 @@ impl TouchView {
         section_header(ui, kind_name(item.kind), |ui| {
             if ui
                 .add(IconButton::new(Icon::Trash).flat().danger())
-                .on_hover_text(t("Löschen"))
+                .on_hover_text(t("Delete"))
                 .clicked()
             {
                 remove = true;
             }
             if ui
                 .add(IconButton::new(Icon::Copy).flat())
-                .on_hover_text(t("Duplizieren"))
+                .on_hover_text(t("Duplicate"))
                 .clicked()
             {
                 duplicate = true;
             }
             if ui
                 .add(IconButton::new(Icon::Close).flat())
-                .on_hover_text(t("Auswahl aufheben"))
+                .on_hover_text(t("Clear selection"))
                 .clicked()
             {
                 cx.state.touch_sel = None;
@@ -1072,11 +1071,11 @@ impl TouchView {
         if item.kind != TouchKind::Label {
             let text = if item.kind.uses_fixtures() {
                 match item.fixtures.len() {
-                    0 => t("keine Geräte").to_string(),
+                    0 => t("no devices").to_string(),
                     1 => show
                         .fixture(item.fixtures[0])
                         .map_or_else(String::new, |f| f.name.clone()),
-                    n => crate::tr!("{n} Geräte", n = n),
+                    n => crate::tr!("{n} fixtures", n = n),
                 }
             } else {
                 item_target(show, &item)
@@ -1086,43 +1085,43 @@ impl TouchView {
         }
         let mut pick_img = false;
         form(ui, "touch_props", |f| {
-            f.row(t("Beschriftung"), |ui| {
+            f.row(t("Label"), |ui| {
                 ui.add(text_field(&mut item.label).desired_width(ui.available_width()));
             });
-            f.row(t("Textgröße"), |ui| {
+            f.row(t("Text size"), |ui| {
                 ui.add(
                     egui::DragValue::new(&mut item.text_size)
                         .range(0.0..=96.0)
                         .speed(0.5)
                         .custom_formatter(|v, _| {
                             if v <= 0.0 {
-                                t("automatisch").to_string()
+                                t("automatic").to_string()
                             } else {
                                 format!("{v:.0}")
                             }
                         }),
                 );
             });
-            f.row(t("Textfarbe"), |ui| {
+            f.row(t("Text colour"), |ui| {
                 swatch_row(ui, &mut item.text_color, true);
             });
-            f.row(t("Farbe"), |ui| {
+            f.row(t("Color"), |ui| {
                 swatch_row(ui, &mut item.color, true);
             });
             if matches!(item.kind, TouchKind::Button | TouchKind::Label) {
-                f.row(t("Symbol"), |ui| {
+                f.row(t("Icon"), |ui| {
                     icon_picker(ui, ("touch_icon", sel), &mut item.icon);
                 });
-                f.row(t("Bild"), |ui| {
-                    if ui.button(t("Laden …")).clicked() {
+                f.row(t("Image"), |ui| {
+                    if ui.button(t("Load …")).clicked() {
                         pick_img = true;
                     }
-                    if item.image.is_some() && ui.button(t("Entfernen")).clicked() {
+                    if item.image.is_some() && ui.button(t("Remove")).clicked() {
                         item.image = None;
                     }
                 });
             }
-            f.row(t("Größe"), |ui| {
+            f.row(t("Size"), |ui| {
                 ui.add(
                     egui::DragValue::new(&mut item.w)
                         .range(0.25..=40.0)
@@ -1142,7 +1141,7 @@ impl TouchView {
                     if ui
                         .add_enabled(
                             !cx.state.selected.is_empty(),
-                            egui::Button::new(t("Auswahl übernehmen")),
+                            egui::Button::new(t("Use selection")),
                         )
                         .clicked()
                     {
@@ -1151,7 +1150,7 @@ impl TouchView {
                 });
             }
             if item.kind == TouchKind::Button {
-                f.row(t("Flash-Taste"), |ui| {
+                f.row(t("Flash button"), |ui| {
                     ui.add(Toggle::new(&mut item.flash, ""));
                 });
             }
@@ -1404,7 +1403,7 @@ fn icon_picker(ui: &mut Ui, id: impl std::hash::Hash, icon: &mut Option<String>)
     }
     menu::dropdown(&resp, |ui| {
         ui.set_width(10.0 * 32.0);
-        if ui.button(t("Kein Symbol")).clicked() {
+        if ui.button(t("No icon")).clicked() {
             *icon = None;
             ui.close();
         }
@@ -1450,7 +1449,7 @@ fn target_entry(ui: &mut Ui, show: &Show, item: &TouchItem) {
             .filter_map(|f| show.fixture(*f).map(|f| f.name.clone()))
             .collect();
         if names.is_empty() {
-            t("keine Geräte").to_string()
+            t("no devices").to_string()
         } else {
             names.join(", ")
         }
@@ -1459,7 +1458,7 @@ fn target_entry(ui: &mut Ui, show: &Show, item: &TouchItem) {
     } else {
         item_target(show, item)
     };
-    ui.add(MenuItem::new(&crate::tr!("Ziel: {target}", target = text)).enabled(false));
+    ui.add(MenuItem::new(&crate::tr!("Target: {target}", target = text)).enabled(false));
     if !item.channels.is_empty() {
         let chans: Vec<String> = item
             .channels
@@ -1471,7 +1470,7 @@ fn target_entry(ui: &mut Ui, show: &Show, item: &TouchItem) {
         }
         if chans.len() > 8 {
             ui.add(
-                MenuItem::new(&crate::tr!("… und {n} weitere", n = chans.len() - 8)).enabled(false),
+                MenuItem::new(&crate::tr!("… and {n} more", n = chans.len() - 8)).enabled(false),
             );
         }
     }
@@ -1482,8 +1481,8 @@ fn pick_image(ctx: &egui::Context) -> Receiver<Option<PathBuf>> {
     let ctx = ctx.clone();
     std::thread::spawn(move || {
         let path = rfd::FileDialog::new()
-            .set_title(t("Bild laden"))
-            .add_filter(t("Bilder"), &["png", "jpg", "jpeg"])
+            .set_title(t("Load image"))
+            .add_filter(t("Images"), &["png", "jpg", "jpeg"])
             .pick_file();
         let _ = tx.send(path);
         ctx.request_repaint();
@@ -1531,18 +1530,18 @@ fn paint_cover(p: &egui::Painter, rect: Rect, tex: &egui::TextureHandle, alpha: 
 fn add_page(cx: &mut ViewCtx<'_>) {
     let touch = &mut cx.engine.show_mut().touch;
     let n = touch.pages.len() + 1;
-    let id = touch.add_page(crate::tr!("Seite {n}", n = n));
+    let id = touch.add_page(crate::tr!("Page {n}", n = n));
     cx.state.touch_page = Some(id);
 }
 
 fn kind_name(k: TouchKind) -> &'static str {
     match k {
-        TouchKind::Label => t("Beschriftung"),
-        TouchKind::Button => t("Schaltfläche"),
+        TouchKind::Label => t("Label"),
+        TouchKind::Button => t("Button"),
         TouchKind::Fader => t("Fader"),
-        TouchKind::Knob => t("Drehregler"),
-        TouchKind::Color => t("Farbrad"),
-        TouchKind::Xy => t("XY-Feld"),
+        TouchKind::Knob => t("Knob"),
+        TouchKind::Color => t("Color wheel"),
+        TouchKind::Xy => t("XY pad"),
     }
 }
 
@@ -1553,7 +1552,7 @@ fn item_target(show: &Show, item: &TouchItem) -> String {
             let (cat, target) = crate::mapping::describe_mapping(show, &m);
             format!("{cat}: {target}")
         }
-        _ => t("kein Ziel").to_string(),
+        _ => t("no target").to_string(),
     }
 }
 
@@ -2062,7 +2061,7 @@ pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::Touch
                     item.control = control;
                     item.channels = channels;
                 }
-                st.info(t("Ziel übernommen"));
+                st.info(t("Target assigned"));
                 return;
             }
         }
@@ -2073,7 +2072,7 @@ pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::Touch
             Some(p) => p.id,
             None => {
                 let n = touch.pages.len() + 1;
-                touch.add_page(crate::tr!("Seite {n}", n = n))
+                touch.add_page(crate::tr!("Page {n}", n = n))
             }
         },
     };
@@ -2106,10 +2105,7 @@ pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::Touch
         .map_or_else(String::new, |p| p.name.clone());
     if let Some(id) = e.show_mut().touch.add_item(page, item) {
         st.touch_sel = Some(id);
-        st.info(crate::tr!(
-            "Zur Touch-Seite „{page}“ hinzugefügt",
-            page = name
-        ));
+        st.info(crate::tr!("Added to touch page “{page}”", page = name));
     }
 }
 

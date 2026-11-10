@@ -55,16 +55,16 @@ impl Tab {
 
     fn label(self) -> &'static str {
         match self {
-            Tab::General => t("Allgemein"),
-            Tab::Customize => t("Anpassen"),
+            Tab::General => t("General"),
+            Tab::Customize => t("Customize"),
             Tab::Startup => t("Start"),
-            Tab::Outputs => t("Ausgänge"),
+            Tab::Outputs => t("Outputs"),
             Tab::Midi => t("MIDI"),
-            Tab::Audio => t("Ton"),
+            Tab::Audio => t("Audio"),
             Tab::Obs => t("OBS"),
-            Tab::Remote => t("Fernbedienung"),
+            Tab::Remote => t("Remote"),
             Tab::Ai => t("MCP"),
-            Tab::Project => t("Projekt"),
+            Tab::Project => t("Project"),
         }
     }
 
@@ -128,12 +128,12 @@ impl SettingsWindow {
     ) -> SettingsChanges {
         let mut ch = SettingsChanges::default();
         let tab = &mut self.tab;
-        Dialog::new(t("Einstellungen"))
+        Dialog::new(t("Settings"))
             .id("settings")
             .width(WIDTH)
             .height(HEIGHT)
             .flush()
-            .cancel(t("Schließen"))
+            .cancel(t("Close"))
             .show(ctx, open, |ui, _| {
                 // Feste Aufteilung: Reiterleiste links, Inhalt rechts
                 let area = egui::Rect::from_min_size(ui.cursor().min, vec2(WIDTH, HEIGHT));
@@ -238,7 +238,7 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
     use crate::mcp::McpStatus;
     section(ui, t("MCP"));
     ch.save |= ui
-        .add(Toggle::new(&mut s.mcp_enabled, t("MCP-Server einschalten")))
+        .add(Toggle::new(&mut s.mcp_enabled, t("Enable MCP server")))
         .changed();
     ui.add_space(theme::SP_S);
     form(ui, "settings_mcp", |f| {
@@ -254,14 +254,14 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
         });
         f.row(t("Status"), |ui| {
             let (text, color) = match status {
-                McpStatus::Off => (t("aus").to_string(), theme::text_dim()),
+                McpStatus::Off => (t("off").to_string(), theme::text_dim()),
                 McpStatus::Running(p) => {
-                    (tr!("läuft – http://127.0.0.1:{p}/mcp", p = p), theme::OK)
+                    (tr!("running – http://127.0.0.1:{p}/mcp", p = p), theme::OK)
                 }
-                McpStatus::Error(e) => (tr!("Fehler: {e}", e = e), theme::DANGER),
+                McpStatus::Error(e) => (tr!("Error: {e}", e = e), theme::DANGER),
             };
             ui.label(egui::RichText::new(text).color(color));
-            if matches!(status, McpStatus::Error(_)) && ui.button(t("Erneut versuchen")).clicked() {
+            if matches!(status, McpStatus::Error(_)) && ui.button(t("Try again")).clicked() {
                 ch.mcp_retry = true;
             }
         });
@@ -271,7 +271,7 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
     let (exe, args) = crate::mcp::bridge_command(s.mcp_port);
     let snippets = [
         (
-            t("Claude Code (Terminal)"),
+            t("Claude Code (terminal)"),
             format!("claude mcp add --transport http dmxcraft {url}"),
         ),
         (
@@ -281,7 +281,7 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
             }))
             .unwrap_or_default(),
         ),
-        (t("Andere Clients (Streamable HTTP)"), url.clone()),
+        (t("Other clients (Streamable HTTP)"), url.clone()),
     ];
     for (title, code) in snippets {
         section(ui, title);
@@ -297,7 +297,7 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
             );
             if ui
                 .add(IconButton::new(Icon::Copy))
-                .on_hover_text(t("Kopieren"))
+                .on_hover_text(t("Copy"))
                 .clicked()
             {
                 ui.ctx().copy_text(code.clone());
@@ -307,15 +307,15 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
     }
     hint(
         ui,
-        t("Claude Desktop startet DMXCraft dafür mit dem Argument „mcp“ als Brücke; DMXCraft selbst muss laufen und der Server eingeschaltet sein. Änderungen der KI lassen sich mit Strg+Z rückgängig machen; ist DMXCraft gesperrt, darf die KI nur lesen."),
+        t("Claude Desktop starts DMXCraft with the argument “mcp” as a bridge; DMXCraft itself must be running with the server switched on. Changes made by the AI can be undone with Ctrl+Z; while DMXCraft is locked the AI may only read."),
     );
 }
 
 /// Ton: Höchstlautstärke, Zurücksetzen beim Start, Ausfaden.
 fn audio(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
-    section(ui, t("Ton"));
+    section(ui, t("Audio"));
     form(ui, "settings_audio_limit", |f| {
-        f.row(t("Höchstlautstärke"), |ui| {
+        f.row(t("Maximum volume"), |ui| {
             let r = ui.add(
                 egui::DragValue::new(&mut s.audio_limit_pct)
                     .range(1..=100)
@@ -329,22 +329,22 @@ fn audio(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     });
     hint(
         ui,
-        t("Ton-Master 100 % (und ein MIDI-Fader ganz oben) entspricht dieser Lautstärke – z. B. 30 % zum Testen, ohne die Systemlautstärke zu ändern."),
+        t("Sound master 100 % (and a MIDI fader at the top) equals this volume – e.g. 30 % for testing without changing the system volume."),
     );
     ui.add_space(theme::SP_S);
     ch.save |= ui
         .add(Toggle::new(
             &mut s.audio_reset_on_start,
-            t("Start einer SUPER SCENE setzt den Ton-Master auf die Höchstlautstärke"),
+            t("Starting a SUPER SCENE resets the sound master to the maximum volume"),
         ))
         .changed();
     hint(
         ui,
-        t("Ein MIDI-Fader auf dem Ton-Master wirkt danach erst wieder, wenn er den aktuellen Wert erreicht – er springt also nicht."),
+        t("A MIDI fader on the sound master only takes effect again once it reaches the current value – so it never jumps."),
     );
     ui.add_space(theme::SP_S);
     form(ui, "settings_audio", |f| {
-        f.row(t("Ausfaden (Standard)"), |ui| {
+        f.row(t("Fade out (default)"), |ui| {
             let mut secs = s.audio_fade_ms as f32 / 1000.0;
             let r = ui.add(
                 egui::DragValue::new(&mut secs)
@@ -362,13 +362,13 @@ fn audio(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     ch.save |= ui
         .add(Toggle::new(
             &mut s.audio_fade_stop,
-            t("Nach dem Ausfaden die SUPER SCENES mit Ton stoppen"),
+            t("Stop SUPER SCENES with sound after fading out"),
         ))
         .changed();
     ui.add_space(theme::SP_M);
     hint(
         ui,
-        t("Gilt nur für die Wiedergabe der Audioblöcke in SUPER SCENES, nicht für die Systemlautstärke. Ton-Master, Stumm und Ausfaden findest du oben in der Titelleiste und als Ziele in der MIDI-Zuordnung."),
+        t("Only affects playback of the audio clips in SUPER SCENES, not the system volume. Sound master, mute and fade out are in the title bar and available as targets in MIDI mapping."),
     );
 }
 
@@ -380,11 +380,11 @@ fn remote(
     ch: &mut SettingsChanges,
 ) {
     use crate::remote::RemoteStatus;
-    section(ui, t("Touch-Fernbedienung"));
+    section(ui, t("Touch remote"));
     ch.save |= ui
         .add(Toggle::new(
             &mut s.remote_enabled,
-            t("Fernbedienung im lokalen Netzwerk einschalten"),
+            t("Enable remote control on the local network"),
         ))
         .changed();
     ui.add_space(theme::SP_S);
@@ -402,7 +402,7 @@ fn remote(
         f.row(t("PIN"), |ui| {
             let r = ui.add(
                 egui::TextEdit::singleline(&mut s.remote_pin)
-                    .hint_text(t("ohne PIN"))
+                    .hint_text(t("no PIN"))
                     .char_limit(12)
                     .desired_width(ui.available_width()),
             );
@@ -415,19 +415,18 @@ fn remote(
         });
         f.row(t("Status"), |ui| {
             let (text, color) = match &link.status {
-                RemoteStatus::Off => (t("aus").to_string(), theme::text_dim()),
+                RemoteStatus::Off => (t("off").to_string(), theme::text_dim()),
                 RemoteStatus::Running(_) if link.clients > 0 => (
-                    tr!("läuft – {n} Gerät(e) verbunden", n = link.clients),
+                    tr!("running – {n} device(s) connected", n = link.clients),
                     theme::OK,
                 ),
                 RemoteStatus::Running(_) => {
-                    (t("läuft – kein Gerät verbunden").to_string(), theme::OK)
+                    (t("running – no device connected").to_string(), theme::OK)
                 }
-                RemoteStatus::Error(e) => (tr!("Fehler: {e}", e = e), theme::DANGER),
+                RemoteStatus::Error(e) => (tr!("Error: {e}", e = e), theme::DANGER),
             };
             ui.label(egui::RichText::new(text).color(color));
-            if matches!(link.status, RemoteStatus::Error(_))
-                && ui.button(t("Erneut versuchen")).clicked()
+            if matches!(link.status, RemoteStatus::Error(_)) && ui.button(t("Try again")).clicked()
             {
                 ch.remote_retry = true;
             }
@@ -435,21 +434,21 @@ fn remote(
     });
     if matches!(link.status, RemoteStatus::Running(_)) {
         ui.add_space(theme::SP_M);
-        section(ui, t("Verbinden"));
+        section(ui, t("Connect"));
         ui.horizontal_top(|ui| {
             if let Some(url) = link.addresses.first() {
                 qr_code(ui, url, 180.0);
                 ui.add_space(theme::SP_M);
             }
             ui.vertical(|ui| {
-                ui.label(t("Mit der Kamera des Smartphones oder Tablets scannen oder eine Adresse im Browser öffnen:"));
+                ui.label(t("Scan with the camera of your phone or tablet, or open an address in the browser:"));
                 ui.add_space(theme::SP_S);
                 for url in &link.addresses {
                     ui.horizontal(|ui| {
                         ui.hyperlink_to(egui::RichText::new(url).monospace(), url);
                         if ui
                             .add(IconButton::new(Icon::Copy))
-                            .on_hover_text(t("Kopieren"))
+                            .on_hover_text(t("Copy"))
                             .clicked()
                         {
                             ui.ctx().copy_text(url.clone());
@@ -458,7 +457,7 @@ fn remote(
                 }
                 if link.addresses.is_empty() {
                     ui.label(
-                        egui::RichText::new(t("Keine Netzwerkadresse gefunden."))
+                        egui::RichText::new(t("No network address found."))
                             .color(theme::WARN),
                     );
                 }
@@ -468,7 +467,7 @@ fn remote(
     ui.add_space(theme::SP_M);
     hint(
         ui,
-        t("Die Fernbedienung zeigt die Seiten des Touch-Modus im Browser (iPhone, iPad, Android). Gerät und Rechner müssen im selben Netzwerk sein; beim ersten Start fragt die Firewall eventuell nach. Über „Zum Home-Bildschirm“ läuft sie wie eine App im Vollbild. Ohne PIN kann jeder im Netzwerk bedienen."),
+        t("The remote shows the touch mode pages in the browser (iPhone, iPad, Android). Device and computer must be on the same network; the firewall may ask on first start. Use “Add to Home Screen” to run it full screen like an app. Without a PIN, anyone on the network can control it."),
     );
 }
 
@@ -517,9 +516,9 @@ fn full_combo(
 }
 
 fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
-    section(ui, t("Optionen"));
+    section(ui, t("Options"));
     form(ui, "settings_general", |f| {
-        f.row(t("Sprache"), |ui| {
+        f.row(t("Language"), |ui| {
             let current = Lang::from_key(&s.language);
             let mut picked = current;
             // Sprachnamen in der jeweiligen Sprache, damit man sie immer findet
@@ -534,10 +533,12 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
                 ch.save = true;
             }
         });
-        f.row(t("Instanzname"), |ui| {
+        f.row(t("Instance name"), |ui| {
             let r = ui
                 .add(text_field(&mut s.instance_name).desired_width(f32::INFINITY))
-                .on_hover_text(t("Name dieses Rechners, z. B. für Fernsteuerung im Netz"));
+                .on_hover_text(t(
+                    "Name of this computer, e.g. for remote control over the network",
+                ));
             if r.lost_focus() {
                 ch.save = true;
             }
@@ -545,13 +546,13 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     });
     ui.add_space(theme::SP_L);
     if let Some(p) = Settings::path() {
-        hint(ui, &tr!("Gespeichert in {v}", v = p.display()));
+        hint(ui, &tr!("Stored in {v}", v = p.display()));
     }
 }
 
 /// Anpassen: Aussehen und Darstellung.
 fn customize(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
-    section(ui, t("Aussehen"));
+    section(ui, t("Appearance"));
     form(ui, "settings_customize", |f| {
         f.row(t("Theme"), |ui| {
             let current = Theme::from_key(&s.theme);
@@ -568,7 +569,7 @@ fn customize(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
                 ch.save = true;
             }
         });
-        f.row(t("Darstellungsgröße"), |ui| {
+        f.row(t("Display size"), |ui| {
             let current = (s.ui_scale * 100.0).round() as u32;
             let mut picked = current;
             full_combo(ui, "settings_scale", format!("{current} %"), |ui| {
@@ -584,55 +585,49 @@ fn customize(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
         });
     });
     ui.add_space(theme::SP_M);
-    section(ui, t("Darstellung"));
+    section(ui, t("Display"));
     ch.save |= ui
         .add(Toggle::new(
             &mut s.wrap_scenes,
-            t("Szenen am unteren Rand in weitere Spalten umbrechen"),
+            t("Wrap scenes into further columns at the bottom"),
         ))
-        .on_hover_text(t(
-            "Aus: alle Szenen einer Bank untereinander (mit Bildlaufleiste)",
-        ))
+        .on_hover_text(t("Off: all scenes of a bank stacked (with scroll bar)"))
         .changed();
     ch.save |= ui
         .add(Toggle::new(
             &mut s.fader_ranges,
-            t("Wertebereiche auf den Fader-Schienen zeigen"),
+            t("Show value ranges on the fader tracks"),
         ))
-        .on_hover_text(t(
-            "Aus: schlichte Schienen; die Bezeichnung erscheint weiter beim Bewegen",
-        ))
+        .on_hover_text(t("Off: plain tracks; the label still appears while moving"))
         .changed();
     ch.save |= ui
         .add(Toggle::new(
             &mut s.tools_as_tabs,
-            t("3D-Visualisierer und Profile Builder als Reiter in der Titelleiste"),
+            t("3D visualizer and Profile Builder as tabs in the title bar"),
         ))
         .on_hover_text(t(
-            "Zusätzlich zu Einrichten, Steuern und Touch; über den Knopf im Reiter lassen sie sich weiterhin im eigenen Fenster öffnen",
+            "In addition to Setup, Control and Touch; the button in the tab still opens them in their own window",
         ))
         .changed();
 }
 
 /// Start: was beim Programmstart passiert.
 fn startup(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
-    section(ui, t("Beim Start"));
+    section(ui, t("On startup"));
     ch.save |= ui
         .add(Toggle::new(
             &mut s.open_last_show,
-            t("Letzte Datei automatisch laden"),
+            t("Load last file automatically"),
         ))
         .changed();
     ch.save |= ui
-        .add(Toggle::new(&mut s.start_touch, t("Im Touch-Modus starten")))
-        .on_hover_text(t(
-            "Der Touch-Modus folgt – die Einstellung wird schon gespeichert",
-        ))
+        .add(Toggle::new(&mut s.start_touch, t("Start in touch mode")))
+        .on_hover_text(t("Touch mode is coming – the setting is already saved"))
         .changed();
     ch.save |= ui
         .add(Toggle::new(
             &mut s.check_updates,
-            t("Beim Start nach Updates suchen"),
+            t("Check for updates on startup"),
         ))
         .changed();
 }
@@ -645,14 +640,14 @@ fn outputs(
     ch: &mut SettingsChanges,
 ) {
     ui.horizontal(|ui| {
-        ui.label(theme::heading_text(t("Universen"))).on_hover_text(
+        ui.label(theme::heading_text(t("Universes"))).on_hover_text(
             "Ein USB-DMX-Kabel (Open DMX / FTDI) je Universum. Die Zuordnung hängt an der \
              Seriennummer des Kabels und bleibt beim Umstecken erhalten.",
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
                 .add(IconButton::new(Icon::Reset).flat())
-                .on_hover_text(t("Geräte neu suchen"))
+                .on_hover_text(t("Search for devices again"))
                 .clicked()
             {
                 *ports = dmxcraft_output::list_ports();
@@ -660,9 +655,9 @@ fn outputs(
             let n = ports.iter().filter(|p| p.ftdi).count();
             ui.label(
                 egui::RichText::new(match n {
-                    0 => t("kein USB-DMX-Kabel gefunden").to_string(),
-                    1 => t("1 Kabel gefunden").to_string(),
-                    n => tr!("{n} Kabel gefunden", n = n),
+                    0 => t("no USB DMX cable found").to_string(),
+                    1 => t("1 cable found").to_string(),
+                    n => tr!("{n} cables found", n = n),
                 })
                 .color(theme::text_dim()),
             );
@@ -685,33 +680,30 @@ fn outputs(
                     .and_then(|k| ports.iter().find(|p| &p.key == k));
                 // Zustandspunkt
                 let (dot, tip) = match (&current, port) {
-                    (None, _) => (
-                        theme::text_faint(),
-                        t("Kein Gerät – wird nicht ausgegeben").to_string(),
-                    ),
-                    (Some(_), Some(_)) => (theme::OK, t("Gerät angeschlossen").to_string()),
-                    (Some(k), None) => (theme::WARN, tr!("{k} ist nicht angeschlossen", k = k)),
+                    (None, _) => (theme::text_faint(), t("No device – not output").to_string()),
+                    (Some(_), Some(_)) => (theme::OK, t("Device connected").to_string()),
+                    (Some(k), None) => (theme::WARN, tr!("{k} is not connected", k = k)),
                 };
                 let (r, resp) = ui.allocate_exact_size(vec2(10.0, INPUT_H), Sense::hover());
                 ui.painter().circle_filled(r.center(), 4.0, dot);
                 resp.on_hover_text(tip);
 
-                ui.label(tr!("Universum {u_nr}", u_nr = u + 1));
+                ui.label(tr!("Universe {u_nr}", u_nr = u + 1));
 
                 let text = match (&current, port) {
-                    (None, _) => t("– kein Gerät –").to_string(),
+                    (None, _) => t("– no device –").to_string(),
                     (Some(_), Some(p)) => p.label.clone(),
-                    (Some(k), None) => tr!("{k} (nicht angeschlossen)", k = k),
+                    (Some(k), None) => tr!("{k} (not connected)", k = k),
                 };
                 let mut picked = current.clone();
                 ui.allocate_ui(vec2(360.0, INPUT_H), |ui| {
                     full_combo(ui, ("settings_universe", u), text, |ui| {
-                        ui.selectable_value(&mut picked, None, t("– kein Gerät –"));
+                        ui.selectable_value(&mut picked, None, t("– no device –"));
                         for p in ports.iter() {
                             let label = if p.ftdi {
                                 p.label.clone()
                             } else {
-                                tr!("{label} (kein FTDI)", label = p.label)
+                                tr!("{label} (not FTDI)", label = p.label)
                             };
                             ui.selectable_value(&mut picked, Some(p.key.clone()), label);
                         }
@@ -731,8 +723,8 @@ fn outputs(
                 ui.label(
                     egui::RichText::new(match n {
                         0 => String::new(),
-                        1 => t("1 Gerät").to_string(),
-                        n => tr!("{n} Geräte", n = n),
+                        1 => t("1 fixture").to_string(),
+                        n => tr!("{n} fixtures", n = n),
                     })
                     .color(theme::text_dim()),
                 );
@@ -749,7 +741,7 @@ fn midi(
     ch: &mut SettingsChanges,
 ) {
     ui.horizontal(|ui| {
-        ui.label(theme::heading_text(t("MIDI-Controller")));
+        ui.label(theme::heading_text(t("MIDI controllers")));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let free: Vec<&String> = inputs
                 .iter()
@@ -757,7 +749,7 @@ fn midi(
                 .collect();
             let add = ui
                 .add(IconButton::new(Icon::Plus).flat().enabled(!free.is_empty()))
-                .on_hover_text(t("Gerät hinzufügen"));
+                .on_hover_text(t("Add device"));
             if add.clicked() {
                 egui::Popup::toggle_id(ui.ctx(), add.id);
             }
@@ -774,16 +766,16 @@ fn midi(
     });
     hint(
         ui,
-        t("Alle angeschlossenen MIDI-Eingänge werden für die Zuordnung geöffnet. Hier eingerichtete Geräte bekommen ihren Typ (Farben der Tasten) und den Ausgang für die LED-Rückmeldung."),
+        t("All connected MIDI inputs are opened for mapping. Devices set up here get their type (button colours) and the output for LED feedback."),
     );
     ui.add_space(theme::SP_S);
     if s.midi_devices.is_empty() {
         hint(
             ui,
             if inputs.is_empty() {
-                t("Kein MIDI-Gerät gefunden.")
+                t("No MIDI device found.")
             } else {
-                t("Noch kein Gerät eingerichtet – mit „+“ hinzufügen.")
+                t("No device set up yet – add one with “+”.")
             },
         );
         return;
@@ -808,15 +800,15 @@ fn midi(
                     };
                     ui.painter().circle_filled(r.center(), 4.0, c);
                     dot.on_hover_text(if connected {
-                        t("Angeschlossen")
+                        t("Connected")
                     } else {
-                        t("Nicht angeschlossen")
+                        t("Not connected")
                     });
                     ui.label(egui::RichText::new(&d.input).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
                             .add(IconButton::new(Icon::Trash).flat().danger())
-                            .on_hover_text(t("Gerät entfernen"))
+                            .on_hover_text(t("Remove device"))
                             .clicked()
                         {
                             remove = Some(i);
@@ -825,37 +817,33 @@ fn midi(
                 });
                 ui.add_space(theme::SP_XS);
                 form(ui, &format!("settings_midi_dev_{i}"), |f| {
-                    f.row(t("Typ"), |ui| {
+                    f.row(t("Type"), |ui| {
                         full_combo(ui, ("midi_model", i), d.model.label(), |ui| {
                             for m in DeviceModel::ALL {
                                 ui.selectable_value(&mut d.model, m, m.label());
                             }
                         });
                     });
-                    f.row(t("LED-Ausgang"), |ui| {
+                    f.row(t("LED output"), |ui| {
                         let shown = if d.output.is_empty() {
-                            t("– kein Ausgang –").to_string()
+                            t("– no output –").to_string()
                         } else {
                             d.output.clone()
                         };
                         full_combo(ui, ("midi_out", i), shown, |ui| {
-                            ui.selectable_value(
-                                &mut d.output,
-                                String::new(),
-                                t("– kein Ausgang –"),
-                            );
+                            ui.selectable_value(&mut d.output, String::new(), t("– no output –"));
                             for o in outputs {
                                 ui.selectable_value(&mut d.output, o.clone(), o);
                             }
                         });
                     });
-                    f.row(t("LEDs löschen"), |ui| {
-                        ui.add(Toggle::new(&mut d.clear_on_connect, t("beim Verbinden")));
+                    f.row(t("Clear LEDs"), |ui| {
+                        ui.add(Toggle::new(&mut d.clear_on_connect, t("on connect")));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui
                                 .add_enabled(
                                     !d.output.is_empty(),
-                                    egui::Button::new(t("Jetzt löschen")),
+                                    egui::Button::new(t("Clear now")),
                                 )
                                 .clicked()
                             {
@@ -881,10 +869,10 @@ fn obs(ui: &mut Ui, e: &mut Engine, link: &crate::obs::Obs) {
     use crate::obs::Status;
     let mut cfg = e.show().obs.clone();
     section(ui, t("OBS"));
-    ui.add(Toggle::new(&mut cfg.enabled, t("Mit OBS verbinden")));
+    ui.add(Toggle::new(&mut cfg.enabled, t("Connect to OBS")));
     ui.add_space(theme::SP_S);
     form(ui, "settings_obs", |f| {
-        f.row(t("Adresse"), |ui| {
+        f.row(t("Address"), |ui| {
             ui.add(egui::TextEdit::singleline(&mut cfg.host).desired_width(220.0));
         });
         f.row(t("Port"), |ui| {
@@ -894,34 +882,34 @@ fn obs(ui: &mut Ui, e: &mut Engine, link: &crate::obs::Obs) {
                     .speed(1),
             );
         });
-        f.row(t("Passwort"), |ui| {
+        f.row(t("Password"), |ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut cfg.password)
                     .password(true)
                     .desired_width(220.0),
             );
         });
-        f.row(t("Medienquelle für Videos"), |ui| {
+        f.row(t("Media source for videos"), |ui| {
             ui.add(egui::TextEdit::singleline(&mut cfg.video_source).desired_width(220.0));
         });
         f.row(t("Status"), |ui| {
             let (text, color) = match link.status() {
-                Status::Off => (t("Nicht verbunden").to_string(), theme::text_dim()),
-                Status::Connecting => (t("Verbinde …").to_string(), theme::WARN),
+                Status::Off => (t("Not connected").to_string(), theme::text_dim()),
+                Status::Connecting => (t("Connecting …").to_string(), theme::WARN),
                 Status::Connected => (
                     tr!(
-                        "Verbunden – {scenes} Szenen, {inputs} Quellen",
+                        "Connected – {scenes} scenes, {inputs} sources",
                         scenes = link.scenes().len(),
                         inputs = link.inputs().len()
                     ),
                     theme::OK,
                 ),
-                Status::Failed(e) => (tr!("Fehler: {e}", e = e), theme::DANGER),
+                Status::Failed(e) => (tr!("Error: {e}", e = e), theme::DANGER),
             };
             ui.label(egui::RichText::new(text).color(color));
         });
         if let (crate::obs::Status::Connected, Some(err)) = (link.status(), link.last_error()) {
-            f.row(t("Letzte Meldung"), |ui| {
+            f.row(t("Last message"), |ui| {
                 ui.label(egui::RichText::new(err).color(theme::text_faint()));
             });
         }
@@ -934,9 +922,9 @@ fn obs(ui: &mut Ui, e: &mut Engine, link: &crate::obs::Obs) {
 fn project(ui: &mut Ui, e: &mut Engine, show_path: &str) {
     section(ui, t("Show"));
     form(ui, "settings_project", |f| {
-        f.row(t("Datei"), |ui| {
+        f.row(t("File"), |ui| {
             let text = if show_path.is_empty() {
-                t("noch nicht gespeichert")
+                t("not saved yet")
             } else {
                 show_path
             };
@@ -944,7 +932,7 @@ fn project(ui: &mut Ui, e: &mut Engine, show_path: &str) {
                 .on_hover_text(text);
         });
         let show = e.show();
-        f.row(t("Inhalt"), |ui| {
+        f.row(t("Content"), |ui| {
             ui.label(
                 egui::RichText::new(tr!(
                     "{n} Geräte · {n1} Szenen · {n2} Zonen · {n3} Gruppen",

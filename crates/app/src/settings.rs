@@ -67,7 +67,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            language: "de".into(),
+            language: "en".into(),
             ui_scale: 1.0,
             instance_name: default_instance_name(),
             start_touch: false,
@@ -186,7 +186,7 @@ impl Settings {
     }
 
     pub fn save(&self) -> Result<(), String> {
-        let path = Self::path().ok_or(t("Kein Konfigurationsordner gefunden"))?;
+        let path = Self::path().ok_or(t("No configuration folder found"))?;
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }

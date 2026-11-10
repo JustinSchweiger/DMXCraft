@@ -52,7 +52,7 @@ pub fn trigger_cx(
     let mut counts = HashMap::new();
     for tr in triggers {
         let label = match tr.control {
-            None => t("Kein Ziel").to_string(),
+            None => t("No target").to_string(),
             Some(_) if !tr.channels.is_empty() => {
                 crate::mapping::channel_name(show, tr.channels[0])
             }
@@ -99,7 +99,7 @@ pub fn triggers_ui(
     ui.add_space(theme::SP_S);
     ui.horizontal(|ui| {
         ui.label(
-            egui::RichText::new(t("Trigger").to_uppercase())
+            egui::RichText::new(t("Triggers").to_uppercase())
                 .font(theme::caption())
                 .color(theme::text_dim()),
         );
@@ -110,14 +110,14 @@ pub fn triggers_ui(
                     .flat()
                     .enabled(enabled),
             );
-            let resp = resp.on_hover_text(t("Trigger hinzufügen"));
+            let resp = resp.on_hover_text(t("Add trigger"));
             menu::dropdown(&resp, |ui| {
                 menu::begin(ui);
                 for band in TriggerBand::ALL {
                     let label = match band {
-                        TriggerBand::Low => t("Low (Kick, Bass)"),
-                        TriggerBand::Mid => t("Mid (Snare, Stimme)"),
-                        TriggerBand::High => t("High (Hi-Hat, Becken)"),
+                        TriggerBand::Low => t("Low (kick, bass)"),
+                        TriggerBand::Mid => t("Mid (snare, vocals)"),
+                        TriggerBand::High => t("High (hi-hat, cymbals)"),
                     };
                     if menu::item(ui, menu::MenuItem::new(label).icon(Icon::Waveform)) {
                         let id = triggers.iter().map(|t| t.id).max().unwrap_or(0) + 1;
@@ -128,7 +128,7 @@ pub fn triggers_ui(
         });
     });
     if triggers.is_empty() {
-        ui.label(egui::RichText::new(t("Keine Trigger")).color(theme::text_faint()));
+        ui.label(egui::RichText::new(t("No triggers")).color(theme::text_faint()));
     }
     let mut remove = None;
     for tr in triggers.iter_mut() {
@@ -165,8 +165,8 @@ fn trigger_ui(
             crate::ui::widgets::dialog::text_field(&mut tr.name).desired_width(90.0),
         );
         let count = match tcx.counts.get(&tr.id).copied().flatten() {
-            Some(n) => crate::tr!("{n} Ereignisse", n = n),
-            None => t("wird berechnet …").to_string(),
+            Some(n) => crate::tr!("{n} events", n = n),
+            None => t("calculating …").to_string(),
         };
         ui.label(
             egui::RichText::new(count)
@@ -181,7 +181,7 @@ fn trigger_ui(
                         .flat()
                         .enabled(enabled),
                 )
-                .on_hover_text(t("Trigger löschen"))
+                .on_hover_text(t("Delete trigger"))
                 .clicked()
             {
                 *remove = Some(tr.id);
@@ -189,7 +189,7 @@ fn trigger_ui(
             let icon = if tr.muted { Icon::EyeOff } else { Icon::Eye };
             if ui
                 .add(IconButton::new(icon).size(22.0).flat().enabled(enabled))
-                .on_hover_text(t("Trigger aus-/einschalten"))
+                .on_hover_text(t("Enable/disable trigger"))
                 .clicked()
             {
                 tr.muted = !tr.muted;
@@ -205,7 +205,7 @@ fn trigger_ui(
             (Some(TriggerBand::Low), "Low"),
             (Some(TriggerBand::Mid), "Mid"),
             (Some(TriggerBand::High), "High"),
-            (None, t("Eigenes")),
+            (None, t("Custom")),
         ];
         let w = ((ui.available_width() - 4.0) / 4.0).clamp(36.0, 64.0);
         ui.add_enabled_ui(enabled, |ui| {
@@ -223,7 +223,7 @@ fn trigger_ui(
         });
     });
     if tr.band().is_none() {
-        label_row(ui, t("Frequenz (Hz)"), |ui| {
+        label_row(ui, t("Frequency (Hz)"), |ui| {
             ui.add_enabled_ui(enabled, |ui| {
                 ui.add_sized(
                     Vec2::new(64.0, 22.0),
@@ -258,8 +258,8 @@ fn trigger_ui(
         );
         *v = p / 100.0;
     };
-    pct(ui, "thr", t("Schwellwert (%)"), &mut tr.threshold, 100.0);
-    pct(ui, "hys", t("Hysterese (%)"), &mut tr.hysteresis, 50.0);
+    pct(ui, "thr", t("Threshold (%)"), &mut tr.threshold, 100.0);
+    pct(ui, "hys", t("Hysteresis (%)"), &mut tr.hysteresis, 50.0);
     tr.threshold = tr.threshold.max(0.01);
     let ms = |ui: &mut egui::Ui, key: &str, label: &str, v: &mut u32, max: f32| {
         let mut f = *v as f32;
@@ -275,19 +275,13 @@ fn trigger_ui(
         );
         *v = f.round().max(0.0) as u32;
     };
-    ms(
-        ui,
-        "gap",
-        t("Mindestabstand (ms)"),
-        &mut tr.min_gap_ms,
-        1000.0,
-    );
-    ms(ui, "hold", t("Haltezeit (ms)"), &mut tr.hold_ms, 1000.0);
-    ms(ui, "lead", t("Vorlauf (ms)"), &mut tr.lead_ms, 500.0);
-    toggle_row(ui, t("Nur während des Ereignisses"), &mut tr.flash, enabled);
+    ms(ui, "gap", t("Minimum gap (ms)"), &mut tr.min_gap_ms, 1000.0);
+    ms(ui, "hold", t("Hold time (ms)"), &mut tr.hold_ms, 1000.0);
+    ms(ui, "lead", t("Lead time (ms)"), &mut tr.lead_ms, 500.0);
+    toggle_row(ui, t("Only during the event"), &mut tr.flash, enabled);
     // Ziel
     let label = tcx.labels.get(&tr.id).cloned().unwrap_or_default();
-    label_row(ui, t("Ziel"), |ui| {
+    label_row(ui, t("Target"), |ui| {
         ui.add(
             egui::Label::new(egui::RichText::new(label).color(if tr.control.is_some() {
                 accent
@@ -298,7 +292,7 @@ fn trigger_ui(
         );
     });
     ui.horizontal(|ui| {
-        let resp = ui.add_enabled(enabled, egui::Button::new(t("Szene …")));
+        let resp = ui.add_enabled(enabled, egui::Button::new(t("Scene …")));
         menu::dropdown(&resp, |ui| {
             menu::begin(ui);
             egui::ScrollArea::vertical()
@@ -316,23 +310,21 @@ fn trigger_ui(
         });
         if tcx.picking == Some(tr.id) {
             if ui
-                .add_enabled(enabled, egui::Button::new(t("Abbrechen")))
+                .add_enabled(enabled, egui::Button::new(t("Cancel")))
                 .clicked()
             {
                 *action = TriggerAction::CancelPick;
             }
         } else if ui
-            .add_enabled(enabled, egui::Button::new(t("Element wählen")))
-            .on_hover_text(t(
-                "Danach Alt + Klick auf ein Bedienelement (wie bei Touch)",
-            ))
+            .add_enabled(enabled, egui::Button::new(t("Pick element")))
+            .on_hover_text(t("Then Alt + click a control (as for Touch)"))
             .clicked()
         {
             *action = TriggerAction::Pick(tr.id);
         }
         if tr.control.is_some()
             && ui
-                .add_enabled(enabled, egui::Button::new(t("Entfernen")))
+                .add_enabled(enabled, egui::Button::new(t("Remove")))
                 .clicked()
         {
             tr.control = None;
@@ -341,7 +333,7 @@ fn trigger_ui(
     });
     if tcx.picking == Some(tr.id) {
         ui.label(
-            egui::RichText::new(t("Alt + Klick auf das Ziel …"))
+            egui::RichText::new(t("Alt + click the target …"))
                 .font(theme::caption())
                 .color(accent),
         );
@@ -356,7 +348,7 @@ pub fn apply_trigger_pick(
     pick: crate::mapping::TouchPick,
 ) {
     let Some(control) = pick.control else {
-        st.info(t("Dieses Element kann kein Trigger-Ziel sein"));
+        st.info(t("This element can't be a trigger target"));
         return;
     };
     let (control, channels) = if pick.channels.is_empty() {
@@ -376,6 +368,6 @@ pub fn apply_trigger_pick(
     if let Some(tr) = tr {
         tr.control = Some(control);
         tr.channels = channels;
-        st.info(t("Ziel übernommen"));
+        st.info(t("Target assigned"));
     }
 }

@@ -52,8 +52,8 @@ pub fn show(ctx: &egui::Context, e: &mut Engine, st: &mut AppState, mapper: &mut
         return;
     };
     let title = match kind {
-        MapKind::Keyboard => t("Tastatur-Zuordnung"),
-        MapKind::Midi => t("MIDI-Zuordnung"),
+        MapKind::Keyboard => t("Keyboard mapping"),
+        MapKind::Midi => t("MIDI mapping"),
     };
     let mut open = true;
     let pos = ctx.content_rect().right_top() + vec2(-theme::SP_L, 48.0);
@@ -81,11 +81,11 @@ pub fn show(ctx: &egui::Context, e: &mut Engine, st: &mut AppState, mapper: &mut
 /// Kopf „Voreinstellungen“ mit Löschen, Import, Export und „+“ für globale
 /// Befehle.
 fn presets(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, kind: MapKind) {
-    section_header(ui, t("Voreinstellungen"), |ui| {
+    section_header(ui, t("Presets"), |ui| {
         let empty = e.show().mappings.list(kind).is_empty();
         if ui
             .add(IconButton::new(Icon::Export).flat().enabled(!empty))
-            .on_hover_text(t("Voreinstellung exportieren"))
+            .on_hover_text(t("Export preset"))
             .clicked()
         {
             let list = e.show().mappings.list(kind).clone();
@@ -93,14 +93,14 @@ fn presets(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, 
         }
         if ui
             .add(IconButton::new(Icon::Import).flat())
-            .on_hover_text(t("Voreinstellung importieren"))
+            .on_hover_text(t("Import preset"))
             .clicked()
         {
             mapper.win.import = Some((kind, pick_import(ui.ctx())));
         }
         if ui
             .add(IconButton::new(Icon::Trash).flat().danger().enabled(!empty))
-            .on_hover_text(t("Aktuelle Voreinstellung löschen"))
+            .on_hover_text(t("Delete current preset"))
             .clicked()
         {
             e.show_mut().mappings.list_mut(kind).clear();
@@ -109,7 +109,7 @@ fn presets(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, 
         }
         let add = ui
             .add(IconButton::new(Icon::Plus).flat())
-            .on_hover_text(t("Globalen Befehl zuordnen"));
+            .on_hover_text(t("Map a global command"));
         if add.clicked() {
             egui::Popup::toggle_id(ui.ctx(), add.id);
         }
@@ -117,17 +117,17 @@ fn presets(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, 
             let items = [
                 (Control::Blackout, t("Blackout")),
                 (Control::Master, t("Master")),
-                (Control::StopAll, t("Alle Szenen stoppen")),
-                (Control::AudioMaster, t("Ton-Master")),
-                (Control::AudioMute, t("Ton stumm")),
-                (Control::AudioFade, t("Ton ausfaden")),
-                (Control::BankStep { delta: 1 }, t("Nächste Bank")),
-                (Control::BankStep { delta: -1 }, t("Vorige Bank")),
+                (Control::StopAll, t("Stop all scenes")),
+                (Control::AudioMaster, t("Sound master")),
+                (Control::AudioMute, t("Mute sound")),
+                (Control::AudioFade, t("Fade out sound")),
+                (Control::BankStep { delta: 1 }, t("Next bank")),
+                (Control::BankStep { delta: -1 }, t("Previous bank")),
                 (
                     Control::Scene {
                         target: SceneTarget::Selected,
                     },
-                    t("Ausgewählte Szene"),
+                    t("Selected scene"),
                 ),
             ];
             for (c, label) in items {
@@ -179,10 +179,10 @@ fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, ki
     let p = ui.painter();
     p.rect_filled(head, theme::R_S, theme::bg());
     let input_head = match kind {
-        MapKind::Keyboard => t("Taste"),
-        MapKind::Midi => t("MIDI-Eingang"),
+        MapKind::Keyboard => t("Key"),
+        MapKind::Midi => t("MIDI input"),
     };
-    let heads = [t("Kategorie"), t("Ziel"), input_head];
+    let heads = [t("Category"), t("Target"), input_head];
     let mut x = head.left() + theme::SP_S;
     for (i, h) in heads.iter().enumerate() {
         p.text(
@@ -220,10 +220,8 @@ fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, ki
                 ui.add_space(theme::SP_M);
                 ui.vertical_centered(|ui| {
                     ui.label(
-                        egui::RichText::new(t(
-                            "Noch keine Zuordnungen. Ein markiertes Element anklicken.",
-                        ))
-                        .color(theme::text_faint()),
+                        egui::RichText::new(t("No mappings yet. Click a highlighted element."))
+                            .color(theme::text_faint()),
                     );
                 });
             }
@@ -260,12 +258,12 @@ fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, ki
                     st.map_learn = false;
                 }
                 resp.context_menu(|ui| {
-                    if ui.button(t("Neu zuweisen")).clicked() {
+                    if ui.button(t("Reassign")).clicked() {
                         st.map_sel = Some(*id);
                         st.map_learn = true;
                         ui.close();
                     }
-                    if ui.button(t("Löschen")).clicked() {
+                    if ui.button(t("Delete")).clicked() {
                         delete = Some(*id);
                         ui.close();
                     }
@@ -293,9 +291,12 @@ fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, ki
 
 /// Einstellungen der gewählten Zuordnung.
 fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, kind: MapKind) {
-    section_header(ui, t("Einstellungen"), |_| {});
+    section_header(ui, t("Settings"), |_| {});
     let Some(id) = st.map_sel else {
-        hint(ui, t("Ein markiertes Element anklicken, um es zuzuordnen oder seine Zuordnung zu bearbeiten."));
+        hint(
+            ui,
+            t("Click a highlighted element to map it or edit its mapping."),
+        );
         return;
     };
     let Some(mut m) = e
@@ -320,25 +321,21 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
         // Eingabe
         f.row(
             match kind {
-                MapKind::Keyboard => t("Taste"),
-                MapKind::Midi => t("Eingabe"),
+                MapKind::Keyboard => t("Key"),
+                MapKind::Midi => t("Input"),
             },
             |ui| {
                 let text = if learn {
-                    t("Warte auf Eingabe …").to_string()
+                    t("Waiting for input …").to_string()
                 } else {
                     m.input
                         .as_ref()
-                        .map_or_else(|| t("(keine)").to_string(), Input::label)
+                        .map_or_else(|| t("(none)").to_string(), Input::label)
                 };
                 let c = if learn { color(kind) } else { theme::text() };
                 ui.label(egui::RichText::new(text).color(c).strong());
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let label = if learn {
-                        t("Abbrechen")
-                    } else {
-                        t("Neu zuweisen")
-                    };
+                    let label = if learn { t("Cancel") } else { t("Reassign") };
                     if ui.button(label).clicked() {
                         learn = !learn;
                     }
@@ -349,7 +346,7 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
         {
             let options = targets(show, &m);
             if options.len() > 1 {
-                f.row(t("Ziel"), |ui| {
+                f.row(t("Target"), |ui| {
                     let current = options
                         .iter()
                         .find(|(c, _)| *c == m.control)
@@ -363,10 +360,10 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
             }
         }
         // Modus
-        f.row(t("Tastenmodus"), |ui| {
+        f.row(t("Button mode"), |ui| {
             let label = |b: ButtonMode| match b {
-                ButtonMode::Toggle => t("An / Aus"),
-                ButtonMode::Value => t("Wert in %"),
+                ButtonMode::Toggle => t("On / Off"),
+                ButtonMode::Value => t("Value in %"),
             };
             combo(ui, ("map_mode", id), label(m.mode), |ui| {
                 for b in [ButtonMode::Toggle, ButtonMode::Value] {
@@ -382,9 +379,9 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
                 | Control::Channel { .. }
         ) && m.mode == ButtonMode::Toggle
         {
-            f.row(t("Flash-Taste"), |ui| {
+            f.row(t("Flash button"), |ui| {
                 ui.add(crate::ui::widgets::Toggle::new(&mut m.flash, ""))
-                    .on_hover_text(t("Nur aktiv, solange die Taste gedrückt ist"));
+                    .on_hover_text(t("Only active while the button is held"));
             });
         }
         // MIDI-Eingang
@@ -395,30 +392,30 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
             number,
         }) = &mut m.input
         {
-            f.row(t("Gerät"), |ui| {
+            f.row(t("Device"), |ui| {
                 let shown = if device.is_empty() {
-                    t("Alle Geräte").to_string()
+                    t("All devices").to_string()
                 } else {
                     device.clone()
                 };
                 combo(ui, ("map_in", id), shown, |ui| {
-                    ui.selectable_value(device, String::new(), t("Alle Geräte"));
+                    ui.selectable_value(device, String::new(), t("All devices"));
                     for n in &inputs {
                         ui.selectable_value(device, n.clone(), n);
                     }
                 });
             });
-            f.row(t("Kanal"), |ui| {
+            f.row(t("Channel"), |ui| {
                 combo(ui, ("map_ch", id), channel.to_string(), |ui| {
                     for c in 1..=16u8 {
                         ui.selectable_value(channel, c, c.to_string());
                     }
                 });
             });
-            f.row(t("Nachricht"), |ui| {
+            f.row(t("Message"), |ui| {
                 let label = |x: MidiMessage| match x {
                     MidiMessage::Note => t("Note"),
-                    MidiMessage::Cc => t("Regler (CC)"),
+                    MidiMessage::Cc => t("Control (CC)"),
                 };
                 combo(ui, ("map_msg", id), label(*message), |ui| {
                     for x in [MidiMessage::Note, MidiMessage::Cc] {
@@ -426,7 +423,7 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
                     }
                 });
             });
-            f.row(t("Nummer"), |ui| {
+            f.row(t("Number"), |ui| {
                 let note = *message == MidiMessage::Note;
                 ui.add(
                     egui::DragValue::new(number)
@@ -446,7 +443,7 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
     // MIDI-Ausgang (LED-Rückmeldung)
     if kind == MapKind::Midi {
         ui.add_space(theme::SP_S);
-        section_header(ui, t("MIDI-Ausgang"), |_| {});
+        section_header(ui, t("MIDI output"), |_| {});
         let models: Vec<(String, DeviceModel)> = mapper
             .devices
             .iter()
@@ -454,19 +451,19 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
             .collect();
         let edit_on = &mut mapper.win.edit_on;
         form(ui, &format!("mapping_out_{id}"), |f| {
-            f.row(t("Gerät"), |ui| {
+            f.row(t("Device"), |ui| {
                 let mut dev = m
                     .feedback
                     .as_ref()
                     .map(|f| f.device.clone())
                     .unwrap_or_default();
                 let shown = if dev.is_empty() {
-                    t("Keins").to_string()
+                    t("None").to_string()
                 } else {
                     dev.clone()
                 };
                 combo(ui, ("map_out", id), shown, |ui| {
-                    ui.selectable_value(&mut dev, String::new(), t("Keins"));
+                    ui.selectable_value(&mut dev, String::new(), t("None"));
                     for n in &outputs {
                         ui.selectable_value(&mut dev, n.clone(), n);
                     }
@@ -480,16 +477,16 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
             let Some(fb) = &mut m.feedback else {
                 return;
             };
-            f.row(t("Zustand"), |ui| {
-                ui.selectable_value(edit_on, false, t("Aus"));
-                ui.selectable_value(edit_on, true, t("An"));
+            f.row(t("State"), |ui| {
+                ui.selectable_value(edit_on, false, t("Off"));
+                ui.selectable_value(edit_on, true, t("On"));
             });
             let model = models
                 .iter()
                 .find(|(o, _)| *o == fb.device)
                 .map_or_else(|| DeviceModel::detect(&fb.device), |d| d.1);
             let s = if *edit_on { &mut fb.on } else { &mut fb.off };
-            f.row(t("Kanal"), |ui| {
+            f.row(t("Channel"), |ui| {
                 combo(
                     ui,
                     ("map_fbch", id, *edit_on),
@@ -514,7 +511,7 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
         if ui
             .add(IconButton::new(Icon::Trash).flat().danger())
-            .on_hover_text(t("Zuordnung löschen"))
+            .on_hover_text(t("Delete mapping"))
             .clicked()
         {
             remove = true;
@@ -547,29 +544,29 @@ fn targets(show: &Show, m: &Mapping) -> Vec<(Control, String)> {
         let fixed = match fixtures.iter().next() {
             Some(f) if fixtures.len() == 1 => show
                 .fixture(*f)
-                .map_or_else(|| t("(gelöscht)").to_string(), |f| f.name.clone()),
-            _ => crate::tr!("{n} Geräte", n = fixtures.len()),
+                .map_or_else(|| t("(deleted)").to_string(), |f| f.name.clone()),
+            _ => crate::tr!("{n} fixtures", n = fixtures.len()),
         };
         out.push((
             Control::Channels,
-            crate::tr!("Fest: {devices}", devices = fixed),
+            crate::tr!("Fixed: {devices}", devices = fixed),
         ));
         out.push((
             Control::Ui {
                 key: key ^ dmxcraft_core::mapping::channels_key(&m.channels),
                 fader: true,
             },
-            t("Ausgewählte Geräte (folgt der Auswahl)").to_string(),
+            t("Selected devices (follows the selection)").to_string(),
         ));
     }
     if let Control::Fixture { id } = m.element() {
-        out.push((Control::Fixture { id }, t("Auswahl umschalten").to_string()));
+        out.push((Control::Fixture { id }, t("Toggle selection").to_string()));
         if show.virtual_dimmer(id).is_some() {
             out.push((
                 Control::Channel {
                     channel: dmxcraft_core::ChannelRef::virtual_dimmer(id),
                 },
-                t("Dimmer (virtuell)").to_string(),
+                t("Dimmer (virtual)").to_string(),
             ));
         }
         if let Some(ty) = show.fixture(id).and_then(|f| show.type_of(f)) {
@@ -581,7 +578,7 @@ fn targets(show: &Show, m: &Mapping) -> Vec<(Control, String)> {
                             channel: i as u16,
                         },
                     },
-                    crate::tr!("Kanal {n}: {name}", n = i + 1, name = c.name),
+                    crate::tr!("Channel {n}: {name}", n = i + 1, name = c.name),
                 ));
             }
         }
@@ -590,21 +587,21 @@ fn targets(show: &Show, m: &Mapping) -> Vec<(Control, String)> {
         target: SceneTarget::Scene { id },
     } = m.element()
     {
-        out.push((scene(SceneTarget::Scene { id }), t("Szene").to_string()));
+        out.push((scene(SceneTarget::Scene { id }), t("Scene").to_string()));
         out.push((
             scene(SceneTarget::Selected),
-            t("Ausgewählte Szene").to_string(),
+            t("Selected scene").to_string(),
         ));
         if let Some(z) = show.scene(id).and_then(|s| s.zone) {
             let list = super::zone_scenes(show, z);
             if let Some(index) = list.iter().position(|s| *s == id) {
                 out.push((
                     scene(SceneTarget::Index { zone: z, index }),
-                    crate::tr!("Nr. {n} in dieser Bank", n = index + 1),
+                    crate::tr!("No. {n} in this bank", n = index + 1),
                 ));
                 out.push((
                     scene(SceneTarget::IndexInShownBank { index }),
-                    crate::tr!("Nr. {n} in der angezeigten Bank", n = index + 1),
+                    crate::tr!("No. {n} in the shown bank", n = index + 1),
                 ));
             }
         }
@@ -636,7 +633,7 @@ fn palette_button(
         egui::Stroke::new(1.0, theme::border()),
         egui::StrokeKind::Inside,
     );
-    let resp = resp.on_hover_text(t("Farbe wählen"));
+    let resp = resp.on_hover_text(t("Choose color"));
     let pid = resp.id;
     if resp.clicked() {
         egui::Popup::toggle_id(ui.ctx(), pid);
@@ -696,8 +693,8 @@ fn pick_import(ctx: &egui::Context) -> Receiver<Option<PathBuf>> {
     let ctx = ctx.clone();
     std::thread::spawn(move || {
         let path = rfd::FileDialog::new()
-            .set_title(t("Voreinstellung importieren"))
-            .add_filter(t("DMXCraft-Zuordnung"), &[MAP_EXT])
+            .set_title(t("Import preset"))
+            .add_filter(t("DMXCraft mapping"), &[MAP_EXT])
             .pick_file();
         let _ = tx.send(path);
         ctx.request_repaint();
@@ -709,13 +706,13 @@ fn pick_export(ctx: &egui::Context, kind: MapKind) -> Receiver<Option<PathBuf>> 
     let (tx, rx) = std::sync::mpsc::channel();
     let ctx = ctx.clone();
     let name = match kind {
-        MapKind::Keyboard => format!("{}.{MAP_EXT}", t("Tastatur")),
+        MapKind::Keyboard => format!("{}.{MAP_EXT}", t("Keyboard")),
         MapKind::Midi => format!("MIDI.{MAP_EXT}"),
     };
     std::thread::spawn(move || {
         let path = rfd::FileDialog::new()
-            .set_title(t("Voreinstellung exportieren"))
-            .add_filter(t("DMXCraft-Zuordnung"), &[MAP_EXT])
+            .set_title(t("Export preset"))
+            .add_filter(t("DMXCraft mapping"), &[MAP_EXT])
             .set_file_name(name)
             .save_file();
         let _ = tx.send(path);
@@ -743,7 +740,7 @@ fn poll_files(e: &mut Engine, st: &mut AppState, mapper: &mut Mapper) {
                             maps.list_mut(kind).push(m);
                         }
                         st.map_sel = None;
-                        st.message = Some((crate::tr!("{n} Zuordnungen importiert", n = n), false));
+                        st.message = Some((crate::tr!("{n} mappings imported", n = n), false));
                     }
                     Err(err) => st.message = Some((err, true)),
                 }
@@ -764,7 +761,7 @@ fn poll_files(e: &mut Engine, st: &mut AppState, mapper: &mut Mapper) {
                     .map_err(|e| e.to_string())
                     .and_then(|s| std::fs::write(&path, s).map_err(|e| e.to_string()));
                 st.message = Some(match res {
-                    Ok(()) => (t("Voreinstellung exportiert").to_string(), false),
+                    Ok(()) => (t("Preset exported").to_string(), false),
                     Err(err) => (err, true),
                 });
             }

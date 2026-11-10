@@ -52,21 +52,21 @@ impl View for StageEditorView {
                 ui.spacing_mut().item_spacing.y = 2.0;
                 let some = !cx.state.selected.is_empty();
                 for (icon, hint, a) in [
-                    (Icon::ArrangeRow, t("In Reihe verteilen"), Arrange::Row),
-                    (Icon::ArrangeGrid, t("Als Raster anordnen"), Arrange::Grid),
+                    (Icon::ArrangeRow, t("Distribute in a row"), Arrange::Row),
+                    (Icon::ArrangeGrid, t("Arrange as grid"), Arrange::Grid),
                     (
                         Icon::AlignH,
-                        t("Waagerecht ausrichten (gleiche Höhe)"),
+                        t("Align horizontally (same height)"),
                         Arrange::AlignH,
                     ),
                     (
                         Icon::AlignV,
-                        t("Senkrecht ausrichten (untereinander)"),
+                        t("Align vertically (stacked)"),
                         Arrange::AlignV,
                     ),
                     (
                         Icon::Reset,
-                        t("Position zurücksetzen (nach Patch-Reihenfolge)"),
+                        t("Reset position (by patch order)"),
                         Arrange::Reset,
                     ),
                 ] {
@@ -80,8 +80,8 @@ impl View for StageEditorView {
                 }
                 tool_sep(ui);
                 for (on, icon, hint) in [
-                    (&mut self.snap, Icon::Magnet, t("Einrasten")),
-                    (&mut self.grid, Icon::GridFour, t("Raster")),
+                    (&mut self.snap, Icon::Magnet, t("Snap")),
+                    (&mut self.grid, Icon::GridFour, t("Grid")),
                 ] {
                     if ui
                         .add(IconButton::new(icon).size(26.0).active(*on))
@@ -100,7 +100,7 @@ impl View for StageEditorView {
                     self.snap,
                     egui::vec2(26.0, 22.0),
                 )
-                .on_hover_text(t("Felder zum Einrasten"))
+                .on_hover_text(t("Snap cells"))
                 .changed()
                 {
                     self.cells = cells;
@@ -109,28 +109,28 @@ impl View for StageEditorView {
                 let st = &mut self.interaction;
                 if ui
                     .add(IconButton::new(Icon::ZoomFit).size(26.0))
-                    .on_hover_text(t("Alle Geräte einpassen"))
+                    .on_hover_text(t("Fit all fixtures"))
                     .clicked()
                 {
                     st.fit_request = true;
                 }
                 if ui
                     .add(IconButton::new(Icon::ZoomIn).size(26.0))
-                    .on_hover_text(tr!("Vergrößern ({pct} %)", pct = (st.zoom * 100.0).round()))
+                    .on_hover_text(tr!("Zoom in ({pct} %)", pct = (st.zoom * 100.0).round()))
                     .clicked()
                 {
                     st.zoom_by(1.25);
                 }
                 if ui
                     .add(IconButton::new(Icon::ZoomOut).size(26.0))
-                    .on_hover_text(tr!("Verkleinern ({pct} %)", pct = (st.zoom * 100.0).round()))
+                    .on_hover_text(tr!("Zoom out ({pct} %)", pct = (st.zoom * 100.0).round()))
                     .clicked()
                 {
                     st.zoom_by(0.8);
                 }
                 tool_sep(ui);
                 ui.add(IconButton::new(Icon::Info).size(26.0).flat()).on_hover_text(
-                    t("Ziehen = verschieben\nAufziehen = auswählen\nStrg/Shift = zur Auswahl hinzufügen\nMittlere Maustaste = Ansicht ziehen\nMausrad = zoomen\nRechtsklick = Menü (Form, Größe, Gruppen …)"),
+                    t("Drag = move\nDrag a box = select\nCtrl/Shift = add to selection\nMiddle mouse button = pan the view\nMouse wheel = zoom\nRight-click = menu (shape, size, groups …)"),
                 );
             });
 

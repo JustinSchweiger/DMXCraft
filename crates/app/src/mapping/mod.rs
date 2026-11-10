@@ -430,7 +430,7 @@ fn alt_click(
 }
 
 fn t_touch_hint() -> &'static str {
-    crate::i18n::t("Zur Touch-Oberfläche hinzufügen")
+    crate::i18n::t("Add to touch surface")
 }
 
 /// Farbfeld bzw. XY-Feld des Programmers: Alt + Klick legt ein Farbrad bzw.
@@ -478,7 +478,7 @@ pub fn describe_mapping(show: &Show, m: &Mapping) -> (String, String) {
             let label = channel_name(show, m.channels[0]);
             let label = if fixtures.len() > 1 {
                 let chan = label.split_once(": ").map_or(label.as_str(), |x| x.1);
-                crate::tr!("{n} Geräte: {chan}", n = fixtures.len(), chan = chan)
+                crate::tr!("{n} devices: {chan}", n = fixtures.len(), chan = chan)
             } else {
                 label
             };
@@ -494,7 +494,7 @@ pub fn describe(show: &Show, c: &Control) -> (String, String) {
     use crate::i18n::t;
     let zone = |z: ZoneId| {
         show.zone(z)
-            .map_or_else(|| t("(gelöscht)").to_string(), |z| z.name.clone())
+            .map_or_else(|| t("(deleted)").to_string(), |z| z.name.clone())
     };
     match c {
         Control::Scene { target } => {
@@ -504,75 +504,72 @@ pub fn describe(show: &Show, c: &Control) -> (String, String) {
                         let bank = s.zone.map(zone).unwrap_or_default();
                         format!("{}: {}", bank.to_uppercase(), s.name)
                     }
-                    None => t("(gelöscht)").to_string(),
+                    None => t("(deleted)").to_string(),
                 },
-                SceneTarget::Selected => t("Ausgewählte Szene").to_string(),
+                SceneTarget::Selected => t("Selected scene").to_string(),
                 SceneTarget::Index { zone: z, index } => {
                     crate::tr!(
-                        "{bank}: Nr. {n}",
+                        "{bank}: no. {n}",
                         bank = zone(*z).to_uppercase(),
                         n = index + 1
                     )
                 }
                 SceneTarget::IndexInShownBank { index } => {
-                    crate::tr!("Angezeigte Bank: Nr. {n}", n = index + 1)
+                    crate::tr!("Shown bank: no. {n}", n = index + 1)
                 }
             };
-            (t("Szene").to_string(), what)
+            (t("Scene").to_string(), what)
         }
         Control::ShowBank { zone: z } => (
             t("Bank").to_string(),
-            z.map_or_else(|| t("Alle").to_string(), zone),
+            z.map_or_else(|| t("All").to_string(), zone),
         ),
         Control::BankStep { delta } => (
             t("Bank").to_string(),
             if *delta < 0 {
-                t("Vorige Bank")
+                t("Previous bank")
             } else {
-                t("Nächste Bank")
+                t("Next bank")
             }
             .to_string(),
         ),
         Control::ZonePause { zone: z } => (
             t("Bank").to_string(),
-            crate::tr!("{bank}: Pause", bank = zone(*z)),
+            crate::tr!("{bank}: pause", bank = zone(*z)),
         ),
         Control::ZoneStep { zone: z, delta } => (
             t("Bank").to_string(),
             if *delta < 0 {
-                crate::tr!("{bank}: Schritt zurück", bank = zone(*z))
+                crate::tr!("{bank}: step back", bank = zone(*z))
             } else {
-                crate::tr!("{bank}: Schritt vor", bank = zone(*z))
+                crate::tr!("{bank}: step forward", bank = zone(*z))
             },
         ),
         Control::Blackout => (t("Global").to_string(), t("Blackout").to_string()),
         Control::Master => (t("Global").to_string(), t("Master").to_string()),
-        Control::AudioMaster => (t("Ton").to_string(), t("Ton-Master").to_string()),
-        Control::AudioMute => (t("Ton").to_string(), t("Ton stumm").to_string()),
-        Control::AudioFade => (t("Ton").to_string(), t("Ton ausfaden").to_string()),
-        Control::StopAll => (
-            t("Global").to_string(),
-            t("Alle Szenen stoppen").to_string(),
-        ),
-        Control::Ui { .. } => (t("Oberfläche").to_string(), t("Bedienelement").to_string()),
+        Control::AudioMaster => (t("Audio").to_string(), t("Sound master").to_string()),
+        Control::AudioMute => (t("Audio").to_string(), t("Mute sound").to_string()),
+        Control::AudioFade => (t("Audio").to_string(), t("Fade out sound").to_string()),
+        Control::StopAll => (t("Global").to_string(), t("Stop all scenes").to_string()),
+        Control::Ui { .. } => (t("Interface").to_string(), t("UI element").to_string()),
         Control::Group { id } => (
-            t("Gruppe").to_string(),
+            t("Group").to_string(),
             match id {
-                None => t("Alle").to_string(),
+                None => t("All").to_string(),
                 Some(g) => show
                     .groups
                     .iter()
                     .find(|x| x.id == *g)
-                    .map_or_else(|| t("(gelöscht)").to_string(), |x| x.name.clone()),
+                    .map_or_else(|| t("(deleted)").to_string(), |x| x.name.clone()),
             },
         ),
         Control::Fixture { id } => (
-            t("Gerät").to_string(),
+            t("Device").to_string(),
             show.fixture(*id)
-                .map_or_else(|| t("(gelöscht)").to_string(), |f| f.name.clone()),
+                .map_or_else(|| t("(deleted)").to_string(), |f| f.name.clone()),
         ),
-        Control::Channel { channel } => (t("Gerät").to_string(), channel_name(show, *channel)),
-        Control::Channels => (t("Programmer").to_string(), t("Feste Kanäle").to_string()),
+        Control::Channel { channel } => (t("Device").to_string(), channel_name(show, *channel)),
+        Control::Channels => (t("Programmer").to_string(), t("Fixed channels").to_string()),
     }
 }
 
@@ -598,7 +595,7 @@ pub fn channel_name(show: &Show, ch: dmxcraft_core::ChannelRef) -> String {
         return t_deleted();
     };
     let name = if ch.is_virtual() {
-        crate::i18n::t("Dimmer (virtuell)").to_string()
+        crate::i18n::t("Dimmer (virtual)").to_string()
     } else {
         show.type_of(f)
             .and_then(|ty| ty.channels.get(usize::from(ch.channel)))
@@ -608,7 +605,7 @@ pub fn channel_name(show: &Show, ch: dmxcraft_core::ChannelRef) -> String {
 }
 
 fn t_deleted() -> String {
-    crate::i18n::t("(gelöscht)").to_string()
+    crate::i18n::t("(deleted)").to_string()
 }
 
 /// Szenen einer Bank in der angezeigten Reihenfolge (ohne ausgeblendete).

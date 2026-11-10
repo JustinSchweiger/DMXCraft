@@ -252,15 +252,15 @@ impl Theme {
     /// Anzeigename (deutsche Quelle, übersetzt über `i18n::t`).
     pub fn label(self) -> &'static str {
         match self {
-            Theme::Navy => "Dunkelblau",
-            Theme::Gray => "Grau",
-            Theme::Graphite => "Graphit",
-            Theme::Black => "Schwarz (OLED)",
-            Theme::Violet => "Violett",
-            Theme::Night => "Nachtmodus (rot)",
-            Theme::Contrast => "Hoher Kontrast",
-            Theme::Light => "Hell",
-            Theme::Daslight => "Daslight (hell)",
+            Theme::Navy => "Dark blue",
+            Theme::Gray => "Gray",
+            Theme::Graphite => "Graphite",
+            Theme::Black => "Black (OLED)",
+            Theme::Violet => "Violet",
+            Theme::Night => "Night mode (red)",
+            Theme::Contrast => "High contrast",
+            Theme::Light => "Light",
+            Theme::Daslight => "Daslight (light)",
         }
     }
 

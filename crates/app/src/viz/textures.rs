@@ -155,12 +155,12 @@ pub type Pattern = fn(f32, f32) -> [f32; 3];
 /// Mitgelieferte Bilder: Name, empfohlene Kachelgröße (m), Erzeuger.
 pub fn builtin() -> Vec<(&'static str, f32, Pattern)> {
     vec![
-        (t("Holzdielen"), 2.0, wood),
-        (t("Bühnenboden schwarz"), 2.0, stage),
-        (t("Beton"), 2.0, concrete),
-        (t("Teppich"), 1.0, carpet),
-        (t("Ziegel"), 1.0, brick),
-        (t("Fliesen"), 1.2, tiles),
+        (t("Wooden planks"), 2.0, wood),
+        (t("Black stage floor"), 2.0, stage),
+        (t("Concrete"), 2.0, concrete),
+        (t("Carpet"), 1.0, carpet),
+        (t("Brick"), 1.0, brick),
+        (t("Tiles"), 1.2, tiles),
         (t("Molton"), 1.5, molton),
     ]
 }
@@ -181,11 +181,11 @@ pub fn make(name: &str, f: Pattern) -> Texture {
 pub fn load_file(path: &std::path::Path) -> Result<Texture, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     if bytes.len() > 16 * 1024 * 1024 {
-        return Err(t("Bild zu groß (höchstens 16 MB)").to_string());
+        return Err(t("Image too large (16 MB max)").to_string());
     }
     match image::guess_format(&bytes) {
         Ok(image::ImageFormat::Png | image::ImageFormat::Jpeg) => {}
-        _ => return Err(t("Nur PNG- oder JPEG-Bilder").to_string()),
+        _ => return Err(t("Only PNG or JPEG images").to_string()),
     }
     image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
     Ok(Texture {

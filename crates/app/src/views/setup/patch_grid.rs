@@ -83,11 +83,8 @@ impl View for PatchGrid {
             .map(|f| (f.address, ()));
         ui.horizontal(|ui| {
             ui.set_min_height(30.0);
-            Segmented::new(&[
-                (GridMode::Patch, t("Patch")),
-                (GridMode::Output, t("Ausgang")),
-            ])
-            .show(ui, &mut self.mode);
+            Segmented::new(&[(GridMode::Patch, "Patch"), (GridMode::Output, t("Output"))])
+                .show(ui, &mut self.mode);
             ui.add_space(theme::SP_M);
             if ui
                 .add(IconButton::new(Icon::Prev).enabled(self.universe > 0))
@@ -97,7 +94,7 @@ impl View for PatchGrid {
             }
             ui.label(
                 egui::RichText::new(tr!(
-                    "Universum {universe_nr} / {universes}",
+                    "Universe {universe_nr} / {universes}",
                     universes = universes,
                     universe_nr = self.universe + 1
                 ))
@@ -111,7 +108,7 @@ impl View for PatchGrid {
             }
             ui.add_space(theme::SP_M);
             ui.label(
-                egui::RichText::new(tr!("{free} von 512 frei", free = free))
+                egui::RichText::new(tr!("{free} of 512 free", free = free))
                     .color(theme::text_dim()),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -222,7 +219,7 @@ impl PatchGrid {
                         Some(d.fixture),
                     );
                     let msg = match &check {
-                        Ok(()) => tr!("Adresse {start_nr}", start_nr = start + 1),
+                        Ok(()) => tr!("Address {start_nr}", start_nr = start + 1),
                         Err(e) => e.to_string(),
                     };
                     ghost = Some((start, *len, check.is_ok(), msg));
@@ -235,7 +232,7 @@ impl PatchGrid {
                 if ok {
                     repatch = Some((d.fixture, start as u16 + 1));
                 } else {
-                    cx.state.error(tr!("Nicht verschoben: {msg}", msg = msg));
+                    cx.state.error(tr!("Not moved: {msg}", msg = msg));
                 }
             }
             self.drag = None;
@@ -495,14 +492,14 @@ impl PatchGrid {
                         .and_then(|t| t.channels.get(ch))
                         .map_or(String::new(), |d| d.name.clone());
                     tr!(
-                        "Adresse {c_nr} · {v} · Kanal {ch_nr} {ch_name}",
+                        "Address {c_nr} · {v} · channel {ch_nr} {ch_name}",
                         c_nr = c + 1,
                         v = f.name,
                         ch_nr = ch + 1,
                         ch_name = ch_name
                     )
                 }
-                None => tr!("Adresse {c_nr} · frei", c_nr = c + 1),
+                None => tr!("Address {c_nr} · free", c_nr = c + 1),
             };
             resp.on_hover_text_at_pointer(text);
         }
@@ -543,7 +540,7 @@ impl PatchGrid {
                     Ok(id) => {
                         cx.state.selected = std::iter::once(id).collect();
                         cx.state.info(tr!(
-                            "„{name}“ gepatcht ab Adresse {addr}",
+                            "Patched “{name}” at address {addr}",
                             name = name,
                             addr = cell + 1
                         ));
@@ -551,7 +548,7 @@ impl PatchGrid {
                     Err(err) => cx.state.error(err.to_string()),
                 }
             } else {
-                cx.state.error(t("Dort ist nicht genug Platz frei"));
+                cx.state.error(t("Not enough free channels there"));
             }
         }
 
@@ -567,7 +564,7 @@ impl PatchGrid {
             if let Err(e) = cx.engine.show_mut().repatch_fixture(id, universe, addr) {
                 cx.state.error(e.to_string());
             } else {
-                cx.state.info(tr!("Neue Startadresse {addr}", addr = addr));
+                cx.state.info(tr!("New start address {addr}", addr = addr));
             }
         }
         if let Some(a) = action {

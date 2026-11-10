@@ -81,9 +81,9 @@ impl View for ScenePropsView {
             self.tab = Tab::Properties;
         }
         for (tab, icon, tip) in [
-            (Tab::Properties, Icon::Sliders, t("Eigenschaften")),
-            (Tab::Effects, Icon::Fx, t("Effekte")),
-            (Tab::Third, Icon::Gear, t("Erweiterte Eigenschaften")),
+            (Tab::Properties, Icon::Sliders, t("Properties")),
+            (Tab::Effects, Icon::Fx, t("Effects")),
+            (Tab::Third, Icon::Gear, t("Advanced properties")),
         ] {
             let enabled = !(multi && tab == Tab::Effects);
             let r = tab_ui
@@ -97,7 +97,7 @@ impl View for ScenePropsView {
                 .on_hover_text(tip);
             let key = format!("scene/tab/{}", tab as u8);
             let mapped = crate::mapping::button(&tab_ui, &r, &key, self.tab == tab, || {
-                (t("Seitenleiste").to_string(), tip.to_string())
+                (t("Sidebar").to_string(), tip.to_string())
             });
             if (r.clicked() || mapped) && enabled {
                 self.tab = tab;
@@ -214,7 +214,7 @@ fn multi_header(ui: &mut egui::Ui, e: &Engine, first: SceneId, n: usize) {
     ui.horizontal(|ui| {
         ui.set_min_height(34.0);
         ui.label(
-            egui::RichText::new(tr!("{n} Szenen", n = n))
+            egui::RichText::new(tr!("{n} scenes", n = n))
                 .color(color)
                 .strong(),
         );
@@ -246,14 +246,14 @@ fn header(ui: &mut egui::Ui, e: &mut Engine, id: SceneId) {
             let tip = if active && !paused {
                 t("Pause")
             } else {
-                t("Abspielen")
+                t("Play")
             };
             let r = ui
                 .add(IconButton::new(icon).size(30.0).active(active))
                 .on_hover_text(tip);
             let mapped =
                 crate::mapping::button(ui, &r, "scene/play_pause", active && !paused, || {
-                    (t("Szene").to_string(), t("Abspielen / Pause").to_string())
+                    (t("Scene").to_string(), t("Play / pause").to_string())
                 });
             if r.clicked() || mapped {
                 if active {
@@ -287,7 +287,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         let mut dim = f32::from(st.dimmer) / 255.0;
         let dim_text = format!("{:.0} %", dim * 100.0);
         if Knob::new(&mut dim, t("Dimmer"), dim_text)
-            .map("scene/knob/dimmer", t("Szene"))
+            .map("scene/knob/dimmer", t("Scene"))
             .color(color)
             .enabled(on)
             .show(ui)
@@ -296,8 +296,8 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         }
         // Speed logarithmisch: 10 % … 100 % (Mitte) … 1000 %
         let mut sp = ((f32::from(st.speed_pct) / 10.0).log10() / 2.0).clamp(0.0, 1.0);
-        if Knob::new(&mut sp, t("Speed"), format!("{} %", st.speed_pct))
-            .map("scene/knob/speed", t("Szene"))
+        if Knob::new(&mut sp, "Speed", format!("{} %", st.speed_pct))
+            .map("scene/knob/speed", t("Scene"))
             .color(color)
             .default_value(0.5)
             .enabled(on)
@@ -307,7 +307,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         }
         let mut ph = f32::from(st.phase_deg) / 360.0;
         if Knob::new(&mut ph, t("Phase"), format!("{}°", st.phase_deg))
-            .map("scene/knob/phase", t("Szene"))
+            .map("scene/knob/phase", t("Scene"))
             .color(color)
             .default_value(0.0)
             .enabled(on)
@@ -316,8 +316,8 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
             st.phase_deg = (ph * 360.0).round() as u16;
         }
         let mut sz = f32::from(st.size_pct) / 200.0;
-        if Knob::new(&mut sz, t("Size"), format!("{} %", st.size_pct))
-            .map("scene/knob/size", t("Szene"))
+        if Knob::new(&mut sz, "Size", format!("{} %", st.size_pct))
+            .map("scene/knob/size", t("Scene"))
             .color(color)
             .default_value(0.5)
             .enabled(on)
@@ -333,14 +333,14 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         for (to, icon, key, tip) in [
-            (0.0, Icon::Prev, "scene/seek_start", t("Zum Anfang")),
-            (1.0, Icon::Next, "scene/seek_end", t("Zum Ende")),
+            (0.0, Icon::Prev, "scene/seek_start", t("Go to start")),
+            (1.0, Icon::Next, "scene/seek_end", t("Go to end")),
         ] {
             let r = ui
                 .add(IconButton::new(icon).enabled(pos.is_some()))
                 .on_hover_text(tip);
             let mapped = crate::mapping::button(ui, &r, key, false, || {
-                (t("Szene").to_string(), tip.to_string())
+                (t("Scene").to_string(), tip.to_string())
             });
             if r.clicked() || (mapped && pos.is_some()) {
                 e.seek(id, to);
@@ -348,8 +348,8 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         }
         ui.add_space(theme::SP_XS);
         for (rev, icon, tip) in [
-            (true, Icon::PlayBack, t("Rückwärts abspielen")),
-            (false, Icon::Play, t("Vorwärts abspielen")),
+            (true, Icon::PlayBack, t("Play backwards")),
+            (false, Icon::Play, t("Play forwards")),
         ] {
             let r = ui
                 .add(
@@ -365,7 +365,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
                 "scene/forward"
             };
             let mapped = crate::mapping::button(ui, &r, key, st.reverse == rev, || {
-                (t("Szene").to_string(), tip.to_string())
+                (t("Scene").to_string(), tip.to_string())
             });
             if r.clicked() || (mapped && on) {
                 st.reverse = rev;
@@ -411,16 +411,16 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
             });
         });
     };
-    row(ui, t("Dauer"), &mut |ui| {
+    row(ui, t("Duration"), &mut |ui| {
         time_field(ui, "duration", &mut duration, on, true, color);
     });
-    row(ui, t("Fade in"), &mut |ui| {
+    row(ui, "Fade in", &mut |ui| {
         time_field(ui, "fade_in", &mut st.fade_in_ms, on, false, color);
     });
-    row(ui, t("Fade out"), &mut |ui| {
+    row(ui, "Fade out", &mut |ui| {
         time_field(ui, "fade_out", &mut st.fade_out_ms, on, false, color);
     });
-    row(ui, t("Fade Speed"), &mut |ui| {
+    row(ui, t("Fade speed"), &mut |ui| {
         // 0.1 … 4.0 in Zehnteln, Standard 1.0
         ui.set_max_width(150.0);
         let mut v = f32::from(st.fade_speed.clamp(1, 40) - 1) / 39.0;
@@ -439,15 +439,15 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     if super_scene {
         ui.horizontal(|ui| {
             ui.set_min_height(32.0);
-            ui.label(egui::RichText::new(t("Ton ausfaden")).color(theme::text_dim()))
+            ui.label(egui::RichText::new(t("Fade out sound")).color(theme::text_dim()))
                 .on_hover_text(t(
-                    "Dauer für „Ton ausfaden“, solange diese SUPER SCENE läuft. 0 = Standard aus den Einstellungen.",
+                    "Duration of “Fade out sound” while this SUPER SCENE is running. 0 = default from the settings.",
                 ));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 time_field(ui, "audio_fade", &mut st.audio_fade_ms, on, false, color);
                 if st.audio_fade_ms == 0 {
                     ui.label(
-                        egui::RichText::new(t("Standard"))
+                        egui::RichText::new(t("Default"))
                             .small()
                             .color(theme::text_faint()),
                     );
@@ -559,13 +559,13 @@ impl ScenePropsView {
                 .show(&mut tiles_ui, |ui| {
                     if self.adding && !effects.is_empty() {
                         ui.horizontal(|ui| {
-                            ui.label(theme::heading_text(t("Effekt hinzufügen")));
+                            ui.label(theme::heading_text(t("Add effect")));
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
                                     if ui
                                         .add(IconButton::new(Icon::Close).flat())
-                                        .on_hover_text(t("Abbrechen"))
+                                        .on_hover_text(t("Cancel"))
                                         .clicked()
                                     {
                                         self.adding = false;
@@ -590,14 +590,14 @@ impl ScenePropsView {
                 let on = !locked && self.fx_dialog.is_none();
                 if bar
                     .add(IconButton::new(Icon::Export).size(30.0).flat().enabled(on))
-                    .on_hover_text(t("Szene exportieren"))
+                    .on_hover_text(t("Export scene"))
                     .clicked()
                 {
                     self.start_dialog(bar.ctx(), id, true);
                 }
                 if bar
                     .add(IconButton::new(Icon::Import).size(30.0).flat().enabled(on))
-                    .on_hover_text(t("Effekte importieren"))
+                    .on_hover_text(t("Import effects"))
                     .clicked()
                 {
                     self.start_dialog(bar.ctx(), id, false);
@@ -688,7 +688,7 @@ impl ScenePropsView {
                         .engine
                         .show()
                         .scene(*s)
-                        .map_or_else(|| t("Gelöscht").to_string(), |s| s.name.clone()),
+                        .map_or_else(|| t("Deleted").to_string(), |s| s.name.clone()),
                     dmxcraft_core::timeline::ClipContent::Audio { path, .. }
                     | dmxcraft_core::timeline::ClipContent::Video { path, .. } => {
                         std::path::Path::new(path)
@@ -732,9 +732,9 @@ impl ScenePropsView {
                                 menu::begin(ui);
                                 menu::title(ui, fx.kind.label());
                                 let collapse = if fx.collapsed {
-                                    t("Ausklappen")
+                                    t("Expand")
                                 } else {
-                                    t("Einklappen")
+                                    t("Collapse")
                                 };
                                 if menu::item(ui, MenuItem::new(collapse)) {
                                     toggle = Some(fx.id);
@@ -742,9 +742,7 @@ impl ScenePropsView {
                                 menu::separator(ui);
                                 if menu::item(
                                     ui,
-                                    MenuItem::new(t("Effekt löschen"))
-                                        .icon(Icon::Trash)
-                                        .danger(),
+                                    MenuItem::new(t("Delete effect")).icon(Icon::Trash).danger(),
                                 ) {
                                     menu_delete = Some(fx.id);
                                 }
@@ -804,7 +802,7 @@ impl ScenePropsView {
                                         }
                                     } else {
                                         ui.label(
-                                            egui::RichText::new(t("Einstellungen folgen"))
+                                            egui::RichText::new(t("Settings coming soon"))
                                                 .color(theme::text_faint()),
                                         );
                                     }
@@ -920,9 +918,9 @@ impl ScenePropsView {
                             .enabled(on && self.fx_dialog.is_none()),
                     )
                     .on_hover_text(if has_steps {
-                        t("Schritte exportieren")
+                        t("Export steps")
                     } else {
-                        t("Effekte exportieren")
+                        t("Export effects")
                     })
                     .clicked()
                 {
@@ -936,9 +934,9 @@ impl ScenePropsView {
                             .enabled(on && self.fx_dialog.is_none()),
                     )
                     .on_hover_text(if has_steps {
-                        t("Schritte importieren")
+                        t("Import steps")
                     } else {
-                        t("Effekte importieren")
+                        t("Import effects")
                     })
                     .clicked()
                 {
@@ -955,9 +953,9 @@ impl ScenePropsView {
                             .enabled(on && (selected.is_some() || delete_step)),
                     )
                     .on_hover_text(if delete_step {
-                        t("Ausgewählten Schritt löschen")
+                        t("Delete selected step")
                     } else {
-                        t("Ausgewählten Effekt löschen")
+                        t("Delete selected effect")
                     })
                     .clicked();
                 if clicked_delete || delete {
@@ -978,11 +976,11 @@ impl ScenePropsView {
                 }
                 let has_super = effects.iter().any(|e| e.kind == EffectKind::SuperScene);
                 let (tip, icon) = if has_steps {
-                    (t("Schritt hinzufügen"), Icon::Plus)
+                    (t("Add step"), Icon::Plus)
                 } else if has_super {
-                    (t("Spur hinzufügen"), Icon::Plus)
+                    (t("Add track"), Icon::Plus)
                 } else {
-                    (t("Effekt hinzufügen"), Icon::Plus)
+                    (t("Add effect"), Icon::Plus)
                 };
                 if ui
                     .add(IconButton::new(icon).size(30.0).flat().enabled(on))
@@ -1017,15 +1015,15 @@ impl ScenePropsView {
         let (tx, rx) = channel();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let dialog = rfd::FileDialog::new().add_filter(t("DMXCraft-Effekte"), &[FX_EXT]);
+            let dialog = rfd::FileDialog::new().add_filter(t("DMXCraft effects"), &[FX_EXT]);
             let result = if export {
                 dialog
-                    .set_title(t("Effekte exportieren"))
+                    .set_title(t("Export effects"))
                     .set_file_name(format!("Effekte.{FX_EXT}"))
                     .save_file()
                     .map(|p| p.with_extension(FX_EXT))
             } else {
-                dialog.set_title(t("Effekte importieren")).pick_file()
+                dialog.set_title(t("Import effects")).pick_file()
             };
             let _ = tx.send(result);
             ctx.request_repaint();
@@ -1072,7 +1070,7 @@ impl ScenePropsView {
             match result {
                 Ok(()) => cx
                     .state
-                    .info(tr!("Effekte exportiert: {path}", path = path.display())),
+                    .info(tr!("Effects exported: {path}", path = path.display())),
                 Err(e) => cx.state.error(e),
             }
         } else {
@@ -1118,9 +1116,9 @@ fn block_props(
                 .color(theme::text_dim()),
         );
     };
-    caption(ui, t("Block-Eigenschaften"));
+    caption(ui, t("Block properties"));
     let Some((cid, name, beat)) = block else {
-        ui.label(egui::RichText::new(t("Keine Auswahl")).color(theme::text_faint()));
+        ui.label(egui::RichText::new(t("No selection")).color(theme::text_faint()));
         return false;
     };
     let Some(c) = tl.clip_mut(*cid) else {
@@ -1136,15 +1134,15 @@ fn block_props(
     let mut start = c.start_ms.min(u64::from(u32::MAX)) as u32;
     let mut dur = c.duration_ms.min(u64::from(u32::MAX)) as u32;
     time_row(ui, t("Start"), "blk_start", &mut start);
-    time_row(ui, t("Dauer"), "blk_dur", &mut dur);
-    time_row(ui, t("Fade In"), "blk_fin", &mut c.fade_in_ms);
-    time_row(ui, t("Ausfaden"), "blk_fout", &mut c.fade_out_ms);
+    time_row(ui, t("Duration"), "blk_dur", &mut dur);
+    time_row(ui, t("Fade in"), "blk_fin", &mut c.fade_in_ms);
+    time_row(ui, t("Fade out"), "blk_fout", &mut c.fade_out_ms);
     c.start_ms = u64::from(start);
     c.duration_ms = u64::from(dur).max(40);
-    row(ui, t("Dem Tempo anpassen"), |ui| {
+    row(ui, t("Fit to tempo"), |ui| {
         ui.add(crate::ui::widgets::Toggle::new(&mut c.tempo_sync, "").enabled(enabled));
     });
-    row(ui, t("Endlosschleife (Loop)"), |ui| {
+    row(ui, t("Endless loop"), |ui| {
         ui.add(crate::ui::widgets::Toggle::new(&mut c.looped, "").enabled(enabled));
     });
     if c.tempo_sync {
@@ -1174,23 +1172,23 @@ fn obs_props(
         ClipContent::Video {
             obs_scene, source, ..
         } => {
-            row(ui, t("OBS-Szene"), |ui| {
+            row(ui, t("OBS scene"), |ui| {
                 name_pick(
                     ui,
                     "blk_obs_scene",
                     obs_scene,
                     scenes,
-                    Some(t("Keine")),
+                    Some(t("None")),
                     enabled,
                 );
             });
-            row(ui, t("Medienquelle"), |ui| {
+            row(ui, t("Media source"), |ui| {
                 name_pick(
                     ui,
                     "blk_obs_src",
                     source,
                     inputs,
-                    Some(t("Standard")),
+                    Some(t("Default")),
                     enabled,
                 );
             });
@@ -1202,20 +1200,16 @@ fn obs_props(
                 ObsAction::Source { visible: false, .. } => 2,
             };
             let before = kind;
-            row(ui, t("Aktion"), |ui| {
+            row(ui, t("Action"), |ui| {
                 ui.add_enabled_ui(enabled, |ui| {
                     egui::ComboBox::from_id_salt("blk_obs_kind")
                         .selected_text(
-                            [
-                                t("Szene wechseln"),
-                                t("Quelle einblenden"),
-                                t("Quelle ausblenden"),
-                            ][kind],
+                            [t("Switch scene"), t("Show source"), t("Hide source")][kind],
                         )
                         .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut kind, 0, t("Szene wechseln"));
-                            ui.selectable_value(&mut kind, 1, t("Quelle einblenden"));
-                            ui.selectable_value(&mut kind, 2, t("Quelle ausblenden"));
+                            ui.selectable_value(&mut kind, 0, t("Switch scene"));
+                            ui.selectable_value(&mut kind, 1, t("Show source"));
+                            ui.selectable_value(&mut kind, 2, t("Hide source"));
                         });
                 });
             });
@@ -1238,15 +1232,15 @@ fn obs_props(
             }
             match action {
                 ObsAction::Scene(scene) => {
-                    row(ui, t("OBS-Szene"), |ui| {
+                    row(ui, t("OBS scene"), |ui| {
                         name_pick(ui, "blk_obs_scene", scene, scenes, None, enabled);
                     });
                 }
                 ObsAction::Source { scene, source, .. } => {
-                    row(ui, t("OBS-Szene"), |ui| {
+                    row(ui, t("OBS scene"), |ui| {
                         name_pick(ui, "blk_obs_scene", scene, scenes, None, enabled);
                     });
-                    row(ui, t("Quelle"), |ui| {
+                    row(ui, t("Source"), |ui| {
                         name_pick(ui, "blk_obs_src", source, inputs, None, enabled);
                     });
                 }
@@ -1411,24 +1405,22 @@ fn import_fx(s: &mut dmxcraft_core::Scene, file: FxFile) -> Result<String, Strin
     // exportierte STATIC-Szene: ihre Werte übernehmen
     if file.effects.is_empty() {
         if !s.effects.is_empty() {
-            return Err(
-                t("Eine statische Szene lässt sich nur in eine STATIC-Szene importieren").into(),
-            );
+            return Err(t("A static scene can only be imported into a STATIC scene").into());
         }
         if let Some(st) = file.steps.into_iter().next() {
             s.steps = vec![st];
         }
-        return Ok(t("Szene importiert").into());
+        return Ok(t("Scene imported").into());
     }
     let with_steps = file.effects.iter().any(|e| e.kind == EffectKind::Steps);
     if with_steps {
         if s.has_steps() {
             let n = file.steps.len();
             s.steps.extend(file.steps);
-            return Ok(tr!("{n} Schritt(e) importiert", n = n));
+            return Ok(tr!("{n} step(s) imported", n = n));
         }
         if !s.effects.is_empty() {
-            return Err(t("STEPS kann nur als einziger Effekt in einer Szene stehen").into());
+            return Err(t("STEPS must be the only effect of a scene").into());
         }
         s.add_effect(EffectKind::Steps);
         let n = file.steps.len();
@@ -1437,12 +1429,10 @@ fn import_fx(s: &mut dmxcraft_core::Scene, file: FxFile) -> Result<String, Strin
         } else if s.steps.is_empty() {
             s.steps.push(dmxcraft_core::Step::new(Vec::new()));
         }
-        return Ok(tr!("{n} Schritt(e) importiert", n = n));
+        return Ok(tr!("{n} step(s) imported", n = n));
     }
     if s.has_steps() {
-        return Err(
-            t("Zu einer Schrittszene lassen sich keine weiteren Effekte hinzufügen").into(),
-        );
+        return Err(t("A step scene cannot take further effects").into());
     }
     let n = file.effects.len();
     for fx in file.effects {
@@ -1452,7 +1442,7 @@ fn import_fx(s: &mut dmxcraft_core::Scene, file: FxFile) -> Result<String, Strin
             *new = dmxcraft_core::Effect { id, ..fx };
         }
     }
-    Ok(tr!("{n} Effekt(e) importiert", n = n))
+    Ok(tr!("{n} effect(s) imported", n = n))
 }
 
 /// Kacheln der Effektarten in zwei Spalten; gibt die angeklickte zurück.
@@ -1549,10 +1539,9 @@ fn steps_table(
     ui.spacing_mut().item_spacing.y = GAP;
     // Kopfzeile
     let (head, _) = ui.allocate_exact_size(Vec2::new(full_w, ROW_H), Sense::hover());
-    for (r, text) in
-        cells(head.top())
-            .into_iter()
-            .zip([t("Schritt"), t("Hold Zeit"), t("Fade Zeit")])
+    for (r, text) in cells(head.top())
+        .into_iter()
+        .zip([t("Step"), t("Hold time"), t("Fade time")])
     {
         ui.painter().rect_filled(r, 0.0, theme::raised_hover());
         ui.painter().text(
@@ -1671,7 +1660,7 @@ fn effect_header(
             ui.make_persistent_id(("fx_close", fx.id)),
             Sense::click(),
         )
-        .on_hover_text(t("Effekt löschen"))
+        .on_hover_text(t("Delete effect"))
     });
     let p = ui.painter();
     let fill = if selected {
@@ -1767,11 +1756,11 @@ fn advanced(
     let mut open = None;
 
     ui.add_enabled_ui(on, |ui| {
-        row(ui, t("Szenen-Priorität"), |ui| {
+        row(ui, t("Scene priority"), |ui| {
             ui.add(egui::DragValue::new(&mut st.priority).range(-10..=10))
-                .on_hover_text(t("Höhere Priorität gewinnt bei Überschneidungen"));
+                .on_hover_text(t("Higher priority wins where scenes overlap"));
         });
-        row(ui, t("Wiederholung"), |ui| {
+        row(ui, t("Repeats"), |ui| {
             if once {
                 ui.add(
                     egui::DragValue::new(&mut st.repeat_count)
@@ -1780,15 +1769,15 @@ fn advanced(
                 );
             }
             for (mode, icon, tip) in [
-                (LoopMode::Once, Icon::RepeatOnce, t("X-mal abspielen")),
-                (LoopMode::Loop, Icon::Repeat, t("Endlosschleife")),
+                (LoopMode::Once, Icon::RepeatOnce, t("Play X times")),
+                (LoopMode::Loop, Icon::Repeat, t("Loop forever")),
             ] {
                 let r = ui
                     .add(IconButton::new(icon).active(loop_mode == mode).tint(color))
                     .on_hover_text(tip);
                 let key = format!("scene/loop/{mode:?}");
                 let mapped = crate::mapping::button(ui, &r, &key, loop_mode == mode, || {
-                    (t("Szene").to_string(), tip.to_string())
+                    (t("Scene").to_string(), tip.to_string())
                 });
                 if r.clicked() || mapped {
                     loop_mode = mode;
@@ -1796,28 +1785,28 @@ fn advanced(
             }
         });
         ui.add_enabled_ui(once, |ui| {
-            row(ui, t("Springe zu"), |ui| {
+            row(ui, t("Jump to"), |ui| {
                 let text = match st.jump_to_scenes.as_slice() {
-                    [] => t("Keine").to_string(),
+                    [] => t("None").to_string(),
                     [one] => names.get(&one.0).cloned().unwrap_or_default(),
-                    many => tr!("{n} Szenen", n = many.len()),
+                    many => tr!("{n} scenes", n = many.len()),
                 };
                 if ui.button(text).clicked() {
                     open = Some(PickTarget::Jump);
                 }
             });
-            row(ui, t("Am Ende freigeben"), |ui| {
+            row(ui, t("Release at end"), |ui| {
                 ui.add(Toggle::new(&mut st.release_at_end, "").map(
                     "scene/release_at_end",
-                    t("Szene"),
-                    t("Am Ende freigeben"),
+                    t("Scene"),
+                    t("Release at end"),
                 ));
             });
         });
         ui.add_space(theme::SP_S);
         if scope_row(
             ui,
-            t("Freigabe-Modus"),
+            t("Release mode"),
             ("release_mode", id.0),
             &mut st.release_mode,
         ) {
@@ -1825,16 +1814,16 @@ fn advanced(
         }
         if scope_row(
             ui,
-            t("Vor Freigabe schützen"),
+            t("Protect from release"),
             ("protect", id.0),
             &mut st.protect,
         ) {
             open = Some(PickTarget::Protect);
         }
         ui.add_space(theme::SP_S);
-        row(ui, t("Flash-Modus"), |ui| {
-            ui.add(Toggle::new(&mut st.flash, "").map("scene/flash", t("Szene"), t("Flash-Modus")))
-                .on_hover_text(t("Läuft nur, solange die Szene gedrückt wird"));
+        row(ui, t("Flash mode"), |ui| {
+            ui.add(Toggle::new(&mut st.flash, "").map("scene/flash", t("Scene"), t("Flash mode")))
+                .on_hover_text(t("Only plays while the scene is held down"));
         });
     });
 
@@ -1879,9 +1868,9 @@ fn picker_window(ctx: &egui::Context, e: &mut Engine, picker: &mut Option<Picker
     };
     let pick_banks = p.target != PickTarget::Jump;
     let title = if pick_banks {
-        t("Bänke auswählen")
+        t("Select banks")
     } else {
-        t("Szenen auswählen")
+        t("Select scenes")
     };
     let show = e.show();
     let columns: Vec<PickColumn> = show
@@ -1902,14 +1891,14 @@ fn picker_window(ctx: &egui::Context, e: &mut Engine, picker: &mut Option<Picker
     let res = Dialog::new(title)
         .id("scene_bank_picker")
         .resizable([760.0, 460.0])
-        .cancel(t("Abbrechen"))
-        .primary(t("Übernehmen"))
+        .cancel(t("Cancel"))
+        .primary(t("Apply"))
         .show(ctx, &mut open, |ui, _| {
             ui.label(
                 egui::RichText::new(if pick_banks {
-                    t("Bänke anklicken, um sie aus- oder abzuwählen.")
+                    t("Click banks to select or deselect them.")
                 } else {
-                    t("Szenen anklicken, um sie aus- oder abzuwählen.")
+                    t("Click scenes to select or deselect them.")
                 })
                 .color(theme::text_dim()),
             );
@@ -2033,7 +2022,7 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
 /// Bank-Bezug als kurze Auswahl rechts; bei „Bänke“ darunter ein Knopf für
 /// das Auswahlfenster. `true` = Fenster öffnen.
 fn scope_row(ui: &mut egui::Ui, label: &str, id: (&str, u32), scope: &mut BankScope) -> bool {
-    let names = [t("Aus"), t("Alle"), t("Bank"), t("Außerhalb"), t("Bänke")];
+    let names = [t("Off"), t("All"), t("Bank"), t("Outside"), t("Banks")];
     let index = match scope {
         BankScope::Off => 0,
         BankScope::All => 1,
@@ -2068,15 +2057,11 @@ fn scope_row(ui: &mut egui::Ui, label: &str, id: (&str, u32), scope: &mut BankSc
     if let BankScope::Banks(list) = scope {
         row(ui, "", |ui| {
             let text = match list.len() {
-                0 => t("Keine Bank").to_string(),
-                1 => t("1 Bank").to_string(),
-                n => tr!("{n} Bänke", n = n),
+                0 => t("No bank").to_string(),
+                1 => t("1 bank").to_string(),
+                n => tr!("{n} banks", n = n),
             };
-            if ui
-                .button(text)
-                .on_hover_text(t("Bänke auswählen"))
-                .clicked()
-            {
+            if ui.button(text).on_hover_text(t("Select banks")).clicked() {
                 open = true;
             }
         });

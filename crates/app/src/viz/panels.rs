@@ -67,8 +67,8 @@ pub enum OutlineTab {
 impl VizView {
     pub(super) fn outline_panel(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let n_fx = cx.engine.show().fixtures.len();
-        let objects = t("Objekte");
-        let fixtures = tr!("Geräte ({n})", n = n_fx);
+        let objects = t("Objects");
+        let fixtures = tr!("Fixtures ({n})", n = n_fx);
         Segmented::new(&[
             (OutlineTab::Objects, objects),
             (OutlineTab::Fixtures, fixtures.as_str()),
@@ -79,11 +79,11 @@ impl VizView {
             self.fixture_list_header(ui, cx);
             ui.add(
                 egui::TextEdit::singleline(&mut self.fixture_filter)
-                    .hint_text(t("Suchen"))
+                    .hint_text(t("Search"))
                     .desired_width(f32::INFINITY),
             );
             ui.label(
-                egui::RichText::new(t("Klick wählt aus, Strg: hinzufügen, Umschalt: Bereich, ziehen: in einen Ordner, Rechtsklick: Menü"))
+                egui::RichText::new(t("Click selects, Ctrl: add, Shift: range, drag: into a folder, right-click: menu"))
                     .small()
                     .color(theme::text_faint()),
             );
@@ -100,13 +100,13 @@ impl VizView {
 
     fn objects_tab(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let v = &mut cx.engine.show_mut().venue;
-        fold_section(ui, "viz_room", t("Raum"), false, |ui| {
+        fold_section(ui, "viz_room", t("Room"), false, |ui| {
             ui.horizontal(|ui| {
                 ui.label(t("Name"));
                 ui.text_edit_singleline(&mut v.name);
             });
             ui.horizontal(|ui| {
-                ui.label(t("Größe (m)"));
+                ui.label(t("Size (m)"));
                 for (i, c) in ["B", "H", "T"].iter().enumerate() {
                     ui.add(
                         egui::DragValue::new(&mut v.size[i])
@@ -117,41 +117,38 @@ impl VizView {
                     );
                 }
             });
-            if ui
-                .button(t("Leeren Raum mit dieser Größe anlegen"))
-                .clicked()
-            {
+            if ui.button(t("Create an empty room of this size")).clicked() {
                 let (size, name, env) = (v.size, v.name.clone(), v.environment);
                 *v = Venue::room(name, size);
                 v.environment = env;
                 self.selected = None;
             }
         });
-        fold_section(ui, "viz_add", t("Hinzufügen"), true, |ui| {
+        fold_section(ui, "viz_add", t("Add"), true, |ui| {
             ui.horizontal_wrapped(|ui| {
                 let at = self.camera.map_or(Vec3::ZERO, |c| c.target);
                 let items: [(&str, Shape, [f32; 3]); 6] = [
                     (
-                        t("Quader"),
+                        t("Box"),
                         Shape::Box {
                             size: [1.0, 1.0, 1.0],
                         },
                         [at.x, 0.5, at.z],
                     ),
                     (
-                        t("Podest"),
+                        t("Riser"),
                         Shape::Box {
                             size: [2.0, 0.4, 1.0],
                         },
                         [at.x, 0.2, at.z],
                     ),
                     (
-                        t("Fläche"),
+                        t("Plane"),
                         Shape::Plane { size: [2.0, 2.0] },
                         [at.x, 0.01, at.z],
                     ),
                     (
-                        t("Zylinder"),
+                        t("Cylinder"),
                         Shape::Cylinder {
                             radius: 0.2,
                             height: 2.0,
@@ -159,7 +156,7 @@ impl VizView {
                         [at.x, 1.0, at.z],
                     ),
                     (
-                        t("Traverse 2 m"),
+                        t("Truss 2 m"),
                         Shape::Truss {
                             length: 2.0,
                             profile: TrussProfile::Triangle,
@@ -168,7 +165,7 @@ impl VizView {
                         [at.x, 4.0, at.z],
                     ),
                     (
-                        t("Traverse 3 m"),
+                        t("Truss 3 m"),
                         Shape::Truss {
                             length: 3.0,
                             profile: TrussProfile::Square,
@@ -204,18 +201,18 @@ impl VizView {
             });
             let loading = self.model_job.is_some();
             let label = if loading {
-                t("Modell wird geladen …")
+                t("Loading model …")
             } else {
-                t("3D-Modell importieren (glTF/GLB) …")
+                t("Import 3D model (glTF/GLB) …")
             };
             if ui.add_enabled(!loading, egui::Button::new(label)).clicked() {
                 self.open_dialog(ui.ctx(), DialogKind::ImportModel);
             }
         });
-        fold_section(ui, "viz_library", t("Bibliothek"), false, |ui| {
+        fold_section(ui, "viz_library", t("Library"), false, |ui| {
             self.library_ui(ui, cx);
         });
-        fold_section(ui, "viz_objects", t("Objekte"), true, |ui| {
+        fold_section(ui, "viz_objects", t("Objects"), true, |ui| {
             self.object_tree(ui, cx);
         });
         self.missing_section(ui, cx);
@@ -228,7 +225,7 @@ impl VizView {
         let at = self.camera.map_or(Vec3::ZERO, |c| c.target);
         let mut insert: Option<library::Prefab> = None;
         ui.label(
-            egui::RichText::new(t("Mitgeliefert"))
+            egui::RichText::new(t("Built-in"))
                 .small()
                 .color(theme::text_dim()),
         );
@@ -241,14 +238,14 @@ impl VizView {
         });
         ui.add_space(theme::SP_XS);
         ui.label(
-            egui::RichText::new(t("Eigene"))
+            egui::RichText::new(t("Custom"))
                 .small()
                 .color(theme::text_dim()),
         );
         let mut delete = None;
         if user.is_empty() {
             ui.label(
-                egui::RichText::new(t("Noch keine – Objekt auswählen und unten speichern."))
+                egui::RichText::new(t("None yet – select an object and save it below."))
                     .small()
                     .color(theme::text_faint()),
             );
@@ -260,7 +257,7 @@ impl VizView {
                     insert = Some(u.prefab.clone());
                 }
                 r.context_menu(|ui| {
-                    if ui.button(t("Aus der Bibliothek löschen")).clicked() {
+                    if ui.button(t("Remove from library")).clicked() {
                         delete = Some(i);
                         ui.close();
                     }
@@ -280,10 +277,10 @@ impl VizView {
         if ui
             .add_enabled(
                 sel.is_some(),
-                egui::Button::new(t("Auswahl als eigenes Objekt speichern")),
+                egui::Button::new(t("Save selection as own object")),
             )
             .on_hover_text(t(
-                "Speichert das ausgewählte Objekt bzw. den Ordner samt Inhalt in der Bibliothek",
+                "Saves the selected object or folder with its contents to the library",
             ))
             .clicked()
         {
@@ -292,8 +289,7 @@ impl VizView {
             {
                 match library::save_user(&p) {
                     Ok(_) => {
-                        cx.state
-                            .info(tr!("In der Bibliothek gespeichert: {n}", n = p.name));
+                        cx.state.info(tr!("Saved to library: {n}", n = p.name));
                         self.library = None;
                     }
                     Err(e) => cx.state.error(e),
@@ -321,9 +317,9 @@ impl VizView {
         if self.missing.is_empty() {
             return;
         }
-        let title = tr!("Ohne Gegenstück im Patch ({n})", n = self.missing.len());
+        let title = tr!("Not in the patch ({n})", n = self.missing.len());
         fold_section(ui, "viz_missing", &title, true, |ui| {
-            ui.label(egui::RichText::new(t("Diese Geräte aus dem Import haben im Patch kein Gerät mit gleichem Universum und gleicher Adresse. Vorgeschlagen ist ein passender Typ aus der Bibliothek (kursiv: nur ähnlich, bitte prüfen).")).small().color(theme::text_faint()));
+            ui.label(egui::RichText::new(t("These imported fixtures have no fixture with the same universe and address in the patch. A matching library type is suggested (italic: only similar, please check).")).small().color(theme::text_faint()));
             for m in &mut self.missing {
                 let f = &m.fixture;
                 ui.horizontal(|ui| {
@@ -339,7 +335,7 @@ impl VizView {
                             .small(),
                         );
                         let ty = tr!(
-                            "{m} {t} ({mode} · {n} Kanäle)",
+                            "{m} {t} ({mode} · {n} channels)",
                             m = m.proposal.manufacturer,
                             t = m.proposal.model,
                             mode = m.proposal.mode,
@@ -356,7 +352,7 @@ impl VizView {
             let n = self.missing.iter().filter(|m| m.create).count();
             ui.horizontal_wrapped(|ui| {
                 if ui
-                    .add_enabled(n > 0, egui::Button::new(tr!("{n} Geräte anlegen", n = n)))
+                    .add_enabled(n > 0, egui::Button::new(tr!("Create {n} fixtures", n = n)))
                     .clicked()
                 {
                     let show = cx.engine.show_mut();
@@ -385,16 +381,16 @@ impl VizView {
                     }
                     dmxcraft_ofl::fill_physical(show);
                     if failed.is_empty() {
-                        cx.state.info(tr!("{n} Geräte angelegt", n = made));
+                        cx.state.info(tr!("{n} fixtures created", n = made));
                     } else {
                         cx.state.error(tr!(
-                            "{n} Geräte angelegt, nicht möglich: {f}",
+                            "{n} fixtures created, not possible: {f}",
                             n = made,
                             f = failed.join(", ")
                         ));
                     }
                 }
-                if ui.button(t("Liste ausblenden")).clicked() {
+                if ui.button(t("Hide list")).clicked() {
                     self.missing.clear();
                 }
             });
@@ -413,7 +409,7 @@ impl VizView {
                     ui.add_space(theme::SP_M);
                     ui.label(
                         egui::RichText::new(t(
-                            "Objekt oder Gerät anklicken (im Bild oder links in der Liste), um es zu bearbeiten.",
+                            "Click an object or fixture (in the view or in the list on the left) to edit it.",
                         ))
                         .color(theme::text_faint()),
                     );
@@ -442,27 +438,27 @@ impl VizView {
             self.selected = None;
             return;
         };
-        fold_section(ui, "viz_p_general", t("Allgemein"), true, |ui| {
+        fold_section(ui, "viz_p_general", t("General"), true, |ui| {
             ui.horizontal(|ui| {
                 ui.label(t("Name"));
                 ui.text_edit_singleline(&mut o.name);
             });
             ui.horizontal(|ui| {
-                ui.checkbox(&mut o.locked, t("Gesperrt"));
-                ui.checkbox(&mut o.hidden, t("Ausgeblendet"));
+                ui.checkbox(&mut o.locked, t("Locked"));
+                ui.checkbox(&mut o.hidden, t("Hidden"));
             });
         });
         let enabled = !o.locked;
         ui.add_enabled_ui(enabled, |ui| {
-            fold_section(ui, "viz_p_place", t("Lage"), true, |ui| {
+            fold_section(ui, "viz_p_place", t("Placement"), true, |ui| {
                 vec3_row(ui, t("Position (m)"), &mut o.transform.position, 0.01);
-                vec3_row(ui, t("Drehung (°)"), &mut o.transform.rotation, 0.5);
-                vec3_row(ui, t("Skalierung"), &mut o.transform.scale, 0.01);
+                vec3_row(ui, t("Rotation (°)"), &mut o.transform.rotation, 0.5);
+                vec3_row(ui, t("Scale"), &mut o.transform.scale, 0.01);
                 ui.horizontal(|ui| {
-                    if ui.button(t("Drehung zurücksetzen")).clicked() {
+                    if ui.button(t("Reset rotation")).clicked() {
                         o.transform.rotation = [0.0; 3];
                     }
-                    if ui.button(t("Auf den Boden")).clicked() {
+                    if ui.button(t("Onto the floor")).clicked() {
                         o.transform.position[1] = match &o.shape {
                             Shape::Box { size } => size[1] * 0.5 * o.transform.scale[1],
                             Shape::Cylinder { height, .. } => height * 0.5 * o.transform.scale[1],
@@ -472,12 +468,12 @@ impl VizView {
                 });
             });
             if !matches!(o.shape, Shape::Group) {
-                fold_section(ui, "viz_p_shape", t("Form"), true, |ui| {
+                fold_section(ui, "viz_p_shape", t("Shape"), true, |ui| {
                     match &mut o.shape {
-                        Shape::Box { size } => vec3_row(ui, t("Maße (m)"), size, 0.01),
+                        Shape::Box { size } => vec3_row(ui, t("Dimensions (m)"), size, 0.01),
                         Shape::Plane { size } => {
                             ui.horizontal(|ui| {
-                                ui.label(t("Maße (m)"));
+                                ui.label(t("Dimensions (m)"));
                                 for s in size.iter_mut() {
                                     ui.add(egui::DragValue::new(s).speed(0.01).range(0.01..=500.0));
                                 }
@@ -485,7 +481,7 @@ impl VizView {
                         }
                         Shape::Cylinder { radius, height } => {
                             ui.horizontal(|ui| {
-                                ui.label(t("Radius / Höhe (m)"));
+                                ui.label(t("Radius / height (m)"));
                                 ui.add(
                                     egui::DragValue::new(radius)
                                         .speed(0.005)
@@ -500,10 +496,10 @@ impl VizView {
                             length, profile, ..
                         } => {
                             ui.horizontal(|ui| {
-                                ui.label(t("Länge (m)"));
+                                ui.label(t("Length (m)"));
                                 ui.add(egui::DragValue::new(length).speed(0.05).range(0.25..=30.0));
                                 let mut sq = *profile == TrussProfile::Square;
-                                ui.checkbox(&mut sq, t("Vierpunkt"));
+                                ui.checkbox(&mut sq, t("Square truss"));
                                 *profile = if sq {
                                     TrussProfile::Square
                                 } else {
@@ -515,7 +511,7 @@ impl VizView {
                             if let Some((name, tris, size)) = &model_info {
                                 ui.label(
                                     egui::RichText::new(tr!(
-                                        "Modell {n} · {k} Dreiecke · {x} × {y} × {z} m",
+                                        "Model {n} · {k} triangles · {x} × {y} × {z} m",
                                         n = name,
                                         k = tris,
                                         x = format!("{:.2}", size[0]),
@@ -533,7 +529,7 @@ impl VizView {
                 fold_section(ui, "viz_p_material", t("Material"), false, |ui| {
                     if !matches!(o.shape, Shape::Model { .. }) {
                         ui.horizontal(|ui| {
-                            ui.label(t("Farbe"));
+                            ui.label(t("Color"));
                             let mut c = Color32::from_rgb(
                                 o.material.color[0],
                                 o.material.color[1],
@@ -546,17 +542,17 @@ impl VizView {
                     }
                     if !matches!(o.shape, Shape::Model { .. } | Shape::Truss { .. }) {
                         ui.horizontal(|ui| {
-                            ui.label(t("Bild"));
+                            ui.label(t("Image"));
                             let current = tex_list
                                 .iter()
                                 .find(|x| x.0 == o.material.texture)
-                                .map_or(t("Keins").to_string(), |x| x.1.clone());
+                                .map_or(t("None").to_string(), |x| x.1.clone());
                             egui::ComboBox::from_id_salt("viz_tex")
                                 .selected_text(current)
                                 .width(170.0)
                                 .show_ui(ui, |ui| {
                                     if ui
-                                        .selectable_label(o.material.texture == 0, t("Keins"))
+                                        .selectable_label(o.material.texture == 0, t("None"))
                                         .clicked()
                                     {
                                         tex_action = Some(TexAction::Set(0, None));
@@ -579,14 +575,14 @@ impl VizView {
                                             tex_action = Some(TexAction::Builtin(i, *tile));
                                         }
                                     }
-                                    if ui.button(t("Bild laden (PNG/JPEG) …")).clicked() {
+                                    if ui.button(t("Load image (PNG/JPEG) …")).clicked() {
                                         tex_action = Some(TexAction::Load);
                                     }
                                 });
                         });
                         if o.material.texture != 0 {
                             ui.horizontal(|ui| {
-                                ui.label(t("Kachelgröße (m)"));
+                                ui.label(t("Tile size (m)"));
                                 ui.add(
                                     egui::DragValue::new(&mut o.material.tile)
                                         .range(0.05..=100.0)
@@ -597,21 +593,19 @@ impl VizView {
                         }
                     }
                     ui.add(
-                        egui::Slider::new(&mut o.material.opacity, 0.05..=1.0).text(t("Deckkraft")),
+                        egui::Slider::new(&mut o.material.opacity, 0.05..=1.0).text(t("Opacity")),
                     );
-                    ui.add(egui::Slider::new(&mut o.material.gloss, 0.0..=1.0).text(t("Glanz")));
-                    ui.add(
-                        egui::Slider::new(&mut o.material.emissive, 0.0..=1.0).text(t("Leuchten")),
-                    );
+                    ui.add(egui::Slider::new(&mut o.material.gloss, 0.0..=1.0).text(t("Gloss")));
+                    ui.add(egui::Slider::new(&mut o.material.emissive, 0.0..=1.0).text(t("Glow")));
                 });
             }
         });
         ui.horizontal(|ui| {
             duplicate = ui
-                .add_enabled(enabled, egui::Button::new(t("Duplizieren")))
+                .add_enabled(enabled, egui::Button::new(t("Duplicate")))
                 .clicked();
             remove = ui
-                .add_enabled(enabled, egui::Button::new(t("Löschen")))
+                .add_enabled(enabled, egui::Button::new(t("Delete")))
                 .clicked();
         });
         if let Some(a) = tex_action {
@@ -671,12 +665,12 @@ impl VizView {
         let mut p: Placement = rig::placement(show, id);
         let before = p;
         let n = targets(cx, self.selected).len();
-        fold_section(ui, "viz_f_place", t("Lage"), true, |ui| {
+        fold_section(ui, "viz_f_place", t("Placement"), true, |ui| {
             vec3_row(ui, t("Position (m)"), &mut p.position, 0.01);
-            vec3_row(ui, t("Drehung (°)"), &mut p.rotation, 0.5);
+            vec3_row(ui, t("Rotation (°)"), &mut p.rotation, 0.5);
             ui.label(
                 egui::RichText::new(t(
-                    "Drehung 0/0/0 strahlt senkrecht nach unten. Im Bild drehen die Ringe um die Achsen des Raums.",
+                    "Rotation 0/0/0 points straight down. In the view the rings rotate around the room axes.",
                 ))
                 .small()
                 .color(theme::text_faint()),
@@ -686,17 +680,17 @@ impl VizView {
             apply_placement(cx, Pick::Fixture(id), p);
         }
         let title = if n > 1 {
-            tr!("Ausrichten ({n} Geräte)", n = n)
+            tr!("Aim ({n} fixtures)", n = n)
         } else {
-            t("Ausrichten").to_string()
+            t("Aim").to_string()
         };
         fold_section(ui, "viz_f_aim", &title, true, |ui| {
             ui.horizontal_wrapped(|ui| {
                 let dirs: [(&str, [f32; 3]); 4] = [
-                    (t("Unten"), [0.0, -1.0, 0.0]),
-                    (t("Oben"), [0.0, 1.0, 0.0]),
-                    (t("Vorne"), [0.0, 0.0, 1.0]),
-                    (t("Hinten"), [0.0, 0.0, -1.0]),
+                    (t("Down"), [0.0, -1.0, 0.0]),
+                    (t("Up"), [0.0, 1.0, 0.0]),
+                    (t("Front"), [0.0, 0.0, 1.0]),
+                    (t("Back"), [0.0, 0.0, -1.0]),
                 ];
                 for (label, d) in dirs {
                     if ui.button(label).clicked() {
@@ -716,13 +710,13 @@ impl VizView {
                     }
                 }
             });
-            vec3_row(ui, t("Zielpunkt (m)"), &mut self.aim, 0.05);
+            vec3_row(ui, t("Target point (m)"), &mut self.aim, 0.05);
             ui.horizontal_wrapped(|ui| {
-                if ui.button(t("Auf Zielpunkt richten")).clicked() {
+                if ui.button(t("Aim at target")).clicked() {
                     aim_selected(cx, self.selected, self.aim);
                 }
                 if ui
-                    .selectable_label(self.aim_pick, t("Zielpunkt im Bild wählen"))
+                    .selectable_label(self.aim_pick, t("Pick target in view"))
                     .clicked()
                 {
                     self.aim_pick = !self.aim_pick;
@@ -736,10 +730,7 @@ impl VizView {
                 .iter()
                 .any(|(o, _)| matches!(o.shape, Shape::Truss { .. }));
             if ui
-                .add_enabled(
-                    has_truss,
-                    egui::Button::new(t("An nächste Traverse hängen")),
-                )
+                .add_enabled(has_truss, egui::Button::new(t("Hang on nearest truss")))
                 .clicked()
             {
                 for fid in targets(cx, self.selected) {
@@ -754,7 +745,7 @@ impl VizView {
         if ui
             .add_enabled(
                 !auto,
-                egui::Button::new(t("Automatisch (aus dem Bühnenplan)")),
+                egui::Button::new(t("Automatic (from the stage plan)")),
             )
             .clicked()
         {

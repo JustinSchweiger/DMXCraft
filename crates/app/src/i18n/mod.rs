@@ -1,12 +1,12 @@
-//! Übersetzung der Oberfläche.
+//! UI translation.
 //!
-//! Deutsch ist die Quellsprache: Texte stehen im Code auf Deutsch und laufen
-//! über [`t`] (feste Texte) oder [`tr!`] (Texte mit Platzhaltern
-//! `{name}`). Für Englisch schlägt [`t`] den deutschen Text in [`en::ENTRIES`]
-//! nach. Fehlt ein Eintrag, bleibt der deutsche Text stehen – ein Test
-//! (`all_texts_translated`) sorgt dafür, dass das nicht passiert.
+//! English is the source language: texts are written in English in the code
+//! and go through [`t`] (fixed texts) or [`tr!`] (texts with placeholders
+//! `{name}`). For German, [`t`] looks the English text up in
+//! [`de::ENTRIES`]. If an entry is missing the English text is shown – a test
+//! (`all_texts_translated`) makes sure that does not happen.
 
-mod en;
+mod de;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -19,9 +19,9 @@ pub enum Lang {
 }
 
 impl Lang {
-    pub const ALL: [Lang; 2] = [Lang::De, Lang::En];
+    pub const ALL: [Lang; 2] = [Lang::En, Lang::De];
 
-    /// Schlüssel für die Einstellungen.
+    /// Key used in the settings.
     pub fn key(self) -> &'static str {
         match self {
             Lang::De => "de",
@@ -33,10 +33,10 @@ impl Lang {
         Lang::ALL
             .into_iter()
             .find(|l| l.key() == key)
-            .unwrap_or(Lang::De)
+            .unwrap_or(Lang::En)
     }
 
-    /// Name der Sprache in ihr selbst (wird nicht übersetzt).
+    /// Name of the language in itself (not translated).
     pub fn native_name(self) -> &'static str {
         match self {
             Lang::De => "Deutsch",
@@ -56,18 +56,18 @@ pub fn lang() -> Lang {
     Lang::ALL[usize::from(LANG.load(Ordering::Relaxed)) % Lang::ALL.len()]
 }
 
-static EN: LazyLock<HashMap<&'static str, &'static str>> =
-    LazyLock::new(|| en::ENTRIES.iter().copied().collect());
+static DE: LazyLock<HashMap<&'static str, &'static str>> =
+    LazyLock::new(|| de::ENTRIES.iter().copied().collect());
 
-/// Übersetzt einen festen deutschen Text in die aktive Sprache.
-pub fn t(de: &'static str) -> &'static str {
+/// Translates a fixed English text into the active language.
+pub fn t(en: &'static str) -> &'static str {
     match lang() {
-        Lang::De => de,
-        Lang::En => EN.get(de).copied().unwrap_or(de),
+        Lang::En => en,
+        Lang::De => DE.get(en).copied().unwrap_or(en),
     }
 }
 
-/// Setzt Werte in einen (übersetzten) Text mit Platzhaltern `{name}` ein.
+/// Fills values into a (translated) text with placeholders `{name}`.
 pub fn fill(template: &str, args: &[(&str, String)]) -> String {
     let mut out = template.to_string();
     for (k, v) in args {
@@ -76,8 +76,8 @@ pub fn fill(template: &str, args: &[(&str, String)]) -> String {
     out
 }
 
-/// Übersetzter Text mit Platzhaltern:
-/// `tr!("{n} Geräte", n = count)` → „3 Geräte“ / „3 fixtures“.
+/// Translated text with placeholders:
+/// `tr!("{n} fixtures", n = count)` → “3 fixtures” / „3 Geräte“.
 #[macro_export]
 macro_rules! tr {
     ($tpl:literal $(, $k:ident = $v:expr)* $(,)?) => {
@@ -93,7 +93,7 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
 
-    /// Alle Texte aus `t("…")` und `tr!("…")` im Quellcode.
+    /// All texts from `t("…")` and `tr!("…")` in the source code.
     fn texts_in_source() -> Vec<(String, String)> {
         fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
             for e in std::fs::read_dir(dir).unwrap().flatten() {
@@ -119,7 +119,7 @@ mod tests {
             for marker in ["t(\"", "tr!(\""] {
                 let mut rest = src.as_str();
                 while let Some(i) = rest.find(marker) {
-                    // nur als eigenes Wort (nicht `set(`, `hint(`, `include_str!(` …)
+                    // only as a separate word (not `set(`, `hint(`, `include_str!(` …)
                     let before = rest[..i].chars().last();
                     let ok = !before.is_some_and(|c| c.is_alphanumeric() || c == '_');
                     let start = i + marker.len();
@@ -141,13 +141,13 @@ mod tests {
     fn all_texts_translated() {
         let missing: Vec<_> = texts_in_source()
             .into_iter()
-            .filter(|(de, _)| !EN.contains_key(de.as_str()))
+            .filter(|(en, _)| !DE.contains_key(en.as_str()))
             .collect();
-        assert!(missing.is_empty(), "ohne Übersetzung: {missing:#?}");
+        assert!(missing.is_empty(), "not translated: {missing:#?}");
     }
 
-    /// Texte, die aus anderen Crates oder Konstanten kommen und erst an der
-    /// Verwendungsstelle über `t()` laufen.
+    /// Texts that come from other crates or constants and only go through
+    /// `t()` where they are used.
     #[test]
     fn labels_from_core_translated() {
         let mut labels: Vec<&str> = dmxcraft_core::PlanShape::ALL
@@ -170,15 +170,15 @@ mod tests {
             .collect();
         labels.extend(crate::views::fixture_menu::SIZES.iter().map(|(l, _)| *l));
         for l in labels {
-            assert!(EN.contains_key(l), "ohne Übersetzung: {l}");
+            assert!(DE.contains_key(l), "not translated: {l}");
         }
     }
 
     #[test]
     fn no_duplicate_entries() {
         let mut seen = HashSet::new();
-        for (de, _) in en::ENTRIES {
-            assert!(seen.insert(de), "doppelt: {de}");
+        for (en, _) in de::ENTRIES {
+            assert!(seen.insert(en), "duplicate: {en}");
         }
     }
 
@@ -193,16 +193,16 @@ mod tests {
             v.sort();
             v
         };
-        for (de, en) in en::ENTRIES {
-            assert_eq!(names(de), names(en), "Platzhalter: {de} / {en}");
+        for (en, de) in de::ENTRIES {
+            assert_eq!(names(en), names(de), "placeholders: {en} / {de}");
         }
     }
 
     #[test]
     fn fill_replaces_names() {
         assert_eq!(
-            fill("{n} von {m}", &[("n", "1".into()), ("m", "2".into())]),
-            "1 von 2"
+            fill("{n} of {m}", &[("n", "1".into()), ("m", "2".into())]),
+            "1 of 2"
         );
     }
 }

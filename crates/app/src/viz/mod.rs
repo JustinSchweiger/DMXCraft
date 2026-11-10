@@ -49,9 +49,9 @@ impl Quality {
 
     pub fn label(self) -> &'static str {
         match self {
-            Quality::Low => t("Niedrig"),
-            Quality::Medium => t("Mittel"),
-            Quality::High => t("Hoch"),
+            Quality::Low => t("Low"),
+            Quality::Medium => t("Medium"),
+            Quality::High => t("High"),
             Quality::Ultra => t("Ultra"),
         }
     }
@@ -538,7 +538,7 @@ impl VizView {
             painter.text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                t("Keine Grafikkarte verfügbar"),
+                t("No graphics card available"),
                 theme::body(),
                 theme::text_dim(),
             );
@@ -789,13 +789,13 @@ impl VizView {
             painter.text(
                 rect.center_top() + vec2(0.0, 12.0),
                 egui::Align2::CENTER_TOP,
-                t("Zielpunkt auf dem Boden anklicken"),
+                t("Click the target point on the floor"),
                 theme::body(),
                 theme::accent(),
             );
         }
         if building {
-            let hint = t("Linke Maustaste: drehen · auf der Auswahl: verschieben · Griffe: Achse bzw. Drehung (Strg: ohne Raster) · Rechts/Mitte: verschieben · Rad: zoomen");
+            let hint = t("Left mouse: orbit · on the selection: move · Handles: axis or rotation (Ctrl: no grid) · Right/middle: pan · Wheel: zoom");
             let galley = painter.layout(
                 hint.to_string(),
                 egui::FontId::proportional(theme::FS_CAPTION - 1.0),
@@ -1058,24 +1058,24 @@ impl VizView {
         std::thread::spawn(move || {
             let r = match kind {
                 DialogKind::ImportEv2 => rfd::FileDialog::new()
-                    .set_title(t("Easy View 2 importieren"))
+                    .set_title(t("Import Easy View 2"))
                     .add_filter(t("Easy View 2 (XML)"), &["xml", "ev2"])
                     .pick_file(),
                 DialogKind::ImportModel => rfd::FileDialog::new()
-                    .set_title(t("3D-Modell importieren"))
-                    .add_filter(t("glTF-Modell"), &["glb", "gltf"])
+                    .set_title(t("Import 3D model"))
+                    .add_filter(t("glTF model"), &["glb", "gltf"])
                     .pick_file(),
                 DialogKind::LoadTexture => rfd::FileDialog::new()
-                    .set_title(t("Bild laden"))
-                    .add_filter(t("Bild (PNG/JPEG)"), &["png", "jpg", "jpeg"])
+                    .set_title(t("Load image"))
+                    .add_filter(t("Image (PNG/JPEG)"), &["png", "jpg", "jpeg"])
                     .pick_file(),
                 DialogKind::LoadVenue => rfd::FileDialog::new()
-                    .set_title(t("Veranstaltungsort laden"))
-                    .add_filter(t("Veranstaltungsort"), &[VENUE_EXT])
+                    .set_title(t("Load venue"))
+                    .add_filter(t("Venue"), &[VENUE_EXT])
                     .pick_file(),
                 DialogKind::SaveVenue => rfd::FileDialog::new()
-                    .set_title(t("Veranstaltungsort speichern unter"))
-                    .add_filter(t("Veranstaltungsort"), &[VENUE_EXT])
+                    .set_title(t("Save venue as"))
+                    .add_filter(t("Venue"), &[VENUE_EXT])
                     .set_file_name(format!("Ort.{VENUE_EXT}"))
                     .save_file()
                     .map(|p| {
@@ -1124,12 +1124,12 @@ impl VizView {
                 self.selected = Some(Pick::Object(o.id));
                 v.objects.push(o);
                 cx.state.info(tr!(
-                    "Modell importiert: {n} ({k} Dreiecke)",
+                    "Model imported: {n} ({k} triangles)",
                     n = name,
                     k = tris
                 ));
             }
-            Err(e) => cx.state.error(tr!("Import fehlgeschlagen: {e}", e = e)),
+            Err(e) => cx.state.error(tr!("Import failed: {e}", e = e)),
         }
     }
 
@@ -1162,7 +1162,7 @@ impl VizView {
                         .collect();
                     panels::apply_texture(v, ids, id, None);
                 }
-                Err(e) => cx.state.error(tr!("Bild nicht geladen: {e}", e = e)),
+                Err(e) => cx.state.error(tr!("Image not loaded: {e}", e = e)),
             },
             DialogKind::ImportModel => {
                 let (tx, rx) = channel();
@@ -1178,10 +1178,8 @@ impl VizView {
                     .map_err(|e| e.to_string())
                     .and_then(|j| std::fs::write(&path, j).map_err(|e| e.to_string()))
                 {
-                    Ok(()) => cx
-                        .state
-                        .info(tr!("Veranstaltungsort gespeichert: {p}", p = p)),
-                    Err(e) => cx.state.error(tr!("Nicht gespeichert: {e}", e = e)),
+                    Ok(()) => cx.state.info(tr!("Venue saved: {p}", p = p)),
+                    Err(e) => cx.state.error(tr!("Not saved: {e}", e = e)),
                 }
             }
             DialogKind::LoadVenue => match std::fs::read_to_string(&path)
@@ -1191,9 +1189,9 @@ impl VizView {
                 Ok(v) => {
                     cx.engine.show_mut().venue = v;
                     self.selected = None;
-                    cx.state.info(tr!("Veranstaltungsort geladen: {p}", p = p));
+                    cx.state.info(tr!("Venue loaded: {p}", p = p));
                 }
-                Err(e) => cx.state.error(tr!("Nicht geladen: {e}", e = e)),
+                Err(e) => cx.state.error(tr!("Not loaded: {e}", e = e)),
             },
             DialogKind::ImportEv2 => {
                 let text = match std::fs::read(&path) {
@@ -1237,7 +1235,7 @@ impl VizView {
                         }
                         self.selected = None;
                         cx.state.info(tr!(
-                            "Easy View importiert: {m} Geräte zugeordnet, {n} ohne Gegenstück im Patch",
+                            "Easy View imported: {m} fixtures matched, {n} without a match in the patch",
                             m = matched,
                             n = missing.len()
                         ));
@@ -1246,7 +1244,7 @@ impl VizView {
                         }
                         self.missing = missing;
                     }
-                    Err(e) => cx.state.error(tr!("Import fehlgeschlagen: {e}", e = e)),
+                    Err(e) => cx.state.error(tr!("Import failed: {e}", e = e)),
                 }
             }
         }

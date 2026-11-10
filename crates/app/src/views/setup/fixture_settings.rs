@@ -34,16 +34,16 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = theme::SP_XS;
             for (q, icon, tip) in [
-                (Quick::Off, Icon::LightOff, t("Licht aus")),
+                (Quick::Off, Icon::LightOff, t("Light off")),
                 (
                     Quick::On,
                     Icon::LightOn,
-                    t("Licht an (Dimmer und Weiß voll)"),
+                    t("Light on (dimmer and white full)"),
                 ),
                 (
                     Quick::Center,
                     Icon::Center,
-                    t("Moving Head zentrieren (Pan/Tilt 50 %)"),
+                    t("Center moving head (pan/tilt 50 %)"),
                 ),
             ] {
                 if ui
@@ -83,7 +83,7 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let h = (ui.available_height() - 4.0).clamp(120.0, 420.0);
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
-                let cw = caption(ui, t("Dimmer Limit")).rect.width();
+                let cw = caption(ui, t("Dimmer limit")).rect.width();
                 // Regler unter der (breiteren) Überschrift mittig ausrichten
                 ui.horizontal(|ui| {
                     ui.add_space(((cw - crate::ui::widgets::fader::FADER_W) * 0.5).max(0.0));
@@ -98,7 +98,7 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
             });
             ui.separator();
             ui.vertical(|ui| {
-                caption(ui, t("Bewegung Limit"));
+                caption(ui, t("Movement limit"));
                 let side = (h - 24.0).min(ui.available_width() - 150.0).max(110.0);
                 LimitPad {
                     pan: (&mut lim.pan_min, &mut lim.pan_max),
@@ -125,18 +125,17 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
                             );
                         });
                     ui.add_space(theme::SP_S);
-                    caption(ui, t("Invertieren"));
+                    caption(ui, t("Invert"));
                     ui.add(Toggle::new(&mut lim.invert_pan, t("Pan")).enabled(has_pan));
                     ui.add(Toggle::new(&mut lim.invert_tilt, t("Tilt")).enabled(has_tilt));
                     ui.add(
-                        Toggle::new(&mut lim.swap_pan_tilt, t("Tauschen"))
-                            .enabled(has_pan && has_tilt),
+                        Toggle::new(&mut lim.swap_pan_tilt, t("Swap")).enabled(has_pan && has_tilt),
                     );
                 });
                 ui.add_space(theme::SP_S);
                 if ui
-                    .add_enabled(!lim.is_default(), egui::Button::new(t("Zurücksetzen")))
-                    .on_hover_text(t("Alle Grenzen zurücksetzen"))
+                    .add_enabled(!lim.is_default(), egui::Button::new(t("Reset")))
+                    .on_hover_text(t("Reset all limits"))
                     .clicked()
                 {
                     lim = FixtureLimits::default();

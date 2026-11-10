@@ -332,7 +332,7 @@ impl SceneGridView {
                 ui,
                 &mut self.page,
                 PageFilter::All,
-                t("Alle"),
+                t("All"),
                 theme::text(),
                 false,
             );
@@ -398,7 +398,7 @@ impl SceneGridView {
             if !locked
                 && ui
                     .add(IconButton::new(Icon::Plus).flat())
-                    .on_hover_text(t("Neue Bank"))
+                    .on_hover_text(t("New bank"))
                     .clicked()
             {
                 actions.push(Action::Bank(BankAction::New));
@@ -412,7 +412,7 @@ fn hidden_banks_menu(ui: &mut egui::Ui, show: &Show, actions: &mut Vec<Action>) 
     let hidden: Vec<_> = show.zones.iter().filter(|z| z.hidden).collect();
     menu::sub(
         ui,
-        MenuItem::new(t("Ausgeblendete Bänke"))
+        MenuItem::new(t("Hidden banks"))
             .icon(Icon::LightOn)
             .enabled(!hidden.is_empty()),
         |ui| {
@@ -422,13 +422,13 @@ fn hidden_banks_menu(ui: &mut egui::Ui, show: &Show, actions: &mut Vec<Action>) 
                     .icon_fn(move |p, r, _| {
                         p.circle_filled(r.center(), r.width().min(r.height()) * 0.32, c);
                     })
-                    .tooltip(t("Einblenden"));
+                    .tooltip(t("Unhide"));
                 if menu::item(ui, item) {
                     actions.push(Action::Bank(BankAction::Show(z.id)));
                 }
             }
             menu::separator(ui);
-            if menu::item(ui, MenuItem::new(t("Alle einblenden")).icon(Icon::LightOn)) {
+            if menu::item(ui, MenuItem::new(t("Show all")).icon(Icon::LightOn)) {
                 actions.extend(hidden.iter().map(|z| Action::Bank(BankAction::Show(z.id))));
             }
         },
@@ -450,17 +450,17 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
     menu::title(ui, &z.name);
     act(
         ui,
-        MenuItem::new(t("Umbenennen")).icon(Icon::Edit),
+        MenuItem::new(t("Rename")).icon(Icon::Edit),
         BankAction::Rename(zone),
     );
     act(
         ui,
-        MenuItem::new(t("Duplizieren")).icon(Icon::Copy),
+        MenuItem::new(t("Duplicate")).icon(Icon::Copy),
         BankAction::Duplicate(zone),
     );
     act(
         ui,
-        MenuItem::new(t("Ausblenden")).icon(Icon::LightOff),
+        MenuItem::new(t("Hide")).icon(Icon::LightOff),
         BankAction::Hide(zone),
     );
     // ausgeblendete Szenen einzeln oder alle wieder einblenden
@@ -472,7 +472,7 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
         .collect();
     menu::sub(
         ui,
-        MenuItem::new(&tr!("Ausgeblendete Szenen ({n})", n = hidden.len()))
+        MenuItem::new(&tr!("Hidden scenes ({n})", n = hidden.len()))
             .icon(Icon::EyeOff)
             .enabled(!hidden.is_empty()),
         |ui| {
@@ -483,7 +483,7 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
                 }
             }
             menu::separator(ui);
-            if menu::item(ui, MenuItem::new(t("Alle einblenden")).icon(Icon::Eye)) {
+            if menu::item(ui, MenuItem::new(t("Show all")).icon(Icon::Eye)) {
                 other = Some(BankAction::ShowAllScenes(zone));
             }
         },
@@ -494,7 +494,7 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
     ui.horizontal(|ui| {
         ui.add_space(theme::SP_S);
         ui.label(
-            egui::RichText::new(t("Bankfarbe"))
+            egui::RichText::new(t("Bank color"))
                 .small()
                 .color(theme::text_dim()),
         );
@@ -503,28 +503,28 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
         ui,
         ui.make_persistent_id(("bank_color", zone.0)),
         z.color,
-        t("Automatisch (nach Position)"),
+        t("Automatic (by position)"),
     ) {
         other = Some(BankAction::SetColor(zone, c));
     }
     act(
         ui,
-        MenuItem::new(t("Bankfarbe allen Szenen zuordnen")).icon(Icon::Paste),
+        MenuItem::new(t("Apply bank color to all scenes")).icon(Icon::Paste),
         BankAction::ColorToScenes(zone),
     );
     menu::separator(ui);
     act(
         ui,
-        MenuItem::new(t("Alle Szenen auswählen")).icon(Icon::ArrangeGrid),
+        MenuItem::new(t("Select all scenes")).icon(Icon::ArrangeGrid),
         BankAction::SelectScenes(zone),
     );
     menu::separator(ui);
     act(
         ui,
-        MenuItem::new(t("Löschen"))
+        MenuItem::new(t("Delete"))
             .icon(Icon::Trash)
             .danger()
-            .tooltip(t("Löscht die Bank mit allen Szenen")),
+            .tooltip(t("Deletes the bank with all its scenes")),
         BankAction::Delete(zone),
     );
     out.or(other)
@@ -669,14 +669,14 @@ fn column(
                                     .enabled(on)
                                     .active(paused),
                             )
-                            .on_hover_text(t("Pause / Weiter"));
+                            .on_hover_text(t("Pause / resume"));
                         if !mapping::target(ui, r.rect, Control::ZonePause { zone }) && r.clicked()
                         {
                             actions.push(Action::Pause(sid));
                         }
                         let r = ui
                             .add(IconButton::new(Icon::Prev).enabled(on))
-                            .on_hover_text(t("Vorheriger Schritt"));
+                            .on_hover_text(t("Previous step"));
                         if !mapping::target(ui, r.rect, Control::ZoneStep { zone, delta: -1 })
                             && r.clicked()
                         {
@@ -684,7 +684,7 @@ fn column(
                         }
                         let r = ui
                             .add(IconButton::new(Icon::Next).enabled(on))
-                            .on_hover_text(t("Nächster Schritt"));
+                            .on_hover_text(t("Next step"));
                         if !mapping::target(ui, r.rect, Control::ZoneStep { zone, delta: 1 })
                             && r.clicked()
                         {
@@ -693,7 +693,7 @@ fn column(
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui
                                 .add(IconButton::new(Icon::Plus))
-                                .on_hover_text(t("Neue Szene"))
+                                .on_hover_text(t("New scene"))
                                 .clicked()
                                 && !locked
                             {
@@ -702,9 +702,9 @@ fn column(
                             if ui
                                 .add(IconButton::new(Icon::ChevronDown).active(compact))
                                 .on_hover_text(if compact {
-                                    t("Normale Ansicht")
+                                    t("Normal view")
                                 } else {
-                                    t("Kompaktansicht (nur Namen)")
+                                    t("Compact view (names only)")
                                 })
                                 .clicked()
                             {
@@ -780,7 +780,7 @@ fn drag_ghost(ctx: &egui::Context, show: &Show, selected: &BTreeSet<SceneId>) {
     };
     ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
     let label = if selected.contains(&*id) && selected.len() > 1 {
-        tr!("{n} Szenen", n = selected.len())
+        tr!("{n} scenes", n = selected.len())
     } else {
         scene.name.clone()
     };
@@ -899,12 +899,12 @@ fn scene_card(
         _ if is_super => t("SUPER SCENE").to_string(),
         _ if !scene.effects.is_empty() => t("FX").to_string(),
         (_, Some(p)) if p.step_count > 1 => tr!(
-            "ABLAUF · {step_nr}/{step_count}",
+            "SEQUENCE · {step_nr}/{step_count}",
             step_nr = p.step + 1,
             step_count = p.step_count
         ),
-        (n, _) if n > 1 => tr!("ABLAUF · {n} SCHRITTE", n = n),
-        _ => t("STATISCH").to_string(),
+        (n, _) if n > 1 => tr!("SEQUENCE · {n} STEPS", n = n),
+        _ => t("STATIC").to_string(),
     };
     let is_marked = marked.contains(&id);
     let resp = SceneCard {
@@ -1015,7 +1015,7 @@ fn scene_card(
     menu::context(&resp.whole(), |ui| {
         menu::begin(ui);
         let title = if targets.len() > 1 {
-            tr!("{n} Szenen", n = targets.len())
+            tr!("{n} scenes", n = targets.len())
         } else {
             scene.name.clone()
         };
@@ -1023,18 +1023,16 @@ fn scene_card(
         let single = targets.len() == 1;
         if menu::item(
             ui,
-            MenuItem::new(t("Umbenennen"))
-                .icon(Icon::Edit)
-                .enabled(single),
+            MenuItem::new(t("Rename")).icon(Icon::Edit).enabled(single),
         ) {
             actions.push(Action::RenameScene(id));
         }
-        if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
+        if menu::item(ui, MenuItem::new(t("Duplicate")).icon(Icon::Copy)) {
             actions.extend(targets.iter().map(|s| Action::DuplicateScene(*s)));
         }
         if menu::item(
             ui,
-            MenuItem::new(t("Zur Touch-Oberfläche hinzufügen")).icon(Icon::Touch),
+            MenuItem::new(t("Add to touch surface")).icon(Icon::Touch),
         ) {
             for s in &targets {
                 mapping::touch_pick_control(
@@ -1045,14 +1043,14 @@ fn scene_card(
                 );
             }
         }
-        if menu::item(ui, MenuItem::new(t("Ausblenden")).icon(Icon::EyeOff)) {
+        if menu::item(ui, MenuItem::new(t("Hide")).icon(Icon::EyeOff)) {
             actions.push(Action::HideScenes(targets.clone()));
         }
         if menu::item(
             ui,
-            MenuItem::new(t("SuperSzene erstellen"))
+            MenuItem::new(t("Create super scene"))
                 .icon(Icon::Music)
-                .tooltip(t("Neue SUPER SCENE mit diesen Szenen nacheinander")),
+                .tooltip(t("New super scene with these scenes in sequence")),
         ) {
             actions.push(Action::CreateSuper(targets.clone()));
         }
@@ -1060,7 +1058,7 @@ fn scene_card(
         ui.horizontal(|ui| {
             ui.add_space(theme::SP_S);
             ui.label(
-                egui::RichText::new(t("Szenenfarbe"))
+                egui::RichText::new(t("Scene color"))
                     .small()
                     .color(theme::text_dim()),
             );
@@ -1069,14 +1067,14 @@ fn scene_card(
             ui,
             ui.make_persistent_id(("scene_color", id.0)),
             current,
-            t("Bankfarbe übernehmen"),
+            t("Use bank color"),
         ) {
             actions.push(Action::SceneColor(targets.clone(), c));
         }
         menu::separator(ui);
         if menu::item(
             ui,
-            MenuItem::new(t("Löschen"))
+            MenuItem::new(t("Delete"))
                 .icon(Icon::Trash)
                 .shortcut(crate::titlebar::keys::delete())
                 .danger(),
@@ -1107,7 +1105,7 @@ fn apply(
             Action::NewScene(zone) => {
                 // Werte aus dem Programmer übernehmen, sonst leere Szene
                 let values = programmer_values(e);
-                let name = tr!("Szene {n}", n = e.show().scenes.len() + 1);
+                let name = tr!("Scene {n}", n = e.show().scenes.len() + 1);
                 // neue Szenen dauern 5 s
                 let mut step = Step::new(values);
                 step.hold_ms = 5000;
@@ -1133,7 +1131,7 @@ fn apply(
                     continue;
                 };
                 e.show_mut()
-                    .duplicate_scene(id, tr!("{name} (Kopie)", name = name));
+                    .duplicate_scene(id, tr!("{name} (copy)", name = name));
             }
             Action::HideScenes(ids) => {
                 for id in &ids {
@@ -1143,7 +1141,7 @@ fn apply(
                     st.selected_scenes.remove(id);
                 }
                 st.info(tr!(
-                    "{n} Szene(n) ausgeblendet – Rechtsklick auf die Bank blendet sie wieder ein",
+                    "{n} scene(s) hidden – right-click the bank to show them again",
                     n = ids.len()
                 ));
             }
@@ -1163,7 +1161,7 @@ fn apply(
                         .map_or(String::new(), |s| s.name.clone());
                     tr!("{name} (Super)", name = n)
                 } else {
-                    t("Super Szene").to_string()
+                    t("Super scene").to_string()
                 };
                 if let Some(id) = e.show_mut().create_super_scene(&ordered, name) {
                     st.selected_scenes.clear();
@@ -1286,13 +1284,13 @@ fn apply_bank(
                 return;
             };
             e.show_mut()
-                .duplicate_zone(id, tr!("{name} (Kopie)", name = name));
+                .duplicate_zone(id, tr!("{name} (copy)", name = name));
         }
         BankAction::Hide(id) => {
             if let Some(z) = e.show_mut().zone_mut(id) {
                 z.hidden = true;
                 st.info(tr!(
-                    "„{name}“ ausgeblendet – Rechtsklick auf „Alle“ blendet sie wieder ein",
+                    "“{name}” hidden – right-click “All” to show it again",
                     name = z.name
                 ));
             }

@@ -238,7 +238,7 @@ impl<'a> Dialog<'a> {
             );
             if ui
                 .put(close_rect, IconButton::new(Icon::Close).flat().danger())
-                .on_hover_text(t("Schließen"))
+                .on_hover_text(t("Close"))
                 .clicked()
             {
                 close = true;

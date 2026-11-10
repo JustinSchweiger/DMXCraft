@@ -50,7 +50,7 @@ impl VizView {
 
     fn left_part(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, locked: bool) {
         let mut mode = self.mode;
-        Segmented::new(&[(Mode::Build, t("Bauen")), (Mode::Live, t("Live"))]).show(ui, &mut mode);
+        Segmented::new(&[(Mode::Build, t("Build")), (Mode::Live, t("Live"))]).show(ui, &mut mode);
         if !locked {
             self.mode = mode;
         }
@@ -63,7 +63,7 @@ impl VizView {
                         .flat()
                         .enabled(cx.state.can_undo),
                 )
-                .on_hover_text(t("Rückgängig (Strg+Z)"))
+                .on_hover_text(t("Undo (Ctrl+Z)"))
                 .clicked()
             {
                 cx.state.history_request = Some(true);
@@ -75,7 +75,7 @@ impl VizView {
                         .flat()
                         .enabled(cx.state.can_redo),
                 )
-                .on_hover_text(t("Wiederholen (Strg+Y)"))
+                .on_hover_text(t("Redo (Ctrl+Y)"))
                 .clicked()
             {
                 cx.state.history_request = Some(false);
@@ -85,20 +85,16 @@ impl VizView {
         divider(ui);
         let env = &mut cx.engine.show_mut().venue.environment;
         for (label, v, tip) in [
-            (t("Umgebung"), &mut env.ambient, t("Raumlicht")),
-            (
-                t("Strahlen"),
-                &mut env.beams,
-                t("Sichtbarkeit der Lichtstrahlen"),
-            ),
-            (t("Nebel"), &mut env.fog, t("Dunst im Raum")),
+            (t("Ambient"), &mut env.ambient, t("Room light")),
+            (t("Beams"), &mut env.beams, t("Visibility of light beams")),
+            (t("Fog"), &mut env.fog, t("Haze in the room")),
         ] {
             level(ui, label, v, !locked).on_hover_text(tip);
         }
         divider(ui);
         // Qualität als Auswahl im Stil der Leiste
         let q = cx.state.viz_quality;
-        let r = chip(ui, t("Qualität"), q.label(), true);
+        let r = chip(ui, t("Quality"), q.label(), true);
         menu::dropdown(&r, |ui| {
             menu::begin(ui);
             for v in Quality::ALL {
@@ -113,19 +109,19 @@ impl VizView {
         for (icon, tip, kind, enabled) in [
             (
                 Icon::Import,
-                t("Easy View 2 importieren (als XML) …"),
+                t("Import Easy View 2 (as XML) …"),
                 DialogKind::ImportEv2,
                 !locked,
             ),
             (
                 Icon::FileOpen,
-                t("Veranstaltungsort laden …"),
+                t("Load venue …"),
                 DialogKind::LoadVenue,
                 !locked,
             ),
             (
                 Icon::Save,
-                t("Veranstaltungsort speichern unter …"),
+                t("Save venue as …"),
                 DialogKind::SaveVenue,
                 true,
             ),
@@ -150,7 +146,7 @@ impl VizView {
                         .flat()
                         .active(full),
                 )
-                .on_hover_text(t("Vollbild"))
+                .on_hover_text(t("Full screen"))
                 .clicked()
             {
                 ui.ctx()
@@ -163,7 +159,7 @@ impl VizView {
                     .flat()
                     .active(cx.state.viz_window),
             )
-            .on_hover_text(t("In eigenem Fenster öffnen (z. B. zweiter Bildschirm)"))
+            .on_hover_text(t("Open in its own window (e.g. second screen)"))
             .clicked()
         {
             cx.state.viz_window = !cx.state.viz_window;
@@ -189,21 +185,21 @@ impl VizView {
         if !locked
             && ui
                 .add(IconButton::new(Icon::Plus).size(H).flat())
-                .on_hover_text(t("Aktuelle Ansicht als Kamerapunkt speichern"))
+                .on_hover_text(t("Save current view as camera point"))
                 .clicked()
         {
             if let Some(cam) = current {
                 let venue = &mut cx.engine.show_mut().venue;
                 let n = (1..)
                     .find(|n| {
-                        let name = tr!("Ansicht {n}", n = n);
+                        let name = tr!("View {n}", n = n);
                         !venue.cameras.iter().any(|c| c.name == name)
                     })
                     .unwrap_or(1);
-                venue.cameras.push(cam.to_preset(tr!("Ansicht {n}", n = n)));
+                venue.cameras.push(cam.to_preset(tr!("View {n}", n = n)));
                 // gleich umbenennen (in der breiten Leiste)
                 if !collapsed {
-                    self.cam_rename = Some((venue.cameras.len() - 1, tr!("Ansicht {n}", n = n)));
+                    self.cam_rename = Some((venue.cameras.len() - 1, tr!("View {n}", n = n)));
                     self.cam_rename_focus = true;
                 }
             }
@@ -240,12 +236,12 @@ impl VizView {
             let target = OrbitCamera::from_preset(p);
             let active = current.is_some_and(|c| c.near(&target));
             let key = if i < 9 {
-                tr!("Taste {n}", n = i + 1)
+                tr!("key {n}", n = i + 1)
             } else {
                 String::new()
             };
             let r = point_chip(ui, i + 1, &p.name, active).on_hover_text(tr!(
-                "Zum Kamerapunkt „{name}“ fahren{key}\nRechtsklick: überschreiben, umbenennen, löschen",
+                "Move to camera point “{name}”{key}\nRight-click: overwrite, rename, delete",
                 name = p.name,
                 key = if key.is_empty() {
                     String::new()
@@ -266,16 +262,16 @@ impl VizView {
                     menu::title(ui, &p.name);
                     if menu::item(
                         ui,
-                        MenuItem::new(t("Mit aktueller Ansicht überschreiben")).icon(Icon::Camera),
+                        MenuItem::new(t("Overwrite with current view")).icon(Icon::Camera),
                     ) {
                         overwrite = Some(i);
                     }
-                    if menu::item(ui, MenuItem::new(t("Umbenennen")).icon(Icon::Edit)) {
+                    if menu::item(ui, MenuItem::new(t("Rename")).icon(Icon::Edit)) {
                         self.cam_rename = Some((i, p.name.clone()));
                         self.cam_rename_focus = true;
                     }
                     menu::separator(ui);
-                    if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash).danger()) {
+                    if menu::item(ui, MenuItem::new(t("Delete")).icon(Icon::Trash).danger()) {
                         remove = Some(i);
                     }
                 });
@@ -283,7 +279,7 @@ impl VizView {
         }
         if ui
             .add(IconButton::new(Icon::ZoomFit).size(H).flat())
-            .on_hover_text(t("Grundansicht"))
+            .on_hover_text(t("Default view"))
             .clicked()
         {
             self.fly_to(OrbitCamera::for_room(self.room));
@@ -322,7 +318,7 @@ impl VizView {
             .iter()
             .position(|p| current.is_some_and(|c| c.near(&OrbitCamera::from_preset(p))));
         let value = active.map_or_else(|| "–".to_string(), |i| presets[i].name.clone());
-        let r = chip(ui, t("Kamera"), &value, true).on_hover_text(t("Kamerapunkte (Taste 1–9)"));
+        let r = chip(ui, t("Camera"), &value, true).on_hover_text(t("Camera points (keys 1–9)"));
         let mut go = None;
         let mut remove = None;
         menu::dropdown(&r, |ui| {
@@ -344,12 +340,12 @@ impl VizView {
                 }
             }
             menu::separator(ui);
-            if menu::item(ui, MenuItem::new(t("Grundansicht")).icon(Icon::ZoomFit)) {
+            if menu::item(ui, MenuItem::new(t("Default view")).icon(Icon::ZoomFit)) {
                 go = Some(None);
                 ui.close();
             }
             if !locked && !presets.is_empty() {
-                menu::sub(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash), |ui| {
+                menu::sub(ui, MenuItem::new(t("Delete")).icon(Icon::Trash), |ui| {
                     menu::begin(ui);
                     for (i, p) in presets.iter().enumerate() {
                         if menu::item(ui, MenuItem::new(&p.name).danger()) {

@@ -46,10 +46,10 @@ impl PaletteStore {
         if let Some((name, colors)) = self.save.as_mut() {
             let mut open = true;
             let mut name_now = name.clone();
-            let res = Dialog::new(t("Palette speichern"))
+            let res = Dialog::new(t("Save palette"))
                 .id("palette_save")
-                .cancel(t("Abbrechen"))
-                .primary(t("Speichern"))
+                .cancel(t("Cancel"))
+                .primary(t("Save"))
                 .show(ctx, &mut open, |ui, first| {
                     ui.horizontal(|ui| {
                         ui.add_sized(
@@ -85,15 +85,15 @@ impl PaletteStore {
             let mut rename = self.rename.clone();
             let mut start_rename = None;
             let mut commit_rename = false;
-            let res = Dialog::new(t("Paletten verwalten"))
+            let res = Dialog::new(t("Manage palettes"))
                 .id("palette_manage")
                 .resizable([520.0, 460.0])
-                .secondary(t("Standardpaletten wiederherstellen"))
-                .cancel(t("Schließen"))
+                .secondary(t("Restore default palettes"))
+                .cancel(t("Close"))
                 .show(ctx, &mut open, |ui, _| {
                     ui.label(
                         egui::RichText::new(t(
-                            "Doppelklick auf den Namen benennt um. Farbfeld anklicken ändert die Farbe, Rechtsklick entfernt sie.",
+                            "Double-click a name to rename it. Click a swatch to change its color, right-click to remove it.",
                         ))
                         .color(theme::text_dim()),
                     );
@@ -144,7 +144,7 @@ impl PaletteStore {
                                                     )
                                                     .flat(),
                                                 )
-                                                .on_hover_text(t("Palette löschen"))
+                                                .on_hover_text(t("Delete palette"))
                                                 .clicked()
                                             {
                                                 delete = Some(i);
@@ -244,7 +244,7 @@ pub(super) fn edit_colors(
             c[0],
             c[1],
             c[2],
-            t("Rechtsklick: entfernen")
+            t("Right-click: remove")
         ));
         crate::ui::widgets::menu::dropdown(&resp, |ui| {
             ui.set_min_width(212.0);
@@ -268,7 +268,7 @@ pub(super) fn edit_colors(
                 .frame(false)
                 .min_size(Vec2::splat(size)),
         )
-        .on_hover_text(t("Farbe hinzufügen"))
+        .on_hover_text(t("Add color"))
         .clicked()
     {
         let last = colors.last().copied().unwrap_or([255, 255, 255]);
@@ -319,21 +319,17 @@ pub fn color_fx_ui(
 
     // Farbpalette
     // Zeile mit Paletten-Menü, darunter die Farbfelder über die volle Breite
-    label_row(
-        ui,
-        if values { t("Werte") } else { t("Farbpalette") },
-        |ui| {
-            palette_editor(ui, &mut fx.palette, enabled, store);
-        },
-    );
+    label_row(ui, if values { t("Values") } else { t("Palette") }, |ui| {
+        palette_editor(ui, &mut fx.palette, enabled, store);
+    });
     ui.horizontal_wrapped(|ui| {
         edit_colors(ui, ("fx", salt), &mut fx.palette, enabled, 18.0);
     });
     ui.add_space(theme::SP_XS);
     if !values {
-        toggle_row(ui, t("Graustufen"), &mut fx.grayscale, enabled);
+        toggle_row(ui, t("Grayscale"), &mut fx.grayscale, enabled);
     }
-    label_row(ui, t("Transformieren"), |ui| {
+    label_row(ui, t("Transform"), |ui| {
         ui.add_enabled_ui(enabled, |ui| {
             egui::ComboBox::from_id_salt(id("transform"))
                 .selected_text(t(fx.transform.label()))
@@ -353,19 +349,19 @@ pub fn color_fx_ui(
         };
     match fx.preset {
         ColorPreset::Rainbow => {
-            s(ui, "width", t("Farbenbreite"), &mut fx.width, 0.0, 100.0, 1);
-            s(ui, "angle", t("Winkel"), &mut fx.angle, 0.0, 360.0, 0);
-            s(ui, "blend", t("Verlauf"), &mut fx.blend, 0.0, 100.0, 1);
+            s(ui, "width", t("Color width"), &mut fx.width, 0.0, 100.0, 1);
+            s(ui, "angle", t("Angle"), &mut fx.angle, 0.0, 360.0, 0);
+            s(ui, "blend", t("Blend"), &mut fx.blend, 0.0, 100.0, 1);
         }
         ColorPreset::Burst => {
-            s(ui, "width", t("Farbenbreite"), &mut fx.width, 0.0, 500.0, 0);
-            s(ui, "blend", t("Verlauf"), &mut fx.blend, 0.0, 100.0, 1);
+            s(ui, "width", t("Color width"), &mut fx.width, 0.0, 500.0, 0);
+            s(ui, "blend", t("Blend"), &mut fx.blend, 0.0, 100.0, 1);
         }
         ColorPreset::Plasma => {
             s(
                 ui,
                 "sx",
-                t("Größe X-Achse"),
+                t("Size X axis"),
                 &mut fx.plasma_size[0],
                 0.0,
                 10.0,
@@ -383,7 +379,7 @@ pub fn color_fx_ui(
             s(
                 ui,
                 "sy",
-                t("Größe Y-Achse"),
+                t("Size Y axis"),
                 &mut fx.plasma_size[1],
                 0.0,
                 10.0,
@@ -401,7 +397,7 @@ pub fn color_fx_ui(
             s(
                 ui,
                 "vx",
-                t("Speed X-Achse"),
+                t("Speed X axis"),
                 &mut fx.plasma_speed[0],
                 -5.0,
                 5.0,
@@ -419,7 +415,7 @@ pub fn color_fx_ui(
             s(
                 ui,
                 "vy",
-                t("Speed Y-Achse"),
+                t("Speed Y axis"),
                 &mut fx.plasma_speed[1],
                 -5.0,
                 5.0,
@@ -436,14 +432,14 @@ pub fn color_fx_ui(
             );
         }
         ColorPreset::KnightRider => {
-            s(ui, "size", t("Größe"), &mut fx.size, 1.0, 32.0, 0);
-            toggle_row(ui, t("Nur eine Richtung"), &mut fx.one_direction, enabled);
-            toggle_row(ui, t("Überblendung"), &mut fx.crossfade, enabled);
-            toggle_row(ui, t("Verlauf nach außen"), &mut fx.fade_outward, enabled);
+            s(ui, "size", t("Size"), &mut fx.size, 1.0, 32.0, 0);
+            toggle_row(ui, t("One direction only"), &mut fx.one_direction, enabled);
+            toggle_row(ui, t("Crossfade"), &mut fx.crossfade, enabled);
+            toggle_row(ui, t("Fade outward"), &mut fx.fade_outward, enabled);
             slider_row(
                 ui,
                 id("trail"),
-                t("Nachleuchten"),
+                t("Trail"),
                 &mut fx.trail,
                 (0.0, 100.0),
                 0,
@@ -452,13 +448,13 @@ pub fn color_fx_ui(
             );
         }
         ColorPreset::Sweep => {
-            toggle_row(ui, t("Richtung ändern"), &mut fx.alternate, enabled);
+            toggle_row(ui, t("Alternate direction"), &mut fx.alternate, enabled);
         }
         ColorPreset::Sparkle => {
             s(
                 ui,
                 "count",
-                t("Glitzeranzahl"),
+                t("Sparkle count"),
                 &mut fx.sparkle_count,
                 1.0,
                 50.0,
@@ -467,7 +463,7 @@ pub fn color_fx_ui(
             s(
                 ui,
                 "life",
-                t("Glitzer-Lebenszeit"),
+                t("Sparkle lifetime"),
                 &mut fx.sparkle_life,
                 0.0,
                 1.0,
@@ -476,7 +472,7 @@ pub fn color_fx_ui(
             s(
                 ui,
                 "sw",
-                t("Glitzerbreite"),
+                t("Sparkle width"),
                 &mut fx.sparkle_width,
                 1.0,
                 16.0,
@@ -484,12 +480,12 @@ pub fn color_fx_ui(
             );
         }
         ColorPreset::RandomFill => {
-            s(ui, "dot", t("Punktbreite"), &mut fx.dot_width, 1.0, 16.0, 0);
+            s(ui, "dot", t("Dot width"), &mut fx.dot_width, 1.0, 16.0, 0);
         }
         ColorPreset::Perlin => {
-            s(ui, "oct", t("Oktaven"), &mut fx.octaves, 1.0, 8.0, 0);
+            s(ui, "oct", t("Octaves"), &mut fx.octaves, 1.0, 8.0, 0);
             s(ui, "zoom", t("Zoom"), &mut fx.zoom, 0.0, 100.0, 0);
-            s(ui, "dir", t("Richtung"), &mut fx.direction, 0.0, 7.0, 0);
+            s(ui, "dir", t("Direction"), &mut fx.direction, 0.0, 7.0, 0);
             s(ui, "tempo", t("Tempo"), &mut fx.tempo, 0.0, 10.0, 0);
             s(ui, "amp", t("Amplitude"), &mut fx.amplitude, 0.0, 100.0, 0);
         }
@@ -624,7 +620,7 @@ pub(super) fn palette_editor(
         .on_hover_text(tip)
     };
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let more = small(ui, "•••", t("Paletten"));
+        let more = small(ui, "•••", t("Palettes"));
         crate::ui::widgets::menu::dropdown(&more, |ui| {
             use crate::ui::widgets::menu::{self, MenuItem};
             menu::begin(ui);
@@ -654,13 +650,13 @@ pub(super) fn palette_editor(
                 }
             }
             menu::separator(ui);
-            if menu::item(ui, MenuItem::new(t("Neu"))) {
+            if menu::item(ui, MenuItem::new(t("New"))) {
                 pick = Some(vec![[0, 0, 0], [255, 255, 255]]);
             }
-            if menu::item(ui, MenuItem::new(t("Speichern…"))) {
+            if menu::item(ui, MenuItem::new(t("Save…"))) {
                 store.save = Some((String::new(), palette.clone()));
             }
-            if menu::item(ui, MenuItem::new(t("Verwalten…"))) {
+            if menu::item(ui, MenuItem::new(t("Manage…"))) {
                 store.manage = true;
             }
             if let Some(colors) = pick {

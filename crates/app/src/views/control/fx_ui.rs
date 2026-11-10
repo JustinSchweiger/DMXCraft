@@ -61,14 +61,14 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                 });
                 strip(ui, preview);
                 if c.preset != ChaserPreset::Random && c.preset != ChaserPreset::Fill {
-                    toggle_row(ui, t("Nur eine Richtung"), &mut c.one_direction, enabled);
+                    toggle_row(ui, t("One direction only"), &mut c.one_direction, enabled);
                 }
-                toggle_row(ui, t("Überblendung"), &mut c.crossfade, enabled);
+                toggle_row(ui, t("Crossfade"), &mut c.crossfade, enabled);
                 if c.preset != ChaserPreset::Fill {
                     slider_row(
                         ui,
                         id("px"),
-                        t("Pixelanzahl"),
+                        t("Pixel count"),
                         &mut c.pixels,
                         (1.0, 32.0),
                         0,
@@ -80,7 +80,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                     slider_row(
                         ui,
                         id("flash"),
-                        t("Leuchtdauer"),
+                        t("Flash length"),
                         &mut c.flash,
                         (1.0, 100.0),
                         0,
@@ -90,7 +90,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                     slider_row(
                         ui,
                         id("seed"),
-                        t("Zufallswert"),
+                        t("Random seed"),
                         &mut c.seed,
                         (0.0, 100.0),
                         0,
@@ -100,7 +100,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                     slider_row(
                         ui,
                         id("rep"),
-                        t("Wiederholungen"),
+                        t("Repeats"),
                         &mut c.repeats,
                         (1.0, 32.0),
                         0,
@@ -122,7 +122,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                 slider_row(
                     ui,
                     id("rep"),
-                    t("Wiederholungsrate"),
+                    t("Repeat rate"),
                     &mut c.repeat,
                     (0.0, 16.0),
                     0,
@@ -132,7 +132,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                 slider_row(
                     ui,
                     id("size"),
-                    t("Größe"),
+                    t("Size"),
                     &mut c.size,
                     (0.0, 2.0),
                     1,
@@ -187,7 +187,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                 move_editor(ui, id("editor"), m, positions, accent, enabled);
                 point_row(ui, id("editor"), m, accent, enabled);
                 if m.shape == MoveShape::Points {
-                    toggle_row(ui, t("Springen"), &mut m.jump, enabled);
+                    toggle_row(ui, t("Jump"), &mut m.jump, enabled);
                 }
                 slider_row(
                     ui,
@@ -199,7 +199,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                     enabled,
                     accent,
                 );
-                toggle_row(ui, t("Symmetrie"), &mut m.symmetry, enabled);
+                toggle_row(ui, t("Symmetry"), &mut m.symmetry, enabled);
                 mode_row(ui, id("mode"), &mut m.relative, enabled);
             }
         }
@@ -216,7 +216,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
     ui.painter().text(
         r.right_center(),
         egui::Align2::RIGHT_CENTER,
-        tr!("{n} Beam(s)", n = fx.fixtures.len().max(preview.len())),
+        tr!("{n} beam(s)", n = fx.fixtures.len().max(preview.len())),
         egui::FontId::proportional(theme::FS_CAPTION),
         theme::text_dim(),
     );
@@ -252,25 +252,25 @@ fn strip(ui: &mut egui::Ui, colors: &[[u8; 3]]) {
 
 /// „Funktionsweise“: absolut oder relativ zum Wert aus den Schritten.
 fn mode_row(ui: &mut egui::Ui, id: egui::Id, relative: &mut bool, enabled: bool) {
-    label_row(ui, t("Funktionsweise"), |ui| {
+    label_row(ui, t("Mode"), |ui| {
         ui.add_enabled_ui(enabled, |ui| {
             egui::ComboBox::from_id_salt(id)
                 .selected_text(if *relative {
-                    t("Relativ")
+                    t("Relative")
                 } else {
-                    t("Absolut")
+                    t("Absolute")
                 })
                 .width(ui.available_width() - 4.0)
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(relative, false, t("Absolut"));
-                    ui.selectable_value(relative, true, t("Relativ"));
+                    ui.selectable_value(relative, false, t("Absolute"));
+                    ui.selectable_value(relative, true, t("Relative"));
                 });
         });
     });
 }
 
 fn transform_row(ui: &mut egui::Ui, id: egui::Id, tr: &mut Transform, enabled: bool) {
-    label_row(ui, t("Transformieren"), |ui| {
+    label_row(ui, t("Transform"), |ui| {
         ui.add_enabled_ui(enabled, |ui| {
             egui::ComboBox::from_id_salt(id)
                 .selected_text(t(tr.label()))
@@ -303,71 +303,67 @@ fn mapping_ui(
     if preset != m.preset {
         m.set_preset(preset, color);
     }
-    label_row(
-        ui,
-        if color { t("Farbpalette") } else { t("Werte") },
-        |ui| {
-            palette_editor(ui, &mut m.palette, enabled, store);
-        },
-    );
+    label_row(ui, if color { t("Palette") } else { t("Values") }, |ui| {
+        palette_editor(ui, &mut m.palette, enabled, store);
+    });
     ui.horizontal_wrapped(|ui| {
         edit_colors(ui, ("map", salt), &mut m.palette, enabled, 18.0);
     });
     ui.add_space(theme::SP_XS);
     if color {
-        toggle_row(ui, t("Graustufen"), &mut m.grayscale, enabled);
+        toggle_row(ui, t("Grayscale"), &mut m.grayscale, enabled);
     }
     transform_row(ui, id("tr"), &mut m.transform, enabled);
     let s = |ui: &mut egui::Ui, k: &str, l: &str, v: &mut f32, r: (f32, f32), d: usize| {
         slider_row(ui, id(k), l, v, r, d, enabled, accent);
     };
-    s(ui, "spin", t("Rotation"), &mut m.spin, (-4.0, 4.0), 1);
+    s(ui, "spin", "Rotation", &mut m.spin, (-4.0, 4.0), 1);
     match m.preset {
         MapPreset::Rainbow => {
-            s(ui, "w", t("Farbenbreite"), &mut m.width, (0.0, 100.0), 1);
-            s(ui, "a", t("Winkel"), &mut m.angle, (0.0, 360.0), 0);
-            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+            s(ui, "w", t("Color width"), &mut m.width, (0.0, 100.0), 1);
+            s(ui, "a", t("Angle"), &mut m.angle, (0.0, 360.0), 0);
+            s(ui, "b", t("Blend"), &mut m.blend, (0.0, 100.0), 1);
         }
         MapPreset::Spiral => {
             s(ui, "r", t("Radius"), &mut m.radius, (0.0, 100.0), 0);
             s(
                 ui,
                 "sw",
-                t("Anzahl der Wirbel"),
+                t("Number of swirls"),
                 &mut m.swirls,
                 (1.0, 12.0),
                 0,
             );
-            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+            s(ui, "b", t("Blend"), &mut m.blend, (0.0, 100.0), 1);
         }
         MapPreset::Burst => {
-            s(ui, "w", t("Farbenbreite"), &mut m.width, (0.0, 100.0), 0);
-            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+            s(ui, "w", t("Color width"), &mut m.width, (0.0, 100.0), 0);
+            s(ui, "b", t("Blend"), &mut m.blend, (0.0, 100.0), 1);
         }
         MapPreset::Butterfly => {
-            s(ui, "sw", t("Flügel"), &mut m.swirls, (1.0, 8.0), 0);
-            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+            s(ui, "sw", t("Wings"), &mut m.swirls, (1.0, 8.0), 0);
+            s(ui, "b", t("Blend"), &mut m.blend, (0.0, 100.0), 1);
         }
         MapPreset::Plasma | MapPreset::Tube => {
             if m.preset == MapPreset::Tube {
-                s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 20.0), 0);
+                s(ui, "c", t("Count"), &mut m.count, (1.0, 20.0), 0);
             } else {
                 s(ui, "z", t("Zoom"), &mut m.zoom, (0.0, 100.0), 0);
             }
-            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+            s(ui, "b", t("Blend"), &mut m.blend, (0.0, 100.0), 1);
         }
         MapPreset::Bounce => {
-            s(ui, "o", t("Größe"), &mut m.object, (2.0, 100.0), 0);
-            s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 10.0), 0);
+            s(ui, "o", t("Size"), &mut m.object, (2.0, 100.0), 0);
+            s(ui, "c", t("Count"), &mut m.count, (1.0, 10.0), 0);
         }
         MapPreset::Fire => {
             s(ui, "z", t("Zoom"), &mut m.zoom, (0.0, 100.0), 0);
             s(ui, "amp", t("Amplitude"), &mut m.amplitude, (0.0, 100.0), 0);
-            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+            s(ui, "b", t("Blend"), &mut m.blend, (0.0, 100.0), 1);
         }
         MapPreset::KnightRider => {
-            s(ui, "o", t("Größe"), &mut m.object, (2.0, 100.0), 0);
-            s(ui, "a", t("Winkel"), &mut m.angle, (0.0, 360.0), 0);
+            s(ui, "o", t("Size"), &mut m.object, (2.0, 100.0), 0);
+            s(ui, "a", t("Angle"), &mut m.angle, (0.0, 360.0), 0);
         }
         MapPreset::Text => {
             label_row(ui, t("Text"), |ui| {
@@ -377,50 +373,48 @@ fn mapping_ui(
                         .desired_width(ui.available_width() - 6.0),
                 );
             });
-            s(ui, "o", t("Größe"), &mut m.object, (30.0, 100.0), 0);
+            s(ui, "o", t("Size"), &mut m.object, (30.0, 100.0), 0);
         }
         MapPreset::Sweep => {
-            s(ui, "a", t("Winkel"), &mut m.angle, (0.0, 360.0), 0);
+            s(ui, "a", t("Angle"), &mut m.angle, (0.0, 360.0), 0);
         }
         MapPreset::Sparkle => {
-            s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 20.0), 0);
-            s(ui, "o", t("Lebenszeit"), &mut m.object, (2.0, 100.0), 0);
+            s(ui, "c", t("Count"), &mut m.count, (1.0, 20.0), 0);
+            s(ui, "o", t("Lifetime"), &mut m.object, (2.0, 100.0), 0);
         }
         MapPreset::RandomFill => {
-            s(ui, "c", t("Felder"), &mut m.count, (1.0, 20.0), 0);
+            s(ui, "c", t("Cells"), &mut m.count, (1.0, 20.0), 0);
         }
         MapPreset::Rain => {
-            s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 20.0), 0);
-            s(ui, "o", t("Länge"), &mut m.object, (2.0, 100.0), 0);
+            s(ui, "c", t("Count"), &mut m.count, (1.0, 20.0), 0);
+            s(ui, "o", t("Length"), &mut m.object, (2.0, 100.0), 0);
         }
         MapPreset::Perlin => {
-            s(ui, "oct", t("Oktaven"), &mut m.octaves, (1.0, 8.0), 0);
+            s(ui, "oct", t("Octaves"), &mut m.octaves, (1.0, 8.0), 0);
             s(ui, "z", t("Zoom"), &mut m.zoom, (0.0, 100.0), 0);
             s(ui, "amp", t("Amplitude"), &mut m.amplitude, (0.0, 100.0), 0);
         }
         MapPreset::Explosion => {
-            s(ui, "c", t("Ringe"), &mut m.count, (1.0, 8.0), 0);
-            s(ui, "o", t("Größe"), &mut m.object, (2.0, 100.0), 0);
+            s(ui, "c", t("Rings"), &mut m.count, (1.0, 8.0), 0);
+            s(ui, "o", t("Size"), &mut m.object, (2.0, 100.0), 0);
         }
         MapPreset::Starfield => {
-            s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 20.0), 0);
-            s(ui, "o", t("Größe"), &mut m.object, (2.0, 100.0), 0);
+            s(ui, "c", t("Count"), &mut m.count, (1.0, 20.0), 0);
+            s(ui, "o", t("Size"), &mut m.object, (2.0, 100.0), 0);
         }
         MapPreset::Graph => {
-            s(ui, "c", t("Balken"), &mut m.count, (1.0, 32.0), 0);
+            s(ui, "c", t("Bars"), &mut m.count, (1.0, 32.0), 0);
         }
         MapPreset::Lines => {
-            s(ui, "c", t("Anzahl"), &mut m.count, (1.0, 20.0), 0);
-            s(ui, "a", t("Winkel"), &mut m.angle, (0.0, 360.0), 0);
-            s(ui, "b", t("Verlauf"), &mut m.blend, (0.0, 100.0), 1);
+            s(ui, "c", t("Count"), &mut m.count, (1.0, 20.0), 0);
+            s(ui, "a", t("Angle"), &mut m.angle, (0.0, 360.0), 0);
+            s(ui, "b", t("Blend"), &mut m.blend, (0.0, 100.0), 1);
         }
     }
     ui.label(
-        egui::RichText::new(t(
-            "Das Rechteck lässt sich auf der Bühne verschieben, skalieren und drehen.",
-        ))
-        .small()
-        .color(theme::text_faint()),
+        egui::RichText::new(t("Move, scale and rotate the rectangle on the stage."))
+            .small()
+            .color(theme::text_faint()),
     );
 }
 
@@ -532,7 +526,7 @@ fn point_row(ui: &mut egui::Ui, id: egui::Id, m: &mut MoveFx, accent: Color32, e
     let mut remove = false;
     ui.horizontal(|ui| {
         ui.set_min_height(28.0);
-        ui.label(egui::RichText::new(tr!("Punkt {n}", n = i + 1)).color(theme::text()));
+        ui.label(egui::RichText::new(tr!("Point {n}", n = i + 1)).color(theme::text()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             remove = ui
                 .add(
@@ -541,7 +535,7 @@ fn point_row(ui: &mut egui::Ui, id: egui::Id, m: &mut MoveFx, accent: Color32, e
                         .size(24.0)
                         .enabled(enabled && m.points.len() > m.min_points()),
                 )
-                .on_hover_text(t("Punkt löschen (Entf)"))
+                .on_hover_text(t("Delete point (Del)"))
                 .clicked();
         });
     });
@@ -551,7 +545,7 @@ fn point_row(ui: &mut egui::Ui, id: egui::Id, m: &mut MoveFx, accent: Color32, e
         slider_row(
             ui,
             id.with(("smooth", i)),
-            t("Rundung"),
+            t("Rounding"),
             &mut pct,
             (0.0, 100.0),
             0,
@@ -664,7 +658,7 @@ fn move_editor(
     if m.editable() {
         bg.clone()
             .union(r.clone())
-            .on_hover_text(t("Doppelklick: Punkt hinzufügen"));
+            .on_hover_text(t("Double-click: add point"));
     }
     if r.dragged() {
         let d = r.drag_delta();
@@ -794,11 +788,11 @@ fn features_ui(
 ) {
     ui.add_space(theme::SP_S);
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(t("Zugeordnete Features")).color(theme::text()));
+        ui.label(egui::RichText::new(t("Assigned features")).color(theme::text()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let add = ui
                 .add_enabled(enabled, egui::Button::new("+").frame(false))
-                .on_hover_text(t("Kanal hinzufügen (oder FX-Symbol am Fader)"));
+                .on_hover_text(t("Add channel (or FX icon on the fader)"));
             crate::ui::widgets::menu::dropdown(&add, |ui| {
                 use crate::ui::widgets::menu::{self, MenuItem};
                 menu::begin(ui);
@@ -809,7 +803,7 @@ fn features_ui(
                     .collect();
                 if free.is_empty() {
                     ui.label(
-                        egui::RichText::new(t("Keine weiteren Kanäle")).color(theme::text_faint()),
+                        egui::RichText::new(t("No further channels")).color(theme::text_faint()),
                     );
                 }
                 for k in free {
@@ -829,7 +823,7 @@ fn features_ui(
         ui.set_min_height(60.0);
         if features.is_empty() {
             ui.label(
-                egui::RichText::new(t("Noch keine Kanäle zugeordnet."))
+                egui::RichText::new(t("No channels assigned yet."))
                     .small()
                     .color(theme::text_faint()),
             );
@@ -857,7 +851,7 @@ fn features_ui(
                 );
                 if ui
                     .add_enabled(enabled, egui::Button::new("×").frame(false))
-                    .on_hover_text(t("Kanal entfernen"))
+                    .on_hover_text(t("Remove channel"))
                     .clicked()
                 {
                     remove = Some(i);
@@ -923,7 +917,7 @@ fn range_bar(
     }
     let label = |v: u8| {
         if v == 0 {
-            t("AUS").to_string()
+            t("OFF").to_string()
         } else {
             v.to_string()
         }

@@ -172,25 +172,25 @@ pub fn window(ctx: &egui::Context, cx: &mut ViewCtx<'_>) {
         .collect();
     let mut relinks: Vec<(String, String)> = Vec::new();
     let mut search = false;
-    Dialog::new(t("Fehlende Audiodateien"))
+    Dialog::new(t("Missing audio files"))
         .id("missing_audio")
         .resizable([720.0, 420.0])
-        .cancel(t("Schließen"))
+        .cancel(t("Close"))
         .show(ctx, &mut open, |ui, _| {
             ui.horizontal(|ui| {
                 ui.label(
                     egui::RichText::new(if files.len() == 1 {
-                        t("1 Datei nicht gefunden. Schnitt und Versatz bleiben beim neuen Verknüpfen erhalten.").to_string()
+                        t("1 file not found. Cuts and offsets are kept when relinking.").to_string()
                     } else {
                         crate::tr!(
-                            "{n} Dateien nicht gefunden. Schnitt und Versatz bleiben beim neuen Verknüpfen erhalten.",
+                            "{n} files not found. Cuts and offsets are kept when relinking.",
                             n = files.len()
                         )
                     })
                     .color(theme::text_dim()),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(t("In Ordner suchen …")).clicked() {
+                    if ui.button(t("Search in folder …")).clicked() {
                         search = true;
                     }
                 });
@@ -228,7 +228,7 @@ pub fn window(ctx: &egui::Context, cx: &mut ViewCtx<'_>) {
                                             .collect();
                                         ui.label(
                                             egui::RichText::new(crate::tr!(
-                                                "Verwendet in: {scenes}",
+                                                "Used in: {scenes}",
                                                 scenes = names.join(", ")
                                             ))
                                             .font(theme::caption())
@@ -238,9 +238,9 @@ pub fn window(ctx: &egui::Context, cx: &mut ViewCtx<'_>) {
                                     ui.with_layout(
                                         egui::Layout::right_to_left(egui::Align::Center),
                                         |ui| {
-                                            if ui.button(t("Datei wählen …")).clicked() {
+                                            if ui.button(t("Choose file …")).clicked() {
                                                 if let Some(p) = rfd::FileDialog::new()
-                                                    .add_filter(t("Audio / Video"), &AUDIO_EXT)
+                                                    .add_filter(t("Audio / video"), &AUDIO_EXT)
                                                     .pick_file()
                                                 {
                                                     relinks.push((
@@ -266,8 +266,7 @@ pub fn window(ctx: &egui::Context, cx: &mut ViewCtx<'_>) {
                 }
             }
             if relinks.is_empty() {
-                cx.state
-                    .info(t("Im Ordner keine passenden Dateien gefunden"));
+                cx.state.info(t("No matching files found in the folder"));
             }
         }
     }
@@ -277,7 +276,7 @@ pub fn window(ctx: &egui::Context, cx: &mut ViewCtx<'_>) {
             n += relink(cx.engine.show_mut(), old, new);
         }
         cx.state
-            .info(crate::tr!("{n} Audio-Blöcke neu verknüpft", n = n));
+            .info(crate::tr!("{n} audio blocks relinked", n = n));
         cx.state.missing.check(cx.engine.show(), true);
     }
     cx.state.missing.open = open && cx.state.missing.any();

@@ -63,8 +63,8 @@ impl OutputKind {
 
     pub fn label(self) -> &'static str {
         match self {
-            OutputKind::Simulation => "Simulation (kein Gerät)",
-            OutputKind::OpenDmx => "USB-DMX-Kabel (Open DMX / FTDI)",
+            OutputKind::Simulation => "Simulation (no device)",
+            OutputKind::OpenDmx => "USB DMX cable (Open DMX / FTDI)",
         }
     }
 

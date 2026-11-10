@@ -181,7 +181,7 @@ impl TimelineView {
                         .size(34.0)
                         .flat(),
                 )
-                .on_hover_text(t("Szene abspielen (Leertaste: Play/Pause)"));
+                .on_hover_text(t("Play scene (Space: play/pause)"));
             let space = ui.input(|i| i.key_pressed(egui::Key::Space))
                 && ui.ctx().memory(|m| m.focused().is_none());
             if play.clicked() || space {
@@ -204,17 +204,12 @@ impl TimelineView {
                 }
             };
             let (mut lp, mut st_) = (tl.loop_resize, tl.stretch_resize);
-            toggle(
-                ui,
-                &mut lp,
-                Icon::Cursor,
-                t("Block bei Längenänderungen loopen"),
-            );
+            toggle(ui, &mut lp, Icon::Cursor, t("Loop block when resizing"));
             toggle(
                 ui,
                 &mut st_,
                 Icon::ArrowsH,
-                t("Block bei Längenänderungen dehnen"),
+                t("Stretch block when resizing"),
             );
             // die beiden schließen sich aus
             if lp != tl.loop_resize && lp {
@@ -231,14 +226,14 @@ impl TimelineView {
                 ui,
                 &mut tl.allow_overlap,
                 Icon::Stack,
-                t("Block-Überlappung erlauben"),
+                t("Allow block overlap"),
             );
             super::programmer::tool_separator(ui);
-            toggle(ui, &mut tl.auto_scroll, Icon::FollowRight, t("Auto-Scroll"));
-            toggle(ui, &mut tl.snap, Icon::Magnet, t("An Gitter einrasten"));
+            toggle(ui, &mut tl.auto_scroll, Icon::FollowRight, t("Auto scroll"));
+            toggle(ui, &mut tl.snap, Icon::Magnet, t("Snap to grid"));
             let grid = ui
                 .add(IconButton::new(Icon::GridFour).size(34.0).flat())
-                .on_hover_text(t("Gitter-Optionen"));
+                .on_hover_text(t("Grid options"));
             menu::dropdown(&grid, |ui| grid_options(ui, &mut tl, locked));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
@@ -367,13 +362,13 @@ impl TimelineView {
                 .unwrap_or((0, st.timeline_cursor as u64));
             if menu::item(
                 ui,
-                MenuItem::new(t("Einfügen"))
+                MenuItem::new(t("Paste"))
                     .icon(Icon::Paste)
                     .shortcut("Ctrl+V"),
             ) {
                 paste_at = Some(at);
             }
-            if menu::item(ui, MenuItem::new(t("Audio hinzufügen…")).icon(Icon::Music)) {
+            if menu::item(ui, MenuItem::new(t("Add audio…")).icon(Icon::Music)) {
                 let first = !has_audio(&tl);
                 if let Some(id) = add_audio_dialog(&mut tl, at.0, at.1) {
                     if first {
@@ -381,7 +376,7 @@ impl TimelineView {
                     }
                 }
             }
-            if menu::item(ui, MenuItem::new(t("Video hinzufügen…")).icon(Icon::Camera)) {
+            if menu::item(ui, MenuItem::new(t("Add video…")).icon(Icon::Camera)) {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter(t("Video"), &VIDEO_EXT)
                     .pick_file()
@@ -390,10 +385,7 @@ impl TimelineView {
                     st.timeline_sel = [id].into();
                 }
             }
-            if menu::item(
-                ui,
-                MenuItem::new(t("OBS-Aktion hinzufügen")).icon(Icon::Camera),
-            ) {
+            if menu::item(ui, MenuItem::new(t("Add OBS action")).icon(Icon::Camera)) {
                 let first = st.obs.scenes().into_iter().next().unwrap_or_default();
                 let id = tl.add_clip(
                     at.0,
@@ -404,13 +396,13 @@ impl TimelineView {
                 st.timeline_sel = [id].into();
             }
             menu::separator(ui);
-            if menu::item(ui, MenuItem::new(t("Raster: Zeit")).icon(Icon::Clock)) {
+            if menu::item(ui, MenuItem::new(t("Grid: time")).icon(Icon::Clock)) {
                 tl.grid = GridMode::Time;
             }
-            if menu::item(ui, MenuItem::new(t("Raster: Beats")).icon(Icon::MusicNote)) {
+            if menu::item(ui, MenuItem::new(t("Grid: beats")).icon(Icon::MusicNote)) {
                 tl.grid = GridMode::Beat;
             }
-            if menu::item(ui, MenuItem::new(t("Alles zeigen")).icon(Icon::ZoomFit)) {
+            if menu::item(ui, MenuItem::new(t("Show all")).icon(Icon::ZoomFit)) {
                 let len = tl.length_ms().max(10_000) as f64;
                 self.zoom = (lanes.width() / (len * 1.05) as f32).clamp(0.002, 2.0);
                 self.scroll_ms = 0.0;
@@ -455,8 +447,8 @@ impl TimelineView {
         );
         if add_rect.bottom() < area.bottom() && add_rect.top() > lanes.top() - 10.0 {
             let r = ui
-                .put(add_rect, egui::Button::new(t("+ Spur")).small())
-                .on_hover_text(t("Spur hinzufügen"));
+                .put(add_rect, egui::Button::new(t("+ Track")).small())
+                .on_hover_text(t("Add track"));
             if r.clicked() && !locked {
                 tl.add_track(None);
             }
@@ -508,7 +500,7 @@ impl TimelineView {
                 let sel = st.timeline_sel.contains(&cid);
                 let (name, color, scene_ms) = match &c.content {
                     ClipContent::Scene(id) => names(*id)
-                        .unwrap_or_else(|| (t("Gelöscht").to_string(), theme::text_faint(), 1000)),
+                        .unwrap_or_else(|| (t("Deleted").to_string(), theme::text_faint(), 1000)),
                     ClipContent::Audio { path, .. } => (
                         std::path::Path::new(path)
                             .file_name()
@@ -640,16 +632,11 @@ impl TimelineView {
                 menu::context(&body, |ui| {
                     menu::begin(ui);
                     for (a, label, icon, key) in [
-                        (ClipAction::Split, t("Block teilen"), Icon::Scissors, ""),
-                        (ClipAction::Cut, t("Ausschneiden"), Icon::Scissors, "Ctrl+X"),
-                        (ClipAction::Copy, t("Kopieren"), Icon::Copy, "Ctrl+C"),
-                        (
-                            ClipAction::Duplicate,
-                            t("Duplizieren"),
-                            Icon::Copy,
-                            "Ctrl+D",
-                        ),
-                        (ClipAction::Delete, t("Löschen"), Icon::Trash, "Del"),
+                        (ClipAction::Split, t("Split block"), Icon::Scissors, ""),
+                        (ClipAction::Cut, t("Cut"), Icon::Scissors, "Ctrl+X"),
+                        (ClipAction::Copy, t("Copy"), Icon::Copy, "Ctrl+C"),
+                        (ClipAction::Duplicate, t("Duplicate"), Icon::Copy, "Ctrl+D"),
+                        (ClipAction::Delete, t("Delete"), Icon::Trash, "Del"),
                     ] {
                         if menu::item(ui, MenuItem::new(label).icon(icon).shortcut(key)) {
                             clip_menu = Some((cid, a));
@@ -657,14 +644,11 @@ impl TimelineView {
                     }
                     menu::separator(ui);
                     if c.scene().is_some()
-                        && menu::item(ui, MenuItem::new(t("Szene bearbeiten")).icon(Icon::Edit))
+                        && menu::item(ui, MenuItem::new(t("Edit scene")).icon(Icon::Edit))
                     {
                         clip_menu = Some((cid, ClipAction::EditScene));
                     }
-                    if menu::item(
-                        ui,
-                        MenuItem::new(t("Geschwindigkeit zurücksetzen")).icon(Icon::Reset),
-                    ) {
+                    if menu::item(ui, MenuItem::new(t("Reset speed")).icon(Icon::Reset)) {
                         clip_menu = Some((cid, ClipAction::ResetSpeed));
                     }
                     if matches!(c.content, ClipContent::Audio { .. }) {
@@ -672,27 +656,27 @@ impl TimelineView {
                         for (a, label, icon) in [
                             (
                                 ClipAction::ApplyGrid,
-                                t("Raster der Zeitleiste übernehmen"),
+                                t("Apply grid to timeline"),
                                 Icon::MusicNote,
                             ),
                             (
                                 ClipAction::Grid(GridEdit::Double),
-                                t("Tempo verdoppeln"),
+                                t("Double tempo"),
                                 Icon::MusicNote,
                             ),
                             (
                                 ClipAction::Grid(GridEdit::Halve),
-                                t("Tempo halbieren"),
+                                t("Halve tempo"),
                                 Icon::MusicNote,
                             ),
                             (
                                 ClipAction::Grid(GridEdit::Earlier),
-                                t("Downbeat einen Schlag früher"),
+                                t("Move downbeat one beat earlier"),
                                 Icon::MusicNote,
                             ),
                             (
                                 ClipAction::Grid(GridEdit::Later),
-                                t("Downbeat einen Schlag später"),
+                                t("Move downbeat one beat later"),
                                 Icon::MusicNote,
                             ),
                         ] {
@@ -703,8 +687,7 @@ impl TimelineView {
                         if matches!(c.content, ClipContent::Audio { grid: Some(_), .. })
                             && menu::item(
                                 ui,
-                                MenuItem::new(t("Erkanntes Raster wiederherstellen"))
-                                    .icon(Icon::Reset),
+                                MenuItem::new(t("Restore detected grid")).icon(Icon::Reset),
                             )
                         {
                             clip_menu = Some((cid, ClipAction::Grid(GridEdit::Reset)));
@@ -966,7 +949,7 @@ impl TimelineView {
         if live {
             p.rect_filled(area, 0.0, theme::text_faint().gamma_multiply(0.32));
             let chip = p.layout_no_wrap(
-                t("LIVE – nur Ansicht").to_string(),
+                t("LIVE – view only").to_string(),
                 egui::FontId::proportional(theme::FS_CAPTION),
                 theme::text(),
             );
@@ -1726,7 +1709,7 @@ fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {
     menu::begin(ui);
     ui.set_min_width(W);
     ui.set_max_width(W);
-    menu::title(ui, t("Gitter"));
+    menu::title(ui, t("Grid lines"));
     // Zeile: Beschriftung links, Bedienelement rechts (feste Breite)
     let row = |ui: &mut egui::Ui, label: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
         ui.allocate_ui_with_layout(
@@ -1743,10 +1726,10 @@ fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {
         );
     };
     ui.add_enabled_ui(!locked, |ui| {
-        row(ui, t("Display"), &mut |ui| {
+        row(ui, "Display", &mut |ui| {
             for (mode, icon, tip) in [
-                (GridMode::Beat, Icon::MusicNote, t("Beat-basiert")),
-                (GridMode::Time, Icon::Clock, t("Zeitbasiert")),
+                (GridMode::Beat, Icon::MusicNote, t("Beat based")),
+                (GridMode::Time, Icon::Clock, t("Time based")),
             ] {
                 if ui
                     .add(
@@ -1764,7 +1747,7 @@ fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {
         });
         menu::separator(ui);
         ui.add_enabled_ui(tl.grid == GridMode::Beat, |ui| {
-            row(ui, t("Folgt dem Audio"), &mut |ui| {
+            row(ui, t("Follows the audio"), &mut |ui| {
                 ui.add(crate::ui::widgets::Toggle::new(&mut tl.follow_audio, ""));
             });
         });
@@ -1856,7 +1839,7 @@ fn track_header(
                 .size(22.0)
                 .flat(),
         )
-        .on_hover_text(t("Spur ein-/ausblenden"))
+        .on_hover_text(t("Show/hide track"))
         .clicked()
         && !locked
     {
@@ -1890,7 +1873,7 @@ fn track_header(
         }
     } else {
         let label = if tr.name.is_empty() {
-            tr!("Spur {n}", n = i + 1)
+            tr!("Track {n}", n = i + 1)
         } else {
             tr.name.clone()
         };
@@ -1924,25 +1907,25 @@ fn track_header(
     }
     menu::context(&resp, |ui| {
         menu::begin(ui);
-        if menu::item(ui, MenuItem::new(t("Umbenennen")).icon(Icon::Edit)) {
+        if menu::item(ui, MenuItem::new(t("Rename")).icon(Icon::Edit)) {
             *rename = Some((tr.id, tr.name.clone()));
         }
         let label = if tr.expanded {
-            t("Einklappen")
+            t("Collapse")
         } else {
-            t("Erweitern")
+            t("Expand")
         };
         if menu::item(ui, MenuItem::new(label)) {
             action = Some(HeaderAction::Toggle);
         }
-        if menu::item(ui, MenuItem::new(t("Alle erweitern"))) {
+        if menu::item(ui, MenuItem::new(t("Expand all"))) {
             action = Some(HeaderAction::ExpandAll);
         }
         menu::separator(ui);
         ui.horizontal(|ui| {
             ui.add_space(theme::SP_S);
             ui.label(
-                egui::RichText::new(t("Spurfarbe"))
+                egui::RichText::new(t("Track colour"))
                     .small()
                     .color(theme::text_dim()),
             );
@@ -1951,18 +1934,18 @@ fn track_header(
             ui,
             ui.make_persistent_id(("track_color", tr.id)),
             tr.color,
-            t("Keine Farbe"),
+            t("No colour"),
         ) {
             tr.color = c;
         }
         menu::separator(ui);
-        if menu::item(ui, MenuItem::new(t("Neue Spur einfügen")).icon(Icon::Plus)) {
+        if menu::item(ui, MenuItem::new(t("Insert new track")).icon(Icon::Plus)) {
             action = Some(HeaderAction::Insert);
         }
-        if menu::item(ui, MenuItem::new(t("Duplizieren")).icon(Icon::Copy)) {
+        if menu::item(ui, MenuItem::new(t("Duplicate")).icon(Icon::Copy)) {
             action = Some(HeaderAction::Duplicate);
         }
-        if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash)) {
+        if menu::item(ui, MenuItem::new(t("Delete")).icon(Icon::Trash)) {
             action = Some(HeaderAction::Delete);
         }
     });
@@ -1996,7 +1979,7 @@ fn paint_clip(
             p.text(
                 pos2(r.left() + 4.0, r.center().y + 4.0),
                 egui::Align2::LEFT_CENTER,
-                tr!("Datei nicht lesbar: {e}", e = e),
+                tr!("File not readable: {e}", e = e),
                 egui::FontId::proportional(theme::FS_CAPTION - 1.0),
                 theme::DANGER,
             );
@@ -2307,8 +2290,8 @@ pub(crate) fn obs_label(a: &dmxcraft_core::obs::ObsAction) -> String {
             source,
             visible: true,
             ..
-        } => tr!("OBS: {source} ein", source = source),
-        ObsAction::Source { source, .. } => tr!("OBS: {source} aus", source = source),
+        } => tr!("OBS: {source} on", source = source),
+        ObsAction::Source { source, .. } => tr!("OBS: {source} off", source = source),
     }
 }
 
@@ -2355,7 +2338,7 @@ fn add_audio(tl: &mut Timeline, track: usize, at: u64, path: &str) -> (u32, u64)
 
 fn add_audio_dialog(tl: &mut Timeline, track: usize, at: u64) -> Option<u32> {
     let path = rfd::FileDialog::new()
-        .add_filter(t("Audio"), &["mp3", "wav", "flac", "ogg", "m4a", "aac"])
+        .add_filter("Audio", &["mp3", "wav", "flac", "ogg", "m4a", "aac"])
         .pick_file()?;
     Some(add_audio(tl, track, at, &path.to_string_lossy()).0)
 }

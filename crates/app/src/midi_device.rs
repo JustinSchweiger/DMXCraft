@@ -22,7 +22,7 @@ impl DeviceModel {
 
     pub fn label(self) -> &'static str {
         match self {
-            DeviceModel::Generic => crate::i18n::t("Allgemeiner MIDI-Controller"),
+            DeviceModel::Generic => crate::i18n::t("Generic MIDI controller"),
             DeviceModel::ApcMiniMk2 => "Akai APC mini mk2",
         }
     }
@@ -68,9 +68,9 @@ impl DeviceModel {
             "1/16", "1/8", "1/4", "1/2", "1/24", "1/16", "1/8", "1/4", "1/2",
         ];
         Some(match c {
-            1..=7 => crate::tr!("An, {p} % Helligkeit", p = BRIGHT[usize::from(c - 1)]),
-            8..=11 => crate::tr!("Pulsieren {r}", r = RATE[usize::from(c - 8)]),
-            12..=16 => crate::tr!("Blinken {r}", r = RATE[usize::from(c - 8)]),
+            1..=7 => crate::tr!("On, {p} % brightness", p = BRIGHT[usize::from(c - 1)]),
+            8..=11 => crate::tr!("Pulsing {r}", r = RATE[usize::from(c - 8)]),
+            12..=16 => crate::tr!("Blinking {r}", r = RATE[usize::from(c - 8)]),
             _ => return None,
         })
     }

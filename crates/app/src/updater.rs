@@ -120,7 +120,7 @@ impl Updater {
                         let version = tag.trim_start_matches('v').to_string();
                         if manual {
                             me.notify(
-                                crate::tr!("Neue Version v{v} verfügbar", v = version.clone()),
+                                crate::tr!("New version v{v} available", v = version.clone()),
                                 false,
                             );
                         }
@@ -133,7 +133,7 @@ impl Updater {
                         if manual {
                             me.notify(
                                 crate::tr!(
-                                    "DMXCraft ist aktuell (v{v})",
+                                    "DMXCraft is up to date (v{v})",
                                     v = Self::current_version()
                                 ),
                                 false,
@@ -144,10 +144,7 @@ impl Updater {
                 }
                 Err(e) => {
                     if manual {
-                        me.notify(
-                            crate::tr!("Update-Prüfung fehlgeschlagen: {e}", e = e.clone()),
-                            true,
-                        );
+                        me.notify(crate::tr!("Update check failed: {e}", e = e.clone()), true);
                     }
                     UpdateState::Error(e)
                 }
@@ -177,10 +174,7 @@ impl Updater {
                 _ => run_updater(),
             };
             if let UpdateState::Error(e) = &state {
-                me.notify(
-                    crate::tr!("Update fehlgeschlagen: {e}", e = e.clone()),
-                    true,
-                );
+                me.notify(crate::tr!("Update failed: {e}", e = e.clone()), true);
             }
             me.set(state);
             ctx.request_repaint();

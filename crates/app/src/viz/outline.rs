@@ -201,41 +201,37 @@ impl Tree<'_> {
             }
             label.context_menu(|ui| {
                 ui.set_min_width(200.0);
-                if ui.button(t("Umbenennen")).clicked() {
+                if ui.button(t("Rename")).clicked() {
                     self.acts.push(TreeAction::StartRename(o.id));
                     ui.close();
                 }
                 let here = if is_group { Some(o.id) } else { parent };
-                if ui.button(t("Neuer Ordner")).clicked() {
+                if ui.button(t("New folder")).clicked() {
                     self.acts.push(TreeAction::NewFolder(here));
                     ui.close();
                 }
-                if ui.button(t("Auswahl in neuen Ordner")).clicked() {
+                if ui.button(t("Selection into new folder")).clicked() {
                     if !active {
                         self.acts.push(TreeAction::Select(o.id));
                     }
                     self.acts.push(TreeAction::GroupSelection(parent));
                     ui.close();
                 }
-                if is_group && ui.button(t("Inhalt nach Namen sortieren")).clicked() {
+                if is_group && ui.button(t("Sort contents by name")).clicked() {
                     self.acts.push(TreeAction::Sort(Some(o.id)));
                     ui.close();
                 }
                 ui.separator();
-                let lock = if o.locked {
-                    t("Entsperren")
-                } else {
-                    t("Sperren")
-                };
+                let lock = if o.locked { t("Unlock") } else { t("Lock") };
                 if ui.button(lock).clicked() {
                     self.acts.push(TreeAction::ToggleLock(o.id));
                     ui.close();
                 }
-                if ui.button(t("Duplizieren")).clicked() {
+                if ui.button(t("Duplicate")).clicked() {
                     self.acts.push(TreeAction::Duplicate(o.id));
                     ui.close();
                 }
-                if ui.button(t("Löschen")).clicked() {
+                if ui.button(t("Delete")).clicked() {
                     self.acts.push(TreeAction::Delete(o.id));
                     ui.close();
                 }
@@ -325,31 +321,31 @@ impl VizView {
         ui.horizontal(|ui| {
             if ui
                 .add(IconButton::new(Icon::Plus).size(22.0))
-                .on_hover_text(t("Neuer Ordner"))
+                .on_hover_text(t("New folder"))
                 .clicked()
             {
                 let v = &mut cx.engine.show_mut().venue;
                 let o = v.object(
-                    t("Ordner"),
+                    t("Folder"),
                     Shape::Group,
                     Transform::default(),
                     Material::default(),
                 );
                 let id = o.id;
                 v.objects.push(o);
-                self.renaming = Some(Renaming::Object(id, t("Ordner").to_string()));
+                self.renaming = Some(Renaming::Object(id, t("Folder").to_string()));
                 self.rename_focus = true;
             }
             if ui
                 .button(t("A–Z"))
-                .on_hover_text(t("Oberste Ebene nach Namen sortieren"))
+                .on_hover_text(t("Sort top level by name"))
                 .clicked()
             {
                 cx.engine.show_mut().venue.sort_by_name(None);
             }
             if self.sel_objects.len() > 1 {
                 ui.label(
-                    egui::RichText::new(crate::tr!("{n} ausgewählt", n = self.sel_objects.len()))
+                    egui::RichText::new(crate::tr!("{n} selected", n = self.sel_objects.len()))
                         .small()
                         .color(theme::text_dim()),
                 );
@@ -421,7 +417,7 @@ impl VizView {
                 }
                 TreeAction::NewFolder(parent) => {
                     let o = v.object(
-                        t("Ordner"),
+                        t("Folder"),
                         Shape::Group,
                         Transform::default(),
                         Material::default(),
@@ -430,12 +426,12 @@ impl VizView {
                     if let Some(list) = v.list_mut(parent) {
                         list.push(o);
                     }
-                    self.renaming = Some(Renaming::Object(id, t("Ordner").to_string()));
+                    self.renaming = Some(Renaming::Object(id, t("Folder").to_string()));
                     self.rename_focus = true;
                 }
                 TreeAction::GroupSelection(parent) => {
                     let o = v.object(
-                        t("Ordner"),
+                        t("Folder"),
                         Shape::Group,
                         Transform::default(),
                         Material::default(),
@@ -447,7 +443,7 @@ impl VizView {
                     let ids: Vec<u32> = self.sel_objects.iter().copied().collect();
                     move_objects(v, &ids, Some(gid), None);
                     self.reveal = Some(gid);
-                    self.renaming = Some(Renaming::Object(gid, t("Ordner").to_string()));
+                    self.renaming = Some(Renaming::Object(gid, t("Folder").to_string()));
                     self.rename_focus = true;
                 }
                 TreeAction::Sort(parent) => v.sort_by_name(parent),
@@ -561,7 +557,7 @@ impl VizView {
                     _ => {
                         let title = match folder {
                             Some((_, n)) => n.clone(),
-                            None => t("Ohne Ordner").to_string(),
+                            None => t("No folder").to_string(),
                         };
                         let r = ui.add(
                             egui::Label::new(theme::heading_text(&title))
@@ -582,17 +578,17 @@ impl VizView {
                 }
                 r.context_menu(|ui| {
                     ui.set_min_width(180.0);
-                    if ui.button(t("Alle auswählen")).clicked() {
+                    if ui.button(t("Select all")).clicked() {
                         select_folder = Some(ids_here.clone());
                         ui.close();
                     }
                     if let Some((id, name)) = folder {
-                        if ui.button(t("Umbenennen")).clicked() {
+                        if ui.button(t("Rename")).clicked() {
                             self.renaming = Some(Renaming::Folder(*id, name.clone()));
                             self.rename_focus = true;
                             ui.close();
                         }
-                        if ui.button(t("Ordner auflösen")).clicked() {
+                        if ui.button(t("Dissolve folder")).clicked() {
                             delete_folder = Some(*id);
                             ui.close();
                         }
@@ -633,7 +629,7 @@ impl VizView {
                                     .small()
                                     .color(theme::text_faint()),
                             )
-                            .on_hover_text(t("Lage aus dem Bühnenplan abgeleitet"));
+                            .on_hover_text(t("Placement derived from the stage plan"));
                         }
                         ui.label(
                             egui::RichText::new(format!("{}·{}", uni + 1, addr))
@@ -654,18 +650,18 @@ impl VizView {
                     } else {
                         vec![*id]
                     };
-                    if ui.button(t("Neuer Ordner mit Auswahl")).clicked() {
+                    if ui.button(t("New folder with selection")).clicked() {
                         new_folder_with = Some(ids.clone());
                         ui.close();
                     }
-                    ui.menu_button(t("Verschieben nach"), |ui| {
+                    ui.menu_button(t("Move to"), |ui| {
                         for (fid, fname, _) in &folders {
                             if ui.button(fname).clicked() {
                                 moves.push((ids.clone(), Some(*fid)));
                                 ui.close();
                             }
                         }
-                        if ui.button(t("Ohne Ordner")).clicked() {
+                        if ui.button(t("No folder")).clicked() {
                             moves.push((ids.clone(), None));
                             ui.close();
                         }
@@ -691,7 +687,7 @@ impl VizView {
             ui.add_space(theme::SP_XS);
         }
         if all.is_empty() {
-            ui.label(egui::RichText::new(t("Keine Geräte")).color(theme::text_faint()));
+            ui.label(egui::RichText::new(t("No fixtures")).color(theme::text_faint()));
         }
         // ----- anwenden -----
         let v = &mut cx.engine.show_mut().venue;
@@ -699,9 +695,9 @@ impl VizView {
             v.move_fixtures(&ids, folder);
         }
         if let Some(ids) = new_folder_with {
-            let id = v.add_fixture_folder(t("Ordner"));
+            let id = v.add_fixture_folder(t("Folder"));
             v.move_fixtures(&ids, Some(id));
-            self.renaming = Some(Renaming::Folder(id, t("Ordner").to_string()));
+            self.renaming = Some(Renaming::Folder(id, t("Folder").to_string()));
             self.rename_focus = true;
         }
         if let Some(id) = delete_folder {
@@ -754,33 +750,33 @@ impl VizView {
         ui.horizontal(|ui| {
             if ui
                 .add(IconButton::new(Icon::Plus).size(22.0))
-                .on_hover_text(t("Neuer Ordner (mit der Auswahl)"))
+                .on_hover_text(t("New folder (with the selection)"))
                 .clicked()
             {
                 let ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
                 let v = &mut cx.engine.show_mut().venue;
-                let id = v.add_fixture_folder(t("Ordner"));
+                let id = v.add_fixture_folder(t("Folder"));
                 v.move_fixtures(&ids, Some(id));
-                self.renaming = Some(Renaming::Folder(id, t("Ordner").to_string()));
+                self.renaming = Some(Renaming::Folder(id, t("Folder").to_string()));
                 self.rename_focus = true;
             }
             egui::ComboBox::from_id_salt("viz_fx_sort")
                 .selected_text(match self.fixture_sort {
-                    FixtureSort::Address => t("Nach Adresse"),
-                    FixtureSort::Name => t("Nach Name"),
+                    FixtureSort::Address => t("By address"),
+                    FixtureSort::Name => t("By name"),
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
                         &mut self.fixture_sort,
                         FixtureSort::Address,
-                        t("Nach Adresse"),
+                        t("By address"),
                     );
-                    ui.selectable_value(&mut self.fixture_sort, FixtureSort::Name, t("Nach Name"));
+                    ui.selectable_value(&mut self.fixture_sort, FixtureSort::Name, t("By name"));
                 });
             let n = cx.state.selected.len();
             if n > 1 {
                 ui.label(
-                    egui::RichText::new(crate::tr!("{n} ausgewählt", n = n))
+                    egui::RichText::new(crate::tr!("{n} selected", n = n))
                         .small()
                         .color(theme::text_dim()),
                 );

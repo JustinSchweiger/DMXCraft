@@ -108,16 +108,13 @@ impl View for StageView {
                     ids.intersection(&live_fixtures).copied().collect();
                 if !affected.is_empty() {
                     menu::begin(ui);
-                    if menu::item(
-                        ui,
-                        MenuItem::new(t("Live-Werte zurücksetzen")).icon(Icon::Undo),
-                    ) {
+                    if menu::item(ui, MenuItem::new(t("Reset live values")).icon(Icon::Undo)) {
                         clear_live = Some(affected);
                     }
                     menu::separator(ui);
                 }
                 if locked {
-                    ui.label(t("Oberfläche ist gesperrt"));
+                    ui.label(t("Interface is locked"));
                     return;
                 }
                 if let Some(a) =
@@ -128,7 +125,7 @@ impl View for StageView {
                 menu::separator(ui);
                 if menu::item(
                     ui,
-                    MenuItem::new(t("Zur Touch-Oberfläche hinzufügen")).icon(Icon::Touch),
+                    MenuItem::new(t("Add to touch surface")).icon(Icon::Touch),
                 ) {
                     for id in &ids {
                         crate::mapping::touch_pick_control(
@@ -361,10 +358,10 @@ impl StageView {
         let locked = st.locked;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = theme::SP_S;
-            ui.label(theme::heading_text(t("Gruppen")));
+            ui.label(theme::heading_text(t("Groups")));
             ui.label(egui::RichText::new("|").color(theme::text_faint()));
             let all: BTreeSet<FixtureId> = show.fixtures.iter().map(|f| f.id).collect();
-            if let Some(a) = group_pill(ui, None, t("Alle"), &all, &st.selected) {
+            if let Some(a) = group_pill(ui, None, t("All"), &all, &st.selected) {
                 actions.push(a);
             }
             for g in &show.groups {
@@ -407,19 +404,19 @@ impl StageView {
                 menu::context(&pill.resp, |ui| {
                     menu::begin(ui);
                     menu::title(ui, &g.name);
-                    if menu::item(ui, MenuItem::new(t("Umbenennen")).icon(Icon::Edit)) {
+                    if menu::item(ui, MenuItem::new(t("Rename")).icon(Icon::Edit)) {
                         actions.push(GroupAction::Rename(id));
                     }
                     if menu::item(
                         ui,
-                        MenuItem::new(t("Ausgewählte Geräte hinzufügen"))
+                        MenuItem::new(t("Add selected fixtures"))
                             .icon(Icon::Plus)
                             .enabled(some),
                     ) {
                         actions.push(GroupAction::AddSelection(id));
                     }
                     menu::separator(ui);
-                    if menu::item(ui, MenuItem::new(t("Löschen")).icon(Icon::Trash).danger()) {
+                    if menu::item(ui, MenuItem::new(t("Delete")).icon(Icon::Trash).danger()) {
                         actions.push(GroupAction::Delete(id));
                     }
                 });
@@ -428,8 +425,8 @@ impl StageView {
                 let some = !st.selected.is_empty();
                 let r = ui
                     .add_enabled(some, IconButton::new(Icon::Plus).flat())
-                    .on_hover_text(t("Neue Gruppe aus Auswahl"))
-                    .on_disabled_hover_text(t("Erst Geräte auswählen"));
+                    .on_hover_text(t("New group from selection"))
+                    .on_disabled_hover_text(t("Select fixtures first"));
                 if r.clicked() {
                     actions.push(GroupAction::New);
                 }
@@ -442,7 +439,7 @@ impl StageView {
             match a {
                 GroupAction::Select(set) => st.selected = set,
                 GroupAction::New => {
-                    let name = tr!("Gruppe {n}", n = e.show().groups.len() + 1);
+                    let name = tr!("Group {n}", n = e.show().groups.len() + 1);
                     let ids = st.selected.iter().copied().collect();
                     let id = e.show_mut().add_group(name.clone(), ids);
                     self.rename = Some((id, name));
@@ -507,12 +504,12 @@ fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppSt
         .tint(theme::DANGER);
     let r = ui
         .place(rect, btn)
-        .on_hover_text(t("Effekt mit der aktuellen Auswahl aktualisieren"))
-        .on_disabled_hover_text(t("Effekt anklicken, dann Geräte ändern"));
+        .on_hover_text(t("Update the effect with the current selection"))
+        .on_disabled_hover_text(t("Click an effect, then change the fixtures"));
     let mapped = crate::mapping::button(ui, &r, "stage/fx_update", pending, || {
         (
-            t("Bühne").to_string(),
-            t("Effekt mit der aktuellen Auswahl aktualisieren").to_string(),
+            t("Stage").to_string(),
+            t("Update the effect with the current selection").to_string(),
         )
     });
     if (r.clicked() || mapped) && pending {
