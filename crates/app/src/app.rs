@@ -850,6 +850,7 @@ impl eframe::App for DmxCraftApp {
             self.fullscreen.toggle(&ctx);
         }
         self.fullscreen.update(&ctx);
+        let settling = self.fullscreen.settling(&ctx);
 
         // ----- Content (borderless, areas separated only by divider lines) -----
         // Blind: stage and faders show the edit, not the output
@@ -891,81 +892,91 @@ impl eframe::App for DmxCraftApp {
             {
                 cx.state.mode = Mode::Control;
             }
-            match cx.state.mode {
-                Mode::Visualizer => {
-                    egui::CentralPanel::default_margins()
-                        .frame(area)
-                        .show(ui, |ui| {
-                            if cx.state.viz_window {
-                                if moved_out(ui, t("The 3D visualizer is open in its own window."))
-                                {
-                                    cx.state.viz_window = false;
-                                }
-                            } else {
-                                self.viz.ui(ui, &mut cx, rs.as_ref(), false);
-                            }
-                        });
-                }
-                Mode::Builder => {
-                    if self.builder.is_open() {
+            if settling {
+                // Window is changing size (fullscreen): keep the layout as it is
+                // instead of squeezing the areas into the intermediate sizes.
+                egui::CentralPanel::default_margins()
+                    .frame(egui::Frame::new().fill(theme::surface()))
+                    .show(ui, |_| {});
+            } else {
+                match cx.state.mode {
+                    Mode::Visualizer => {
                         egui::CentralPanel::default_margins()
                             .frame(area)
                             .show(ui, |ui| {
-                                if moved_out(
-                                    ui,
-                                    t("The Profile Builder is open in its own window."),
-                                ) {
-                                    self.builder.close();
+                                if cx.state.viz_window {
+                                    if moved_out(
+                                        ui,
+                                        t("The 3D visualizer is open in its own window."),
+                                    ) {
+                                        cx.state.viz_window = false;
+                                    }
+                                } else {
+                                    self.viz.ui(ui, &mut cx, rs.as_ref(), false);
                                 }
                             });
-                    } else {
-                        self.builder.embedded(ui, cx.engine, cx.state);
                     }
-                }
-                Mode::Sound => {
-                    egui::CentralPanel::default_margins()
-                        .frame(egui::Frame::new().fill(theme::surface()))
-                        .show(ui, |ui| self.sound.ui(ui, &mut cx));
-                }
-                Mode::Setup => {
-                    egui::CentralPanel::default_margins()
-                        .frame(egui::Frame::new().fill(theme::surface()))
-                        .show(ui, |ui| self.setup.ui(ui, &mut cx));
-                }
-                Mode::Control | Mode::Touch => {
-                    let touch_mode = cx.state.mode == Mode::Touch;
-                    let control = &mut self.control;
-                    egui::Panel::bottom("live_bottom")
-                        .resizable(true)
-                        .default_size(400.0)
-                        .min_size(220.0)
-                        .frame(egui::Frame::new().fill(theme::surface()))
-                        .show(ui, |ui| {
-                            egui::Panel::right("programmer_panel")
-                                .resizable(true)
-                                .default_size(640.0)
-                                .min_size(320.0)
-                                .frame(area)
-                                .show(ui, |ui| control.programmer.ui(ui, &mut cx));
+                    Mode::Builder => {
+                        if self.builder.is_open() {
                             egui::CentralPanel::default_margins()
                                 .frame(area)
-                                .show(ui, |ui| control.stage.ui(ui, &mut cx));
-                        });
-                    if touch_mode {
+                                .show(ui, |ui| {
+                                    if moved_out(
+                                        ui,
+                                        t("The Profile Builder is open in its own window."),
+                                    ) {
+                                        self.builder.close();
+                                    }
+                                });
+                        } else {
+                            self.builder.embedded(ui, cx.engine, cx.state);
+                        }
+                    }
+                    Mode::Sound => {
                         egui::CentralPanel::default_margins()
-                            .frame(area)
-                            .show(ui, |ui| control.touch.ui(ui, &mut cx));
-                    } else {
-                        // Sidebar with the settings of the selected scene
-                        egui::Panel::right("scene_props")
+                            .frame(egui::Frame::new().fill(theme::surface()))
+                            .show(ui, |ui| self.sound.ui(ui, &mut cx));
+                    }
+                    Mode::Setup => {
+                        egui::CentralPanel::default_margins()
+                            .frame(egui::Frame::new().fill(theme::surface()))
+                            .show(ui, |ui| self.setup.ui(ui, &mut cx));
+                    }
+                    Mode::Control | Mode::Touch => {
+                        let touch_mode = cx.state.mode == Mode::Touch;
+                        let control = &mut self.control;
+                        egui::Panel::bottom("live_bottom")
                             .resizable(true)
-                            .default_size(360.0)
-                            .min_size(340.0)
-                            .frame(area)
-                            .show(ui, |ui| control.props.ui(ui, &mut cx));
-                        egui::CentralPanel::default_margins()
-                            .frame(area)
-                            .show(ui, |ui| control.grid.ui(ui, &mut cx));
+                            .default_size(400.0)
+                            .min_size(220.0)
+                            .frame(egui::Frame::new().fill(theme::surface()))
+                            .show(ui, |ui| {
+                                egui::Panel::right("programmer_panel")
+                                    .resizable(true)
+                                    .default_size(640.0)
+                                    .min_size(320.0)
+                                    .frame(area)
+                                    .show(ui, |ui| control.programmer.ui(ui, &mut cx));
+                                egui::CentralPanel::default_margins()
+                                    .frame(area)
+                                    .show(ui, |ui| control.stage.ui(ui, &mut cx));
+                            });
+                        if touch_mode {
+                            egui::CentralPanel::default_margins()
+                                .frame(area)
+                                .show(ui, |ui| control.touch.ui(ui, &mut cx));
+                        } else {
+                            // Sidebar with the settings of the selected scene
+                            egui::Panel::right("scene_props")
+                                .resizable(true)
+                                .default_size(360.0)
+                                .min_size(340.0)
+                                .frame(area)
+                                .show(ui, |ui| control.props.ui(ui, &mut cx));
+                            egui::CentralPanel::default_margins()
+                                .frame(area)
+                                .show(ui, |ui| control.grid.ui(ui, &mut cx));
+                        }
                     }
                 }
             }

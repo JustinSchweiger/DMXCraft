@@ -13,6 +13,12 @@ use crate::ui::widgets::{Icon, IconButton, Segmented};
 
 pub const HEIGHT: f32 = 36.0;
 
+/// macOS: the window keeps its native buttons (traffic lights) at the top
+/// left, the own window buttons and resize edges are not needed.
+pub const NATIVE_FRAME: bool = cfg!(target_os = "macos");
+/// macOS: room for the traffic lights left of the menu.
+const TRAFFIC_LIGHTS_W: f32 = 72.0;
+
 /// What the title bar needs for drawing.
 pub struct TitleInfo<'a> {
     pub show_name: &'a str,
@@ -156,6 +162,10 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
 
     ui.horizontal_centered(|ui| {
         ui.add_space(6.0);
+        // the traffic lights are hidden in native fullscreen
+        if NATIVE_FRAME && !ui.input(|i| i.viewport().fullscreen.unwrap_or(false)) {
+            ui.add_space(TRAFFIC_LIGHTS_W);
+        }
         main_menu(ui, info, &mut actions);
         ui.add_space(theme::SP_XS);
         let mut tabs: Vec<(Mode, &str)> = Vec::new();
@@ -175,32 +185,8 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
-            if ui
-                .add(IconButton::new(Icon::Close).size(HEIGHT).flat().danger())
-                .on_hover_text(t("Close"))
-                .clicked()
-            {
-                actions.push(MenuAction::Quit);
-            }
-            let (icon, tip) = if maximized {
-                (Icon::Restore, t("Restore"))
-            } else {
-                (Icon::Maximize, t("Maximize"))
-            };
-            if ui
-                .add(IconButton::new(icon).size(HEIGHT).flat())
-                .on_hover_text(tip)
-                .clicked()
-            {
-                ui.ctx()
-                    .send_viewport_cmd(ViewportCommand::Maximized(!maximized));
-            }
-            if ui
-                .add(IconButton::new(Icon::Minimize).size(HEIGHT).flat())
-                .on_hover_text(t("Minimize"))
-                .clicked()
-            {
-                ui.ctx().send_viewport_cmd(ViewportCommand::Minimized(true));
+            if !NATIVE_FRAME {
+                window_buttons(ui, maximized, &mut actions);
             }
             ui.spacing_mut().item_spacing.x = theme::SP_S;
             ui.add_space(theme::SP_M);
@@ -765,10 +751,41 @@ pub mod keys {
     }
 }
 
+/// Own minimize / maximize / close buttons (borderless window).
+fn window_buttons(ui: &mut egui::Ui, maximized: bool, actions: &mut Vec<MenuAction>) {
+    if ui
+        .add(IconButton::new(Icon::Close).size(HEIGHT).flat().danger())
+        .on_hover_text(t("Close"))
+        .clicked()
+    {
+        actions.push(MenuAction::Quit);
+    }
+    let (icon, tip) = if maximized {
+        (Icon::Restore, t("Restore"))
+    } else {
+        (Icon::Maximize, t("Maximize"))
+    };
+    if ui
+        .add(IconButton::new(icon).size(HEIGHT).flat())
+        .on_hover_text(tip)
+        .clicked()
+    {
+        ui.ctx()
+            .send_viewport_cmd(ViewportCommand::Maximized(!maximized));
+    }
+    if ui
+        .add(IconButton::new(Icon::Minimize).size(HEIGHT).flat())
+        .on_hover_text(t("Minimize"))
+        .clicked()
+    {
+        ui.ctx().send_viewport_cmd(ViewportCommand::Minimized(true));
+    }
+}
+
 /// Resize the window at the edges (borderless window).
 pub fn resize_handles(ctx: &egui::Context, fullscreen: bool) {
     let maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
-    if maximized || fullscreen {
+    if maximized || fullscreen || NATIVE_FRAME {
         return;
     }
     let rect = ctx.content_rect();

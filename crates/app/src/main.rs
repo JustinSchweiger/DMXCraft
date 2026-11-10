@@ -48,15 +48,24 @@ fn main() -> eframe::Result {
             .then(|| settings.last_show.clone())
             .flatten()
     });
+    let viewport = eframe::egui::ViewportBuilder::default()
+        .with_title("DMXCraft")
+        .with_inner_size([1440.0, 900.0])
+        .with_min_inner_size([900.0, 600.0])
+        .with_icon(icon::window_icon())
+        .with_resizable(true);
+    // Own title bar instead of the operating system's. On macOS the window
+    // keeps its native frame (traffic lights, native fullscreen, resizing)
+    // with the content drawn behind a transparent title bar.
+    #[cfg(target_os = "macos")]
+    let viewport = viewport
+        .with_fullsize_content_view(true)
+        .with_titlebar_shown(false)
+        .with_title_shown(false);
+    #[cfg(not(target_os = "macos"))]
+    let viewport = viewport.with_decorations(false);
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("DMXCraft")
-            .with_inner_size([1440.0, 900.0])
-            .with_min_inner_size([900.0, 600.0])
-            .with_icon(icon::window_icon())
-            // own title bar instead of the operating system's
-            .with_decorations(false)
-            .with_resizable(true),
+        viewport,
         // restore window size/position and the sizes of the areas (panels) at the
         // next start
         persist_window: true,
