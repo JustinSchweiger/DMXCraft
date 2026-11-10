@@ -261,6 +261,28 @@ impl Placement {
     }
 }
 
+/// Beam direction (unit vector, room coordinates) of a moving head with this
+/// placement rotation. `pan`/`tilt` 0–1 (0.5 = center), ranges in degrees.
+/// Rotation 0 = hanging (beam down at the center); the DMX direction of
+/// moving heads is defined for standing fixtures, so hanging both axes turn
+/// the other way round. Same model as the 3D visualizer.
+pub fn moving_head_direction(
+    rotation_deg: [f32; 3],
+    pan: f32,
+    tilt: f32,
+    pan_range: f32,
+    tilt_range: f32,
+) -> [f32; 3] {
+    let p = (0.5 - pan) * pan_range.to_radians();
+    let t = (0.5 - tilt) * tilt_range.to_radians();
+    let (st, ct) = t.sin_cos();
+    let (sp, cp) = p.sin_cos();
+    // local: Ry(pan) · Rx(tilt) · (0, −1, 0)
+    let l = [-st * sp, -ct, -st * cp];
+    let r = rotation(rotation_deg);
+    [0, 1, 2].map(|i| r[0][i] * l[0] + r[1][i] * l[1] + r[2][i] * l[2])
+}
+
 /// Hanging point on a truss.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrussHang {

@@ -1096,6 +1096,76 @@ impl Show {
         }
     }
 
+    /// How directions in the room (x, z) appear in the stage plan (x, y):
+    /// `plan = [m[0][0]·x + m[0][1]·z, m[1][0]·x + m[1][1]·z]`. Fitted to the
+    /// moving heads that have both a 3D placement and a plan position – the
+    /// plan may be drawn rotated or mirrored (e.g. seen from the stage).
+    /// Without enough of them, or if they do not match: room x = right,
+    /// room z = up.
+    pub fn plan_axes(&self) -> [[f32; 2]; 2] {
+        let pairs: Vec<([f32; 2], [f32; 2])> = self
+            .fixtures
+            .iter()
+            // only moving heads: other fixtures are often drawn schematically
+            .filter(|f| {
+                self.type_of(f)
+                    .is_some_and(|t| t.has_kind(crate::fixture::ChannelKind::Pan))
+            })
+            .filter_map(|f| {
+                let p3 = f.place3d?;
+                let pp = f.plan_pos?;
+                Some(([p3.position[0], p3.position[2]], pp))
+            })
+            .collect();
+        let default = [[1.0, 0.0], [0.0, -1.0]];
+        if pairs.len() < 3 {
+            return default;
+        }
+        let n = pairs.len() as f32;
+        type Pair = ([f32; 2], [f32; 2]);
+        let mean = |f: fn(&Pair) -> [f32; 2]| {
+            let s = pairs
+                .iter()
+                .map(f)
+                .fold([0.0, 0.0], |a, v| [a[0] + v[0], a[1] + v[1]]);
+            [s[0] / n, s[1] / n]
+        };
+        let (rm, pm) = (mean(|p| p.0), mean(|p| p.1));
+        // Best rotation (and best rotation of the mirrored room): angle from
+        // the summed dot and cross products of the centered point pairs
+        let fit = |mirror: f32| {
+            let (mut dot, mut cross, mut spread) = (0.0f32, 0.0f32, 0.0f32);
+            for (r, p) in &pairs {
+                let a = [r[0] - rm[0], mirror * (r[1] - rm[1])];
+                let b = [p[0] - pm[0], p[1] - pm[1]];
+                dot += a[0] * b[0] + a[1] * b[1];
+                cross += a[0] * b[1] - a[1] * b[0];
+                spread += (a[0] * a[0] + a[1] * a[1]).sqrt() * (b[0] * b[0] + b[1] * b[1]).sqrt();
+            }
+            let angle = cross.atan2(dot);
+            // quality: share of the spread that the rotation explains
+            let q = if spread > 1e-6 {
+                dot.hypot(cross) / spread
+            } else {
+                0.0
+            };
+            (angle, q)
+        };
+        let (a1, q1) = fit(1.0);
+        let (a2, q2) = fit(-1.0);
+        let (angle, q, mirror) = if q2 > q1 {
+            (a2, q2, -1.0)
+        } else {
+            (a1, q1, 1.0)
+        };
+        if q < 0.8 {
+            return default;
+        }
+        let (s, c) = angle.sin_cos();
+        // plan = Rot(angle) · [x, mirror·z]
+        [[c, -s * mirror], [s, c * mirror]]
+    }
+
     pub fn plan_position(&self, id: FixtureId) -> [f32; 2] {
         let idx = self.fixtures.iter().position(|f| f.id == id).unwrap_or(0);
         self.fixture(id)
@@ -1463,6 +1533,40 @@ mod zone_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plan_axes_follow_a_mirrored_plan() {
+        let mut s = Show::new("t", 1);
+        s.fixture_types = crate::library::builtin_fixture_types();
+        // plan drawn mirrored in x: room x grows to the left of the plan
+        for (i, (x, z)) in [(-3.0, 0.0), (2.0, 0.0), (-1.0, 3.0), (1.0, 3.0)]
+            .into_iter()
+            .enumerate()
+        {
+            let id = s
+                .add_fixture("F", "generic/moving-head-spot-11ch", 0, 1 + 11 * i as u16)
+                .unwrap();
+            let f = s.fixture_mut(id).unwrap();
+            f.place3d = Some(crate::venue::Placement {
+                position: [x, 5.0, z],
+                rotation: [0.0; 3],
+            });
+            f.plan_pos = Some([0.5 - x * 0.1, 0.5 - z * 0.1]);
+        }
+        let m = s.plan_axes();
+        let map = |d: [f32; 2]| {
+            [
+                m[0][0] * d[0] + m[0][1] * d[1],
+                m[1][0] * d[0] + m[1][1] * d[1],
+            ]
+        };
+        let x = map([1.0, 0.0]);
+        let z = map([0.0, 1.0]);
+        assert!(x[0] < -0.99 && x[1].abs() < 0.01, "{x:?}");
+        assert!(z[1] < -0.99 && z[0].abs() < 0.01, "{z:?}");
+        // without both positions: default orientation
+        assert_eq!(Show::new("u", 1).plan_axes(), [[1.0, 0.0], [0.0, -1.0]]);
+    }
     use crate::library::builtin_fixture_types;
 
     #[test]

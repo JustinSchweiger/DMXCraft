@@ -597,4 +597,22 @@ mod tests {
         let d = beam(128 + 43, 200);
         assert!(d.x < -0.5 && d.z.abs() < 0.1, "{d}");
     }
+
+    #[test]
+    fn core_direction_matches_visualizer() {
+        for (pan, tilt) in [(128u8, 128u8), (128, 200), (171, 200), (30, 60), (240, 10)] {
+            let d = beam(pan, tilt);
+            let c = dmxcraft_core::venue::moving_head_direction(
+                [0.0; 3],
+                f32::from(pan) / 255.0,
+                f32::from(tilt) / 255.0,
+                540.0,
+                270.0,
+            );
+            assert!(
+                d.distance(Vec3::from(c)) < 0.02,
+                "{pan}/{tilt}: {d} vs {c:?}"
+            );
+        }
+    }
 }

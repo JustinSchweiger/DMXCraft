@@ -78,6 +78,9 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let has_tilt = has(ChannelKind::Tilt);
         let mut lim = show.fixture(first).map(|f| f.limits).unwrap_or_default();
         let before = lim;
+        // Mounting from the 3D placement: beam of the base pointing down = hanging
+        let mount_before = hanging_of(show, first);
+        let mut mount = mount_before;
 
         // Limits: dimmer | movement (XY) | values & switches
         let h = (ui.available_height() - 4.0).clamp(120.0, 420.0);
@@ -131,6 +134,13 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
                     ui.add(
                         Toggle::new(&mut lim.swap_pan_tilt, t("Swap")).enabled(has_pan && has_tilt),
                     );
+                    ui.add_space(theme::SP_S);
+                    caption(ui, t("Mounting"));
+                    crate::ui::widgets::Segmented::new(&[
+                        (true, t("Hanging")),
+                        (false, t("Standing")),
+                    ])
+                    .show(ui, &mut mount);
                 });
                 ui.add_space(theme::SP_S);
                 if ui
@@ -143,14 +153,30 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
             });
         });
         let limits_changed = lim != before;
+        let mount_changed = mount != mount_before;
         for id in ids {
+            // turn the 3D placement upside down (keeps position and direction)
+            let flip = mount_changed && hanging_of(cx.engine.show(), id) != mount;
+            let mut place = cx.engine.show().placement3d(id);
+            if flip {
+                place.rotation[0] = (place.rotation[0] + 180.0 + 180.0).rem_euclid(360.0) - 180.0;
+            }
             if let Some(f) = cx.engine.show_mut().fixture_mut(id) {
                 if limits_changed {
                     f.limits = lim;
                 }
+                if flip {
+                    f.place3d = Some(place);
+                }
             }
         }
     }
+}
+
+/// Is the fixture mounted hanging (base above, beam down at the center)?
+fn hanging_of(show: &dmxcraft_core::Show, id: FixtureId) -> bool {
+    let p = show.placement3d(id);
+    dmxcraft_core::venue::moving_head_direction(p.rotation, 0.5, 0.5, 0.0, 0.0)[1] <= 0.0
 }
 
 fn caption(ui: &mut egui::Ui, text: &str) -> egui::Response {

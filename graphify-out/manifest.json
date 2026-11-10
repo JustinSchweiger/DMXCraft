@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "crates/core/src/show.rs": {
-    "mtime": 1794347755.9206717,
-    "seen": 1794351231.71509,
-    "ast_hash": "2edde577c1a5bc482f967a1695f2628f",
+    "mtime": 1794353090.098504,
+    "seen": 1794353143.8486261,
+    "ast_hash": "3ca8f54ba9ecdbeb329b9d606f31a43d",
     "semantic_hash": ""
   },
   "crates/ofl/Cargo.toml": {
@@ -234,9 +234,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/stage_canvas.rs": {
-    "mtime": 1794306525.2519848,
-    "seen": 1794306733.5729194,
-    "ast_hash": "b24da0d1ef84e557245aabf66e5ebd46",
+    "mtime": 1794352845.7040799,
+    "seen": 1794353143.8485587,
+    "ast_hash": "120ed416d3f16d02f57b82f1da87241b",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/swatch.rs": {
@@ -342,9 +342,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/fixture_settings.rs": {
-    "mtime": 1794306525.2744277,
-    "seen": 1794306733.5729477,
-    "ast_hash": "5645187fc4ed1d9eaa9eaa7e3108caf4",
+    "mtime": 1794352938.9915507,
+    "seen": 1794353143.848582,
+    "ast_hash": "473b4cb0b9ac36d59e04d1bc664f029a",
     "semantic_hash": ""
   },
   "crates/app/src/views/setup/library_panel.rs": {
@@ -630,15 +630,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/viz/rig.rs": {
-    "mtime": 1794351075.4070587,
-    "seen": 1794351231.7150707,
-    "ast_hash": "6ad57d5df4ae2be080b40e398ff5dfbb",
+    "mtime": 1794352939.1115508,
+    "seen": 1794353143.848605,
+    "ast_hash": "043359e74bee9a4d406666a9d86004e9",
     "semantic_hash": ""
   },
   "crates/core/src/venue.rs": {
-    "mtime": 1794306938.8065503,
-    "seen": 1794307157.1232316,
-    "ast_hash": "2b6c6423f7723118d1cb3f040a67f337",
+    "mtime": 1794352776.0484724,
+    "seen": 1794353143.84863,
+    "ast_hash": "46b9393bb4400eff7d9e31f330164857",
     "semantic_hash": ""
   },
   "crates/core/src/venue/ev2.rs": {
@@ -894,9 +894,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/i18n/de.rs": {
-    "mtime": 1794347755.9126716,
-    "seen": 1794351231.7149734,
-    "ast_hash": "72493e6fa500c453f38b8aa94eaa0450",
+    "mtime": 1794353090.097941,
+    "seen": 1794353143.8485034,
+    "ast_hash": "1358149d4b2e8dcb0bba447a063e5734",
     "semantic_hash": ""
   },
   "scripts/dev.ps1": {

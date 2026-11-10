@@ -780,17 +780,30 @@ pub fn paint_effects(
     }
 
     // ----- Pan/tilt -----
+    // Where the beam points, seen from above – same model as the 3D
+    // visualizer (mounting from the 3D placement, ranges from the profile).
     if let (Some(pi), Some(ti)) = (find(ChannelKind::Pan), find(ChannelKind::Tilt)) {
-        // Pan 0–540°, tilt away from the center (128) = length of the pointer
-        let pan = value(pi) * 540f32.to_radians() - std::f32::consts::FRAC_PI_2;
-        let tilt = (value(ti) - 0.5) * 2.0;
-        // tilted backwards = pointer in the opposite direction
-        let dir = if tilt < 0.0 {
-            -Vec2::angled(pan)
-        } else {
-            Vec2::angled(pan)
+        let axis = |coarse: usize, fine: Option<usize>| {
+            value(coarse) + fine.map_or(0.0, |i| value(i) / 255.0)
         };
-        let end = c + dir * (size * 0.35 + tilt.abs() * size * 0.7);
+        let phys = ty.physical.unwrap_or_default();
+        let place = show.placement3d(id);
+        let d = dmxcraft_core::venue::moving_head_direction(
+            place.rotation,
+            axis(pi, find(ChannelKind::PanFine)),
+            axis(ti, find(ChannelKind::TiltFine)),
+            phys.pan_range,
+            phys.tilt_range,
+        );
+        // room direction as seen in the plan; length = horizontal part
+        let m = show.plan_axes();
+        let flat = Vec2::new(
+            m[0][0] * d[0] + m[0][1] * d[2],
+            m[1][0] * d[0] + m[1][1] * d[2],
+        );
+        let len = flat.length();
+        let dir = if len > 1e-4 { flat / len } else { Vec2::ZERO };
+        let end = c + dir * (size * 0.35 + len * size * 0.7);
         let s = Stroke::new(1.5, theme::accent());
         p.line_segment([c, end], s);
         p.circle_filled(end, 2.5, theme::accent());
