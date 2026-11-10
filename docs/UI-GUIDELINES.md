@@ -25,11 +25,16 @@ other programs).
 Colors, spacing, radii and font sizes come **exclusively** from `ui::theme`.
 No `Color32::from_rgb(..)` literals in views.
 
-Surface and text colors depend on the chosen **theme** (navy, gray, … –
-Settings → General) and are read as functions: `theme::bg()`,
+Surface and text colors depend on the chosen **theme** (Midnight, Studio, … –
+Settings → Customize) and are read as functions: `theme::bg()`,
 `theme::surface()`, `theme::text()` … New themes are another `Palette` entry
-in `theme.rs`. Signal colors (`DANGER`, `OK`, `WARN`) and the accent stay
-recognizable in all themes.
+in `theme.rs` plus a `Theme` variant with label and description; give each
+theme its own accent so they are clearly distinct. The user can override the
+accent and the work-area background (`theme::Overrides`) – never cache theme
+colors, always read them through the functions. On work areas use
+`canvas_line()`, `canvas_dim()`, `handle()`, `lamp()` …, which follow the
+brightness of the (possibly overridden) canvas. Signal colors (`DANGER`,
+`OK`, `WARN`) stay the same in all themes.
 
 **Terms:** the columns under CONTROL are called **banks** in the interface
 (`Zone` in the code). Inline renaming (chips, patch) focuses the field only

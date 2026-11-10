@@ -41,6 +41,7 @@ fn main() -> eframe::Result {
     let settings = settings::Settings::load();
     i18n::set_lang(i18n::Lang::from_key(&settings.language));
     ui::theme::set_theme(ui::theme::Theme::from_key(&settings.theme));
+    ui::theme::set_overrides(settings.theme_overrides());
     let show_path = std::env::args().nth(1).or_else(|| {
         settings
             .open_last_show

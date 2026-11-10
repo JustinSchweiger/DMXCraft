@@ -213,17 +213,64 @@ pub fn color_swatches(
     current: Option<[u8; 3]>,
     auto_tip: &str,
 ) -> Option<Option<[u8; 3]>> {
+    swatches(ui, id, current, auto_tip, &PRESET_COLORS, 7)
+}
+
+/// Background colors for work areas (dark to light, slightly tinted).
+pub const CANVAS_COLORS: [[u8; 3]; 12] = [
+    [0x00, 0x00, 0x00],
+    [0x0b, 0x0e, 0x12],
+    [0x12, 0x12, 0x14],
+    [0x1c, 0x1d, 0x20],
+    [0x26, 0x28, 0x2c],
+    [0x0a, 0x14, 0x24],
+    [0x0c, 0x1a, 0x14],
+    [0x1a, 0x0f, 0x24],
+    [0x22, 0x14, 0x0e],
+    [0x3a, 0x3d, 0x42],
+    [0xd4, 0xd8, 0xdd],
+    [0xf2, 0xf2, 0xf2],
+];
+
+/// Like [`color_swatches`] in one row (settings).
+pub fn swatches_row(
+    ui: &mut Ui,
+    id: egui::Id,
+    current: Option<[u8; 3]>,
+    auto_tip: &str,
+) -> Option<Option<[u8; 3]>> {
+    swatches(ui, id, current, auto_tip, &PRESET_COLORS, 14)
+}
+
+/// Like [`color_swatches`] with background colors in one row (settings).
+pub fn canvas_swatches(
+    ui: &mut Ui,
+    id: egui::Id,
+    current: Option<[u8; 3]>,
+    auto_tip: &str,
+) -> Option<Option<[u8; 3]>> {
+    swatches(ui, id, current, auto_tip, &CANVAS_COLORS, 14)
+}
+
+/// Swatches in one or more rows: “automatic”, `presets`, own color.
+fn swatches(
+    ui: &mut Ui,
+    id: egui::Id,
+    current: Option<[u8; 3]>,
+    auto_tip: &str,
+    presets: &[[u8; 3]],
+    per_row: usize,
+) -> Option<Option<[u8; 3]>> {
     const SQ: f32 = 22.0;
-    const PER_ROW: usize = 7;
     let mut picked = None;
     let picker_id = id.with("open");
     let mut picker_open = ui.data(|d| d.get_temp::<bool>(picker_id)).unwrap_or(false);
-    let custom = current.filter(|c| !PRESET_COLORS.contains(c));
+    let custom = current.filter(|c| !presets.contains(c));
     let fields: Vec<Swatch> = std::iter::once(Swatch::Auto)
-        .chain(PRESET_COLORS.iter().copied().map(Swatch::Color))
+        .chain(presets.iter().copied().map(Swatch::Color))
         .chain(std::iter::once(Swatch::Custom))
         .collect();
-    for row in fields.chunks(PER_ROW) {
+    for row in fields.chunks(per_row) {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             ui.add_space(theme::SP_S);
@@ -238,6 +285,13 @@ pub fn color_swatches(
                 match field {
                     Swatch::Color(c) => {
                         p.rect_filled(rect.shrink(2.0), 3.0, theme::rgb(*c));
+                        // outline so colors close to the background stay visible
+                        p.rect_stroke(
+                            rect.shrink(2.0),
+                            3.0,
+                            Stroke::new(1.0, theme::border()),
+                            StrokeKind::Inside,
+                        );
                     }
                     Swatch::Auto => {
                         // crossed-out swatch

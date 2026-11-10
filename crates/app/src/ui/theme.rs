@@ -36,8 +36,8 @@ const fn c(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
 
-/// Navy with cyan – the colors of the logo (default).
-pub const NAVY: Palette = Palette {
+/// Midnight: deep navy with cyan – the colors of the logo (default).
+pub const MIDNIGHT: Palette = Palette {
     bg: c(0x0b, 0x0e, 0x12),
     surface: c(0x12, 0x16, 0x1c),
     raised: c(0x1a, 0x20, 0x28),
@@ -54,58 +54,96 @@ pub const NAVY: Palette = Palette {
     canvas: c(0x0b, 0x0e, 0x12),
 };
 
-/// Neutral gray without a color cast, accent stays cyan.
-pub const GRAY: Palette = Palette {
-    bg: c(0x17, 0x17, 0x18),
-    surface: c(0x20, 0x20, 0x21),
-    raised: c(0x2b, 0x2b, 0x2c),
-    raised_hover: c(0x36, 0x36, 0x38),
-    border: c(0x3b, 0x3b, 0x3d),
-    accent: c(0x19, 0xe3, 0xf0),
-    accent_hover: c(0x6c, 0xee, 0xf6),
-    accent_dim: c(0x11, 0x5a, 0x61),
+/// Studio: neutral charcoal without a color cast, warm amber accent like
+/// the indicator lamps of a mixing desk.
+pub const STUDIO: Palette = Palette {
+    bg: c(0x16, 0x16, 0x17),
+    surface: c(0x1f, 0x1f, 0x20),
+    raised: c(0x2a, 0x2a, 0x2b),
+    raised_hover: c(0x35, 0x35, 0x37),
+    border: c(0x3a, 0x3a, 0x3c),
+    accent: c(0xf5, 0xa5, 0x24),
+    accent_hover: c(0xf8, 0xc0, 0x66),
+    accent_dim: c(0x5e, 0x41, 0x12),
     text: c(0xec, 0xec, 0xec),
     text_dim: c(0xa8, 0xa8, 0xaa),
     text_faint: c(0x6c, 0x6c, 0x70),
     fixture_bar: c(0x42, 0x42, 0x45),
     light: false,
-    canvas: c(0x17, 0x17, 0x18),
+    canvas: c(0x16, 0x16, 0x17),
 };
 
-/// Graphite with a strong blue accent.
-pub const GRAPHITE: Palette = Palette {
-    bg: c(0x1b, 0x1d, 0x20),
-    surface: c(0x23, 0x26, 0x2a),
-    raised: c(0x2d, 0x31, 0x36),
-    raised_hover: c(0x38, 0x3d, 0x43),
-    border: c(0x40, 0x45, 0x4c),
-    accent: c(0x3d, 0xa5, 0xf0),
-    accent_hover: c(0x7c, 0xc2, 0xf5),
-    accent_dim: c(0x15, 0x4a, 0x73),
-    text: c(0xea, 0xec, 0xee),
-    text_dim: c(0xa4, 0xaa, 0xb2),
-    text_faint: c(0x6a, 0x71, 0x7a),
-    fixture_bar: c(0x45, 0x4b, 0x53),
+/// Slate: cool blue-gray with a royal blue accent, calm for long sessions.
+pub const SLATE: Palette = Palette {
+    bg: c(0x1a, 0x1e, 0x25),
+    surface: c(0x22, 0x27, 0x30),
+    raised: c(0x2c, 0x32, 0x3d),
+    raised_hover: c(0x37, 0x3e, 0x4b),
+    border: c(0x3f, 0x47, 0x55),
+    accent: c(0x5b, 0x8d, 0xff),
+    accent_hover: c(0x8d, 0xb0, 0xff),
+    accent_dim: c(0x22, 0x3a, 0x70),
+    text: c(0xe8, 0xec, 0xf3),
+    text_dim: c(0xa0, 0xa9, 0xb8),
+    text_faint: c(0x66, 0x6f, 0x7e),
+    fixture_bar: c(0x45, 0x4e, 0x5d),
     light: false,
-    canvas: c(0x1b, 0x1d, 0x20),
+    canvas: c(0x16, 0x1a, 0x20),
 };
 
-/// Pitch black (OLED screens, dark venues).
-pub const BLACK: Palette = Palette {
+/// Pitch black: pure black for OLED screens and dark venues, lime accent that
+/// stays visible at low screen brightness.
+pub const PITCH_BLACK: Palette = Palette {
     bg: c(0x00, 0x00, 0x00),
     surface: c(0x08, 0x08, 0x09),
     raised: c(0x13, 0x14, 0x16),
     raised_hover: c(0x1e, 0x20, 0x23),
     border: c(0x24, 0x26, 0x2a),
-    accent: c(0x19, 0xe3, 0xf0),
-    accent_hover: c(0x6c, 0xee, 0xf6),
-    accent_dim: c(0x0a, 0x4d, 0x53),
+    accent: c(0xb6, 0xf0, 0x3c),
+    accent_hover: c(0xcd, 0xf6, 0x7c),
+    accent_dim: c(0x3a, 0x4f, 0x10),
     text: c(0xe8, 0xea, 0xec),
     text_dim: c(0x92, 0x97, 0x9e),
     text_faint: c(0x50, 0x54, 0x5a),
     fixture_bar: c(0x22, 0x25, 0x2a),
     light: false,
     canvas: c(0x00, 0x00, 0x00),
+};
+
+/// Ultraviolet: dark violet with a magenta accent – club and party look.
+pub const ULTRAVIOLET: Palette = Palette {
+    bg: c(0x0f, 0x0b, 0x16),
+    surface: c(0x16, 0x11, 0x20),
+    raised: c(0x20, 0x19, 0x2d),
+    raised_hover: c(0x2b, 0x22, 0x3b),
+    border: c(0x33, 0x29, 0x45),
+    accent: c(0xe0, 0x5c, 0xf5),
+    accent_hover: c(0xec, 0x93, 0xf9),
+    accent_dim: c(0x56, 0x22, 0x66),
+    text: c(0xec, 0xe6, 0xf4),
+    text_dim: c(0xa8, 0x9c, 0xbb),
+    text_faint: c(0x65, 0x5a, 0x78),
+    fixture_bar: c(0x31, 0x27, 0x44),
+    light: false,
+    canvas: c(0x0f, 0x0b, 0x16),
+};
+
+/// Ember: warm dark brown with an orange accent, like tungsten light.
+pub const EMBER: Palette = Palette {
+    bg: c(0x14, 0x10, 0x0d),
+    surface: c(0x1c, 0x17, 0x13),
+    raised: c(0x27, 0x20, 0x1a),
+    raised_hover: c(0x33, 0x2a, 0x22),
+    border: c(0x3d, 0x32, 0x28),
+    accent: c(0xff, 0x7a, 0x33),
+    accent_hover: c(0xff, 0xa2, 0x70),
+    accent_dim: c(0x62, 0x2e, 0x12),
+    text: c(0xf2, 0xea, 0xe2),
+    text_dim: c(0xb3, 0xa5, 0x97),
+    text_faint: c(0x73, 0x66, 0x5a),
+    fixture_bar: c(0x3e, 0x33, 0x29),
+    light: false,
+    canvas: c(0x12, 0x0e, 0x0b),
 };
 
 /// Night mode: muted red instead of white – does not dazzle at a dark desk
@@ -127,24 +165,6 @@ pub const NIGHT: Palette = Palette {
     canvas: c(0x0a, 0x05, 0x05),
 };
 
-/// Violet with a magenta accent.
-pub const VIOLET: Palette = Palette {
-    bg: c(0x0f, 0x0b, 0x16),
-    surface: c(0x16, 0x11, 0x20),
-    raised: c(0x20, 0x19, 0x2d),
-    raised_hover: c(0x2b, 0x22, 0x3b),
-    border: c(0x33, 0x29, 0x45),
-    accent: c(0xd0, 0x6b, 0xff),
-    accent_hover: c(0xe0, 0x9c, 0xff),
-    accent_dim: c(0x52, 0x26, 0x6e),
-    text: c(0xec, 0xe6, 0xf4),
-    text_dim: c(0xa8, 0x9c, 0xbb),
-    text_faint: c(0x65, 0x5a, 0x78),
-    fixture_bar: c(0x31, 0x27, 0x44),
-    light: false,
-    canvas: c(0x0f, 0x0b, 0x16),
-};
-
 /// High contrast: black, white and yellow, strong borders.
 pub const CONTRAST: Palette = Palette {
     bg: c(0x00, 0x00, 0x00),
@@ -163,8 +183,9 @@ pub const CONTRAST: Palette = Palette {
     canvas: c(0x00, 0x00, 0x00),
 };
 
-/// Light (neutral), petrol accent (cyan would be too pale on white).
-pub const LIGHT: Palette = Palette {
+/// Daylight: light and neutral for bright rooms, petrol accent (cyan would
+/// be too pale on white).
+pub const DAYLIGHT: Palette = Palette {
     bg: c(0xe9, 0xec, 0xef),
     surface: c(0xf4, 0xf6, 0xf8),
     raised: c(0xff, 0xff, 0xff),
@@ -181,118 +202,193 @@ pub const LIGHT: Palette = Palette {
     canvas: c(0xdf, 0xe3, 0xe7),
 };
 
-/// Daslight: colors of the Daslight interface (measured from the Profile
-/// Builder): light gray, white cards, blue accent.
-pub const DASLIGHT: Palette = Palette {
-    bg: c(0xf6, 0xf6, 0xf6),
-    surface: c(0xf6, 0xf6, 0xf6),
-    raised: c(0xff, 0xff, 0xff),
-    raised_hover: c(0xea, 0xf4, 0xfc),
-    border: c(0xd0, 0xd0, 0xd0),
-    accent: c(0x15, 0x92, 0xe6),
-    accent_hover: c(0x0f, 0x7c, 0xc6),
-    accent_dim: c(0xc9, 0xe5, 0xf9),
-    text: c(0x22, 0x22, 0x22),
-    text_dim: c(0x55, 0x55, 0x55),
-    text_faint: c(0x96, 0x96, 0x96),
-    fixture_bar: c(0xde, 0xde, 0xde),
+/// Paper: warm off-white with an ink blue accent, easy to read outdoors.
+pub const PAPER: Palette = Palette {
+    bg: c(0xf3, 0xf0, 0xea),
+    surface: c(0xf8, 0xf6, 0xf1),
+    raised: c(0xff, 0xff, 0xfc),
+    raised_hover: c(0xec, 0xf0, 0xf8),
+    border: c(0xd8, 0xd2, 0xc6),
+    accent: c(0x2f, 0x5b, 0xd8),
+    accent_hover: c(0x24, 0x48, 0xb0),
+    accent_dim: c(0xd3, 0xdd, 0xf7),
+    text: c(0x26, 0x23, 0x1e),
+    text_dim: c(0x5e, 0x58, 0x4f),
+    text_faint: c(0x9d, 0x96, 0x8b),
+    fixture_bar: c(0xe2, 0xdc, 0xd0),
     light: true,
-    canvas: c(0xe7, 0xe7, 0xe7),
+    canvas: c(0xe9, 0xe5, 0xdc),
 };
 
 /// Selectable themes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Theme {
-    Navy,
-    Gray,
-    Graphite,
-    Black,
-    Violet,
+    Midnight,
+    Studio,
+    Slate,
+    PitchBlack,
+    Ultraviolet,
+    Ember,
     Night,
     Contrast,
-    Light,
-    Daslight,
+    Daylight,
+    Paper,
 }
 
 impl Theme {
-    pub const ALL: [Theme; 9] = [
-        Theme::Navy,
-        Theme::Gray,
-        Theme::Graphite,
-        Theme::Black,
-        Theme::Violet,
+    pub const ALL: [Theme; 10] = [
+        Theme::Midnight,
+        Theme::Studio,
+        Theme::Slate,
+        Theme::PitchBlack,
+        Theme::Ultraviolet,
+        Theme::Ember,
         Theme::Night,
         Theme::Contrast,
-        Theme::Light,
-        Theme::Daslight,
+        Theme::Daylight,
+        Theme::Paper,
     ];
 
-    /// Key for the settings.
+    /// Key for the settings (the old keys stay valid for existing settings).
     pub fn key(self) -> &'static str {
         match self {
-            Theme::Navy => "navy",
-            Theme::Gray => "gray",
-            Theme::Graphite => "graphite",
-            Theme::Black => "black",
-            Theme::Violet => "violet",
+            Theme::Midnight => "navy",
+            Theme::Studio => "gray",
+            Theme::Slate => "graphite",
+            Theme::PitchBlack => "black",
+            Theme::Ultraviolet => "violet",
+            Theme::Ember => "ember",
             Theme::Night => "night",
             Theme::Contrast => "contrast",
-            Theme::Light => "light",
-            Theme::Daslight => "daslight",
+            Theme::Daylight => "light",
+            Theme::Paper => "paper",
         }
     }
 
     pub fn from_key(key: &str) -> Theme {
+        if key == "daslight" {
+            return Theme::Paper;
+        }
         Theme::ALL
             .into_iter()
             .find(|t| t.key() == key)
-            .unwrap_or(Theme::Navy)
+            .unwrap_or(Theme::Midnight)
     }
 
     /// Display name (English source, translated via `i18n::t`).
     pub fn label(self) -> &'static str {
         match self {
-            Theme::Navy => "Dark blue",
-            Theme::Gray => "Gray",
-            Theme::Graphite => "Graphite",
-            Theme::Black => "Black (OLED)",
-            Theme::Violet => "Violet",
-            Theme::Night => "Night mode (red)",
+            Theme::Midnight => "Midnight",
+            Theme::Studio => "Studio",
+            Theme::Slate => "Slate",
+            Theme::PitchBlack => "Pitch black",
+            Theme::Ultraviolet => "Ultraviolet",
+            Theme::Ember => "Ember",
+            Theme::Night => "Night (red)",
             Theme::Contrast => "High contrast",
-            Theme::Light => "Light",
-            Theme::Daslight => "Daslight (light)",
+            Theme::Daylight => "Daylight",
+            Theme::Paper => "Paper",
         }
     }
 
-    fn palette(self) -> &'static Palette {
+    /// What the theme is for (English source, translated via `i18n::t`).
+    pub fn description(self) -> &'static str {
         match self {
-            Theme::Navy => &NAVY,
-            Theme::Gray => &GRAY,
-            Theme::Graphite => &GRAPHITE,
-            Theme::Black => &BLACK,
-            Theme::Violet => &VIOLET,
+            Theme::Midnight => "Deep navy with cyan – the DMXCraft colors",
+            Theme::Studio => "Neutral charcoal with an amber accent",
+            Theme::Slate => "Cool blue-gray, calm for long sessions",
+            Theme::PitchBlack => "Pure black for OLED screens and dark venues",
+            Theme::Ultraviolet => "Dark violet with magenta – club look",
+            Theme::Ember => "Warm brown with orange, like tungsten light",
+            Theme::Night => "Red only – keeps your night vision at a dark desk",
+            Theme::Contrast => "Black, white and yellow for best readability",
+            Theme::Daylight => "Light and neutral for bright rooms",
+            Theme::Paper => "Warm off-white with ink blue, readable outdoors",
+        }
+    }
+
+    pub fn palette(self) -> &'static Palette {
+        match self {
+            Theme::Midnight => &MIDNIGHT,
+            Theme::Studio => &STUDIO,
+            Theme::Slate => &SLATE,
+            Theme::PitchBlack => &PITCH_BLACK,
+            Theme::Ultraviolet => &ULTRAVIOLET,
+            Theme::Ember => &EMBER,
             Theme::Night => &NIGHT,
             Theme::Contrast => &CONTRAST,
-            Theme::Light => &LIGHT,
-            Theme::Daslight => &DASLIGHT,
+            Theme::Daylight => &DAYLIGHT,
+            Theme::Paper => &PAPER,
         }
     }
 }
 
-static ACTIVE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+/// Own colors on top of the theme (from the settings).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Overrides {
+    /// Accent color (selection, active elements).
+    pub accent: Option<[u8; 3]>,
+    /// Background of the work areas (stage view, effect fields, timeline).
+    pub canvas: Option<[u8; 3]>,
+}
+
+struct Active {
+    theme: Theme,
+    overrides: Overrides,
+    palette: Palette,
+}
+
+static ACTIVE: std::sync::RwLock<Active> = std::sync::RwLock::new(Active {
+    theme: Theme::Midnight,
+    overrides: Overrides {
+        accent: None,
+        canvas: None,
+    },
+    palette: MIDNIGHT,
+});
+
+fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
+    let m = |x: u8, y: u8| (f32::from(x) * (1.0 - t) + f32::from(y) * t).round() as u8;
+    Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
+}
+
+/// Theme palette with the own colors applied; hover and dim variants of the
+/// accent are derived from it.
+pub fn resolve(t: Theme, o: Overrides) -> Palette {
+    let mut p = *t.palette();
+    if let Some(a) = o.accent {
+        let a = rgb(a);
+        p.accent = a;
+        if p.light {
+            p.accent_hover = mix(a, Color32::BLACK, 0.18);
+            p.accent_dim = mix(p.raised, a, 0.22);
+        } else {
+            p.accent_hover = mix(a, Color32::WHITE, 0.35);
+            p.accent_dim = mix(p.bg, a, 0.38);
+        }
+    }
+    if let Some(cv) = o.canvas {
+        p.canvas = rgb(cv);
+    }
+    p
+}
 
 /// Set the active theme; call `apply` afterwards so egui takes it over.
 pub fn set_theme(t: Theme) {
-    let i = Theme::ALL.iter().position(|x| *x == t).unwrap_or(0) as u8;
-    ACTIVE.store(i, std::sync::atomic::Ordering::Relaxed);
+    let mut a = ACTIVE.write().unwrap_or_else(|e| e.into_inner());
+    a.theme = t;
+    a.palette = resolve(t, a.overrides);
 }
 
-pub fn active() -> Theme {
-    Theme::ALL[usize::from(ACTIVE.load(std::sync::atomic::Ordering::Relaxed)) % Theme::ALL.len()]
+/// Set the own colors on top of the theme; call `apply` afterwards.
+pub fn set_overrides(o: Overrides) {
+    let mut a = ACTIVE.write().unwrap_or_else(|e| e.into_inner());
+    a.overrides = o;
+    a.palette = resolve(a.theme, o);
 }
 
-fn pal() -> &'static Palette {
-    active().palette()
+fn pal() -> Palette {
+    ACTIVE.read().unwrap_or_else(|e| e.into_inner()).palette
 }
 
 pub fn bg() -> Color32 {
@@ -339,9 +435,28 @@ pub fn is_light() -> bool {
 pub fn canvas() -> Color32 {
     pal().canvas
 }
+/// Is the work-area background light? Usually follows the theme, but an own
+/// canvas color can differ from it.
+pub fn canvas_is_light() -> bool {
+    let c = canvas();
+    0.2126 * f32::from(c.r()) + 0.7152 * f32::from(c.g()) + 0.0722 * f32::from(c.b()) > 140.0
+}
+/// Work-area color derived from the canvas when it does not match the theme.
+fn canvas_tone(t: f32) -> Option<Color32> {
+    (canvas_is_light() != is_light()).then(|| {
+        let to = if canvas_is_light() {
+            Color32::BLACK
+        } else {
+            Color32::WHITE
+        };
+        mix(canvas(), to, t)
+    })
+}
 /// Grid lines on the work area.
 pub fn canvas_line() -> Color32 {
-    if is_light() {
+    if let Some(c) = canvas_tone(0.18) {
+        c
+    } else if is_light() {
         c(0xb4, 0xb9, 0xbf)
     } else {
         border()
@@ -349,7 +464,9 @@ pub fn canvas_line() -> Color32 {
 }
 /// Lines/tracks on the work area.
 pub fn canvas_dim() -> Color32 {
-    if is_light() {
+    if let Some(c) = canvas_tone(0.6) {
+        c
+    } else if is_light() {
         c(0x5d, 0x63, 0x6a)
     } else {
         text_dim()
@@ -357,7 +474,9 @@ pub fn canvas_dim() -> Color32 {
 }
 /// Guide lines on the work area.
 pub fn canvas_faint() -> Color32 {
-    if is_light() {
+    if let Some(c) = canvas_tone(0.35) {
+        c
+    } else if is_light() {
         c(0x95, 0x9b, 0xa2)
     } else {
         text_faint()
@@ -365,7 +484,7 @@ pub fn canvas_faint() -> Color32 {
 }
 /// Handles and markers on the work area (light on dark, dark on light).
 pub fn handle() -> Color32 {
-    if is_light() {
+    if canvas_is_light() {
         c(0x2a, 0x2e, 0x33)
     } else {
         Color32::WHITE
@@ -376,7 +495,7 @@ pub fn handle() -> Color32 {
 /// works as is; on a light background “off” would be a black blot – there
 /// it goes from a light gray (off) to the full color (on).
 pub fn lamp(col: Color32) -> Color32 {
-    if !is_light() {
+    if !canvas_is_light() {
         return col;
     }
     let (r, g, b) = (f32::from(col.r()), f32::from(col.g()), f32::from(col.b()));
@@ -595,4 +714,38 @@ pub fn zone_color(show: &Show, zone: Option<ZoneId>) -> Color32 {
         .and_then(|z| z.color)
         .unwrap_or(ZONE_PALETTE[idx % ZONE_PALETTE.len()]);
     rgb(c)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn themes_are_distinct() {
+        for (i, a) in Theme::ALL.iter().enumerate() {
+            assert_eq!(Theme::from_key(a.key()), *a);
+            for b in &Theme::ALL[i + 1..] {
+                assert_ne!(a.key(), b.key());
+                assert_ne!(a.palette().accent, b.palette().accent, "{a:?} / {b:?}");
+            }
+        }
+        // old settings keep working
+        assert_eq!(Theme::from_key("daslight"), Theme::Paper);
+        assert_eq!(Theme::from_key("unknown"), Theme::Midnight);
+    }
+
+    #[test]
+    fn overrides_apply() {
+        let o = Overrides {
+            accent: Some([0xff, 0x00, 0x80]),
+            canvas: Some([0x10, 0x20, 0x30]),
+        };
+        let p = resolve(Theme::Paper, o);
+        assert_eq!(p.accent, c(0xff, 0x00, 0x80));
+        assert_eq!(p.canvas, c(0x10, 0x20, 0x30));
+        assert_ne!(p.accent_dim, PAPER.accent_dim);
+        assert_eq!(p.bg, PAPER.bg);
+        let d = resolve(Theme::Studio, Overrides::default());
+        assert_eq!(d.accent, STUDIO.accent);
+    }
 }

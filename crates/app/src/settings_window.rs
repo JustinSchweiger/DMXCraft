@@ -36,11 +36,10 @@ pub enum Tab {
     Obs,
     Remote,
     Ai,
-    Project,
 }
 
 impl Tab {
-    const ALL: [Tab; 10] = [
+    const ALL: [Tab; 9] = [
         Tab::General,
         Tab::Customize,
         Tab::Startup,
@@ -50,7 +49,6 @@ impl Tab {
         Tab::Obs,
         Tab::Remote,
         Tab::Ai,
-        Tab::Project,
     ];
 
     fn label(self) -> &'static str {
@@ -64,7 +62,6 @@ impl Tab {
             Tab::Obs => t("OBS"),
             Tab::Remote => t("Remote"),
             Tab::Ai => t("MCP"),
-            Tab::Project => t("Project"),
         }
     }
 
@@ -79,7 +76,6 @@ impl Tab {
             Tab::Obs => Icon::Camera,
             Tab::Remote => Icon::Remote,
             Tab::Ai => Icon::Robot,
-            Tab::Project => Icon::FileOpen,
         }
     }
 }
@@ -156,7 +152,9 @@ impl SettingsWindow {
                     .show(&mut cui, |ui| {
                         ui.set_width(content.width());
                         match *tab {
-                            Tab::General => general(ui, cx.settings, &mut ch),
+                            Tab::General => {
+                                general(ui, cx.settings, cx.engine, cx.show_path, &mut ch)
+                            }
                             Tab::Customize => customize(ui, cx.settings, &mut ch),
                             Tab::Startup => startup(ui, cx.settings, &mut ch),
                             Tab::Outputs => {
@@ -169,7 +167,6 @@ impl SettingsWindow {
                             Tab::Obs => obs(ui, cx.engine, cx.obs),
                             Tab::Remote => remote(ui, cx.settings, cx.remote, &mut ch),
                             Tab::Ai => ai(ui, cx.settings, cx.mcp, &mut ch),
-                            Tab::Project => project(ui, cx.engine, cx.show_path),
                         }
                     });
             });
@@ -515,7 +512,13 @@ fn full_combo(
         .show_ui(ui, add);
 }
 
-fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
+fn general(
+    ui: &mut Ui,
+    s: &mut Settings,
+    e: &mut Engine,
+    show_path: &str,
+    ch: &mut SettingsChanges,
+) {
     section(ui, t("Options"));
     form(ui, "settings_general", |f| {
         f.row(t("Language"), |ui| {
@@ -544,6 +547,8 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
             }
         });
     });
+    ui.add_space(theme::SP_M);
+    show_info(ui, e, show_path);
     ui.add_space(theme::SP_L);
     if let Some(p) = Settings::path() {
         hint(ui, &tr!("Stored in {v}", v = p.display()));
@@ -552,23 +557,61 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
 
 /// Customize: appearance and display.
 fn customize(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
-    section(ui, t("Appearance"));
-    form(ui, "settings_customize", |f| {
-        f.row(t("Theme"), |ui| {
-            let current = Theme::from_key(&s.theme);
-            let mut picked = current;
-            full_combo(ui, "settings_theme", t(current.label()), |ui| {
-                for th in Theme::ALL {
-                    ui.selectable_value(&mut picked, th, t(th.label()));
+    section(ui, t("Theme"));
+    let current = Theme::from_key(&s.theme);
+    if let Some(picked) = theme_tiles(ui, current) {
+        s.theme = picked.key().into();
+        theme::set_theme(picked);
+        ch.theme = true;
+        ch.save = true;
+    }
+    ui.add_space(theme::SP_XS);
+    hint(ui, t(current.description()));
+    ui.add_space(theme::SP_M);
+
+    section(ui, t("Colors"));
+    let mut colors = false;
+    form(ui, "settings_colors", |f| {
+        f.row(t("Accent color"), |ui| {
+            ui.vertical(|ui| {
+                if let Some(v) = crate::ui::widgets::color_picker::swatches_row(
+                    ui,
+                    egui::Id::unique("settings_accent"),
+                    s.accent_color,
+                    t("Theme default"),
+                ) {
+                    s.accent_color = v;
+                    colors = true;
                 }
             });
-            if picked != current {
-                s.theme = picked.key().into();
-                theme::set_theme(picked);
-                ch.theme = true;
-                ch.save = true;
-            }
         });
+        f.row(t("Work area"), |ui| {
+            ui.vertical(|ui| {
+                if let Some(v) = crate::ui::widgets::color_picker::canvas_swatches(
+                    ui,
+                    egui::Id::unique("settings_canvas"),
+                    s.canvas_color,
+                    t("Theme default"),
+                ) {
+                    s.canvas_color = v;
+                    colors = true;
+                }
+            });
+        });
+    });
+    hint(
+        ui,
+        t("Work area: background of the stage plan, effect fields and timeline"),
+    );
+    if colors {
+        theme::set_overrides(s.theme_overrides());
+        ch.theme = true;
+        ch.save = true;
+    }
+    ui.add_space(theme::SP_M);
+
+    section(ui, t("Size"));
+    form(ui, "settings_customize", |f| {
         f.row(t("Display size"), |ui| {
             let current = (s.ui_scale * 100.0).round() as u32;
             let mut picked = current;
@@ -918,7 +961,8 @@ fn obs(ui: &mut Ui, e: &mut Engine, link: &crate::obs::Obs) {
     }
 }
 
-fn project(ui: &mut Ui, e: &mut Engine, show_path: &str) {
+/// The open show: file and content.
+fn show_info(ui: &mut Ui, e: &mut Engine, show_path: &str) {
     section(ui, t("Show"));
     form(ui, "settings_project", |f| {
         f.row(t("File"), |ui| {
@@ -944,4 +988,118 @@ fn project(ui: &mut Ui, e: &mut Engine, show_path: &str) {
             );
         });
     });
+}
+
+/// Theme selection as small previews; `Some(theme)` on a click.
+fn theme_tiles(ui: &mut Ui, current: Theme) -> Option<Theme> {
+    const GAP: f32 = theme::SP_S;
+    const PREVIEW_H: f32 = 54.0;
+    const LABEL_H: f32 = 20.0;
+    let cols = 5;
+    // leave room for the scroll bar
+    let w = ((ui.available_width() - 12.0 - GAP * (cols as f32 - 1.0)) / cols as f32).floor();
+    let mut picked = None;
+    for row in Theme::ALL.chunks(cols) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = GAP;
+            for &th in row {
+                let (rect, resp) =
+                    ui.allocate_exact_size(vec2(w, PREVIEW_H + LABEL_H), Sense::click());
+                let resp = resp
+                    .on_hover_text(t(th.description()))
+                    .on_hover_cursor(egui::CursorIcon::PointingHand);
+                let pal = th.palette();
+                let p = ui.painter();
+                let prev = egui::Rect::from_min_size(rect.min, vec2(w, PREVIEW_H));
+                let r = theme::R_S as f32;
+                // window: background, side panel, card with accent bar, text lines
+                p.rect_filled(prev, r, pal.bg);
+                let side = egui::Rect::from_min_size(
+                    prev.min + vec2(4.0, 4.0),
+                    vec2(w * 0.24, PREVIEW_H - 8.0),
+                );
+                p.rect_filled(side, 2.0, pal.surface);
+                p.rect_filled(
+                    egui::Rect::from_min_size(
+                        side.min + vec2(3.0, 5.0),
+                        vec2(side.width() - 6.0, 4.0),
+                    ),
+                    1.0,
+                    pal.accent,
+                );
+                for i in 1..4 {
+                    p.rect_filled(
+                        egui::Rect::from_min_size(
+                            side.min + vec2(3.0, 5.0 + i as f32 * 8.0),
+                            vec2(side.width() * 0.7, 3.0),
+                        ),
+                        1.0,
+                        pal.text_faint,
+                    );
+                }
+                let card = egui::Rect::from_min_max(
+                    pos2(side.right() + 4.0, prev.top() + 4.0),
+                    pos2(prev.right() - 4.0, prev.top() + PREVIEW_H * 0.55),
+                );
+                p.rect_filled(card, 2.0, pal.raised);
+                p.rect_filled(
+                    egui::Rect::from_min_size(card.min, vec2(3.0, card.height())),
+                    1.0,
+                    pal.accent,
+                );
+                p.rect_filled(
+                    egui::Rect::from_min_size(
+                        card.min + vec2(8.0, 5.0),
+                        vec2(card.width() * 0.5, 4.0),
+                    ),
+                    1.0,
+                    pal.text,
+                );
+                p.rect_filled(
+                    egui::Rect::from_min_size(
+                        card.min + vec2(8.0, 13.0),
+                        vec2(card.width() * 0.32, 3.0),
+                    ),
+                    1.0,
+                    pal.text_dim,
+                );
+                let canvas = egui::Rect::from_min_max(
+                    pos2(card.left(), card.bottom() + 4.0),
+                    pos2(card.right(), prev.bottom() - 4.0),
+                );
+                p.rect_filled(canvas, 2.0, pal.canvas);
+                p.rect_stroke(
+                    canvas,
+                    2.0,
+                    Stroke::new(1.0, pal.border),
+                    egui::StrokeKind::Inside,
+                );
+                let selected = th == current;
+                let stroke = if selected {
+                    Stroke::new(2.0, theme::accent())
+                } else if resp.hovered() {
+                    Stroke::new(1.0, theme::text_dim())
+                } else {
+                    Stroke::new(1.0, theme::border())
+                };
+                p.rect_stroke(prev, r, stroke, egui::StrokeKind::Outside);
+                p.text(
+                    pos2(rect.center().x, prev.bottom() + LABEL_H * 0.55),
+                    Align2::CENTER_CENTER,
+                    t(th.label()),
+                    theme::body(),
+                    if selected {
+                        theme::text()
+                    } else {
+                        theme::text_dim()
+                    },
+                );
+                if resp.clicked() && !selected {
+                    picked = Some(th);
+                }
+            }
+        });
+        ui.add_space(GAP);
+    }
+    picked
 }

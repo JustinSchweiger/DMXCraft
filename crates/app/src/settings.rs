@@ -17,8 +17,12 @@ pub struct Settings {
     pub instance_name: String,
     /// Open directly in touch mode at startup.
     pub start_touch: bool,
-    /// Color scheme (“navy” or “gray”).
+    /// Color scheme (key of `theme::Theme`, e.g. “navy” for Midnight).
     pub theme: String,
+    /// Own accent color instead of the theme's (None = theme default).
+    pub accent_color: Option<[u8; 3]>,
+    /// Own background of the work areas (None = theme default).
+    pub canvas_color: Option<[u8; 3]>,
     /// Check for updates at startup.
     pub check_updates: bool,
     /// Last used show file.
@@ -72,6 +76,8 @@ impl Default for Settings {
             instance_name: default_instance_name(),
             start_touch: false,
             theme: "navy".into(),
+            accent_color: None,
+            canvas_color: None,
             check_updates: true,
             last_show: None,
             recent: Vec::new(),
@@ -197,6 +203,16 @@ impl Settings {
 
 fn yes() -> bool {
     true
+}
+
+impl Settings {
+    /// Own colors on top of the theme.
+    pub fn theme_overrides(&self) -> crate::ui::theme::Overrides {
+        crate::ui::theme::Overrides {
+            accent: self.accent_color,
+            canvas: self.canvas_color,
+        }
+    }
 }
 
 #[cfg(test)]
