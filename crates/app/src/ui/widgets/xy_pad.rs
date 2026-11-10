@@ -1,4 +1,4 @@
-//! Zweiachsiges Feld für Pan/Tilt.
+//! Two-axis pad for pan/tilt.
 
 use eframe::egui::{self, pos2, Sense, Stroke, StrokeKind, Ui, Vec2};
 
@@ -11,7 +11,7 @@ pub struct XyPad {
 }
 
 impl XyPad {
-    /// Gibt die neuen Werte zurück, wenn der Benutzer sie geändert hat.
+    /// Returns the new values if the user changed them.
     pub fn show(self, ui: &mut Ui) -> Option<(u8, u8)> {
         let (rect, resp) = ui.allocate_exact_size(Vec2::splat(self.size), Sense::click_and_drag());
         let p = ui.painter();

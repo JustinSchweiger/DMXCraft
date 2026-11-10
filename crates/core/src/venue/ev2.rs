@@ -1,30 +1,30 @@
-//! Import aus Easy View 2 (als XML entschlüsselte `.ev2`-Datei).
+//! Import from Easy View 2 (`.ev2` file decrypted to XML).
 //!
-//! Übernommen werden nur die eigenen Daten des Benutzers: Raumgröße,
-//! Umgebung, Bauten (Quader und Flächen mit Farbe), Traversen und die Lage
-//! der Geräte samt Adresse. Easy-View-Modelle, Texturen und die
-//! eingebettete Daslight-Gerätebibliothek werden bewusst nicht übernommen –
-//! Traversen und Lautsprecher werden mit eigenen Formen nachgebildet.
+//! Only the user's own data is taken over: room size, environment,
+//! structures (boxes and planes with color), trusses and the placement of
+//! the fixtures including address. Easy View models, textures and the
+//! embedded Daslight fixture library are deliberately not taken over –
+//! trusses and speakers are recreated with own shapes.
 //!
-//! Easy View rechnet in Zentimetern mit y nach oben, linkshändig (DirectX);
-//! Drehungen in Grad (X, dann Y, dann Z). DMXCraft ist rechtshändig, daher
-//! wird an der x-Achse gespiegelt.
+//! Easy View works in centimeters with y up, left-handed (DirectX);
+//! rotations in degrees (X, then Y, then Z). DMXCraft is right-handed, so
+//! the x axis is mirrored.
 
 use super::{Material, Object, Placement, Shape, Transform, TrussProfile, Venue};
 
-/// Grundmaße des Easy-View-Quaders „rect 75x100x200“ in cm (x, y, z).
+/// Base dimensions of the Easy View box “rect 75x100x200” in cm (x, y, z).
 const RECT_SIZE: [f32; 3] = [200.0, 75.0, 100.0];
-/// Länge der Traversenteile aus dem Dateinamen („s3000“ = 3,0 m).
+/// Length of the truss parts from the file name (“s3000” = 3.0 m).
 const DEFAULT_TRUSS_LEN: f32 = 2.0;
 
-/// Ein Gerät aus der Easy-View-Datei.
+/// A fixture from the Easy View file.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ev2Fixture {
     pub name: String,
-    /// Bibliotheksname in Easy View, z. B. „Stairville/PAR 56 7CH.ssl2“
-    /// (nur als Hinweis für die Zuordnung).
+    /// Library name in Easy View, e.g. “Stairville/PAR 56 7CH.ssl2” (only as a
+    /// hint for matching).
     pub library_name: String,
-    /// 0-basiert.
+    /// 0-based.
     pub universe: u8,
     pub address: u16,
     pub placement: Placement,
@@ -34,7 +34,7 @@ pub struct Ev2Fixture {
 pub struct Ev2Import {
     pub venue: Venue,
     pub fixtures: Vec<Ev2Fixture>,
-    /// Objekte, die nur angenähert wurden (z. B. unbekannte Modelle).
+    /// Objects that were only approximated (e.g. unknown models).
     pub approximated: Vec<String>,
 }
 
@@ -47,7 +47,7 @@ fn vec3(n: &roxmltree::Node, attr: &str, default: f32) -> [f32; 3] {
     [0, 1, 2].map(|i| v.get(i).copied().unwrap_or(default))
 }
 
-/// ARGB als Dezimalzahl → RGB + Deckkraft.
+/// ARGB as a decimal number → RGB + opacity.
 fn argb(n: &roxmltree::Node) -> ([u8; 3], f32) {
     let v: u32 = n
         .attribute("COLOR")
@@ -55,7 +55,7 @@ fn argb(n: &roxmltree::Node) -> ([u8; 3], f32) {
         .map_or(0xffa0_a0a0, |c| c as u32);
     let [a, r, g, b] = v.to_be_bytes();
     let _ = a;
-    // TRANSPARENCY ist in Easy View die Deckkraft (1 = deckend)
+    // TRANSPARENCY in Easy View is the opacity (1 = opaque)
     let opacity = n
         .attribute("TRANSPARENCY")
         .and_then(|t| t.parse::<f32>().ok())
@@ -70,8 +70,8 @@ fn argb(n: &roxmltree::Node) -> ([u8; 3], f32) {
     )
 }
 
-/// Easy View rechnet linkshändig (DirectX): x wird gespiegelt. Eine
-/// Spiegelung an x lässt die Drehung um x gleich und kehrt die um y und z um.
+/// Easy View is left-handed (DirectX): x is mirrored. Mirroring at x keeps
+/// the rotation around x and reverses those around y and z.
 fn transform(n: &roxmltree::Node) -> Transform {
     let p = vec3(n, "POSITION", 0.0);
     let r = vec3(n, "ROTATION", 0.0);
@@ -82,12 +82,12 @@ fn transform(n: &roxmltree::Node) -> Transform {
     }
 }
 
-/// Liest eine als XML vorliegende Easy-View-2-Datei.
+/// Reads an Easy View 2 file available as XML.
 pub fn import(xml: &str) -> Result<Ev2Import, String> {
     let doc = roxmltree::Document::parse(xml).map_err(|e| format!("XML: {e}"))?;
     let root = doc.root_element();
     if root.tag_name().name() != "EV2FILE" {
-        return Err("Keine Easy-View-2-Datei (EV2FILE fehlt)".into());
+        return Err("Not an Easy View 2 file (EV2FILE missing)".into());
     }
     let cfg = root.children().find(|c| c.has_tag_name("CONFIGURATION"));
     let num = |a: &str, d: f32| {
@@ -127,8 +127,8 @@ pub fn import(xml: &str) -> Result<Ev2Import, String> {
     Ok(out)
 }
 
-/// Wandelt einen Knoten um; Geräte landen in `out.fixtures` (mit
-/// Weltkoordinaten, daher die Matrix der Elterngruppen).
+/// Converts a node; fixtures end up in `out.fixtures` (with world
+/// coordinates, hence the matrix of the parent groups).
 fn node(out: &mut Ev2Import, n: &roxmltree::Node, parent: [[f32; 4]; 4]) -> Option<Object> {
     let name = n.attribute("NAME").unwrap_or("").to_string();
     let hidden = n.attribute("VISIBLE") == Some("0");
@@ -142,7 +142,7 @@ fn node(out: &mut Ev2Import, n: &roxmltree::Node, parent: [[f32; 4]; 4]) -> Opti
                     children.push(o);
                 }
             }
-            // Gruppen, die nur Geräte enthielten, entfallen
+            // Groups that only contained fixtures are dropped
             if children.is_empty() {
                 return None;
             }
@@ -163,7 +163,7 @@ fn node(out: &mut Ev2Import, n: &roxmltree::Node, parent: [[f32; 4]; 4]) -> Opti
                 address: num("ADDRESS").unwrap_or(1).clamp(1, 512) as u16,
                 placement: Placement {
                     position: [world[3][0], world[3][1], world[3][2]],
-                    // Gruppen sind in Easy View nicht gedreht; die eigene Drehung reicht
+                    // Groups are not rotated in Easy View; the own rotation is enough
                     rotation: t.rotation,
                 },
             });
@@ -195,7 +195,7 @@ fn node(out: &mut Ev2Import, n: &roxmltree::Node, parent: [[f32; 4]; 4]) -> Opti
                     size: RECT_SIZE.map(|v| v / 100.0),
                 }
             } else if file.contains("truss") {
-                // Länge aus „…-s3000.x“ (mm); Traversen liegen in Easy View entlang y
+                // Length from “…-s3000.x” (mm); trusses lie along y in Easy View
                 let len = file
                     .rsplit("-s")
                     .next()
@@ -207,7 +207,7 @@ fn node(out: &mut Ev2Import, n: &roxmltree::Node, parent: [[f32; 4]; 4]) -> Opti
                     } else {
                         TrussProfile::Triangle
                     };
-                // eigene Traverse liegt entlang x: um z drehen, damit sie wie in Easy View steht
+                // our truss lies along x: rotate around z so it stands as in Easy View
                 let inner = Object {
                     id: out.venue.new_id(),
                     name: name.clone(),
@@ -236,7 +236,7 @@ fn node(out: &mut Ev2Import, n: &roxmltree::Node, parent: [[f32; 4]; 4]) -> Opti
                 g.hidden = hidden;
                 return Some(g);
             } else {
-                // unbekanntes Modell (z. B. Lautsprecher): als dunkler Kasten
+                // unknown model (e.g. speaker): as a dark box
                 out.approximated.push(name.clone());
                 t.scale = t.scale.map(|s| s.abs());
                 let mut o = out.venue.object(
@@ -290,21 +290,22 @@ mod tests {
         let r = import(SAMPLE).unwrap();
         assert_eq!(r.venue.size, [13.54, 5.47, 19.58]);
         assert!((r.venue.environment.fog - 0.18).abs() < 1e-6);
-        // Bühne/Bau, Traversen (Fixtures-Gruppe ohne Bauten entfällt)
+        // Stage/structure, trusses (a fixtures group without structures is
+        // dropped)
         assert_eq!(r.venue.objects.len(), 2);
         let scene = &r.venue.objects[0];
         assert!(matches!(scene.children[0].shape, Shape::Plane { .. }));
         let rect = &scene.children[1].children[0];
         assert!(matches!(rect.shape, Shape::Box { size } if size == [2.0, 0.75, 1.0]));
         assert_eq!(rect.material.color, [0, 0, 0]);
-        // Gerät in Weltkoordinaten (Gruppe um 1 m angehoben)
+        // Fixture in world coordinates (group raised by 1 m)
         let f = &r.fixtures[0];
         assert_eq!((f.universe, f.address), (1, 230));
         assert!((f.placement.position[1] - 5.0).abs() < 1e-4);
-        // gespiegelt: x umgekehrt, Drehung um x bleibt
+        // mirrored: x reversed, the rotation around x stays
         assert!((f.placement.position[0] + 0.5).abs() < 1e-4);
         assert_eq!(f.placement.rotation, [10.0, -0.0, -0.0]);
-        // Traverse mit Länge aus dem Dateinamen, Lautsprecher angenähert
+        // Truss with the length from the file name, speaker approximated
         let truss = &r.venue.objects[1].children[0].children[0];
         assert!(matches!(truss.shape, Shape::Truss { length, .. } if (length - 3.0).abs() < 1e-6));
         assert_eq!(r.approximated, vec!["Cluster.x".to_string()]);

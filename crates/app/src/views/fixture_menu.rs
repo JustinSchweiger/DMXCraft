@@ -1,6 +1,6 @@
-//! Rechtsklick-Menü für Geräte – gemeinsam für Bühne (STEUERN),
-//! Bühnenplan-Editor und DMX-Patch. Das Menü liest die Show nur und liefert
-//! eine [`FixtureAction`], die anschließend mit [`apply`] ausgeführt wird.
+//! Right-click menu for fixtures – shared by the stage (CONTROL), the stage
+//! plan editor and the DMX patch. The menu only reads the show and returns a
+//! [`FixtureAction`] that is then executed with [`apply`].
 
 use crate::i18n::t;
 use std::collections::BTreeSet;
@@ -14,7 +14,7 @@ use crate::ui::widgets::stage_canvas::fixture_pos;
 use crate::ui::widgets::stage_canvas::paint_shape_icon;
 use crate::ui::widgets::Icon;
 
-/// Größenstufen für Menüs und Werkzeugleiste.
+/// Size steps for menus and toolbar.
 pub const SIZES: [(&str, f32); 5] = [
     ("Small", 0.7),
     ("Normal", 1.0),
@@ -23,7 +23,7 @@ pub const SIZES: [(&str, f32); 5] = [
     ("Huge", 3.2),
 ];
 
-/// Wo das Menü geöffnet wurde (bestimmt die angebotenen Einträge).
+/// Where the menu was opened (determines the offered entries).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum MenuPlace {
     Stage,
@@ -45,12 +45,12 @@ pub enum FixtureAction {
     MirrorH,
     MirrorV,
     ResetPosition,
-    /// `None` = automatisch nach Gerätetyp.
+    /// `None` = automatic by fixture type.
     SetShape(Option<PlanShape>),
     SetSize(f32),
-    /// Drehung setzen (Grad).
+    /// Set the rotation (degrees).
     SetRotation(f32),
-    /// Um einen Winkel weiterdrehen (Grad).
+    /// Rotate further by an angle (degrees).
     RotateBy(f32),
     NextFreeAddress,
     ShowInSetup,
@@ -62,7 +62,7 @@ pub enum FixtureAction {
     Delete,
 }
 
-/// Zeichnet die Menüeinträge. `target` ist das Gerät unter der Maus.
+/// Draws the menu entries. `target` is the fixture under the mouse.
 pub fn menu(
     ui: &mut egui::Ui,
     show: &Show,
@@ -91,7 +91,7 @@ pub fn menu(
         menu::title(ui, &title);
     }
 
-    // Gruppen
+    // Groups
     menu::sub(
         ui,
         MenuItem::new(t("Add to group"))
@@ -130,7 +130,7 @@ pub fn menu(
     );
     menu::separator(ui);
 
-    // Auswahl
+    // Selection
     act(
         ui,
         MenuItem::new(t("Select same fixture type")).enabled(some),
@@ -148,7 +148,7 @@ pub fn menu(
         FixtureAction::InvertOrder,
     );
 
-    // Darstellung
+    // Display
     if place != MenuPlace::Patch {
         menu::separator(ui);
         let current_shape = (n == 1)
@@ -213,7 +213,7 @@ pub fn menu(
         );
     }
 
-    // Anordnung
+    // Arrangement
     if place == MenuPlace::StageEditor {
         menu::separator(ui);
         act(
@@ -330,7 +330,7 @@ pub fn menu(
     out
 }
 
-/// Führt eine Menüaktion aus.
+/// Executes a menu action.
 pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
     let ids: Vec<FixtureId> = e
         .show()
@@ -383,7 +383,7 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
         FixtureAction::SelectAll => st.selected = e.show().fixtures.iter().map(|f| f.id).collect(),
         FixtureAction::SelectNone => st.selected.clear(),
         FixtureAction::InvertOrder => {
-            // Reihenfolge im Patch umkehren (bestimmt Lauflicht-/Effektreihenfolge).
+            // Reverse the order in the patch (determines chaser/effect order).
             let show = e.show_mut();
             let slots: Vec<usize> = show
                 .fixtures
@@ -481,7 +481,8 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
                 else {
                     continue;
                 };
-                // vorübergehend aus dem Patch nehmen, damit die eigene Lage nicht stört
+                // temporarily take it out of the patch so its own position does not get
+                // in the way
                 let free = {
                     let mut tmp = e.show().clone();
                     tmp.fixtures.retain(|f| f.id != id);
@@ -527,7 +528,7 @@ pub fn apply(e: &mut Engine, st: &mut AppState, action: FixtureAction) {
             let Some(first) = src.first() else {
                 return;
             };
-            // Einfügen ab der angeklickten Zelle, sonst hinter dem Original
+            // Paste starting at the clicked cell, otherwise after the original
             let (u, a) = match (action == FixtureAction::Paste, st.patch_cursor) {
                 (true, Some(c)) => c,
                 _ => (first.universe, first.address),

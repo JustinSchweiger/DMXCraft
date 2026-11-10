@@ -1,10 +1,10 @@
-//! Szenenkarte für das Szenen-Raster.
+//! Scene card for the scene grid.
 //!
-//! Aufbau: links der Hauptbereich (Name in der Szenenfarbe, darunter der Typ
-//! in Großbuchstaben), rechts ein schmaler Streifen. Ein Klick auf den
-//! Hauptbereich startet/stoppt die Szene, ein Klick auf den Streifen
-//! wählt sie aus (der Streifen leuchtet dann in der Szenenfarbe). Am Streifen
-//! lässt sich die Szene auch in eine andere Bank ziehen.
+//! Layout: on the left the main area (name in the scene color, below it the
+//! type in upper case), on the right a narrow strip. A click on the main
+//! area starts/stops the scene, a click on the strip selects it (the strip
+//! then lights up in the scene color). The strip also lets you drag the
+//! scene into another bank.
 
 use eframe::egui::{
     self, pos2, Color32, CornerRadius, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2,
@@ -13,11 +13,11 @@ use eframe::egui::{
 use crate::ui::theme;
 use crate::ui::widgets::Icon;
 
-/// Höhe einer Karte.
+/// Height of a card.
 pub const CARD_H: f32 = 54.0;
-/// Höhe einer Karte in der Kompaktansicht (nur Name).
+/// Height of a card in the compact view (name only).
 pub const COMPACT_H: f32 = 32.0;
-/// Breite des Markier-Streifens rechts.
+/// Width of the selection strip on the right.
 const STRIP_W: f32 = 22.0;
 
 pub struct SceneCard<'a> {
@@ -26,37 +26,37 @@ pub struct SceneCard<'a> {
     pub color: Color32,
     pub active: bool,
     pub paused: bool,
-    /// Gesamtfortschritt 0..=1 (nur wenn aktiv).
+    /// Overall progress 0..=1 (only when active).
     pub progress: f32,
     pub width: f32,
-    /// Markiert (Streifen, Strg/Umschalt, „Alle Szenen auswählen“).
+    /// Selected (strip, Ctrl/Shift, “Select all scenes”).
     pub selected: bool,
-    /// Ablauf mit mehreren Schritten (Symbol rechts unten).
+    /// Sequence with several steps (icon bottom right).
     pub sequence: bool,
-    /// Ein-/Ausblenden läuft: Rampe in der Fortschrittsleiste.
+    /// Fade in/out running: ramp in the progress bar.
     pub fade: Option<dmxcraft_core::FadeState>,
-    /// Flash-Szene (kleiner Blitz auf der Karte).
+    /// Flash scene (small lightning bolt on the card).
     pub flash: bool,
-    /// SUPER SCENE: Notensymbol.
+    /// SUPER SCENE: note icon.
     pub super_scene: bool,
-    /// Kompaktansicht: niedrig, nur der Name (ohne Typ).
+    /// Compact view: low, name only (without type).
     pub compact: bool,
-    /// SUPER SCENE mit fehlender Audiodatei: rotes Ausrufezeichen.
+    /// SUPER SCENE with a missing audio file: red exclamation mark.
     pub missing: bool,
 }
 
-/// Antworten der beiden Bereiche einer Karte.
+/// Responses of the two areas of a card.
 pub struct SceneCardResponse {
-    /// Hauptbereich: starten/stoppen.
+    /// Main area: start/stop.
     pub play: Response,
-    /// Streifen: markieren.
+    /// Strip: select.
     pub select: Response,
-    /// Rechteck des Hauptbereichs (z. B. für das Umbenennen-Feld).
+    /// Rectangle of the main area (e.g. for the rename field).
     pub main_rect: Rect,
 }
 
 impl SceneCardResponse {
-    /// Beide Bereiche zusammen (für das Kontextmenü).
+    /// Both areas together (for the context menu).
     pub fn whole(&self) -> Response {
         self.play.clone() | self.select.clone()
     }
@@ -89,7 +89,7 @@ impl SceneCard<'_> {
             },
             fill,
         );
-        // Streifen: markiert = Szenenfarbe, sonst Grau
+        // Strip: selected = scene color, otherwise gray
         let strip_fill = if self.selected {
             self.color
         } else if select.hovered() || select.dragged() {
@@ -110,7 +110,7 @@ impl SceneCard<'_> {
         let outline = if self.active {
             Stroke::new(1.5, self.color)
         } else if play.hovered() || select.hovered() {
-            // Hover nur am Rand – die Fläche bleibt (Streifen daneben ist grau)
+            // Hover only at the border – the area stays (strip next to it is gray)
             Stroke::new(1.5, self.color.gamma_multiply(0.75))
         } else {
             Stroke::new(1.0, theme::border())
@@ -118,7 +118,7 @@ impl SceneCard<'_> {
         p.rect_stroke(rect, r, outline, StrokeKind::Inside);
 
         let inner = main_rect.shrink2(Vec2::new(10.0, 8.0));
-        // rechts Platz für die Symbole (Zustand, Flash, Note)
+        // room on the right for the icons (state, flash, note)
         let icons = 1 + usize::from(self.flash) + usize::from(self.super_scene);
         let name_room = main_rect.width() - 12.0 - 18.0 * icons as f32;
         if self.compact {
@@ -149,7 +149,8 @@ impl SceneCard<'_> {
                 },
             );
         }
-        // Zustand rechts oben im Hauptbereich (kompakt: mittig): läuft / Pause / Ablauf
+        // State top right in the main area (compact: centered): playing / paused /
+        // sequence
         let icon_y = if self.compact {
             main_rect.center().y - 1.0
         } else {
@@ -174,13 +175,13 @@ impl SceneCard<'_> {
                 },
             );
         }
-        // Flash: kleiner Blitz links neben dem Zustandssymbol
+        // Flash: small lightning bolt left of the state icon
         if self.flash {
             let r =
                 Rect::from_center_size(pos2(main_rect.right() - 32.0, icon_y), Vec2::splat(13.0));
             Icon::Lightning.paint(p, r, if self.active { self.color } else { theme::WARN });
         }
-        // SUPER SCENE: Musiknote (enthält Audio und Szenen)
+        // SUPER SCENE: music note (contains audio and scenes)
         if self.super_scene {
             let x = if self.flash { 50.0 } else { 32.0 };
             let r = Rect::from_center_size(pos2(main_rect.right() - x, icon_y), Vec2::splat(13.0));
@@ -190,8 +191,8 @@ impl SceneCard<'_> {
                 Icon::Music.paint(p, r, self.color);
             }
         }
-        // Ein-/Ausblenden: Rampe in der Leiste (steigt beim Ein-, fällt beim
-        // Ausblenden), gefüllt bis zum aktuellen Stand
+        // Fade in/out: ramp in the bar (rising when fading in, falling when fading
+        // out), filled up to the current state
         if let Some(fade) = self.fade {
             let bar = Rect::from_min_max(
                 pos2(main_rect.left() + 8.0, main_rect.bottom() - 11.0),
@@ -199,8 +200,8 @@ impl SceneCard<'_> {
             );
             let (b, h) = (bar.bottom(), bar.height());
             let ramp = |x: f32| -> f32 {
-                // Höhe der Rampe an Stelle x (0..1)
-                // nie ganz flach, damit der Anfang sichtbar bleibt
+                // Height of the ramp at position x (0..1)
+                // never completely flat so the beginning stays visible
                 0.2 + 0.8
                     * match fade {
                         dmxcraft_core::FadeState::In(_) => x,
@@ -208,7 +209,7 @@ impl SceneCard<'_> {
                     }
             };
             let pt = |x: f32| pos2(bar.left() + bar.width() * x, b - h * ramp(x));
-            // Umriss der ganzen Rampe
+            // Outline of the whole ramp
             p.add(egui::Shape::convex_polygon(
                 vec![pos2(bar.left(), b), pt(0.0), pt(1.0), pos2(bar.right(), b)],
                 theme::bg(),
@@ -232,7 +233,7 @@ impl SceneCard<'_> {
                 ));
             }
         } else if self.active {
-            // Fortschritt unten im Hauptbereich
+            // Progress at the bottom of the main area
             let bar = Rect::from_min_max(
                 pos2(main_rect.left() + 8.0, main_rect.bottom() - 4.0),
                 pos2(main_rect.right() - 8.0, main_rect.bottom() - 2.0),

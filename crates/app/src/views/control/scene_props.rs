@@ -1,9 +1,9 @@
-//! STEUERN → Seitenleiste rechts neben den Szenen: Einstellungen der
-//! ausgewählten Szene.
+//! CONTROL → sidebar to the right of the scenes: settings of the selected
+//! scene.
 //!
-//! Ganz rechts eine schmale Leiste mit Reiter-Symbolen, links daneben der
-//! Inhalt. Oben steht in jedem Reiter Name und Farbe der Szene mit dem
-//! Play/Pause-Knopf.
+//! On the far right a narrow bar with tab icons, the content to its left.
+//! Every tab shows the scene's name and color at the top with the
+//! play/pause button.
 
 use crate::i18n::t;
 use std::path::PathBuf;
@@ -18,7 +18,7 @@ use crate::ui::widgets::time_field::time_field;
 use crate::ui::widgets::{Dialog, Icon, IconButton, Toggle};
 use crate::views::{View, ViewCtx};
 
-/// Breite der Reiterleiste.
+/// Width of the tab bar.
 const TABS_W: f32 = 40.0;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -32,29 +32,28 @@ enum Tab {
 #[derive(Default)]
 pub struct ScenePropsView {
     tab: Tab,
-    /// Ausgewählter Effekt (Szene, Effekt-ID).
+    /// Selected effect (scene, effect ID).
     selected_fx: Option<(SceneId, u32)>,
-    /// Kachelauswahl zum Hinzufügen eines Effekts offen.
+    /// Tile selection for adding an effect open.
     adding: bool,
-    /// Zuletzt wurde ein Schritt (nicht der Effekt) angeklickt: Löschen
-    /// entfernt dann den Schritt.
+    /// A step (not the effect) was clicked last: delete then removes the step.
     step_focus: bool,
-    /// Laufender Import/Export-Dialog.
+    /// Running import/export dialog.
     fx_dialog: Option<FxDialog>,
-    /// Eigene Farbpaletten (COLOR FX).
+    /// Custom color palettes (COLOR FX).
     palettes: super::fx_color::PaletteStore,
-    /// Auswahlfenster für Szenen/Bänke.
+    /// Selection window for scenes/banks.
     picker: Option<Picker>,
 }
 
-/// Import/Export von Effekten über den Systemdialog (eigener Thread).
+/// Import/export of effects via the system dialog (own thread).
 struct FxDialog {
     export: bool,
     scene: SceneId,
     rx: Receiver<Option<PathBuf>>,
 }
 
-/// Dateiendung exportierter Effekte (Inhalt JSON).
+/// File extension of exported effects (content JSON).
 const FX_EXT: &str = "dmxfx";
 
 impl View for ScenePropsView {
@@ -64,7 +63,7 @@ impl View for ScenePropsView {
         let body = Rect::from_min_max(full.min, pos2(tabs.left() - theme::SP_S, full.bottom()));
         ui.allocate_rect(full, Sense::hover());
 
-        // Reiterleiste
+        // Tab bar
         let p = ui.painter();
         p.line_segment(
             [tabs.left_top(), tabs.left_bottom()],
@@ -75,7 +74,7 @@ impl View for ScenePropsView {
                 .max_rect(tabs.shrink2(Vec2::new(3.0, 0.0)))
                 .layout(egui::Layout::top_down(egui::Align::Center)),
         );
-        // mehrere Szenen: Eigenschaften gelten für alle, Effekte nur einzeln
+        // several scenes: properties apply to all, effects only one at a time
         let multi = cx.state.selected_scenes.len() > 1;
         if multi && self.tab == Tab::Effects {
             self.tab = Tab::Properties;
@@ -121,7 +120,7 @@ impl View for ScenePropsView {
         }
         ui.add_space(theme::SP_S);
         let locked = cx.state.locked;
-        // Bearbeitet wird die erste Szene; geänderte Felder gehen danach an alle
+        // The first scene is edited; changed fields then go to all of them
         let before = SceneEdit::of(cx.engine, id);
         picker_window(ui.ctx(), cx.engine, &mut self.picker);
         self.poll_dialog(cx);
@@ -145,7 +144,7 @@ impl View for ScenePropsView {
     }
 }
 
-/// Markierte Szenen, die es noch gibt (sortiert nach ID).
+/// Selected scenes that still exist (sorted by ID).
 fn selected_scenes(cx: &ViewCtx<'_>) -> Vec<SceneId> {
     cx.state
         .selected_scenes
@@ -155,7 +154,7 @@ fn selected_scenes(cx: &ViewCtx<'_>) -> Vec<SceneId> {
         .collect()
 }
 
-/// Was die Reiter „Eigenschaften“ und „Erweitert“ an einer Szene ändern.
+/// What the “Properties” and “Advanced” tabs change on a scene.
 #[derive(Clone, PartialEq)]
 struct SceneEdit {
     settings: serde_json::Value,
@@ -174,7 +173,7 @@ impl SceneEdit {
     }
 }
 
-/// Nur die an der ersten Szene geänderten Felder auf die übrigen übertragen.
+/// Transfer only the fields changed on the first scene to the others.
 fn apply_to_others(e: &mut Engine, before: &SceneEdit, after: &SceneEdit, others: &[SceneId]) {
     let changed: Vec<(&String, &serde_json::Value)> = match (&before.settings, &after.settings) {
         (serde_json::Value::Object(b), serde_json::Value::Object(a)) => {
@@ -205,7 +204,7 @@ fn apply_to_others(e: &mut Engine, before: &SceneEdit, after: &SceneEdit, others
     }
 }
 
-/// Kopf bei Mehrfachauswahl: Anzahl in der Farbe der ersten Szene.
+/// Header for a multi-selection: count in the color of the first scene.
 fn multi_header(ui: &mut egui::Ui, e: &Engine, first: SceneId, n: usize) {
     let color = e.show().scene(first).map_or_else(theme::accent, |s| {
         s.color
@@ -223,7 +222,7 @@ fn multi_header(ui: &mut egui::Ui, e: &Engine, first: SceneId, n: usize) {
     ui.painter().rect_filled(line, 0.0, theme::border());
 }
 
-/// Name und Farbe der Szene, Play/Pause rechts, darunter eine Trennlinie.
+/// Name and color of the scene, play/pause on the right, a divider below.
 fn header(ui: &mut egui::Ui, e: &mut Engine, id: SceneId) {
     let Some(scene) = e.show().scene(id) else {
         return;
@@ -281,7 +280,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     let duration_before = duration;
     let on = !locked;
 
-    // Regler in der Szenenfarbe
+    // Slider in the scene color
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         let mut dim = f32::from(st.dimmer) / 255.0;
@@ -294,7 +293,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         {
             st.dimmer = (dim * 255.0).round() as u8;
         }
-        // Speed logarithmisch: 10 % … 100 % (Mitte) … 1000 %
+        // Speed logarithmic: 10 % … 100 % (center) … 1000 %
         let mut sp = ((f32::from(st.speed_pct) / 10.0).log10() / 2.0).clamp(0.0, 1.0);
         if Knob::new(&mut sp, "Speed", format!("{} %", st.speed_pct))
             .map("scene/knob/speed", t("Scene"))
@@ -328,7 +327,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     });
     ui.add_space(theme::SP_S);
 
-    // Zeitleiste: Anfang/Ende, Richtung, Position mit verstrichener/Gesamtzeit
+    // Timeline: start/end, direction, position with elapsed/total time
     let pos = e.scene_position(id);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
@@ -379,7 +378,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     });
     let total = u64::from(duration);
     let elapsed = (f64::from(pos.unwrap_or(0.0)) * total as f64) as u64;
-    // links die verstrichene Zeit (Szenenfarbe), rechts die Gesamtdauer
+    // elapsed time on the left (scene color), total duration on the right
     let hours = total >= 3_600_000;
     ui.horizontal(|ui| {
         ui.label(
@@ -401,7 +400,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     }
     ui.add_space(theme::SP_S);
 
-    // Felder rechtsbündig, Bezeichnung links
+    // Fields right-aligned, label on the left
     let row = |ui: &mut egui::Ui, label: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
         ui.horizontal(|ui| {
             ui.set_min_height(32.0);
@@ -421,7 +420,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         time_field(ui, "fade_out", &mut st.fade_out_ms, on, false, color);
     });
     row(ui, t("Fade speed"), &mut |ui| {
-        // 0.1 … 4.0 in Zehnteln, Standard 1.0
+        // 0.1 … 4.0 in tenths, default 1.0
         ui.set_max_width(150.0);
         let mut v = f32::from(st.fade_speed.clamp(1, 40) - 1) / 39.0;
         let text = format!("{:.1}", f32::from(st.fade_speed) / 10.0);
@@ -435,7 +434,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     row(ui, t("Phase out"), &mut |ui| {
         time_field(ui, "phase_out", &mut st.phase_out_ms, on, false, color);
     });
-    // SUPER SCENE: eigene Dauer für „Ton ausfaden“ (0 = Programmeinstellung)
+    // SUPER SCENE: own duration for “Fade out sound” (0 = program setting)
     if super_scene {
         ui.horizontal(|ui| {
             ui.set_min_height(32.0);
@@ -456,7 +455,7 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
         });
     }
 
-    // Änderungen übernehmen (nur wenn sich etwas geändert hat → kein „*“)
+    // Apply changes (only if something changed → no “*”)
     if let Some(scene) = e.show().scene(id) {
         let changed = scene.settings != st || duration != duration_before;
         if changed {
@@ -470,12 +469,12 @@ fn properties(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, locked: bool) {
     }
 }
 
-/// Zeit als Text wie im Zeitfeld.
+/// Time as text like in the time field.
 fn time_text(ms: u64, hours: bool) -> String {
     crate::ui::widgets::time_field::format(ms, hours)
 }
 
-/// Waagerechter Balkenregler 0..=1, optional mit Text in der Mitte.
+/// Horizontal bar slider 0..=1, optionally with text in the middle.
 fn bar_slider(
     ui: &mut egui::Ui,
     id: &str,
@@ -530,8 +529,8 @@ fn bar_slider(
 }
 
 impl ScenePropsView {
-    /// Reiter „Effekte“: bei STATIC-Szenen die Kacheln zur Auswahl, bei
-    /// FX-Szenen die Liste der Effekte und unten die Werkzeugleiste.
+    /// “Effects” tab: for STATIC scenes the tiles to choose from, for FX scenes
+    /// the list of effects and the toolbar at the bottom.
     fn effects_tab(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, id: SceneId, locked: bool) {
         let Some(scene) = cx.engine.show().scene(id) else {
             return;
@@ -539,7 +538,7 @@ impl ScenePropsView {
         let effects = scene.effects.clone();
         if effects.is_empty() || self.adding {
             let mut pick = None;
-            // STATIC-Szene: unten Import/Export wie bei FX-Szenen
+            // STATIC scene: import/export at the bottom as for FX scenes
             const BAR_H: f32 = 40.0;
             let with_bar = effects.is_empty();
             let area = ui.available_rect_before_wrap();
@@ -617,8 +616,8 @@ impl ScenePropsView {
                         scene.sync_timeline_length();
                     }
                     if !kind.exclusive() {
-                        // wirkt auf die ausgewählten Geräte (sonst die der Szene)
-                        // Reihenfolge der Auswahl = Beam-Reihenfolge
+                        // acts on the selected fixtures (otherwise those of the scene)
+                        // order of the selection = beam order
                         let mut ids: Vec<dmxcraft_core::FixtureId> =
                             cx.state.selection_order.clone();
                         if ids.is_empty() {
@@ -645,7 +644,7 @@ impl ScenePropsView {
             return;
         }
 
-        // Liste der Effekte, darunter die Werkzeugleiste
+        // List of effects, the toolbar below
         const BAR_H: f32 = 40.0;
         let area = ui.available_rect_before_wrap();
         let bar_rect = Rect::from_min_max(pos2(area.left(), area.bottom() - BAR_H), area.max);
@@ -664,7 +663,7 @@ impl ScenePropsView {
             .filter(|p| !p.finished)
             .map(|p| p.step);
         let mut edit_step = cx.state.edit_step;
-        // Vorschau je COLOR FX: aktuelle Farbe jedes Beams
+        // Preview per COLOR FX: current color of every beam
         let cycles = cx.engine.fx_cycles(id);
         let previews: std::collections::HashMap<u32, FxPreview> = effects
             .iter()
@@ -676,7 +675,7 @@ impl ScenePropsView {
         }
         let mut color_changes: Vec<dmxcraft_core::Effect> = Vec::new();
         let palettes = &mut self.palettes;
-        // SUPER SCENE: gewählter Block und sein Name
+        // SUPER SCENE: selected block and its name
         let block = (cx.state.timeline_sel.len() == 1)
             .then(|| cx.state.timeline_sel.iter().next().copied())
             .flatten()
@@ -699,7 +698,7 @@ impl ScenePropsView {
                 };
                 Some((cid, name, tl.beat_ms()))
             });
-        // Audio-Block: Trigger-Anzeige
+        // Audio block: trigger display
         let trig_cx = block.as_ref().and_then(|(cid, _, _)| {
             super::audio_trigger_ui::trigger_cx(cx.engine, cx.state, ui.ctx(), id, *cid)
         });
@@ -844,7 +843,7 @@ impl ScenePropsView {
             }
         }
         if step_clicked {
-            // ein Schritt gehört zum STEPS-Effekt: diesen mit auswählen
+            // a step belongs to the STEPS effect: select it too
             if let Some(fx) = effects.iter().find(|e| e.kind == EffectKind::Steps) {
                 select = Some(fx.id);
             }
@@ -853,7 +852,7 @@ impl ScenePropsView {
             self.selected_fx = Some((id, f));
             self.step_focus = step_clicked;
             cx.state.focus = crate::state::Focus::Effect(id, f);
-            // Effekt anklicken wählt seine Geräte (FX-Knopf der Bühne)
+            // Clicking an effect selects its fixtures (FX button of the stage)
             if let Some(fx) = effects
                 .iter()
                 .find(|e| e.id == f && e.kind != EffectKind::Steps)
@@ -864,7 +863,7 @@ impl ScenePropsView {
                 cx.state.fx_target = None;
             }
         }
-        // Entf löscht den angeklickten Effekt (nicht die Szene)
+        // Delete removes the clicked effect (not the scene)
         let typing = ui.ctx().memory(|m| m.focused().is_some());
         let mut delete = false;
         if let (false, false, crate::state::Focus::Effect(s, f)) = (typing, locked, cx.state.focus)
@@ -886,7 +885,7 @@ impl ScenePropsView {
                 fx.collapsed = !fx.collapsed;
             }
         }
-        // Kontextmenü „Effekt löschen“
+        // Context menu “Delete effect”
         if let (Some(f), false) = (menu_delete, locked) {
             if let Some(scene) = cx.engine.show_mut().scene_mut(id) {
                 self.selected_fx = remove_effect(scene, f, cx.state).map(|e| (id, e));
@@ -895,7 +894,7 @@ impl ScenePropsView {
             return;
         }
 
-        // Werkzeugleiste: feste Leiste am unteren Rand, Knöpfe mittig
+        // Toolbar: fixed bar at the bottom edge, buttons centered
         ui.painter().line_segment(
             [bar_rect.left_top(), bar_rect.right_top()],
             Stroke::new(1.0, theme::border()),
@@ -942,8 +941,8 @@ impl ScenePropsView {
                 {
                     self.start_dialog(ui.ctx(), id, false);
                 }
-                // Schrittszene: Löschen betrifft den gewählten Schritt, solange
-                // mehr als einer da ist und zuletzt ein Schritt angeklickt wurde
+                // Step scene: delete affects the selected step as long as there is more
+                // than one and a step was clicked last
                 let delete_step = has_steps && self.step_focus && steps.len() > 1;
                 let clicked_delete = ui
                     .add(
@@ -997,7 +996,7 @@ impl ScenePropsView {
                             tl.add_track(None);
                         }
                     } else if has_steps {
-                        // neuer Schritt nach dem bearbeiteten (Kopie seiner Werte)
+                        // new step after the edited one (copy of its values)
                         if let Some(scene) = cx.engine.show_mut().scene_mut(id) {
                             cx.state.edit_step = scene.insert_step(cx.state.edit_step);
                             cx.state.edit_reload = true;
@@ -1019,7 +1018,7 @@ impl ScenePropsView {
             let result = if export {
                 dialog
                     .set_title(t("Export effects"))
-                    .set_file_name(format!("Effekte.{FX_EXT}"))
+                    .set_file_name(format!("Effects.{FX_EXT}"))
                     .save_file()
                     .map(|p| p.with_extension(FX_EXT))
             } else {
@@ -1031,7 +1030,7 @@ impl ScenePropsView {
         self.fx_dialog = Some(FxDialog { export, scene, rx });
     }
 
-    /// Ergebnis eines Import/Export-Dialogs verarbeiten.
+    /// Process the result of an import/export dialog.
     fn poll_dialog(&mut self, cx: &mut ViewCtx<'_>) {
         let Some(d) = &self.fx_dialog else {
             return;
@@ -1045,7 +1044,7 @@ impl ScenePropsView {
             return;
         };
         if export {
-            // ausgewählter Effekt, sonst alle Effekte der Szene
+            // selected effect, otherwise all effects of the scene
             let Some(s) = cx.engine.show().scene(scene) else {
                 return;
             };
@@ -1057,7 +1056,7 @@ impl ScenePropsView {
                 Some(f) => s.effects.iter().filter(|e| e.id == f).cloned().collect(),
                 None => s.effects.clone(),
             };
-            // STEPS nimmt die Schritte (Werte und Zeiten) mit
+            // STEPS takes the steps (values and times) along
             let steps = if effects.is_empty() || effects.iter().any(|e| e.kind == EffectKind::Steps)
             {
                 s.steps.clone()
@@ -1095,8 +1094,8 @@ impl ScenePropsView {
     }
 }
 
-/// BLOCK-EIGENSCHAFTEN einer SUPER SCENE: Start, Dauer, Ein-/Ausblenden,
-/// Tempo und Schleife des gewählten Blocks. `true` bei Änderung.
+/// BLOCK PROPERTIES of a SUPER SCENE: start, duration, fade in/out, tempo
+/// and loop of the selected block. `true` on change.
 #[allow(clippy::too_many_arguments)]
 fn block_props(
     ui: &mut egui::Ui,
@@ -1146,7 +1145,7 @@ fn block_props(
         ui.add(crate::ui::widgets::Toggle::new(&mut c.looped, "").enabled(enabled));
     });
     if c.tempo_sync {
-        // Länge auf ganze Schläge runden
+        // Round the length to whole beats
         let beats = (c.duration_ms as f64 / beat).round().max(1.0);
         c.duration_ms = (beats * beat).round() as u64;
     }
@@ -1159,7 +1158,7 @@ fn block_props(
     *tl != before
 }
 
-/// Video- und OBS-Blöcke: Ziel in OBS wählen.
+/// Video and OBS blocks: choose the target in OBS.
 fn obs_props(
     ui: &mut egui::Ui,
     content: &mut dmxcraft_core::timeline::ClipContent,
@@ -1250,7 +1249,7 @@ fn obs_props(
     }
 }
 
-/// Namen aus der Liste von OBS wählen; ohne Verbindung als Text eingeben.
+/// Pick names from OBS's list; without a connection type them in.
 fn name_pick(
     ui: &mut egui::Ui,
     salt: &str,
@@ -1287,7 +1286,7 @@ fn name_pick(
     });
 }
 
-/// Rechteck eines neuen Mappings um seine Geräte legen.
+/// Put the rectangle of a new mapping around its fixtures.
 fn fit_mapping(show: &mut dmxcraft_core::Show, scene: SceneId, fx: u32) {
     let Some(e) = show
         .scene(scene)
@@ -1322,13 +1321,13 @@ fn fit_mapping(show: &mut dmxcraft_core::Show, scene: SceneId, fx: u32) {
     }
 }
 
-/// Vorschau eines Effekts für die Seitenleiste.
+/// Preview of an effect for the sidebar.
 struct FxPreview {
-    /// Farbe bzw. Pegel (grau) je Beam.
+    /// Color or level (gray) per beam.
     colors: Vec<[u8; 3]>,
-    /// MOVE FX: Pan/Tilt je Beam.
+    /// MOVE FX: pan/tilt per beam.
     positions: Vec<[f32; 2]>,
-    /// Kanaltypen der Effekt-Geräte.
+    /// Channel types of the effect fixtures.
     kinds: Vec<dmxcraft_core::ChannelKind>,
 }
 
@@ -1376,11 +1375,11 @@ impl FxPreview {
     }
 }
 
-/// Inhalt einer `.dmxfx`-Datei. Ältere Dateien sind eine reine Effektliste.
+/// Content of a `.dmxfx` file. Older files are a plain list of effects.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct FxFile {
     effects: Vec<Effect>,
-    /// Schritte eines STEPS-Effekts.
+    /// Steps of a STEPS effect.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     steps: Vec<dmxcraft_core::Step>,
 }
@@ -1398,11 +1397,11 @@ impl FxFile {
     }
 }
 
-/// Importierte Effekte in die Szene übernehmen. STEPS steht nur allein:
-/// in eine Schrittszene werden die Schritte angehängt, eine Szene ohne
-/// Effekte wird zur Schrittszene.
+/// Take imported effects into the scene. STEPS only stands alone: in a step
+/// scene the steps are appended, a scene without effects becomes a step
+/// scene.
 fn import_fx(s: &mut dmxcraft_core::Scene, file: FxFile) -> Result<String, String> {
-    // exportierte STATIC-Szene: ihre Werte übernehmen
+    // exported STATIC scene: take over its values
     if file.effects.is_empty() {
         if !s.effects.is_empty() {
             return Err(t("A static scene can only be imported into a STATIC scene").into());
@@ -1436,7 +1435,7 @@ fn import_fx(s: &mut dmxcraft_core::Scene, file: FxFile) -> Result<String, Strin
     }
     let n = file.effects.len();
     for fx in file.effects {
-        // Einstellungen und Geräte übernehmen, nur mit neuer ID
+        // Take over settings and fixtures, only with a new ID
         let id = s.add_effect(fx.kind);
         if let Some(new) = s.effects.iter_mut().find(|e| e.id == id) {
             *new = dmxcraft_core::Effect { id, ..fx };
@@ -1445,7 +1444,7 @@ fn import_fx(s: &mut dmxcraft_core::Scene, file: FxFile) -> Result<String, Strin
     Ok(tr!("{n} effect(s) imported", n = n))
 }
 
-/// Kacheln der Effektarten in zwei Spalten; gibt die angeklickte zurück.
+/// Tiles of the effect kinds in two columns; returns the clicked one.
 fn effect_tiles(ui: &mut egui::Ui, enabled: bool, allow_steps: bool) -> Option<EffectKind> {
     let gap = theme::SP_S;
     let w = ((ui.available_width() - gap) / 2.0).min(120.0);
@@ -1457,7 +1456,7 @@ fn effect_tiles(ui: &mut egui::Ui, enabled: bool, allow_steps: bool) -> Option<E
             let total = w * row.len() as f32 + gap * (row.len() as f32 - 1.0);
             ui.add_space(((ui.available_width() - total) / 2.0).max(0.0));
             for kind in row {
-                // STEPS und SUPER SCENE nur als einziger Effekt einer Szene
+                // STEPS and SUPER SCENE only as the only effect of a scene
                 let enabled = enabled && (allow_steps || !kind.exclusive());
                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
                 let hot = enabled && resp.hovered();
@@ -1506,10 +1505,9 @@ fn effect_tiles(ui: &mut egui::Ui, enabled: bool, allow_steps: bool) -> Option<E
     pick
 }
 
-/// Tabelle der Schritte (kompakt, wie eine Tabelle): Nummer, Haltezeit,
-/// Überblendzeit. Ein Klick auf eine Zeile wählt den Schritt zum Bearbeiten
-/// (die Fader zeigen dann seine Werte). `true`, wenn eine Zeile angeklickt
-/// wurde.
+/// Table of steps (compact, like a table): number, hold time, fade time. A
+/// click on a row selects the step for editing (the faders then show its
+/// values). `true` if a row was clicked.
 fn steps_table(
     ui: &mut egui::Ui,
     steps: &mut [dmxcraft_core::Step],
@@ -1523,7 +1521,7 @@ fn steps_table(
     const GAP: f32 = 1.0;
     let mut clicked = false;
     let full_w = ui.available_width();
-    // Spalten: Nummer schmal, die Zeiten teilen sich den Rest
+    // Columns: number narrow, the times share the rest
     let num_w = (full_w * 0.26).clamp(44.0, 80.0);
     let field_w = ((full_w - num_w - 2.0 * GAP) / 2.0).max(COMPACT_W + 4.0);
     let cols = [num_w, field_w, field_w];
@@ -1537,7 +1535,7 @@ fn steps_table(
         })
     };
     ui.spacing_mut().item_spacing.y = GAP;
-    // Kopfzeile
+    // Header row
     let (head, _) = ui.allocate_exact_size(Vec2::new(full_w, ROW_H), Sense::hover());
     for (r, text) in cells(head.top())
         .into_iter()
@@ -1568,7 +1566,7 @@ fn steps_table(
             p.rect_filled(r, 0.0, fill);
         }
         if playing == Some(i) {
-            // laufender Schritt: Balken in der Szenenfarbe
+            // running step: bar in the scene color
             p.rect_filled(
                 Rect::from_min_size(num.min, Vec2::new(3.0, num.height())),
                 0.0,
@@ -1607,9 +1605,10 @@ fn steps_table(
     clicked
 }
 
-/// Kopfzeile eines Effekts: Zuklapp-Pfeil, Name; Antwort für Auswahl und Pfeil.
-/// Effekt aus der Szene entfernen. Gibt den danach ausgewählten Effekt
-/// zurück (den letzten verbliebenen).
+/// Header row of an effect: collapse arrow, name; response for selection
+/// and arrow.
+/// Remove an effect from the scene. Returns the effect selected afterwards
+/// (the last remaining one).
 fn remove_effect(
     scene: &mut dmxcraft_core::Scene,
     f: u32,
@@ -1619,11 +1618,11 @@ fn remove_effect(
         .effects
         .iter()
         .any(|e| e.id == f && e.kind == EffectKind::Steps);
-    // keine Effekte mehr -> wieder STATIC
+    // no effects left -> STATIC again
     scene.effects.retain(|e| e.id != f);
     if was_steps {
-        // mit STEPS verschwinden auch alle Schritte samt Werten: übrig bleibt
-        // eine leere STATIC-Szene
+        // with STEPS all steps and their values disappear too: what remains is an
+        // empty STATIC scene
         scene.steps = vec![dmxcraft_core::Step::new(Vec::new())];
         state.edit_step = 0;
         state.edit_reload = true;
@@ -1634,8 +1633,8 @@ fn remove_effect(
     scene.effects.last().map(|e| e.id)
 }
 
-/// Kopfzeile eines Effekts: Pfeil zum Ein-/Ausklappen, Name und rechts ein
-/// X zum Löschen (nur wenn `removable`). Gibt (Kopf, Pfeil, X) zurück.
+/// Header row of an effect: arrow to expand/collapse, name and an X on the
+/// right to delete (only if `removable`). Returns (header, arrow, X).
 fn effect_header(
     ui: &mut egui::Ui,
     fx: &Effect,
@@ -1710,26 +1709,26 @@ fn effect_header(
     (head, chevron, close)
 }
 
-/// Wofür das Auswahlfenster geöffnet ist.
+/// What the selection window is open for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PickTarget {
-    /// „Springe zu“: Szenen.
+    /// “Jump to”: scenes.
     Jump,
-    /// Freigabe-Modus „Bänke“.
+    /// Release mode “banks”.
     Release,
-    /// Freigabeschutz „Bänke“.
+    /// Release protection “banks”.
     Protect,
 }
 
-/// Offenes Auswahlfenster (Szenen bzw. Bänke, Mehrfachauswahl).
+/// Open selection window (scenes or banks, multi-selection).
 pub(super) struct Picker {
     scene: SceneId,
     target: PickTarget,
     chosen: std::collections::BTreeSet<u32>,
 }
 
-/// Reiter „Erweiterte Eigenschaften“: Priorität, Wiederholung, Ende,
-/// Freigabe, Freigabeschutz und Flash.
+/// “Advanced properties” tab: priority, repeat, end, release, release
+/// protection and flash.
 fn advanced(
     ui: &mut egui::Ui,
     e: &mut Engine,
@@ -1857,11 +1856,11 @@ fn banks_of(scope: &BankScope) -> std::collections::BTreeSet<u32> {
     }
 }
 
-/// Eine Bank im Auswahlfenster: ID, Name, Farbe und ihre Szenen.
+/// A bank in the selection window: ID, name, color and its scenes.
 type PickColumn = (ZoneId, String, Color32, Vec<(SceneId, String, Color32)>);
 
-/// Auswahlfenster: alle Bänke als Spalten mit ihren Szenen. Je nach Zweck
-/// werden Szenen oder Bänke (Kopf) ausgewählt, mehrere möglich.
+/// Selection window: all banks as columns with their scenes. Depending on
+/// the purpose scenes or banks (header) are selected, several possible.
 fn picker_window(ctx: &egui::Context, e: &mut Engine, picker: &mut Option<Picker>) {
     let Some(p) = picker.as_mut() else {
         return;
@@ -1954,7 +1953,7 @@ fn toggle(set: &mut std::collections::BTreeSet<u32>, v: u32) {
     }
 }
 
-/// Kachel im Auswahlfenster; `true` beim Anklicken.
+/// Tile in the selection window; `true` when clicked.
 fn pick_tile(
     ui: &mut egui::Ui,
     name: &str,
@@ -2010,7 +2009,7 @@ fn pick_tile(
     enabled && resp.clicked()
 }
 
-/// Zeile: Bezeichnung links, Bedienelement rechtsbündig.
+/// Row: label on the left, control right-aligned.
 fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         ui.set_min_height(32.0);
@@ -2019,8 +2018,8 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     });
 }
 
-/// Bank-Bezug als kurze Auswahl rechts; bei „Bänke“ darunter ein Knopf für
-/// das Auswahlfenster. `true` = Fenster öffnen.
+/// Bank reference as a short selection on the right; for “banks” a button
+/// for the selection window below. `true` = open the window.
 fn scope_row(ui: &mut egui::Ui, label: &str, id: (&str, u32), scope: &mut BankScope) -> bool {
     let names = [t("Off"), t("All"), t("Bank"), t("Outside"), t("Banks")];
     let index = match scope {
@@ -2092,9 +2091,6 @@ mod tests {
         let sb = e.show().scene(b).unwrap();
         assert_eq!(sb.settings.dimmer, 100);
         assert_eq!(sb.loop_mode, LoopMode::Once);
-        assert_eq!(
-            sb.settings.fade_in_ms, 700,
-            "nicht geänderte Felder bleiben"
-        );
+        assert_eq!(sb.settings.fade_in_ms, 700, "unchanged fields stay");
     }
 }

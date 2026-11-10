@@ -1,5 +1,5 @@
-//! Schnellaktionen auf ausgewählte Geräte (Beams aus/an, zentrieren) –
-//! genutzt unter EINRICHTEN (Geräte) und im Programmer.
+//! Quick actions on selected fixtures (beams off/on, center) – used in
+//! SETUP (fixtures) and in the programmer.
 
 use std::collections::HashMap;
 
@@ -7,9 +7,9 @@ use dmxcraft_core::{ChannelKind, ChannelRef, Engine, FixtureId};
 
 use crate::state::ProgrammerMode;
 
-/// Wertebene, auf die Fader und Schnellaktionen wirken: Edit/Blind schreiben
-/// in den Programmer (der im Edit die markierte Szene spiegelt), Live in die
-/// Live-Werte, die alles überschreiben und nicht gespeichert werden.
+/// Value layer that faders and quick actions act on: Edit/Blind write into
+/// the programmer (which mirrors the selected scene in Edit), Live into the
+/// live values, which override everything and are not saved.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Layer {
     Programmer,
@@ -64,7 +64,7 @@ pub enum Quick {
     Center,
 }
 
-/// Setzt Programmer-Werte für einen schnellen Test der Auswahl.
+/// Sets programmer values for a quick test of the selection.
 pub fn quick_action(e: &mut Engine, layer: Layer, ids: &[FixtureId], q: Quick) {
     for id in ids {
         let Some(ty) = e
@@ -76,7 +76,7 @@ pub fn quick_action(e: &mut Engine, layer: Layer, ids: &[FixtureId], q: Quick) {
             continue;
         };
         let has_white = ty.has_kind(ChannelKind::White);
-        // reine UV-Geräte (z. B. UV-Leisten) haben UV als einziges Licht
+        // pure UV fixtures (e.g. UV bars) have UV as their only light
         let uv_only = !has_white
             && ![ChannelKind::Red, ChannelKind::Green, ChannelKind::Blue]
                 .iter()

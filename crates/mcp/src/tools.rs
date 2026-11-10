@@ -1,5 +1,5 @@
-//! Werkzeuge des MCP-Servers. Jedes Werkzeug bekommt seine Argumente als
-//! JSON und liefert JSON zurück (oder eine verständliche Fehlermeldung).
+//! Tools of the MCP server. Every tool gets its arguments as JSON and
+//! returns JSON (or an understandable error message).
 
 use dmxcraft_core::fixture::ChannelKind;
 use dmxcraft_core::obs::ObsAction;
@@ -14,7 +14,7 @@ use crate::{AppEvent, Host};
 
 type R = Result<Value, String>;
 
-/// Beschreibung eines Werkzeugs für `tools/list`.
+/// Description of a tool for `tools/list`.
 struct Tool {
     name: &'static str,
     title: &'static str,
@@ -53,11 +53,12 @@ fn any_obj(d: &str) -> Value {
     json!({ "type": "object", "description": d })
 }
 
-/// Werte für Kanäle: entweder einzeln oder je Kanalart für mehrere Geräte.
+/// Values for channels: either individually or per channel kind for several
+/// fixtures.
 fn values_schema() -> Value {
     json!({
         "type": "array",
-        "description": "Kanalwerte. Jeder Eintrag: {fixture: ID, channel: Index (ab 0) ODER Kanalart (\"Dimmer\", \"Red\", \"Green\", \"Blue\", \"White\", \"Amber\", \"Uv\", \"Pan\", \"Tilt\", \"Strobe\", \"ColorWheel\", \"Gobo\", \"Speed\") ODER Kanalname, value: 0–255} – oder kurz als [fixture, channel, value] (spart bei vielen Werten Platz).",
+        "description": "Channel values. Each entry: {fixture: ID, channel: index (from 0) OR channel kind (\"Dimmer\", \"Red\", \"Green\", \"Blue\", \"White\", \"Amber\", \"Uv\", \"Pan\", \"Tilt\", \"Strobe\", \"ColorWheel\", \"Gobo\", \"Speed\") OR channel name, value: 0–255} – or short as [fixture, channel, value] (saves space with many values).",
         "items": {
             "anyOf": [
                 {
@@ -84,11 +85,11 @@ fn step_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "hold_ms": { "type": "integer", "description": "Haltezeit (Standard 5000 bei einem Schritt, sonst 1000)" },
-            "fade_ms": { "type": "integer", "description": "Überblendzeit vom vorherigen Schritt (Standard 0)" },
+            "hold_ms": { "type": "integer", "description": "Hold time (default 5000 for a single step, otherwise 1000)" },
+            "fade_ms": { "type": "integer", "description": "Fade time from the previous step (default 0)" },
             "values": values_schema(),
-            "fixtures": { "type": "array", "items": { "type": "integer" }, "description": "Geräte, auf die `set` angewendet wird" },
-            "set": { "type": "object", "description": "Kanalart → Wert für alle `fixtures`, z. B. {\"Dimmer\":255,\"Red\":255,\"Green\":0,\"Blue\":0}. Statt RGB geht auch \"color\":\"#ff8800\"." }
+            "fixtures": { "type": "array", "items": { "type": "integer" }, "description": "Fixtures that `set` is applied to" },
+            "set": { "type": "object", "description": "Channel kind → value for all `fixtures`, e.g. {\"Dimmer\":255,\"Red\":255,\"Green\":0,\"Blue\":0}. Instead of RGB you can also use \"color\":\"#ff8800\"." }
         }
     })
 }
@@ -97,19 +98,19 @@ fn venue_object_schema() -> Value {
     let v3 = |d: &str| json!({ "type": "array", "items": { "type": "number" }, "description": d });
     obj(
         props! {
-            "id": int("Objekt-ID (nur beim Ändern)"),
+            "id": int("Object ID (only when changing)"),
             "name": string("Name"),
-            "shape": any_obj("Form, siehe Beschreibung"),
-            "parent": int("Gruppe, in die das neue Objekt kommt (optional)"),
+            "shape": any_obj("Shape, see description"),
+            "parent": int("Group the new object goes into (optional)"),
             "position": v3("[x, y, z] in m"),
-            "rotation": v3("Grad, X dann Y dann Z"),
-            "scale": v3("Skalierung"),
+            "rotation": v3("Degrees, X then Y then Z"),
+            "scale": v3("Scale"),
             "color": string("#rrggbb"),
-            "opacity": num("Deckkraft 0–1"),
-            "gloss": num("Glanz 0–1"),
+            "opacity": num("Opacity 0–1"),
+            "gloss": num("Gloss 0–1"),
             "emissive": num("Selbstleuchten 0–1"),
-            "locked": boolean("gegen Verschieben sperren"),
-            "hidden": boolean("ausblenden"),
+            "locked": boolean("lock against moving"),
+            "hidden": boolean("hide"),
         },
         &[],
     )
@@ -118,7 +119,7 @@ fn venue_object_schema() -> Value {
 fn camera_schema() -> Value {
     json!({
         "type": "object",
-        "description": "Kamera (alles optional): point = gespeicherter Kamerapunkt (Name oder Nummer ab 1, siehe get_visualizer) oder view = \"front\" | \"back\" | \"left\" | \"right\" | \"top\" | \"overview\" (Grundstellung) als Ausgangspunkt, dann yaw (Grad um die Hochachse; 0 = von vorn, also von der Publikumsseite +z; 90 = von rechts +x), pitch (Grad, positiv = von oben, -89–89), distance (m), target [x, y, z] (Blickpunkt in m), fov (Öffnungswinkel in Grad).",
+        "description": "Camera (all optional): point = saved camera point (name or number from 1, see get_visualizer) or view = \"front\" | \"back\" | \"left\" | \"right\" | \"top\" | \"overview\" (home position) as the starting point, then yaw (degrees around the vertical axis; 0 = from the front, i.e. from the audience side +z; 90 = from the right +x), pitch (degrees, positive = from above, -89–89), distance (m), target [x, y, z] (look-at point in m), fov (field of view in degrees).",
         "properties": {
             "point": { "type": ["string", "integer"] },
             "view": { "type": "string" },
@@ -135,19 +136,19 @@ fn clip_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "track": { "type": "integer", "description": "Spur (ab 0); fehlende Spuren werden angelegt" },
-            "scene": { "type": "integer", "description": "Szenen-ID für einen Szenenblock" },
-            "audio_path": { "type": "string", "description": "Pfad einer Audiodatei für einen Audioblock" },
-            "video_path": { "type": "string", "description": "Pfad einer Videodatei (MP4/MOV) für einen Videoblock, den OBS abspielt" },
-            "obs_scene": { "type": "string", "description": "Videoblock: OBS-Szene, zu der beim Start gewechselt wird. Allein (ohne scene/audio_path/video_path): OBS-Block, der zu dieser Szene wechselt" },
-            "obs_source": { "type": "string", "description": "Videoblock: Medienquelle in OBS (Standard aus den OBS-Einstellungen). Mit obs_scene + obs_visible: OBS-Block, der diese Quelle ein-/ausblendet" },
-            "obs_visible": { "type": "boolean", "description": "OBS-Block: Quelle einblenden (true) oder ausblenden (false)" },
-            "start_ms": { "type": "integer", "description": "Beginn auf der Zeitleiste" },
-            "duration_ms": { "type": "integer", "description": "Länge (Standard: Länge der Szene bzw. der Datei)" },
+            "track": { "type": "integer", "description": "Track (from 0); missing tracks are created" },
+            "scene": { "type": "integer", "description": "Scene ID for a scene block" },
+            "audio_path": { "type": "string", "description": "Path of an audio file for an audio block" },
+            "video_path": { "type": "string", "description": "Path of a video file (MP4/MOV) for a video block that OBS plays" },
+            "obs_scene": { "type": "string", "description": "Video block: OBS scene to switch to at the start. On its own (without scene/audio_path/video_path): OBS block that switches to this scene" },
+            "obs_source": { "type": "string", "description": "Video block: media source in OBS (default from the OBS settings). With obs_scene + obs_visible: OBS block that shows/hides this source" },
+            "obs_visible": { "type": "boolean", "description": "OBS block: show (true) or hide (false) the source" },
+            "start_ms": { "type": "integer", "description": "Start on the timeline" },
+            "duration_ms": { "type": "integer", "description": "Length (default: length of the scene or the file)" },
             "fade_in_ms": { "type": "integer" },
             "fade_out_ms": { "type": "integer" },
-            "level": { "type": "number", "description": "Pegel 0–1 (Dimmer bzw. Lautstärke)" },
-            "speed": { "type": "number", "description": "Geschwindigkeit des Blocks (1 = normal)" }
+            "level": { "type": "number", "description": "Level 0–1 (dimmer or volume)" },
+            "speed": { "type": "number", "description": "Speed of the block (1 = normal)" }
         },
         "required": ["start_ms"]
     })
@@ -156,397 +157,397 @@ fn clip_schema() -> Value {
 const TOOLS: &[Tool] = &[
     Tool {
         name: "get_overview",
-        title: "Überblick",
-        description: "Überblick über die geöffnete Show: Name, Anzahl Geräte, Bänke mit ihren Szenen, Gruppen, laufende Szenen, Master, Blackout, Tempo.",
+        title: "Overview",
+        description: "Overview of the open show: name, number of fixtures, banks with their scenes, groups, running scenes, master, blackout, tempo.",
         schema: || obj(json!({}), &[]),
         read_only: true,
     },
     Tool {
         name: "list_fixtures",
-        title: "Geräte auflisten",
-        description: "Alle gepatchten Geräte mit ID, Name, Typ, Universum (ab 1), Startadresse und ihren Kanälen (Index, Name, Art).",
+        title: "List fixtures",
+        description: "All patched fixtures with ID, name, type, universe (from 1), start address and their channels (index, name, kind).",
         schema: || obj(json!({}), &[]),
         read_only: true,
     },
     Tool {
         name: "search_fixture_library",
-        title: "Gerätebibliothek durchsuchen",
-        description: "Sucht in der eingebauten Gerätebibliothek (generische Typen, Open Fixture Library, QLC+) nach Hersteller/Modell/Kategorie. Liefert je Modus den `type_key` für add_fixtures.",
-        schema: || obj(props! { "query": string("Suchbegriffe, z. B. \"rgbw par\" oder \"moving head\""), "limit": int("max. Treffer (Standard 15)") }, &["query"]),
+        title: "Search fixture library",
+        description: "Searches the built-in fixture library (generic types, Open Fixture Library, QLC+) by manufacturer/model/category. Returns the `type_key` for add_fixtures per mode.",
+        schema: || obj(props! { "query": string("Search terms, e.g. \"rgbw par\" or \"moving head\""), "limit": int("max. hits (default 15)") }, &["query"]),
         read_only: true,
     },
     Tool {
         name: "add_fixtures",
-        title: "Geräte patchen",
-        description: "Patcht ein oder mehrere Geräte eines Typs an die nächsten freien Adressen (ab `address` im `universe`). Namen werden durchnummeriert.",
+        title: "Patch fixtures",
+        description: "Patches one or more fixtures of a type at the next free addresses (from `address` in `universe`). Names are numbered.",
         schema: || obj(props! {
-            "type_key": string("Typ aus search_fixture_library oder list_fixtures, z. B. generic/rgbw-par-6ch"),
-            "count": int("Anzahl (Standard 1)"),
-            "name": string("Grundname, z. B. \"PAR\" → PAR 1, PAR 2 … (Standard: Modellname)"),
-            "universe": int("Universum ab 1 (Standard 1)"),
-            "address": int("erste Startadresse (Standard 1 = erste freie)"),
+            "type_key": string("Type from search_fixture_library or list_fixtures, e.g. generic/rgbw-par-6ch"),
+            "count": int("Count (default 1)"),
+            "name": string("Base name, e.g. \"PAR\" → PAR 1, PAR 2 … (default: model name)"),
+            "universe": int("Universe from 1 (default 1)"),
+            "address": int("first start address (default 1 = first free)"),
         }, &["type_key"]),
         read_only: false,
     },
     Tool {
         name: "update_fixture",
-        title: "Gerät ändern",
-        description: "Ändert Name, Patch-Adresse oder Position im Bühnenplan (x/y 0–1) eines Geräts.",
+        title: "Update fixture",
+        description: "Changes name, patch address or position on the stage plan (x/y 0–1) of a fixture.",
         schema: || obj(props! {
-            "id": int("Geräte-ID"), "name": string("neuer Name"),
-            "universe": int("Universum ab 1"), "address": int("Startadresse 1–512"),
-            "plan_x": num("Bühnenplan x 0–1 (links → rechts)"), "plan_y": num("Bühnenplan y 0–1 (hinten → vorn)"),
+            "id": int("Fixture ID"), "name": string("new name"),
+            "universe": int("Universe from 1"), "address": int("Start address 1–512"),
+            "plan_x": num("Stage plan x 0–1 (left → right)"), "plan_y": num("Stage plan y 0–1 (back → front)"),
         }, &["id"]),
         read_only: false,
     },
     Tool {
         name: "delete_fixtures",
-        title: "Geräte löschen",
-        description: "Entfernt Geräte aus dem Patch (und aus Gruppen, Szenen und Effekten).",
-        schema: || obj(props! { "ids": ids("Geräte-IDs") }, &["ids"]),
+        title: "Delete fixtures",
+        description: "Removes fixtures from the patch (and from groups, scenes and effects).",
+        schema: || obj(props! { "ids": ids("Fixture IDs") }, &["ids"]),
         read_only: false,
     },
     Tool {
         name: "create_group",
-        title: "Gruppe anlegen",
-        description: "Legt eine Gerätegruppe an.",
-        schema: || obj(props! { "name": string("Name"), "fixtures": ids("Geräte-IDs") }, &["name", "fixtures"]),
+        title: "Create group",
+        description: "Creates a fixture group.",
+        schema: || obj(props! { "name": string("Name"), "fixtures": ids("Fixture IDs") }, &["name", "fixtures"]),
         read_only: false,
     },
     Tool {
         name: "delete_group",
-        title: "Gruppe löschen",
-        description: "Löscht eine Gruppe (die Geräte bleiben).",
-        schema: || obj(props! { "id": int("Gruppen-ID") }, &["id"]),
+        title: "Delete group",
+        description: "Deletes a group (the fixtures stay).",
+        schema: || obj(props! { "id": int("Group ID") }, &["id"]),
         read_only: false,
     },
     Tool {
         name: "create_bank",
-        title: "Bank anlegen",
-        description: "Legt eine neue Bank (Spalte mit Szenen) an.",
-        schema: || obj(props! { "name": string("Name"), "color": string("Farbe als #rrggbb (optional)") }, &["name"]),
+        title: "Create bank",
+        description: "Creates a new bank (column of scenes).",
+        schema: || obj(props! { "name": string("Name"), "color": string("Color as #rrggbb (optional)") }, &["name"]),
         read_only: false,
     },
     Tool {
         name: "update_bank",
-        title: "Bank ändern",
-        description: "Benennt eine Bank um, ändert ihre Farbe oder blendet sie aus/ein.",
-        schema: || obj(props! { "id": int("Bank-ID"), "name": string("neuer Name"), "color": string("#rrggbb oder \"auto\""), "hidden": boolean("ausblenden") }, &["id"]),
+        title: "Update bank",
+        description: "Renames a bank, changes its color or hides/shows it.",
+        schema: || obj(props! { "id": int("Bank ID"), "name": string("new name"), "color": string("#rrggbb or \"auto\""), "hidden": boolean("hide") }, &["id"]),
         read_only: false,
     },
     Tool {
         name: "delete_bank",
-        title: "Bank löschen",
-        description: "Löscht eine Bank samt ihrer Szenen.",
-        schema: || obj(props! { "id": int("Bank-ID") }, &["id"]),
+        title: "Delete bank",
+        description: "Deletes a bank together with its scenes.",
+        schema: || obj(props! { "id": int("Bank ID") }, &["id"]),
         read_only: false,
     },
     Tool {
         name: "list_scenes",
-        title: "Szenen auflisten",
-        description: "Szenen (optional nur einer Bank) mit ID, Name, Bank, Art (STATISCH/FX/SUPER SCENE), Dauer und ob sie läuft.",
-        schema: || obj(props! { "bank": int("nur diese Bank (optional)") }, &[]),
+        title: "List scenes",
+        description: "Scenes (optionally only of one bank) with ID, name, bank, kind (STATIC/FX/SUPER SCENE), duration and whether they are running.",
+        schema: || obj(props! { "bank": int("only this bank (optional)") }, &[]),
         read_only: true,
     },
     Tool {
         name: "get_scene",
-        title: "Szene lesen",
-        description: "Alle Details einer Szene: Einstellungen, Schritte mit Kanalwerten, Effekte (als JSON) und bei SUPER SCENES die Zeitleiste.",
-        schema: || obj(props! { "id": int("Szenen-ID") }, &["id"]),
+        title: "Read scene",
+        description: "All details of a scene: settings, steps with channel values, effects (as JSON) and for SUPER SCENES the timeline.",
+        schema: || obj(props! { "id": int("Scene ID") }, &["id"]),
         read_only: true,
     },
     Tool {
         name: "create_scene",
-        title: "Szene anlegen",
-        description: "Legt eine Szene in einer Bank an. Ein Schritt = statische Szene; mehrere Schritte = Ablauf (Steps). Werte über `values` oder bequem über `fixtures` + `set` je Schritt.",
+        title: "Create scene",
+        description: "Creates a scene in a bank. One step = static scene; several steps = sequence (Steps). Values via `values` or conveniently via `fixtures` + `set` per step.",
         schema: || obj(props! {
-            "name": string("Name"), "bank": int("Bank-ID"),
-            "steps": json!({ "type": "array", "items": step_schema(), "description": "Schritte (mindestens einer)" }),
-            "color": string("Farbe der Karte #rrggbb (optional)"),
-            "loop": boolean("Ablauf endlos wiederholen (Standard true)"),
+            "name": string("Name"), "bank": int("Bank ID"),
+            "steps": json!({ "type": "array", "items": step_schema(), "description": "Steps (at least one)" }),
+            "color": string("Color of the card #rrggbb (optional)"),
+            "loop": boolean("Repeat the sequence endlessly (default true)"),
             "settings": any_obj("Szeneneinstellungen, z. B. {\"fade_in_ms\":500,\"fade_out_ms\":500,\"dimmer\":255,\"speed_pct\":100,\"flash\":false}"),
-            "select": boolean("in der Oberfläche auswählen (Standard true)"),
-            "verbose": boolean("vollständige Szene mit allen Kanalwerten zurückgeben (Standard: kurze Zusammenfassung; Details über get_scene)"),
+            "select": boolean("select in the UI (default true)"),
+            "verbose": boolean("return the full scene with all channel values (default: short summary; details via get_scene)"),
         }, &["name", "bank", "steps"]),
         read_only: false,
     },
     Tool {
         name: "update_scene",
-        title: "Szene ändern",
-        description: "Ändert eine Szene: Name, Farbe, Bank, ausgeblendet, Endlosschleife, Einstellungen (werden zusammengeführt) oder ersetzt die Schritte.",
+        title: "Update scene",
+        description: "Changes a scene: name, color, bank, hidden, endless loop, settings (merged) or replaces the steps.",
         schema: || obj(props! {
-            "id": int("Szenen-ID"), "name": string("neuer Name"), "color": string("#rrggbb oder \"auto\""),
-            "bank": int("in diese Bank verschieben"), "hidden": boolean("ausblenden"),
-            "loop": boolean("endlos wiederholen"), "settings": any_obj("Einstellungen (nur genannte Felder ändern sich)"),
-            "steps": json!({ "type": "array", "items": step_schema(), "description": "neue Schritte (ersetzt alle)" }),
-            "verbose": boolean("vollständige Szene mit allen Kanalwerten zurückgeben (Standard: kurze Zusammenfassung; Details über get_scene)"),
+            "id": int("Scene ID"), "name": string("new name"), "color": string("#rrggbb or \"auto\""),
+            "bank": int("move to this bank"), "hidden": boolean("hide"),
+            "loop": boolean("repeat endlessly"), "settings": any_obj("Settings (only the given fields change)"),
+            "steps": json!({ "type": "array", "items": step_schema(), "description": "new steps (replace all)" }),
+            "verbose": boolean("return the full scene with all channel values (default: short summary; details via get_scene)"),
         }, &["id"]),
         read_only: false,
     },
     Tool {
         name: "delete_scenes",
-        title: "Szenen löschen",
-        description: "Löscht Szenen.",
-        schema: || obj(props! { "ids": ids("Szenen-IDs") }, &["ids"]),
+        title: "Delete scenes",
+        description: "Deletes scenes.",
+        schema: || obj(props! { "ids": ids("Scene IDs") }, &["ids"]),
         read_only: false,
     },
     Tool {
         name: "describe_effect",
-        title: "Effekt beschreiben",
-        description: "Liefert die Standard-Einstellungen eines Effekttyps als JSON (Vorlage für add_effect/update_effect). Typen: ColorFx, ChaserFx, MoveFx, ValueFx, CurveFx, Mappings, ColorMappings.",
+        title: "Describe effect",
+        description: "Returns the default settings of an effect type as JSON (template for add_effect/update_effect). Types: ColorFx, ChaserFx, MoveFx, ValueFx, CurveFx, Mappings, ColorMappings.",
         schema: || obj(props! { "kind": string("Effekttyp") }, &["kind"]),
         read_only: true,
     },
     Tool {
         name: "add_effect",
-        title: "Effekt hinzufügen",
-        description: "Fügt einer Szene einen Effekt hinzu (macht sie zur FX-Szene). `fixtures` in der gewünschten Reihenfolge (= Lauf-/Farbreihenfolge). `params` überschreibt Felder der Vorlage aus describe_effect.",
+        title: "Add effect",
+        description: "Adds an effect to a scene (makes it an FX scene). `fixtures` in the desired order (= run/color order). `params` overrides fields of the template from describe_effect.",
         schema: || obj(props! {
-            "scene": int("Szenen-ID"), "kind": string("Effekttyp, z. B. ColorFx"),
-            "fixtures": ids("Geräte in Effekt-Reihenfolge"), "params": any_obj("Felder wie in describe_effect"),
-            "verbose": boolean("vollständige Szene mit allen Kanalwerten zurückgeben (Standard: kurze Zusammenfassung; Details über get_scene)"),
+            "scene": int("Scene ID"), "kind": string("Effekttyp, z. B. ColorFx"),
+            "fixtures": ids("Fixtures in effect order"), "params": any_obj("Fields as in describe_effect"),
+            "verbose": boolean("return the full scene with all channel values (default: short summary; details via get_scene)"),
         }, &["scene", "kind", "fixtures"]),
         read_only: false,
     },
     Tool {
         name: "update_effect",
-        title: "Effekt ändern",
-        description: "Ändert einen Effekt einer Szene (Felder werden zusammengeführt).",
+        title: "Update effect",
+        description: "Changes an effect of a scene (fields are merged).",
         schema: || obj(props! {
-            "scene": int("Szenen-ID"), "effect": int("Effekt-ID aus get_scene"),
-            "fixtures": ids("neue Geräte (optional)"), "params": any_obj("geänderte Felder"),
-            "verbose": boolean("vollständige Szene mit allen Kanalwerten zurückgeben (Standard: kurze Zusammenfassung; Details über get_scene)"),
+            "scene": int("Scene ID"), "effect": int("Effect ID from get_scene"),
+            "fixtures": ids("new fixtures (optional)"), "params": any_obj("changed fields"),
+            "verbose": boolean("return the full scene with all channel values (default: short summary; details via get_scene)"),
         }, &["scene", "effect"]),
         read_only: false,
     },
     Tool {
         name: "remove_effect",
-        title: "Effekt entfernen",
-        description: "Entfernt einen Effekt aus einer Szene.",
-        schema: || obj(props! { "scene": int("Szenen-ID"), "effect": int("Effekt-ID") }, &["scene", "effect"]),
+        title: "Remove effect",
+        description: "Removes an effect from a scene.",
+        schema: || obj(props! { "scene": int("Scene ID"), "effect": int("Effect ID") }, &["scene", "effect"]),
         read_only: false,
     },
     Tool {
         name: "create_super_scene",
-        title: "SUPER SCENE anlegen",
-        description: "Legt eine SUPER SCENE an: eine Zeitleiste, auf deren Spuren Szenen- und Audioblöcke liegen (spätere Spuren überdecken frühere). Ohne `clips` entsteht eine leere Zeitleiste.",
+        title: "Create SUPER SCENE",
+        description: "Creates a SUPER SCENE: a timeline whose tracks hold scene and audio blocks (later tracks override earlier ones). Without `clips` an empty timeline is created.",
         schema: || obj(props! {
-            "name": string("Name"), "bank": int("Bank-ID"),
+            "name": string("Name"), "bank": int("Bank ID"),
             "clips": json!({ "type": "array", "items": clip_schema() }),
-            "track_names": json!({ "type": "array", "items": { "type": "string" }, "description": "Namen der Spuren (optional)" }),
-            "bpm": num("Tempo für das Beat-Raster (optional)"),
-            "verbose": boolean("vollständige Szene mit allen Kanalwerten zurückgeben (Standard: kurze Zusammenfassung; Details über get_scene)"),
+            "track_names": json!({ "type": "array", "items": { "type": "string" }, "description": "Names of the tracks (optional)" }),
+            "bpm": num("Tempo for the beat grid (optional)"),
+            "verbose": boolean("return the full scene with all channel values (default: short summary; details via get_scene)"),
         }, &["name", "bank"]),
         read_only: false,
     },
     Tool {
         name: "add_timeline_clips",
-        title: "Blöcke einfügen",
-        description: "Fügt einer SUPER SCENE Szenen- oder Audioblöcke hinzu.",
-        schema: || obj(props! { "scene": int("ID der SUPER SCENE"), "clips": json!({ "type": "array", "items": clip_schema() }) }, &["scene", "clips"]),
+        title: "Add blocks",
+        description: "Adds scene or audio blocks to a SUPER SCENE.",
+        schema: || obj(props! { "scene": int("ID of the SUPER SCENE"), "clips": json!({ "type": "array", "items": clip_schema() }) }, &["scene", "clips"]),
         read_only: false,
     },
     Tool {
         name: "remove_timeline_clips",
-        title: "Blöcke entfernen",
-        description: "Entfernt Blöcke (IDs aus get_scene) aus einer SUPER SCENE.",
-        schema: || obj(props! { "scene": int("ID der SUPER SCENE"), "clips": ids("Block-IDs") }, &["scene", "clips"]),
+        title: "Remove blocks",
+        description: "Removes blocks (IDs from get_scene) from a SUPER SCENE.",
+        schema: || obj(props! { "scene": int("ID of the SUPER SCENE"), "clips": ids("Block-IDs") }, &["scene", "clips"]),
         read_only: false,
     },
     Tool {
         name: "play_scene",
-        title: "Szene starten",
-        description: "Startet eine Szene (andere Szenen derselben Bank stoppen). SUPER SCENES laufen ab `position_ms`.",
-        schema: || obj(props! { "id": int("Szenen-ID"), "position_ms": int("Startposition einer SUPER SCENE (optional)") }, &["id"]),
+        title: "Play scene",
+        description: "Starts a scene (other scenes of the same bank stop). SUPER SCENES run from `position_ms`.",
+        schema: || obj(props! { "id": int("Scene ID"), "position_ms": int("Start position of a SUPER SCENE (optional)") }, &["id"]),
         read_only: false,
     },
     Tool {
         name: "stop_scene",
-        title: "Szene stoppen",
-        description: "Stoppt eine Szene (mit ihrer Ausblendzeit). Ohne `id`: alle Szenen.",
-        schema: || obj(props! { "id": int("Szenen-ID (leer = alle)") }, &[]),
+        title: "Stop scene",
+        description: "Stops a scene (with its fade-out time). Without `id`: all scenes.",
+        schema: || obj(props! { "id": int("Scene ID (empty = all)") }, &[]),
         read_only: false,
     },
     Tool {
         name: "pause_scene",
         title: "Pause",
-        description: "Pausiert eine laufende Szene bzw. setzt sie fort.",
-        schema: || obj(props! { "id": int("Szenen-ID") }, &["id"]),
+        description: "Pauses or resumes a running scene.",
+        schema: || obj(props! { "id": int("Scene ID") }, &["id"]),
         read_only: false,
     },
     Tool {
         name: "set_output",
         title: "Master/Blackout/Tempo",
-        description: "Setzt Master (0–1), Blackout und globales Tempo (1 = normal).",
-        schema: || obj(props! { "master": num("0–1"), "blackout": boolean("Blackout an/aus"), "speed": num("Tempo, 1 = normal") }, &[]),
+        description: "Sets master (0–1), blackout and global tempo (1 = normal).",
+        schema: || obj(props! { "master": num("0–1"), "blackout": boolean("Blackout on/off"), "speed": num("Tempo, 1 = normal") }, &[]),
         read_only: false,
     },
     Tool {
         name: "set_live_values",
-        title: "Live-Werte setzen",
-        description: "Setzt Kanäle direkt im Live-Betrieb (liegt über allen Szenen, wird nicht gespeichert). `clear: true` entfernt vorher alle Live-Werte.",
+        title: "Set live values",
+        description: "Sets channels directly in live mode (sits above all scenes, not saved). `clear: true` removes all live values first.",
         schema: || obj(props! {
             "values": values_schema(),
-            "fixtures": ids("Geräte für `set`"),
-            "set": any_obj("Kanalart → Wert, z. B. {\"Dimmer\":255,\"color\":\"#00ffaa\"}"),
-            "clear": boolean("vorher alle Live-Werte löschen"),
+            "fixtures": ids("Fixtures for `set`"),
+            "set": any_obj("Channel kind → value, e.g. {\"Dimmer\":255,\"color\":\"#00ffaa\"}"),
+            "clear": boolean("clear all live values first"),
         }, &[]),
         read_only: false,
     },
     Tool {
         name: "clear_live_values",
-        title: "Live-Werte löschen",
-        description: "Entfernt alle Live-Werte.",
+        title: "Clear live values",
+        description: "Removes all live values.",
         schema: || obj(json!({}), &[]),
         read_only: false,
     },
     Tool {
         name: "get_dmx_output",
-        title: "DMX-Ausgang lesen",
-        description: "Aktuelle DMX-Werte eines Universums (oder je Gerät: `fixtures`).",
+        title: "Read DMX output",
+        description: "Current DMX values of a universe (or per fixture: `fixtures`).",
         schema: || obj(props! {
-            "universe": int("Universum ab 1 (Standard 1)"),
-            "start": int("erste Adresse (Standard 1)"), "count": int("Anzahl (Standard 512)"),
-            "fixtures": ids("statt Adressbereich: Werte dieser Geräte je Kanal"),
+            "universe": int("Universe from 1 (default 1)"),
+            "start": int("first address (default 1)"), "count": int("Count (default 512)"),
+            "fixtures": ids("instead of an address range: values of these fixtures per channel"),
         }, &[]),
         read_only: true,
     },
     Tool {
         name: "select_scene",
-        title: "Szene anzeigen",
-        description: "Wählt eine Szene in der Oberfläche aus, damit der Benutzer sie sieht.",
-        schema: || obj(props! { "id": int("Szenen-ID") }, &["id"]),
+        title: "Show scene",
+        description: "Selects a scene in the UI so the user can see it.",
+        schema: || obj(props! { "id": int("Scene ID") }, &["id"]),
         read_only: true,
     },
     Tool {
         name: "get_venue",
-        title: "Veranstaltungsort lesen",
-        description: "3D-Veranstaltungsort: Raumgröße, Umgebung (Raumlicht, Strahlen, Nebel), alle Objekte (Quader, Flächen, Zylinder, Traversen, Gruppen) mit Lage und Weltposition sowie die 3D-Lage jedes Geräts. Einheiten: Meter, y nach oben.",
+        title: "Read venue",
+        description: "3D venue: room size, environment (ambient light, beams, fog), all objects (boxes, planes, cylinders, trusses, groups) with placement and world position, and the 3D placement of every fixture. Units: meters, y up.",
         schema: || obj(json!({}), &[]),
         read_only: true,
     },
     Tool {
         name: "set_venue",
-        title: "Veranstaltungsort einstellen",
-        description: "Ändert Name, Raumgröße [Breite, Höhe, Tiefe] und Umgebung (ambient, beams, fog je 0–1).",
+        title: "Set up venue",
+        description: "Changes name, room size [width, height, depth] and environment (ambient, beams, fog each 0–1).",
         schema: || obj(props! {
-            "name": string("Name"), "size": json!({ "type": "array", "items": { "type": "number" }, "description": "[Breite x, Höhe y, Tiefe z] in m" }),
-            "ambient": num("Raumlicht 0–1"), "beams": num("Sichtbarkeit der Strahlen 0–1"), "fog": num("Nebel 0–1"),
+            "name": string("Name"), "size": json!({ "type": "array", "items": { "type": "number" }, "description": "[width x, height y, depth z] in m" }),
+            "ambient": num("Ambient light 0–1"), "beams": num("Visibility of the beams 0–1"), "fog": num("Fog 0–1"),
         }, &[]),
         read_only: false,
     },
     Tool {
         name: "add_venue_object",
-        title: "Objekt in den Ort setzen",
-        description: "Fügt ein Objekt hinzu. `shape` z. B. {\"type\":\"box\",\"size\":[2,0.4,1]}, {\"type\":\"plane\",\"size\":[4,3]}, {\"type\":\"cylinder\",\"radius\":0.05,\"height\":3}, {\"type\":\"truss\",\"length\":3,\"profile\":\"square\"} (entlang x) oder {\"type\":\"group\"}. Mittelpunkt des Objekts liegt bei `position`.",
+        title: "Add object to the venue",
+        description: "Adds an object. `shape` e.g. {\"type\":\"box\",\"size\":[2,0.4,1]}, {\"type\":\"plane\",\"size\":[4,3]}, {\"type\":\"cylinder\",\"radius\":0.05,\"height\":3}, {\"type\":\"truss\",\"length\":3,\"profile\":\"square\"} (along x) or {\"type\":\"group\"}. The center of the object is at `position`.",
         schema: venue_object_schema,
         read_only: false,
     },
     Tool {
         name: "update_venue_object",
-        title: "Objekt ändern",
-        description: "Ändert Form, Lage, Farbe, Deckkraft … eines Objekts (nur angegebene Felder).",
+        title: "Update object",
+        description: "Changes shape, placement, color, opacity … of an object (only the given fields).",
         schema: venue_object_schema,
         read_only: false,
     },
     Tool {
         name: "delete_venue_objects",
-        title: "Objekte entfernen",
-        description: "Entfernt Objekte (Gruppen samt Inhalt).",
-        schema: || obj(props! { "ids": ids("Objekt-IDs") }, &["ids"]),
+        title: "Remove objects",
+        description: "Removes objects (groups together with their content).",
+        schema: || obj(props! { "ids": ids("Object IDs") }, &["ids"]),
         read_only: false,
     },
     Tool {
         name: "place_fixtures",
-        title: "Geräte im Raum platzieren",
-        description: "Setzt die 3D-Lage von Geräten: `position` (bei mehreren mit `spacing` je Gerät versetzt), optional an die nächste Traverse hängen, `rotation` oder auf einen Punkt `aim_at` ausrichten. `automatic`: wieder aus dem Bühnenplan ableiten.",
+        title: "Place fixtures in the room",
+        description: "Sets the 3D placement of fixtures: `position` (for several, offset by `spacing` per fixture), optionally hang them on the nearest truss, `rotation` or aim them at a point `aim_at`. `automatic`: derive from the stage plan again.",
         schema: || obj(props! {
-            "fixtures": ids("Geräte-IDs"),
-            "position": json!({ "type": "array", "items": { "type": "number" }, "description": "[x, y, z] in m für das erste Gerät" }),
-            "spacing": json!({ "type": "array", "items": { "type": "number" }, "description": "Versatz je weiterem Gerät [x, y, z]" }),
-            "hang_on_truss": boolean("unter die nächste Traverse hängen"),
-            "rotation": json!({ "type": "array", "items": { "type": "number" }, "description": "Euler-Winkel in Grad; [0,0,0] strahlt senkrecht nach unten" }),
-            "aim_at": json!({ "type": "array", "items": { "type": "number" }, "description": "Zielpunkt [x, y, z], auf den das Gerät strahlt" }),
-            "automatic": boolean("Lage wieder automatisch"),
+            "fixtures": ids("Fixture IDs"),
+            "position": json!({ "type": "array", "items": { "type": "number" }, "description": "[x, y, z] in m for the first fixture" }),
+            "spacing": json!({ "type": "array", "items": { "type": "number" }, "description": "Offset per further fixture [x, y, z]" }),
+            "hang_on_truss": boolean("hang under the nearest truss"),
+            "rotation": json!({ "type": "array", "items": { "type": "number" }, "description": "Euler angles in degrees; [0,0,0] points straight down" }),
+            "aim_at": json!({ "type": "array", "items": { "type": "number" }, "description": "Target point [x, y, z] the fixture points at" }),
+            "automatic": boolean("Placement automatic again"),
         }, &["fixtures"]),
         read_only: false,
     },
     Tool {
         name: "get_visualizer",
-        title: "3D-Visualisierer abfragen",
-        description: "Zustand des 3D-Visualisierers: Fenster offen, Qualität, Kamera (yaw, pitch, distance, target, fov), gespeicherte Kamerapunkte und Raumgröße. Den Ort selbst (Bauten, Geräte-Lagen) liefert get_venue; Umgebungslicht, Strahlen und Nebel stellt set_venue ein.",
+        title: "Query 3D visualizer",
+        description: "State of the 3D visualizer: window open, quality, camera (yaw, pitch, distance, target, fov), saved camera points and room size. The venue itself (structures, fixture placement) comes from get_venue; ambient light, beams and fog are set with set_venue.",
         schema: || obj(json!({}), &[]),
         read_only: true,
     },
     Tool {
         name: "set_visualizer",
-        title: "3D-Visualisierer einstellen",
-        description: "Fenster öffnen/schließen, Qualität (\"low\", \"medium\", \"high\", \"ultra\") und die Kamera der Ansicht setzen (bei offenem Fenster mit Kamerafahrt). Kamerapunkte (in der Leiste des Visualisierers per Klick bzw. Taste 1–9 erreichbar, in der Show gespeichert) mit `save_point` anlegen bzw. überschreiben (aktuelle Kamera oder `camera`) und mit `delete_point` entfernen.",
+        title: "Set up 3D visualizer",
+        description: "Open/close the window, set the quality (\"low\", \"medium\", \"high\", \"ultra\") and the camera of the view (with a camera move when the window is open). Create or overwrite camera points (reachable in the visualizer bar by click or keys 1–9, saved in the show) with `save_point` (current camera or `camera`) and remove them with `delete_point`.",
         schema: || obj(props! {
-            "open": boolean("Fenster öffnen (true) oder schließen (false)"),
+            "open": boolean("Open (true) or close (false) the window"),
             "quality": string("low | medium | high | ultra"),
             "camera": camera_schema(),
-            "save_point": string("Kamerapunkt mit diesem Namen speichern (vorhandener gleichen Namens wird überschrieben)"),
-            "delete_point": string("Kamerapunkt (Name oder Nummer) entfernen"),
+            "save_point": string("Save a camera point with this name (an existing one with the same name is overwritten)"),
+            "delete_point": string("Remove a camera point (name or number)"),
         }, &[]),
         read_only: false,
     },
     Tool {
         name: "visualizer_screenshot",
-        title: "Bild des 3D-Visualisierers",
-        description: "Rendert die 3D-Ansicht mit dem aktuellen DMX-Ausgang als PNG-Bild (Lichtstrahlen, Lichtflecken, Bauten) – z. B. um Positionen, Ausrichtung oder Farben einer Szene zu prüfen. Ohne `camera` aus Sicht der aktuellen Kamera. Das Fenster muss dafür nicht offen sein.",
+        title: "3D visualizer image",
+        description: "Renders the 3D view with the current DMX output as a PNG image (light beams, light spots, structures) – e.g. to check positions, aiming or colors of a scene. Without `camera` from the point of view of the current camera. The window does not need to be open.",
         schema: || obj(props! {
             "camera": camera_schema(),
             "width": int("Breite in Pixel (Standard 1280, 320–2560)"),
-            "height": int("Höhe in Pixel (Standard 720, 240–1600)"),
+            "height": int("Height in pixels (default 720, 240–1600)"),
         }, &[]),
         read_only: true,
     },
     Tool {
         name: "list_profiles",
-        title: "Eigene Geräteprofile",
-        description: "Eigene Geräteprofile aus dem Profile Builder mit Modi, Gerätetyp-Schlüsseln (type_key für add_fixtures) und offenen Problemen.",
+        title: "Custom fixture profiles",
+        description: "Custom fixture profiles from the Profile Builder with modes, fixture type keys (type_key for add_fixtures) and open problems.",
         schema: || obj(json!({}), &[]),
         read_only: true,
     },
     Tool {
         name: "get_profile",
-        title: "Geräteprofil lesen",
-        description: "Ein eigenes Geräteprofil vollständig (Kanäle mit Bereichen, Modi, physische Daten) – zum Ändern lesen, anpassen und mit save_profile speichern.",
-        schema: || obj(props! { "key": string("Schlüssel aus list_profiles") }, &["key"]),
+        title: "Read fixture profile",
+        description: "A custom fixture profile in full (channels with ranges, modes, physical data) – to change it, read, adjust and save with save_profile.",
+        schema: || obj(props! { "key": string("Key from list_profiles") }, &["key"]),
         read_only: true,
     },
     Tool {
         name: "describe_profile_format",
-        title: "Format der Geräteprofile",
-        description: "Vorlage (Beispielprofil), Hinweise und alle Bereichsarten (capability kinds) mit ihren Werten für save_profile.",
+        title: "Fixture profile format",
+        description: "Template (example profile), notes and all range kinds (capability kinds) with their values for save_profile.",
         schema: || obj(json!({}), &[]),
         read_only: true,
     },
     Tool {
         name: "save_profile",
-        title: "Geräteprofil speichern",
-        description: "Legt ein eigenes Geräteprofil an (ohne key) oder ersetzt eines (mit key) – wie Speichern im Profile Builder. Bereiche werden lückenlos gemacht; bei Fehlern (fehlender Name, Modus, Winkel …) wird nicht gespeichert und die Probleme werden genannt. Bereits gepatchte Geräte des Profils werden aktualisiert.",
-        schema: || obj(props! { "profile": any_obj("Profil wie bei get_profile bzw. describe_profile_format") }, &["profile"]),
+        title: "Save fixture profile",
+        description: "Creates a custom fixture profile (without key) or replaces one (with key) – like saving in the Profile Builder. Ranges are made gapless; on errors (missing name, mode, angle …) nothing is saved and the problems are listed. Already patched fixtures of the profile are updated.",
+        schema: || obj(props! { "profile": any_obj("Profile as returned by get_profile or describe_profile_format") }, &["profile"]),
         read_only: false,
     },
     Tool {
         name: "delete_profile",
-        title: "Geräteprofil entfernen",
-        description: "Entfernt ein eigenes Geräteprofil aus der Bibliothek (die Datei kommt in den Ordner „geloescht“). Gepatchte Geräte behalten ihren Gerätetyp.",
-        schema: || obj(props! { "key": string("Schlüssel aus list_profiles") }, &["key"]),
+        title: "Remove fixture profile",
+        description: "Removes a custom fixture profile from the library (the file goes to the “geloescht” folder). Patched fixtures keep their fixture type.",
+        schema: || obj(props! { "key": string("Key from list_profiles") }, &["key"]),
         read_only: false,
     },
     Tool {
         name: "save_show",
-        title: "Show speichern",
-        description: "Speichert die Show (ohne `path` unter dem aktuellen Pfad).",
+        title: "Save show",
+        description: "Saves the show (without `path` under the current path).",
         schema: || obj(props! { "path": string("Dateipfad, Endung .dmxcraft (optional)") }, &[]),
         read_only: false,
     },
 ];
 
-/// Werkzeugliste für `tools/list`.
+/// Tool list for `tools/list`.
 pub fn list() -> Vec<Value> {
     TOOLS
         .iter()
@@ -562,23 +563,25 @@ pub fn list() -> Vec<Value> {
         .collect()
 }
 
-/// Führt ein Werkzeug aus.
+/// Executes a tool.
 pub fn call(host: &Host, name: &str, a: &Value) -> R {
     let read_only = TOOLS
         .iter()
         .find(|t| t.name == name)
         .is_some_and(|t| t.read_only);
     if !read_only && host.locked.load(std::sync::atomic::Ordering::Relaxed) {
-        return Err("DMXCraft ist gesperrt (Schloss in der Titelleiste) – nur lesende Werkzeuge sind erlaubt".into());
+        return Err(
+            "DMXCraft is locked (lock in the title bar) – only read-only tools are allowed".into(),
+        );
     }
-    // 3D-Visualisierer: läuft in der Oberfläche, die dafür die Engine braucht –
-    // also ohne Sperre der Engine aufrufen
+    // 3D visualizer: runs in the UI, which needs the engine for it – so call
+    // it without locking the engine
     match name {
         "get_visualizer" => return (host.viz)("get", a).map(|r| r.0),
         "set_visualizer" => return (host.viz)("set", a).map(|r| r.0),
         "visualizer_screenshot" => {
             let (mut info, png) = (host.viz)("screenshot", a)?;
-            let png = png.ok_or("Kein Bild erhalten")?;
+            let png = png.ok_or("No image received")?;
             info["__image_png"] = Value::String(base64(&png));
             return Ok(info);
         }
@@ -595,7 +598,7 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
     let mut guard = host
         .engine
         .lock()
-        .map_err(|_| "Engine nicht verfügbar".to_string())?;
+        .map_err(|_| "Engine not available".to_string())?;
     let e: &mut Engine = &mut guard;
     let out = match name {
         "get_overview" => overview(e),
@@ -647,20 +650,20 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
                 .groups
                 .iter()
                 .find(|g| g.id == id)
-                .ok_or("Gruppe nicht gefunden")?;
+                .ok_or("Group not found")?;
             e.show_mut().remove_group(id);
             Ok(json!({ "deleted": id.0 }))
         }
         "create_bank" => {
             let id = e.show_mut().add_zone(req_str(a, "name")?);
             if let Some(c) = a.get("color") {
-                e.show_mut().zone_mut(id).ok_or("Bank fehlt")?.color = parse_color_opt(c)?;
+                e.show_mut().zone_mut(id).ok_or("Bank missing")?.color = parse_color_opt(c)?;
             }
             Ok(json!({ "bank": id.0 }))
         }
         "update_bank" => {
             let id = ZoneId(req_u32(a, "id")?);
-            let z = e.show_mut().zone_mut(id).ok_or("Bank nicht gefunden")?;
+            let z = e.show_mut().zone_mut(id).ok_or("Bank not found")?;
             if let Some(n) = opt_str(a, "name") {
                 z.name = n;
             }
@@ -674,7 +677,7 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
         }
         "delete_bank" => {
             let id = ZoneId(req_u32(a, "id")?);
-            e.show().zone(id).ok_or("Bank nicht gefunden")?;
+            e.show().zone(id).ok_or("Bank not found")?;
             e.show_mut().remove_zone_with_scenes(id);
             e.sync();
             Ok(json!({ "deleted": id.0 }))
@@ -703,11 +706,11 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
         "remove_effect" => {
             let sid = SceneId(req_u32(a, "scene")?);
             let fid = req_u32(a, "effect")?;
-            let s = e.show_mut().scene_mut(sid).ok_or("Szene nicht gefunden")?;
+            let s = e.show_mut().scene_mut(sid).ok_or("Scene not found")?;
             let n = s.effects.len();
             s.effects.retain(|f| f.id != fid);
             if s.effects.len() == n {
-                return Err("Effekt nicht gefunden".into());
+                return Err("Effect not found".into());
             }
             Ok(json!({ "scene": sid.0, "removed": fid }))
         }
@@ -717,7 +720,7 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
             let clips = a
                 .get("clips")
                 .and_then(Value::as_array)
-                .ok_or("`clips` fehlt")?
+                .ok_or("`clips` missing")?
                 .clone();
             let ids = add_clips(host, e, sid, &clips)?;
             Ok(json!({ "scene": sid.0, "clips": ids }))
@@ -725,8 +728,8 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
         "remove_timeline_clips" => {
             let sid = SceneId(req_u32(a, "scene")?);
             let list = id_list(a, "clips")?;
-            let s = e.show_mut().scene_mut(sid).ok_or("Szene nicht gefunden")?;
-            let tl = s.timeline_mut().ok_or("Keine SUPER SCENE")?;
+            let s = e.show_mut().scene_mut(sid).ok_or("Scene not found")?;
+            let tl = s.timeline_mut().ok_or("Not a SUPER SCENE")?;
             for c in &list {
                 tl.remove_clip(*c);
             }
@@ -735,9 +738,9 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
         }
         "play_scene" => {
             let id = SceneId(req_u32(a, "id")?);
-            let s = e.show().scene(id).ok_or("Szene nicht gefunden")?;
+            let s = e.show().scene(id).ok_or("Scene not found")?;
             if s.steps.is_empty() {
-                return Err("Szene ist leer".into());
+                return Err("Scene is empty".into());
             }
             e.activate(id);
             if let Some(ms) = a.get("position_ms").and_then(Value::as_f64) {
@@ -758,7 +761,7 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
         "pause_scene" => {
             let id = SceneId(req_u32(a, "id")?);
             if !e.is_active(id) {
-                return Err("Szene läuft nicht".into());
+                return Err("Scene is not running".into());
             }
             e.toggle_pause(id);
             Ok(json!({ "scene": id.0, "paused": e.progress(id).is_some_and(|p| p.paused) }))
@@ -792,7 +795,7 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
         "get_dmx_output" => dmx_output(e, a),
         "select_scene" => {
             let id = SceneId(req_u32(a, "id")?);
-            e.show().scene(id).ok_or("Szene nicht gefunden")?;
+            e.show().scene(id).ok_or("Scene not found")?;
             (host.notify)(AppEvent::SelectScene(id));
             Ok(json!({ "selected": id.0 }))
         }
@@ -805,7 +808,7 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
                         .map(|p| p.clone())
                         .filter(|p| !p.is_empty())
                 })
-                .ok_or("Die Show hat noch keinen Dateipfad – bitte `path` angeben")?;
+                .ok_or("The show has no file path yet – please provide `path`")?;
             if let Some(stem) = std::path::Path::new(&path).file_stem() {
                 e.show_mut().name = stem.to_string_lossy().into_owned();
             }
@@ -825,19 +828,19 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
     out
 }
 
-// ---------- Hilfen: Argumente ----------
+// ---------- Helpers: arguments ----------
 
 fn req_u32(a: &Value, k: &str) -> Result<u32, String> {
     a.get(k)
         .and_then(Value::as_u64)
         .and_then(|v| u32::try_from(v).ok())
-        .ok_or_else(|| format!("`{k}` fehlt oder ist keine Zahl"))
+        .ok_or_else(|| format!("`{k}` missing or not a number"))
 }
 fn opt_u64(a: &Value, k: &str) -> Option<u64> {
     a.get(k).and_then(Value::as_u64)
 }
 fn req_str(a: &Value, k: &str) -> Result<String, String> {
-    opt_str(a, k).ok_or_else(|| format!("`{k}` fehlt"))
+    opt_str(a, k).ok_or_else(|| format!("`{k}` missing"))
 }
 fn opt_str(a: &Value, k: &str) -> Option<String> {
     a.get(k).and_then(Value::as_str).map(str::to_string)
@@ -851,7 +854,7 @@ fn id_list(a: &Value, k: &str) -> Result<Vec<u32>, String> {
                 .filter_map(|n| u32::try_from(n).ok())
                 .collect()
         })
-        .ok_or_else(|| format!("`{k}` fehlt (Liste von IDs)"))
+        .ok_or_else(|| format!("`{k}` missing (list of IDs)"))
 }
 
 fn existing_fixtures(show: &Show, list: &[u32]) -> Result<Vec<FixtureId>, String> {
@@ -860,30 +863,29 @@ fn existing_fixtures(show: &Show, list: &[u32]) -> Result<Vec<FixtureId>, String
             let f = FixtureId(*id);
             show.fixture(f)
                 .map(|_| f)
-                .ok_or(format!("Gerät {id} nicht gefunden"))
+                .ok_or(format!("Fixture {id} not found"))
         })
         .collect()
 }
 
-/// „#rrggbb“ → RGB.
+/// “#rrggbb” → RGB.
 pub(crate) fn parse_hex(s: &str) -> Result<[u8; 3], String> {
     let h = s.trim().trim_start_matches('#');
     if h.len() != 6 {
-        return Err(format!("Farbe „{s}“: erwartet #rrggbb"));
+        return Err(format!("Color “{s}”: expected #rrggbb"));
     }
-    let p = |i: usize| {
-        u8::from_str_radix(&h[i..i + 2], 16).map_err(|_| format!("Farbe „{s}“ ungültig"))
-    };
+    let p =
+        |i: usize| u8::from_str_radix(&h[i..i + 2], 16).map_err(|_| format!("Invalid color “{s}”"));
     Ok([p(0)?, p(2)?, p(4)?])
 }
 
-/// Farbe einer Bank/Szene: `"auto"`/null = keine eigene Farbe.
+/// Color of a bank/scene: `"auto"`/null = no own color.
 fn parse_color_opt(v: &Value) -> Result<Option<[u8; 3]>, String> {
     match v {
         Value::Null => Ok(None),
         Value::String(s) if s.eq_ignore_ascii_case("auto") || s.is_empty() => Ok(None),
         Value::String(s) => parse_hex(s).map(Some),
-        _ => Err("Farbe als \"#rrggbb\" angeben".into()),
+        _ => Err("Give the color as \"#rrggbb\"".into()),
     }
 }
 
@@ -931,18 +933,18 @@ fn channel_kind(s: &str) -> Option<ChannelKind> {
         .find(|k| format!("{k:?}").to_lowercase() == alias)
 }
 
-/// Kanalindex eines Geräts aus Index, Kanalart oder Kanalname.
+/// Channel index of a fixture from index, channel kind or channel name.
 fn resolve_channel(show: &Show, fixture: FixtureId, ch: &Value) -> Result<u16, String> {
     let f = show
         .fixture(fixture)
-        .ok_or(format!("Gerät {} nicht gefunden", fixture.0))?;
-    let ty = show.type_of(f).ok_or("Gerätetyp fehlt")?;
+        .ok_or(format!("Fixture {} not found", fixture.0))?;
+    let ty = show.type_of(f).ok_or("Fixture type missing")?;
     if let Some(i) = ch.as_u64() {
         return (i < ty.channels.len() as u64)
             .then_some(i as u16)
-            .ok_or(format!("{} hat keinen Kanal {i}", f.name));
+            .ok_or(format!("{} has no channel {i}", f.name));
     }
-    let s = ch.as_str().ok_or("`channel` als Index oder Name angeben")?;
+    let s = ch.as_str().ok_or("Give `channel` as index or name")?;
     if let Some(k) = channel_kind(s) {
         if let Some(i) = ty.channels.iter().position(|c| c.kind == k) {
             return Ok(i as u16);
@@ -952,10 +954,10 @@ fn resolve_channel(show: &Show, fixture: FixtureId, ch: &Value) -> Result<u16, S
         .iter()
         .position(|c| c.name.eq_ignore_ascii_case(s))
         .map(|i| i as u16)
-        .ok_or(format!("{} hat keinen Kanal „{s}“", f.name))
+        .ok_or(format!("{} has no channel “{s}”", f.name))
 }
 
-/// Werte aus `values` sowie `fixtures` + `set` (je Kanalart).
+/// Values from `values` as well as `fixtures` + `set` (per channel kind).
 fn collect_values(show: &Show, a: &Value) -> Result<Vec<ChannelValue>, String> {
     let mut out: Vec<ChannelValue> = Vec::new();
     let mut put = |v: ChannelValue| {
@@ -964,7 +966,7 @@ fn collect_values(show: &Show, a: &Value) -> Result<Vec<ChannelValue>, String> {
     };
     if let Some(vals) = a.get("values").and_then(Value::as_array) {
         for v in vals {
-            // kurz: [fixture, channel, value]
+            // short: [fixture, channel, value]
             let (f, c, val) = match v.as_array() {
                 Some(t) if t.len() == 3 => (t[0].clone(), t[1].clone(), t[2].clone()),
                 Some(_) => return Err("Kurzform: [fixture, channel, value]".into()),
@@ -977,10 +979,10 @@ fn collect_values(show: &Show, a: &Value) -> Result<Vec<ChannelValue>, String> {
             let fixture = FixtureId(
                 f.as_u64()
                     .and_then(|n| u32::try_from(n).ok())
-                    .ok_or("`fixture` fehlt")?,
+                    .ok_or("`fixture` missing")?,
             );
             let channel = resolve_channel(show, fixture, &c)?;
-            let value = val.as_u64().ok_or("`value` fehlt")?.min(255) as u8;
+            let value = val.as_u64().ok_or("`value` missing")?.min(255) as u8;
             put(ChannelValue {
                 fixture,
                 channel,
@@ -991,20 +993,20 @@ fn collect_values(show: &Show, a: &Value) -> Result<Vec<ChannelValue>, String> {
     if let Some(set) = a.get("set").and_then(Value::as_object) {
         let fixtures = existing_fixtures(
             show,
-            &id_list(a, "fixtures").map_err(|_| "`set` braucht `fixtures`")?,
+            &id_list(a, "fixtures").map_err(|_| "`set` needs `fixtures`")?,
         )?;
-        // „color“ als Abkürzung für Rot/Grün/Blau
+        // “color” as a shorthand for red/green/blue
         let mut pairs: Vec<(String, u8)> = Vec::new();
         for (k, v) in set {
             if k.eq_ignore_ascii_case("color") {
-                let rgb = parse_hex(v.as_str().ok_or("color als \"#rrggbb\"")?)?;
+                let rgb = parse_hex(v.as_str().ok_or("color as \"#rrggbb\"")?)?;
                 pairs.extend([
                     ("Red".into(), rgb[0]),
                     ("Green".into(), rgb[1]),
                     ("Blue".into(), rgb[2]),
                 ]);
             } else {
-                let n = v.as_u64().ok_or(format!("Wert für {k} fehlt"))?.min(255) as u8;
+                let n = v.as_u64().ok_or(format!("Value for {k} missing"))?.min(255) as u8;
                 pairs.push((k.clone(), n));
             }
         }
@@ -1012,10 +1014,10 @@ fn collect_values(show: &Show, a: &Value) -> Result<Vec<ChannelValue>, String> {
             let ty = show
                 .fixture(f)
                 .and_then(|x| show.type_of(x))
-                .ok_or("Gerätetyp fehlt")?;
+                .ok_or("Fixture type missing")?;
             for (k, value) in &pairs {
-                let kind = channel_kind(k).ok_or(format!("Unbekannte Kanalart „{k}“"))?;
-                // Geräte ohne diese Kanalart werden übersprungen
+                let kind = channel_kind(k).ok_or(format!("Unknown channel kind “{k}”"))?;
+                // Fixtures without this channel kind are skipped
                 for (i, c) in ty.channels.iter().enumerate() {
                     if c.kind == kind {
                         put(ChannelValue {
@@ -1035,9 +1037,9 @@ fn build_steps(show: &Show, a: &Value) -> Result<Vec<Step>, String> {
     let list = a
         .get("steps")
         .and_then(Value::as_array)
-        .ok_or("`steps` fehlt")?;
+        .ok_or("`steps` missing")?;
     if list.is_empty() {
-        return Err("mindestens ein Schritt nötig".into());
+        return Err("at least one step required".into());
     }
     let single = list.len() == 1;
     list.iter()
@@ -1051,7 +1053,7 @@ fn build_steps(show: &Show, a: &Value) -> Result<Vec<Step>, String> {
         .collect()
 }
 
-/// `patch` rekursiv in `base` übernehmen.
+/// Merge `patch` recursively into `base`.
 fn merge(base: &mut Value, patch: &Value) {
     match (base, patch) {
         (Value::Object(b), Value::Object(p)) => {
@@ -1069,10 +1071,10 @@ fn merged<T: serde::Serialize + serde::de::DeserializeOwned>(
 ) -> Result<T, String> {
     let mut j = serde_json::to_value(v).map_err(|e| e.to_string())?;
     merge(&mut j, patch);
-    serde_json::from_value(j).map_err(|e| format!("Ungültige Einstellungen: {e}"))
+    serde_json::from_value(j).map_err(|e| format!("Invalid settings: {e}"))
 }
 
-// ---------- Ausgaben ----------
+// ---------- Outputs ----------
 
 fn fixture_json(show: &Show, id: FixtureId) -> Value {
     let Some(f) = show.fixture(id) else {
@@ -1097,9 +1099,9 @@ fn scene_kind(s: &dmxcraft_core::Scene) -> &'static str {
     } else if !s.effects.is_empty() {
         "FX"
     } else if s.steps.len() > 1 {
-        "ABLAUF"
+        "SEQUENCE"
     } else {
-        "STATISCH"
+        "STATIC"
     }
 }
 
@@ -1145,13 +1147,13 @@ fn list_scenes(e: &Engine, a: &Value) -> R {
     }))
 }
 
-/// Antwort nach einer Änderung: kurz (Zusammenfassung) oder mit `verbose`
-/// die ganze Szene – große Szenen sprengen sonst die Antwort.
+/// Answer after a change: short (summary) or with `verbose` the whole scene
+/// – large scenes would otherwise blow up the answer.
 fn changed_scene(e: &Engine, id: SceneId, a: &Value) -> R {
     if a.get("verbose").and_then(Value::as_bool).unwrap_or(false) {
         return get_scene(e, id);
     }
-    let s = e.show().scene(id).ok_or("Szene nicht gefunden")?;
+    let s = e.show().scene(id).ok_or("Scene not found")?;
     let mut out = scene_brief(e, s);
     out["values_per_step"] = json!(s.steps.iter().map(|st| st.values.len()).collect::<Vec<_>>());
     out["settings"] = serde_json::to_value(&s.settings).unwrap_or_default();
@@ -1172,7 +1174,7 @@ fn changed_scene(e: &Engine, id: SceneId, a: &Value) -> R {
 
 fn get_scene(e: &Engine, id: SceneId) -> R {
     let show = e.show();
-    let s = show.scene(id).ok_or("Szene nicht gefunden")?;
+    let s = show.scene(id).ok_or("Scene not found")?;
     let ch_name = |v: &ChannelValue| {
         show.channel_def(v.channel_ref())
             .map(|c| (c.name.clone(), format!("{:?}", c.kind)))
@@ -1254,14 +1256,14 @@ fn dmx_output(e: &Engine, a: &Value) -> R {
         .unwrap_or(1)
         .clamp(1, UNIVERSE_SIZE as u64) as usize;
     let count = opt_u64(a, "count").unwrap_or(UNIVERSE_SIZE as u64) as usize;
-    let data = frame.universe(u).ok_or("Universum nicht vorhanden")?;
+    let data = frame.universe(u).ok_or("Universe does not exist")?;
     let end = (start - 1 + count).min(UNIVERSE_SIZE);
     Ok(json!({ "universe": u + 1, "start": start, "values": data[start - 1..end].to_vec() }))
 }
 
-// ---------- Geräte ----------
+// ---------- Fixtures ----------
 
-/// Gerätetyp aus Show, eingebauten Typen oder Bibliothek.
+/// Fixture type from the show, built-in types or the library.
 fn find_type(show: &Show, key: &str, user: &[FixtureType]) -> Option<FixtureType> {
     if let Some(t) = show.fixture_type(key) {
         return Some(t.clone());
@@ -1296,7 +1298,7 @@ fn search_library(a: &Value, user: &[FixtureType]) -> R {
         })
         .map(|t| json!({ "manufacturer": t.manufacturer, "model": t.model, "modes": [mode_json(t)] }))
         .collect();
-    // eigene Profile (Profile Builder) zuerst
+    // custom profiles (Profile Builder) first
     let mut own: Vec<Value> = Vec::new();
     for t in user {
         let hay = format!("{} {} {} eigene own", t.manufacturer, t.model, t.mode).to_lowercase();
@@ -1321,14 +1323,15 @@ fn search_library(a: &Value, user: &[FixtureType]) -> R {
 fn add_fixtures(e: &mut Engine, a: &Value, user: &[FixtureType]) -> R {
     let key = req_str(a, "type_key")?;
     let ty = find_type(e.show(), &key, user).ok_or(format!(
-        "Gerätetyp „{key}“ nicht gefunden – erst search_fixture_library nutzen"
+        "Fixture type “{key}” not found – use search_fixture_library first"
     ))?;
     let count = opt_u64(a, "count").unwrap_or(1).clamp(1, 512) as usize;
     let base = opt_str(a, "name").unwrap_or_else(|| ty.model.clone());
     let universe = opt_u64(a, "universe").unwrap_or(1).max(1) as u8 - 1;
     let address = opt_u64(a, "address").unwrap_or(1).clamp(1, 512) as u16;
     e.show_mut().upsert_fixture_type(ty.clone());
-    // Vorlage: Namen „Basis 1“ … – paste_fixtures zählt weiter und sucht freie Adressen
+    // Template: names “Base 1” … – paste_fixtures counts on and finds free
+    // addresses
     let n0 = (1..)
         .find(|n| {
             !e.show()
@@ -1354,7 +1357,7 @@ fn add_fixtures(e: &mut Engine, a: &Value, user: &[FixtureType]) -> R {
         .collect();
     let ids = e.show_mut().paste_fixtures(&templates, universe, address);
     if ids.is_empty() {
-        return Err("Kein Platz im Patch".into());
+        return Err("No room in the patch".into());
     }
     let show = e.show();
     Ok(json!({
@@ -1365,7 +1368,7 @@ fn add_fixtures(e: &mut Engine, a: &Value, user: &[FixtureType]) -> R {
 
 fn update_fixture(e: &mut Engine, a: &Value) -> R {
     let id = FixtureId(req_u32(a, "id")?);
-    let f = e.show().fixture(id).ok_or("Gerät nicht gefunden")?.clone();
+    let f = e.show().fixture(id).ok_or("Fixture not found")?.clone();
     if a.get("universe").is_some() || a.get("address").is_some() {
         let u = opt_u64(a, "universe").map_or(f.universe, |u| u.max(1) as u8 - 1);
         let ad = opt_u64(a, "address").map_or(f.address, |v| v as u16);
@@ -1373,7 +1376,7 @@ fn update_fixture(e: &mut Engine, a: &Value) -> R {
             .repatch_fixture(id, u, ad)
             .map_err(|err| err.to_string())?;
     }
-    let fm = e.show_mut().fixture_mut(id).ok_or("Gerät nicht gefunden")?;
+    let fm = e.show_mut().fixture_mut(id).ok_or("Fixture not found")?;
     if let Some(n) = opt_str(a, "name") {
         fm.name = n;
     }
@@ -1389,11 +1392,11 @@ fn update_fixture(e: &mut Engine, a: &Value) -> R {
     Ok(fixture_json(e.show(), id))
 }
 
-// ---------- Szenen ----------
+// ---------- Scenes ----------
 
 fn create_scene(host: &Host, e: &mut Engine, a: &Value) -> R {
     let bank = ZoneId(req_u32(a, "bank")?);
-    e.show().zone(bank).ok_or("Bank nicht gefunden")?;
+    e.show().zone(bank).ok_or("Bank not found")?;
     let steps = build_steps(e.show(), a)?;
     let multi = steps.len() > 1;
     let id = e
@@ -1401,8 +1404,8 @@ fn create_scene(host: &Host, e: &mut Engine, a: &Value) -> R {
         .add_scene(req_str(a, "name")?, Some(bank), steps);
     apply_scene_fields(e, id, a)?;
     if multi {
-        // Ablauf mit mehreren Schritten = STEPS-Effekt (wie in der Oberfläche)
-        let s = e.show_mut().scene_mut(id).ok_or("Szene fehlt")?;
+        // Sequence with several steps = STEPS effect (as in the UI)
+        let s = e.show_mut().scene_mut(id).ok_or("Scene missing")?;
         if !s.has_steps() {
             s.add_effect(EffectKind::Steps);
         }
@@ -1414,7 +1417,7 @@ fn create_scene(host: &Host, e: &mut Engine, a: &Value) -> R {
 }
 
 fn apply_scene_fields(e: &mut Engine, id: SceneId, a: &Value) -> Result<(), String> {
-    let s = e.show_mut().scene_mut(id).ok_or("Szene nicht gefunden")?;
+    let s = e.show_mut().scene_mut(id).ok_or("Scene not found")?;
     if let Some(n) = opt_str(a, "name") {
         s.name = n;
     }
@@ -1435,17 +1438,14 @@ fn apply_scene_fields(e: &mut Engine, id: SceneId, a: &Value) -> Result<(), Stri
 
 fn update_scene(e: &mut Engine, a: &Value) -> R {
     let id = SceneId(req_u32(a, "id")?);
-    e.show().scene(id).ok_or("Szene nicht gefunden")?;
+    e.show().scene(id).ok_or("Scene not found")?;
     if a.get("steps").is_some() {
         if e.show().scene(id).is_some_and(|s| s.timeline().is_some()) {
-            return Err(
-                "Eine SUPER SCENE hat keine Schritte – Blöcke über add_timeline_clips ändern"
-                    .into(),
-            );
+            return Err("A SUPER SCENE has no steps – change blocks via add_timeline_clips".into());
         }
         let steps = build_steps(e.show(), a)?;
         let multi = steps.len() > 1;
-        let s = e.show_mut().scene_mut(id).ok_or("Szene fehlt")?;
+        let s = e.show_mut().scene_mut(id).ok_or("Scene missing")?;
         s.steps = steps;
         if multi && !s.has_steps() && s.effects.is_empty() {
             s.add_effect(EffectKind::Steps);
@@ -1456,7 +1456,7 @@ fn update_scene(e: &mut Engine, a: &Value) -> R {
     }
     if let Some(b) = opt_u64(a, "bank") {
         let z = ZoneId(b as u32);
-        e.show().zone(z).ok_or("Bank nicht gefunden")?;
+        e.show().zone(z).ok_or("Bank not found")?;
         e.show_mut().move_scenes(&[id], z, None);
     }
     apply_scene_fields(e, id, a)?;
@@ -1468,12 +1468,15 @@ fn add_effect(e: &mut Engine, a: &Value) -> R {
     let sid = SceneId(req_u32(a, "scene")?);
     let kind = parse_kind(&req_str(a, "kind")?)?;
     if kind.exclusive() {
-        return Err("Steps bzw. SuperScene über create_scene/create_super_scene anlegen".into());
+        return Err("Create Steps or a SuperScene via create_scene/create_super_scene".into());
     }
     let fixtures = existing_fixtures(e.show(), &id_list(a, "fixtures")?)?;
-    let s = e.show_mut().scene_mut(sid).ok_or("Szene nicht gefunden")?;
+    let s = e.show_mut().scene_mut(sid).ok_or("Scene not found")?;
     if s.effects.iter().any(|f| f.kind.exclusive()) {
-        return Err("Diese Szene hat STEPS bzw. ist eine SUPER SCENE – dort sind keine weiteren Effekte möglich".into());
+        return Err(
+            "This scene has STEPS or is a SUPER SCENE – no further effects are possible there"
+                .into(),
+        );
     }
     if s.steps.is_empty() {
         s.steps.push(Step::new(Vec::new()));
@@ -1483,7 +1486,7 @@ fn add_effect(e: &mut Engine, a: &Value) -> R {
         .effects
         .iter_mut()
         .find(|f| f.id == fid)
-        .ok_or("Effekt fehlt")?;
+        .ok_or("Effect missing")?;
     fx.fixtures = fixtures;
     if let Some(p) = a.get("params").filter(|v| v.is_object()) {
         let mut p = p.clone();
@@ -1503,12 +1506,12 @@ fn update_effect(e: &mut Engine, a: &Value) -> R {
         Some(_) => Some(existing_fixtures(e.show(), &id_list(a, "fixtures")?)?),
         None => None,
     };
-    let s = e.show_mut().scene_mut(sid).ok_or("Szene nicht gefunden")?;
+    let s = e.show_mut().scene_mut(sid).ok_or("Scene not found")?;
     let fx = s
         .effects
         .iter_mut()
         .find(|f| f.id == fid)
-        .ok_or("Effekt nicht gefunden")?;
+        .ok_or("Effect not found")?;
     if let Some(f) = fixtures {
         fx.fixtures = f;
     }
@@ -1527,14 +1530,14 @@ fn update_effect(e: &mut Engine, a: &Value) -> R {
 
 fn create_super_scene(host: &Host, e: &mut Engine, a: &Value) -> R {
     let bank = ZoneId(req_u32(a, "bank")?);
-    e.show().zone(bank).ok_or("Bank nicht gefunden")?;
+    e.show().zone(bank).ok_or("Bank not found")?;
     let id = e
         .show_mut()
         .add_scene(req_str(a, "name")?, Some(bank), vec![Step::new(Vec::new())]);
     {
-        let s = e.show_mut().scene_mut(id).ok_or("Szene fehlt")?;
+        let s = e.show_mut().scene_mut(id).ok_or("Scene missing")?;
         s.add_effect(EffectKind::SuperScene);
-        let tl = s.timeline_mut().ok_or("Zeitleiste fehlt")?;
+        let tl = s.timeline_mut().ok_or("Timeline missing")?;
         if let Some(b) = a.get("bpm").and_then(Value::as_f64) {
             tl.bpm = b.clamp(20.0, 400.0) as f32;
         }
@@ -1549,7 +1552,7 @@ fn create_super_scene(host: &Host, e: &mut Engine, a: &Value) -> R {
         s.sync_timeline_length();
     }
     if let Some(clips) = a.get("clips").and_then(Value::as_array) {
-        // ungültiger Block: keine halbe SUPER SCENE zurücklassen
+        // invalid block: do not leave half a SUPER SCENE behind
         if let Err(err) = add_clips(host, e, id, &clips.clone()) {
             e.show_mut().remove_scene(id);
             return Err(err);
@@ -1565,7 +1568,7 @@ fn add_clips(
     sid: SceneId,
     clips: &[Value],
 ) -> Result<Vec<u32>, String> {
-    // erst alles prüfen, dann einfügen
+    // check everything first, then insert
     enum Part {
         Scene(dmxcraft_core::Scene),
         Audio(String),
@@ -1575,24 +1578,24 @@ fn add_clips(
     let mut parts = Vec::new();
     for c in clips {
         let track = opt_u64(c, "track").unwrap_or(0) as usize;
-        let start = opt_u64(c, "start_ms").ok_or("`start_ms` fehlt")?;
+        let start = opt_u64(c, "start_ms").ok_or("`start_ms` missing")?;
         let part = if let Some(scene) = opt_u64(c, "scene") {
             let sc = e
                 .show()
                 .scene(SceneId(scene as u32))
-                .ok_or(format!("Szene {scene} nicht gefunden"))?;
+                .ok_or(format!("Scene {scene} not found"))?;
             if sc.id == sid {
-                return Err("Eine SUPER SCENE kann sich nicht selbst enthalten".into());
+                return Err("A SUPER SCENE cannot contain itself".into());
             }
             Part::Scene(sc.clone())
         } else if let Some(p) = opt_str(c, "audio_path") {
             if !std::path::Path::new(&p).exists() {
-                return Err(format!("Audiodatei nicht gefunden: {p}"));
+                return Err(format!("Audio file not found: {p}"));
             }
             Part::Audio(p)
         } else if let Some(p) = opt_str(c, "video_path") {
             if !std::path::Path::new(&p).exists() {
-                return Err(format!("Videodatei nicht gefunden: {p}"));
+                return Err(format!("Video file not found: {p}"));
             }
             Part::Video(p)
         } else if let Some(scene) = opt_str(c, "obs_scene") {
@@ -1608,9 +1611,7 @@ fn add_clips(
                 (None, _) => Part::Obs(ObsAction::Scene(scene)),
             }
         } else {
-            return Err(
-                "Block braucht `scene`, `audio_path`, `video_path` oder `obs_scene`".into(),
-            );
+            return Err("Block needs `scene`, `audio_path`, `video_path` or `obs_scene`".into());
         };
         parts.push((track, start, part, c));
     }
@@ -1624,8 +1625,8 @@ fn add_clips(
             _ => None,
         })
         .collect();
-    let s = e.show_mut().scene_mut(sid).ok_or("Szene nicht gefunden")?;
-    let tl = s.timeline_mut().ok_or("Keine SUPER SCENE")?;
+    let s = e.show_mut().scene_mut(sid).ok_or("Scene not found")?;
+    let tl = s.timeline_mut().ok_or("Not a SUPER SCENE")?;
     let mut ids = Vec::new();
     for ((track, start, part, c), len) in parts.into_iter().zip(durations) {
         let dur = opt_u64(c, "duration_ms").or(len).unwrap_or(10_000);
@@ -1686,7 +1687,7 @@ fn add_clips(
     Ok(ids)
 }
 
-/// Base64 (Standard-Alphabet, mit Auffüllung) für Bilder im MCP-Ergebnis.
+/// Base64 (standard alphabet, with padding) for images in the MCP result.
 pub(crate) fn base64(data: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
@@ -1741,7 +1742,7 @@ mod tests {
             "create_super_scene",
             json!({"name":"S","bank":bank,"clips":[
                 {"obs_scene":"Countdown","start_ms":0},
-                {"obs_scene":"Live","obs_source":"Kamera","obs_visible":false,"start_ms":2000}
+                {"obs_scene":"Live","obs_source":"camera","obs_visible":false,"start_ms":2000}
             ]}),
         )["id"]
             .as_u64()
@@ -1764,7 +1765,7 @@ mod tests {
         let r = call(
             &h,
             "create_super_scene",
-            &json!({"name":"S","bank":bank,"clips":[{"audio_path":"/gibt/es/nicht.mp3","start_ms":0}]}),
+            &json!({"name":"S","bank":bank,"clips":[{"audio_path":"/does/not/exist.mp3","start_ms":0}]}),
         );
         assert!(r.is_err());
         let list = ok(&h, "list_scenes", json!({"bank":bank}));
@@ -1785,7 +1786,7 @@ mod tests {
         assert_eq!(list[1]["address"], 7);
         let ids: Vec<u64> = list.iter().map(|f| f["id"].as_u64().unwrap()).collect();
 
-        let bank = ok(&h, "create_bank", json!({"name":"Farben"}))["bank"]
+        let bank = ok(&h, "create_bank", json!({"name":"Colors"}))["bank"]
             .as_u64()
             .unwrap();
         let red = ok(
@@ -1798,14 +1799,14 @@ mod tests {
                 "verbose":true
             }),
         );
-        assert_eq!(red["kind"], "STATISCH");
+        assert_eq!(red["kind"], "STATIC");
         assert_eq!(red["settings"]["fade_in_ms"], 500);
         let red_id = red["id"].as_u64().unwrap();
         let vals = red["step_list"][0]["values"].as_array().unwrap();
         assert!(vals.iter().any(|v| v["kind"] == "Red" && v["value"] == 255));
         assert!(vals.iter().any(|v| v["kind"] == "Green" && v["value"] == 0));
 
-        // Ablauf mit zwei Schritten
+        // Sequence with two steps
         let chase = ok(
             &h,
             "create_scene",
@@ -1818,7 +1819,7 @@ mod tests {
             }),
         );
         assert_eq!(chase["steps"], 2);
-        // Kurzform der Werte und kurze Antwort ohne Kanalliste
+        // Short form of the values and short answer without the channel list
         let short = ok(
             &h,
             "create_scene",
@@ -1835,7 +1836,7 @@ mod tests {
         assert!(v.iter().any(|x| x["channel"] == 0 && x["value"] == 7));
         assert_eq!(chase["effects"][0], "Steps");
 
-        // Effekt mit Parametern
+        // Effect with parameters
         let tpl = ok(&h, "describe_effect", json!({"kind":"ColorFx"}));
         assert!(tpl["template"]["color"].is_object());
         let fx = ok(
@@ -1851,7 +1852,7 @@ mod tests {
             json!({"scene":red_id,"effect":eid,"fixtures":[ids[0], ids[1]]}),
         );
 
-        // SUPER SCENE mit zwei Blöcken
+        // SUPER SCENE with two blocks
         let sup = ok(
             &h,
             "create_super_scene",
@@ -1872,7 +1873,7 @@ mod tests {
         )
         .is_err());
 
-        // Wiedergabe und Ausgang
+        // Playback and output
         ok(&h, "play_scene", json!({"id":red_id}));
         h.engine
             .lock()
@@ -1888,7 +1889,7 @@ mod tests {
         );
         assert_eq!(h.engine.lock().unwrap().live().len(), 1);
 
-        // Überblick und Aufräumen
+        // Overview and cleanup
         let ov = ok(&h, "get_overview", json!({}));
         assert_eq!(ov["fixtures"], 4);
         ok(&h, "delete_scenes", json!({"ids":[chase["id"]]}));
@@ -1921,7 +1922,7 @@ mod tests {
         .unwrap_err()
         .contains("Bank"));
         assert!(
-            call(&h, "add_fixtures", &json!({"type_key":"gibt/es/nicht"}))
+            call(&h, "add_fixtures", &json!({"type_key":"does/not/exist"}))
                 .unwrap_err()
                 .contains("search_fixture_library")
         );

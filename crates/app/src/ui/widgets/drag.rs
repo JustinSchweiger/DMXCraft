@@ -1,11 +1,11 @@
-//! Endloses Ziehen für Zahlenfelder und Regler: Der Mauszeiger wird während
-//! des Ziehens ausgeblendet und festgehalten (gesperrt bzw. an den Startpunkt
-//! zurückgesetzt), die Bewegung kommt aus den rohen Mausdaten. So lässt sich
-//! ein Wert beliebig weit verstellen, auch über den Fensterrand hinaus.
+//! Endless dragging for number fields and sliders: the mouse pointer is
+//! hidden and held in place while dragging (locked or reset to the start
+//! point), the movement comes from the raw mouse data. That way a value can
+//! be changed as far as you like, even beyond the window edge.
 
 use eframe::egui::{self, CursorIcon, Pos2, Response, Ui, Vec2, ViewportCommand};
 
-/// Wurden schon rohe Mausbewegungen empfangen? (sonst normales Ziehen)
+/// Have raw mouse movements been received already? (otherwise normal dragging)
 fn raw_available(ctx: &egui::Context) -> bool {
     let id = egui::Id::unique("raw_mouse_motion_seen");
     if ctx.input(|i| i.pointer.motion().is_some()) {
@@ -15,7 +15,7 @@ fn raw_available(ctx: &egui::Context) -> bool {
     ctx.data(|d| d.get_temp(id)).unwrap_or(false)
 }
 
-/// Mausweg dieses Frames für ein gezogenes Element (in Punkten).
+/// Mouse travel of this frame for a dragged element (in points).
 pub fn endless_delta(ui: &Ui, resp: &Response) -> Vec2 {
     let ctx = ui.ctx();
     let origin_id = resp.id.with("endless_origin");
@@ -40,7 +40,7 @@ pub fn endless_delta(ui: &Ui, resp: &Response) -> Vec2 {
                 .or(resp.interact_pointer_pos())
                 .unwrap_or_default();
             ctx.data_mut(|d| d.insert_temp(origin_id, o));
-            // Wayland/macOS: Zeiger sperren; sonst hilft das Zurücksetzen unten
+            // Wayland/macOS: lock the pointer; otherwise the reset below helps
             ctx.send_viewport_cmd(ViewportCommand::CursorGrab(egui::CursorGrab::Locked));
             o
         }
@@ -51,8 +51,8 @@ pub fn endless_delta(ui: &Ui, resp: &Response) -> Vec2 {
         .map_or(Vec2::ZERO, |m| m / ppp)
 }
 
-/// Kleines Zahlenfeld im Stil der Symbol-Knöpfe: Ziehen hoch/runter (endlos)
-/// oder Mausrad ändert den Wert. `true`, wenn er sich geändert hat.
+/// Small number field in the style of the icon buttons: dragging up/down
+/// (endless) or the mouse wheel changes the value. `true` if it changed.
 pub fn drag_number(
     ui: &mut Ui,
     id_salt: &str,

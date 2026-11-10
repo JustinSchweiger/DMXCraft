@@ -1,6 +1,6 @@
-//! MOVE FX: Pan/Tilt fahren eine Form ab (Kreis, Kurve, Vieleck, Linie,
-//! Punkte). Die Form liegt in einem Feld 0..=1 (x = Pan, y = Tilt) und wird
-//! über Mittelpunkt, Größe und Drehung platziert.
+//! MOVE FX: pan/tilt trace a shape (circle, curve, polygon, line, points).
+//! The shape lies in a field 0..=1 (x = pan, y = tilt) and is placed via
+//! center, size and rotation.
 
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -41,7 +41,7 @@ impl MoveShape {
         }
     }
 
-    /// Stützpunkte einer neuen Form (lokal, -1..=1).
+    /// Control points of a new shape (local, -1..=1).
     pub fn default_points(self) -> Vec<[f32; 2]> {
         match self {
             MoveShape::Circle => Vec::new(),
@@ -56,26 +56,26 @@ impl MoveShape {
 #[serde(default)]
 pub struct MoveFx {
     pub shape: MoveShape,
-    /// Stützpunkte im lokalen Feld (-1..=1).
+    /// Control points in the local field (-1..=1).
     pub points: Vec<[f32; 2]>,
-    /// Rundung je Stützpunkt (0 = spitze Ecke, 1 = ganz rund). Fehlende
-    /// Einträge zählen als 0. Gilt für Vieleck, Linie und Punkte.
+    /// Rounding per control point (0 = sharp corner, 1 = fully round). Missing
+    /// entries count as 0. Applies to polygon, line and points.
     pub smooth: Vec<f32>,
-    /// Punkte: von Punkt zu Punkt springen statt die Form abzufahren.
-    /// Ältere Shows (ohne das Feld) springen wie bisher.
+    /// Points: jump from point to point instead of tracing the shape.
+    /// Older shows (without the field) jump as before.
     #[serde(default = "jump_default")]
     pub jump: bool,
-    /// Mittelpunkt in Pan/Tilt (0..=1).
+    /// Center in pan/tilt (0..=1).
     pub center: [f32; 2],
-    /// Halbe Breite/Höhe des Rahmens (0..=0.5).
+    /// Half the width/height of the frame (0..=0.5).
     pub size: [f32; 2],
-    /// Drehung in Grad.
+    /// Rotation in degrees.
     pub rotation: f32,
-    /// Versatz von Beam zu Beam (0..1 Durchlauf über alle Beams).
+    /// Offset from beam to beam (0..1 cycle across all beams).
     pub phasing: f32,
-    /// Jeder zweite Beam gespiegelt.
+    /// Every second beam mirrored.
     pub symmetry: bool,
-    /// Relativ zur Position aus den Schritten statt absolut.
+    /// Relative to the position from the steps instead of absolute.
     pub relative: bool,
 }
 
@@ -111,7 +111,7 @@ impl MoveFx {
         self.smooth.clear();
     }
 
-    /// Rundung des Stützpunkts `i` (0..=1).
+    /// Rounding of control point `i` (0..=1).
     pub fn smooth_at(&self, i: usize) -> f32 {
         self.smooth.get(i).copied().unwrap_or(0.0).clamp(0.0, 1.0)
     }
@@ -126,7 +126,7 @@ impl MoveFx {
         self.smooth[i] = v.clamp(0.0, 1.0);
     }
 
-    /// Ist die Bahn geschlossen (letzter Punkt zurück zum ersten)?
+    /// Is the path closed (last point back to the first)?
     pub fn closed(&self) -> bool {
         matches!(
             self.shape,
@@ -134,12 +134,12 @@ impl MoveFx {
         )
     }
 
-    /// Lassen sich Stützpunkte hinzufügen/löschen/runden?
+    /// Can control points be added/deleted/rounded?
     pub fn editable(&self) -> bool {
         self.shape != MoveShape::Circle
     }
 
-    /// Mindestanzahl Stützpunkte der Form.
+    /// Minimum number of control points of the shape.
     pub fn min_points(&self) -> usize {
         match self.shape {
             MoveShape::Polygon | MoveShape::Curve => 3,
@@ -147,8 +147,8 @@ impl MoveFx {
         }
     }
 
-    /// Neuen Stützpunkt an der Stelle `local` einfügen – auf der Kante, die
-    /// ihm am nächsten liegt. Gibt den Index des neuen Punkts zurück.
+    /// Insert a new control point at position `local` – on the edge closest to
+    /// it. Returns the index of the new point.
     pub fn insert_point(&mut self, local: [f32; 2]) -> usize {
         let q = [local[0].clamp(-1.0, 1.0), local[1].clamp(-1.0, 1.0)];
         let n = self.points.len();
@@ -168,8 +168,8 @@ impl MoveFx {
                 da.total_cmp(&db)
             })
             .unwrap_or(n - 1);
-        // offene Bahn: vor dem ersten bzw. hinter dem letzten Punkt anhängen,
-        // wenn der Klick deutlich außerhalb liegt
+        // open path: append before the first or after the last point when the
+        // click is clearly outside
         let at = if self.closed() {
             best + 1
         } else if best == 0 && proj(q, self.points[0], self.points[1]) < 0.0 {
@@ -184,7 +184,7 @@ impl MoveFx {
         at
     }
 
-    /// Stützpunkt entfernen (nicht unter die Mindestanzahl).
+    /// Remove a control point (not below the minimum number).
     pub fn remove_point(&mut self, i: usize) -> bool {
         if i >= self.points.len() || self.points.len() <= self.min_points() {
             return false;
@@ -196,8 +196,8 @@ impl MoveFx {
         true
     }
 
-    /// Bahn mit gerundeten Ecken als dichter Linienzug (lokal). Bei
-    /// geschlossenen Bahnen ist der erste Punkt am Ende wiederholt.
+    /// Path with rounded corners as a dense polyline (local). For closed paths
+    /// the first point is repeated at the end.
     pub fn path(&self) -> Vec<[f32; 2]> {
         let p = &self.points;
         let n = p.len();
@@ -220,7 +220,7 @@ impl MoveFx {
                 out.push(p[i]);
                 continue;
             }
-            // halbe Kante bei voller Rundung, damit Nachbarn sich treffen
+            // half an edge at full rounding so neighbors meet
             let d = r * 0.5 * la.min(lb);
             let q1 = lerp(p[i], a, d / la);
             let q2 = lerp(p[i], b, d / lb);
@@ -235,7 +235,7 @@ impl MoveFx {
         out
     }
 
-    /// Lokaler Punkt (-1..=1) → Pan/Tilt-Feld (0..=1).
+    /// Local point (-1..=1) → pan/tilt field (0..=1).
     pub fn to_field(&self, p: [f32; 2]) -> [f32; 2] {
         let (s, c) = self.rotation.to_radians().sin_cos();
         let (x, y) = (p[0] * self.size[0], p[1] * self.size[1]);
@@ -245,7 +245,7 @@ impl MoveFx {
         ]
     }
 
-    /// Pan/Tilt-Feld → lokaler Punkt.
+    /// Pan/tilt field → local point.
     pub fn to_local(&self, q: [f32; 2]) -> [f32; 2] {
         let (s, c) = self.rotation.to_radians().sin_cos();
         let (dx, dy) = (q[0] - self.center[0], q[1] - self.center[1]);
@@ -253,7 +253,7 @@ impl MoveFx {
         [x / self.size[0].max(1e-4), y / self.size[1].max(1e-4)]
     }
 
-    /// Lokaler Punkt der Form an Stelle `t` (0..1 Durchlauf).
+    /// Local point of the shape at position `t` (0..1 cycle).
     pub fn local_at(&self, t: f32) -> [f32; 2] {
         let t = t.rem_euclid(1.0);
         let p = &self.points;
@@ -263,7 +263,7 @@ impl MoveFx {
             MoveShape::Points if self.jump => p[((t * p.len() as f32) as usize).min(p.len() - 1)],
             MoveShape::Points | MoveShape::Polygon => along(&self.path(), false, t),
             MoveShape::Line => {
-                // hin und zurück
+                // back and forth
                 let u = if t < 0.5 { t * 2.0 } else { 2.0 - t * 2.0 };
                 along(&self.path(), false, u)
             }
@@ -278,7 +278,7 @@ impl MoveFx {
         }
     }
 
-    /// Pan/Tilt (0..=1) des Beams `i` von `n`.
+    /// Pan/tilt (0..=1) of beam `i` of `n`.
     pub fn position(&self, i: usize, n: usize, cycles: f64) -> [f32; 2] {
         let t = cycles as f32 - self.phasing * i as f32 / n.max(1) as f32;
         let mut l = self.local_at(t);
@@ -290,7 +290,7 @@ impl MoveFx {
     }
 }
 
-/// Punkt auf dem Linienzug bei Anteil `t` der Gesamtlänge.
+/// Point on the polyline at share `t` of the total length.
 fn along(p: &[[f32; 2]], closed: bool, t: f32) -> [f32; 2] {
     let mut segs: Vec<([f32; 2], [f32; 2])> = p.windows(2).map(|w| (w[0], w[1])).collect();
     if closed && p.len() > 2 {
@@ -321,7 +321,7 @@ fn lerp(a: [f32; 2], b: [f32; 2], u: f32) -> [f32; 2] {
     [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]
 }
 
-/// Quadratische Bézierkurve q1 → (Kontrollpunkt c) → q2.
+/// Quadratic Bézier curve q1 → (control point c) → q2.
 fn quad(q1: [f32; 2], c: [f32; 2], q2: [f32; 2], u: f32) -> [f32; 2] {
     let v = 1.0 - u;
     [
@@ -330,14 +330,14 @@ fn quad(q1: [f32; 2], c: [f32; 2], q2: [f32; 2], u: f32) -> [f32; 2] {
     ]
 }
 
-/// Lage der Projektion von `q` auf die Gerade a→b (0 = a, 1 = b).
+/// Position of the projection of `q` onto the line a→b (0 = a, 1 = b).
 fn proj(q: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
     let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
     let l2 = (dx * dx + dy * dy).max(1e-8);
     ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / l2
 }
 
-/// Abstand von `q` zur Strecke a–b.
+/// Distance from `q` to the segment a–b.
 fn seg_dist(q: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
     dist(q, lerp(a, b, proj(q, a, b).clamp(0.0, 1.0)))
 }
@@ -354,7 +354,7 @@ fn catmull(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f
     [f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]
 }
 
-/// Pan/Tilt (samt Feinkanälen) der Beams schreiben.
+/// Write pan/tilt (including fine channels) of the beams.
 pub fn apply(
     show: &Show,
     fx: &MoveFx,
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn points_travel_the_closed_path() {
         let fx = square();
-        // ein Viertel der Strecke: von Ecke 1 zu Ecke 2
+        // a quarter of the way: from corner 1 to corner 2
         let q = fx.local_at(0.25);
         assert!(
             (q[0] - 1.0).abs() < 1e-4 && (q[1] + 1.0).abs() < 1e-4,
@@ -462,32 +462,32 @@ mod tests {
         let mut fx = square();
         fx.set_smooth(1, 1.0);
         let path = fx.path();
-        // die spitze Ecke (1, -1) kommt nicht mehr vor, die Bahn bleibt drinnen
+        // the sharp corner (1, -1) no longer occurs, the path stays inside
         assert!(!path
             .iter()
             .any(|p| (p[0] - 1.0).abs() < 1e-4 && (p[1] + 1.0).abs() < 1e-4));
         let mid = quad([0.0, -1.0], [1.0, -1.0], [1.0, 0.0], 0.5);
         assert!(path.iter().any(|p| dist(*p, mid) < 1e-4));
-        // Start und Ende der Bahn gleich (geschlossen)
+        // Start and end of the path are equal (closed)
         assert_eq!(path.first(), path.last());
     }
 
     #[test]
     fn insert_and_remove_points() {
         let mut fx = square();
-        // Klick nahe der rechten Kante -> zwischen Punkt 1 und 2
+        // Click near the right edge -> between point 1 and 2
         let i = fx.insert_point([0.95, 0.0]);
         assert_eq!(i, 2);
         assert_eq!(fx.points.len(), 5);
         assert_eq!(fx.smooth.len(), 5);
-        // Klick nahe der schließenden Kante (links) -> ans Ende
+        // Click near the closing edge (left) -> at the end
         let i = fx.insert_point([-0.95, 0.2]);
         assert_eq!(i, 5);
         assert!(fx.remove_point(0));
         assert_eq!(fx.points.len(), 5);
         let mut line = MoveFx::new(MoveShape::Line);
         assert!(!line.remove_point(0));
-        // offene Linie (0,-1)–(0,1): vor dem Anfang, dazwischen, hinter dem Ende
+        // open line (0,-1)–(0,1): before the start, in between, after the end
         assert_eq!(line.insert_point([0.0, -1.0]), 1);
         let mut line = MoveFx::new(MoveShape::Line);
         line.points = vec![[0.0, -0.5], [0.0, 0.5]];

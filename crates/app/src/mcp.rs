@@ -1,6 +1,6 @@
-//! Anbindung des MCP-Servers (KI-Assistent) an die Anwendung: startet bzw.
-//! stoppt den Server nach den Einstellungen und reicht seine Meldungen an
-//! die Oberfläche weiter.
+//! Connects the MCP server (AI assistant) to the application: starts or
+//! stops the server according to the settings and passes its messages on
+//! to the UI.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use crate::settings::Settings;
 
-/// Zustand für die Anzeige in den Einstellungen.
+/// State for display in the settings.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum McpStatus {
     #[default]
@@ -24,14 +24,14 @@ pub enum McpStatus {
     Error(String),
 }
 
-/// Auftrag an den 3D-Visualisierer (wird in der Oberfläche ausgeführt).
+/// Request to the 3D visualizer (executed in the UI).
 pub struct VizJob {
     pub action: String,
     pub args: Value,
     pub reply: Sender<Result<VizReply, String>>,
 }
 
-/// Eigene Geräteprofile im Konfigurationsordner (wie der Profile Builder).
+/// Custom fixture profiles in the config folder (like the Profile Builder).
 struct AppProfiles;
 
 impl ProfileStore for AppProfiles {
@@ -59,7 +59,7 @@ pub struct McpLink {
     rx: Receiver<AppEvent>,
     show_path: Arc<Mutex<String>>,
     locked: Arc<AtomicBool>,
-    /// Zuletzt angewendete Einstellung (Port, wenn eingeschaltet).
+    /// Last applied setting (port, if enabled).
     wanted: Option<u16>,
     pub status: McpStatus,
 }
@@ -81,8 +81,8 @@ impl Default for McpLink {
 }
 
 impl McpLink {
-    /// Einmal pro Frame: Server nach den Einstellungen starten/stoppen,
-    /// gemeinsame Angaben aktualisieren, Meldungen abholen.
+    /// Once per frame: start/stop the server according to the settings, update
+    /// shared data, collect messages.
     pub fn update(
         &mut self,
         ctx: &egui::Context,
@@ -97,7 +97,7 @@ impl McpLink {
             }
         }
         self.locked.store(locked, Ordering::Relaxed);
-        // nur bei Änderung des Schalters/Ports (neu) starten
+        // only (re)start when the switch/port changes
         let want = settings.mcp_enabled.then_some(settings.mcp_port);
         if want != self.wanted {
             self.wanted = want;
@@ -116,7 +116,7 @@ impl McpLink {
         self.rx.try_iter().collect()
     }
 
-    /// Wartende Aufträge an den 3D-Visualisierer.
+    /// Pending requests to the 3D visualizer.
     pub fn take_viz_jobs(&self) -> Vec<VizJob> {
         self.viz_jobs
             .lock()
@@ -124,7 +124,7 @@ impl McpLink {
             .unwrap_or_default()
     }
 
-    /// Erneut versuchen (z. B. nach Ändern des Ports).
+    /// Try again (e.g. after changing the port).
     pub fn retry(&mut self) {
         self.server = None;
         self.wanted = None;
@@ -145,11 +145,11 @@ impl McpLink {
             audio_duration_ms: Arc::new(crate::audio::duration_ms),
             locked: self.locked.clone(),
             profiles: Arc::new(AppProfiles),
-            // Auftrag einreihen, Oberfläche wecken und auf die Antwort warten
+            // Queue the request, wake the UI and wait for the answer
             viz: Arc::new(move |action, args| {
                 let (reply, rx) = channel();
                 jobs.lock()
-                    .map_err(|_| "Visualisierer nicht verfügbar".to_string())?
+                    .map_err(|_| "Visualizer not available".to_string())?
                     .push(VizJob {
                         action: action.to_string(),
                         args: args.clone(),
@@ -157,18 +157,19 @@ impl McpLink {
                     });
                 vctx.request_repaint();
                 rx.recv_timeout(std::time::Duration::from_secs(20))
-                    .map_err(|_| "Der Visualisierer hat nicht geantwortet (Oberfläche beschäftigt oder minimiert?)".to_string())?
+                    .map_err(|_| {
+                        "The visualizer did not respond (UI busy or minimized?)".to_string()
+                    })?
             }),
         }
     }
 }
 
-/// Befehl, mit dem MCP-Clients DMXCraft als Prozess starten (stdio-Brücke).
-/// Kopie der Brücke `dmxcraft-mcp` im Konfigurationsordner. Clients wie
-/// Claude Desktop starten diese Kopie und halten sie offen – so bleibt die
-/// Datei im Build- bzw. Programmordner frei (unter Windows lässt sich eine
-/// laufende .exe nicht ersetzen). Einmal je Start aktualisiert, wenn sie sich
-/// unterscheidet und gerade nicht läuft.
+/// Command MCP clients use to start DMXCraft as a process (stdio bridge).
+/// Copy of the `dmxcraft-mcp` bridge in the config folder. Clients such as
+/// Claude Desktop start this copy and keep it open – so the file in the
+/// build or program folder stays free (on Windows a running .exe cannot be
+/// replaced). Updated once per start when it differs and is not running.
 fn installed_bridge() -> Option<std::path::PathBuf> {
     static PATH: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
     PATH.get_or_init(|| {
@@ -181,7 +182,7 @@ fn installed_bridge() -> Option<std::path::PathBuf> {
             if let Some(dir) = dst.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
-            // schlägt fehl, solange die alte Kopie läuft – dann bleibt sie
+            // fails while the old copy is running – then it stays
             let _ = std::fs::write(&dst, &src_bytes);
             #[cfg(unix)]
             {
@@ -198,9 +199,9 @@ fn installed_bridge() -> Option<std::path::PathBuf> {
     .clone()
 }
 
-/// Befehl und Argumente für Clients, die die stdio-Brücke starten: bevorzugt
-/// die Kopie von `dmxcraft-mcp` im Konfigurationsordner (sperrt weder
-/// `dmxcraft` noch den Build-Ordner), sonst `dmxcraft mcp`.
+/// Command and arguments for clients that start the stdio bridge: prefers
+/// the copy of `dmxcraft-mcp` in the config folder (locks neither
+/// `dmxcraft` nor the build folder), otherwise `dmxcraft mcp`.
 pub fn bridge_command(port: u16) -> (String, Vec<String>) {
     let exe = std::env::current_exe().ok();
     let small = installed_bridge();

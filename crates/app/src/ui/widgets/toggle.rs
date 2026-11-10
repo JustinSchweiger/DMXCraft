@@ -1,4 +1,4 @@
-//! Schiebeschalter – ersetzt Checkboxen in der ganzen Oberfläche.
+//! Toggle switch – replaces checkboxes throughout the interface.
 
 use eframe::egui::{self, pos2, Response, Sense, Ui, Vec2, Widget};
 
@@ -8,7 +8,7 @@ pub struct Toggle<'a> {
     value: &'a mut bool,
     label: &'a str,
     enabled: bool,
-    /// Zuordenbar über Tastatur/MIDI: (Schlüssel, Kategorie, Ziel).
+    /// Mappable via keyboard/MIDI: (key, category, target).
     map: Option<(String, String, String)>,
 }
 
@@ -25,7 +25,7 @@ impl<'a> Toggle<'a> {
         self.enabled = on;
         self
     }
-    /// Über Tastatur/MIDI zuordenbar machen.
+    /// Make it mappable via keyboard/MIDI.
     pub fn map(
         mut self,
         key: impl Into<String>,

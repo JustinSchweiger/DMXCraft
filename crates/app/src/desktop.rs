@@ -1,9 +1,9 @@
-//! Startmenü-Eintrag unter Linux anlegen bzw. aktualisieren.
+//! Create or update the start menu entry on Linux.
 //!
-//! Die Installer legen nur die Programmdatei ab. Damit DMXCraft im
-//! Anwendungsmenü erscheint, schreibt das Programm beim Start eine
-//! `.desktop`-Datei nach `~/.local/share/applications` – aber nur, wenn es
-//! aus einer installierten Version läuft (nicht aus `target/`).
+//! The installers only place the executable. So that DMXCraft appears in
+//! the application menu, the program writes a `.desktop` file to
+//! `~/.local/share/applications` at startup – but only when it runs from an
+//! installed version (not from `target/`).
 
 #[cfg(target_os = "linux")]
 pub fn ensure_linux_menu_entry() {
@@ -13,7 +13,7 @@ pub fn ensure_linux_menu_entry() {
         return;
     };
     if exe.components().any(|c| c.as_os_str() == "target") {
-        return; // Entwickler-Build
+        return; // Developer build
     }
     let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
         return;
@@ -21,7 +21,7 @@ pub fn ensure_linux_menu_entry() {
     let data = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".local/share"));
-    // Icon ablegen (hicolor-Theme)
+    // Place the icon (hicolor theme)
     let icon_dir = data.join("icons/hicolor/256x256/apps");
     let icon_file = icon_dir.join("dmxcraft.png");
     if std::fs::read(&icon_file).ok().as_deref() != Some(crate::icon::ICON_PNG) {
@@ -34,12 +34,12 @@ pub fn ensure_linux_menu_entry() {
         "[Desktop Entry]\n\
          Type=Application\n\
          Name=DMXCraft\n\
-         Comment=DMX-Lichtsteuerung\n\
+         Comment=DMX lighting control\n\
          Exec=\"{}\" %f\n\
          Icon=dmxcraft\n\
          Terminal=false\n\
          Categories=AudioVideo;Video;\n\
-         Keywords=DMX;Licht;Lighting;Daslight;\n\
+         Keywords=DMX;Lighting;Licht;Daslight;\n\
          MimeType=application/x-dmxcraft;\n",
         exe.display()
     );
@@ -48,13 +48,13 @@ pub fn ensure_linux_menu_entry() {
     }
     let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&file, content));
     register_mime(&data);
-    // Datenbanken aktualisieren, falls die Werkzeuge vorhanden sind
+    // Update the databases if the tools are available
     let _ = std::process::Command::new("update-desktop-database")
         .arg(&dir)
         .status();
 }
 
-/// Dateityp `.dmxcraft` bekannt machen (Doppelklick öffnet DMXCraft).
+/// Register the `.dmxcraft` file type (double-click opens DMXCraft).
 #[cfg(target_os = "linux")]
 fn register_mime(data: &std::path::Path) {
     const XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>

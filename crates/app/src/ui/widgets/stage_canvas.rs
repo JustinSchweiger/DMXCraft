@@ -1,18 +1,19 @@
-//! Bühnenplan-Zeichenfläche.
+//! Stage plan canvas.
 //!
-//! * [`CanvasMode::Select`] (STEUERN): Klicken/Aufziehen wählt Geräte aus.
-//! * [`CanvasMode::Edit`] (EINRICHTEN → Bühnenplan): Ziehen verschiebt Geräte,
-//!   Aufziehen auf freier Fläche wählt aus.
+//! * [`CanvasMode::Select`] (CONTROL): clicking/dragging a box selects
+//!   fixtures.
+//! * [`CanvasMode::Edit`] (SETUP → stage plan): dragging moves fixtures,
+//!   dragging a box on an empty area selects.
 //!
-//! Treffer werden am Druckpunkt ermittelt (`press_origin`), damit ein Ziehen,
-//! das erst nach der Bewegungsschwelle erkannt wird, das richtige Gerät greift.
+//! Hits are determined at the press point (`press_origin`) so a drag that is
+//! only recognized after the movement threshold grabs the right fixture.
 //!
-//! **Unbegrenzter Plan:** Positionen sind Planeinheiten (eine Einheit =
-//! [`WORLD`] Punkte bei Zoom 100 %), Geräte dürfen überall liegen. Eine Kamera
-//! (Zoom + Mittelpunkt, [`StageInteraction`]) bildet den Plan auf die Fläche ab
-//! – ändert sich die Größe der Fläche, ändert sich nur der Ausschnitt, nie
-//! das Layout.
-//! Mittlere Maustaste zieht die Ansicht, das Mausrad zoomt zur Mausposition.
+//! **Unbounded plan:** positions are plan units (one unit = [`WORLD`] points
+//! at 100 % zoom), fixtures may lie anywhere. A camera (zoom + center,
+//! [`StageInteraction`]) maps the plan onto the canvas – if the size of the
+//! canvas changes, only the visible section changes, never the layout.
+//! The middle mouse button drags the view, the mouse wheel zooms towards the
+//! mouse position.
 
 use std::collections::BTreeSet;
 
@@ -22,13 +23,14 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec
 use crate::ui::theme;
 
 const BOX: f32 = 28.0;
-/// Länge einer Planeinheit in Punkten bei Zoom 100 %.
+/// Length of a plan unit in points at 100 % zoom.
 pub const WORLD: f32 = 720.0;
-/// Zoom-Bereich.
+/// Zoom range.
 pub const ZOOM_MIN: f32 = 0.2;
 pub const ZOOM_MAX: f32 = 4.0;
 
-/// Rückruf für das Kontextmenü: (Ui, Gerät unter der Maus, aktuelle Auswahl).
+/// Callback for the context menu: (Ui, fixture under the mouse, current
+/// selection).
 pub type MenuFn<'m> = dyn FnMut(&mut Ui, Option<FixtureId>, &BTreeSet<FixtureId>) + 'm;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -37,19 +39,19 @@ pub enum CanvasMode {
     Edit,
 }
 
-/// Interaktionszustand, den die besitzende Ansicht zwischen Frames hält.
+/// Interaction state the owning view keeps between frames.
 pub struct StageInteraction {
     lasso_start: Option<Pos2>,
     moving: bool,
-    /// Gerät, auf dem das Kontextmenü geöffnet wurde.
+    /// Fixture the context menu was opened on.
     context_target: Option<FixtureId>,
-    /// Kamera: Zoom (1.0 = 100 %) …
+    /// Camera: zoom (1.0 = 100 %) …
     pub zoom: f32,
-    /// … und Bühnenpunkt (normiert) in der Mitte der Fläche.
+    /// … and the stage point (normalized) in the middle of the canvas.
     pub center: [f32; 2],
-    /// Beim nächsten Zeichnen so zoomen, dass alle Geräte sichtbar sind.
+    /// At the next draw, zoom so that all fixtures are visible.
     pub fit_request: bool,
-    /// Fläche und Kamera des letzten Zeichnens (für Ebenen darüber).
+    /// Canvas and camera of the last draw (for layers on top).
     pub view: Option<(Rect, Camera)>,
 }
 
@@ -61,7 +63,7 @@ impl Default for StageInteraction {
             context_target: None,
             zoom: 1.0,
             center: [0.5, 0.5],
-            // Beim ersten Anzeigen alles einpassen
+            // Fit everything on first display
             fit_request: true,
             view: None,
         }
@@ -69,16 +71,16 @@ impl Default for StageInteraction {
 }
 
 impl StageInteraction {
-    /// Zoom um einen Faktor ändern (Knöpfe −/+).
+    /// Change the zoom by a factor (buttons −/+).
     pub fn zoom_by(&mut self, factor: f32) {
         self.zoom = (self.zoom * factor).clamp(ZOOM_MIN, ZOOM_MAX);
     }
 }
 
-/// Zeichnung unter den Geräten.
+/// Drawing below the fixtures.
 pub type Underlay = dyn Fn(&egui::Painter, Camera);
 
-/// Kamera für ein Frame: Bühne (normiert) ↔ Bildschirm.
+/// Camera for one frame: stage (normalized) ↔ screen.
 #[derive(Clone, Copy)]
 pub struct Camera {
     screen_center: Pos2,
@@ -102,7 +104,7 @@ impl Camera {
     }
 }
 
-/// Zoom und Mittelpunkt, sodass alle Geräte in `rect` passen.
+/// Zoom and center so that all fixtures fit into `rect`.
 fn fit(show: &Show, rect: Rect) -> (f32, [f32; 2]) {
     let pts: Vec<[f32; 2]> = show
         .fixtures
@@ -120,7 +122,7 @@ fn fit(show: &Show, rect: Rect) -> (f32, [f32; 2]) {
         x1 = x1.max(p[0]);
         y1 = y1.max(p[1]);
     }
-    // Platz für Gerätegröße und Beschriftung lassen
+    // Leave room for fixture size and label
     let pad = 2.5
         * BOX
         * 3.2_f32.min(
@@ -140,28 +142,28 @@ pub struct StageCanvas<'a> {
     pub show: &'a Show,
     pub frame: &'a DmxFrame,
     pub mode: CanvasMode,
-    /// Raster zum Einrasten beim Verschieben (Felder pro Achse), `None` = frei.
+    /// Grid to snap to while moving (cells per axis), `None` = free.
     pub snap: Option<u32>,
-    /// Hintergrundraster zeichnen.
+    /// Draw the background grid.
     pub show_grid: bool,
-    /// Immer alles einpassen (ohne Zoom- und Ziehbedienung, z. B. STEUERN).
+    /// Always fit everything (without zoom and drag controls, e.g. CONTROL).
     pub auto_fit: bool,
-    /// Auswahlreihenfolge: ausgewählte Geräte tragen ihre Nummer.
+    /// Selection order: selected fixtures carry their number.
     pub order: &'a [FixtureId],
-    /// Unter den Geräten zeichnen (z. B. das Bild eines Mappings).
+    /// Draw below the fixtures (e.g. the image of a mapping).
     pub underlay: Option<&'a Underlay>,
-    /// Live-Werte: betroffene Geräte bekommen eine Ecke in der Live-Farbe.
+    /// Live values: affected fixtures get a corner in the live color.
     pub live: Option<&'a std::collections::HashMap<dmxcraft_core::ChannelRef, u8>>,
 }
 
-/// Position eines Geräts (gespeichert oder Standard nach Patch-Reihenfolge).
+/// Position of a fixture (saved or default by patch order).
 pub fn fixture_pos(show: &Show, id: FixtureId) -> [f32; 2] {
     show.plan_position(id)
 }
 
 impl StageCanvas<'_> {
-    /// Zeichnet den Plan und verarbeitet Eingaben. Ändert die Auswahl direkt;
-    /// gibt Positionsänderungen zurück (die Show ist hier nur geliehen).
+    /// Draws the plan and processes input. Changes the selection directly;
+    /// returns position changes (the show is only borrowed here).
     pub fn show(
         &self,
         ui: &mut Ui,
@@ -175,27 +177,27 @@ impl StageCanvas<'_> {
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, theme::canvas());
 
-        // ----- Kamera -----
+        // ----- Camera -----
         if state.fit_request || self.auto_fit {
-            // Unten Platz für die Zoom-Leiste lassen (nur mit Bedienung)
+            // Leave room for the zoom bar at the bottom (only with controls)
             let area = if self.auto_fit {
                 rect
             } else {
                 rect.with_max_y(rect.bottom() - 44.0)
             };
             (state.zoom, state.center) = fit(self.show, area);
-            // Mittelpunkt auf die ganze Fläche beziehen
+            // Relate the center to the whole canvas
             let shift = (area.center().y - rect.center().y) / (WORLD * state.zoom);
             state.center[1] -= shift;
             state.fit_request = false;
         }
-        // Mittlere Maustaste: Ansicht ziehen
+        // Middle mouse button: drag the view
         let panning = resp.dragged_by(egui::PointerButton::Middle);
         if panning {
             let d = resp.drag_delta() / (WORLD * state.zoom);
             state.center = [state.center[0] - d.x, state.center[1] - d.y];
         }
-        // Mausrad: zur Mausposition zoomen
+        // Mouse wheel: zoom towards the mouse position
         if resp.hovered() && !self.auto_fit {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
             if scroll != 0.0 {
@@ -207,7 +209,7 @@ impl StageCanvas<'_> {
                     };
                     let anchor = before.to_world(mouse);
                     state.zoom_by((scroll * 0.0025).exp());
-                    // Punkt unter der Maus bleibt stehen
+                    // The point under the mouse stays in place
                     let d = (mouse - rect.center()) / (WORLD * state.zoom);
                     state.center = [anchor[0] - d.x, anchor[1] - d.y];
                 }
@@ -247,7 +249,7 @@ impl StageCanvas<'_> {
                 )
             })
             .collect();
-        // Treffer im gedrehten Umriss (Drehung um die Mitte)
+        // Hit within the rotated outline (rotation around the center)
         let hit = |p: Pos2| {
             boxes
                 .iter()
@@ -264,7 +266,7 @@ impl StageCanvas<'_> {
         let (mods, press_origin) = ui.input(|i| (i.modifiers, i.pointer.press_origin()));
         let additive = mods.shift || mods.command;
 
-        // ----- Ziehen -----
+        // ----- Dragging -----
         if resp.drag_started_by(egui::PointerButton::Primary) {
             let origin = press_origin.or(resp.interact_pointer_pos());
             let target = origin.and_then(hit);
@@ -315,7 +317,7 @@ impl StageCanvas<'_> {
             if state.moving {
                 if let Some(cells) = self.snap {
                     for id in selected.iter() {
-                        // Position inkl. der Bewegung dieses Frames
+                        // Position including this frame's movement
                         let p = moves
                             .iter()
                             .find(|(m, _)| m == id)
@@ -330,7 +332,7 @@ impl StageCanvas<'_> {
             state.moving = false;
         }
 
-        // ----- Klicken -----
+        // ----- Clicking -----
         if resp.clicked() {
             match resp.interact_pointer_pos().and_then(hit) {
                 Some(id) if additive => {
@@ -347,7 +349,7 @@ impl StageCanvas<'_> {
             }
         }
 
-        // ----- Kontextmenü -----
+        // ----- Context menu -----
         if resp.secondary_clicked() {
             let target = resp.interact_pointer_pos().and_then(hit);
             if let Some(id) = target {
@@ -361,10 +363,10 @@ impl StageCanvas<'_> {
         let target = state.context_target;
         crate::ui::widgets::menu::context(&resp, |ui| menu(ui, target, selected));
 
-        // ----- Zeichnen -----
+        // ----- Drawing -----
         let hovered = resp.hover_pos().and_then(hit);
         for (id, b) in &boxes {
-            // während des Ziehens die neue Position zeigen
+            // show the new position while dragging
             let b = moves
                 .iter()
                 .find(|(m, _)| m == id)
@@ -372,10 +374,10 @@ impl StageCanvas<'_> {
                 .unwrap_or(*b);
             let sel = selected.contains(id);
             let mut colors = live_colors(self.show, *id, self.frame);
-            // Strobe: in der Dunkelphase aus
+            // Strobe: off in the dark phase
             if let Some(hz) = strobe_hz(self.show, *id, self.frame) {
                 let time = ui.input(|i| i.time);
-                // 0 Hz = Shutter zu
+                // 0 Hz = shutter closed
                 if hz <= 0.0 || (time * f64::from(hz)).fract() > 0.35 {
                     for c in &mut colors {
                         *c = (c.0, 0.0);
@@ -407,7 +409,7 @@ impl StageCanvas<'_> {
             if paint_effects(&painter, self.show, *id, self.frame, b, time) {
                 ui.ctx().request_repaint();
             }
-            // Nummer in der Auswahlreihenfolge
+            // Number in the selection order
             if let Some(n) = sel
                 .then(|| self.order.iter().position(|f| f == id))
                 .flatten()
@@ -424,7 +426,7 @@ impl StageCanvas<'_> {
                 painter.galley(tag.min + pad, galley, Color32::WHITE);
             }
         }
-        // Infos zum Gerät nur beim Überfahren
+        // Fixture info only on hover
         if let Some(f) = hovered.and_then(|id| self.show.fixture(id)) {
             let ty = self
                 .show
@@ -439,7 +441,7 @@ impl StageCanvas<'_> {
                 b = f.address + ch.max(1) - 1
             );
             let name = f.name.clone();
-            // betroffene Kanäle der Live-Bearbeitung
+            // affected channels of the live edit
             let live: Vec<String> = self.live.map_or_else(Vec::new, |l| {
                 let mut chans: Vec<u16> = l
                     .keys()
@@ -464,7 +466,7 @@ impl StageCanvas<'_> {
                     })
                     .collect()
             });
-            // Einrichten: alles inkl. DIP-Schalter; Steuern: nur Name und Adresse
+            // Setup: everything incl. DIP switches; Control: only name and address
             let full = self.mode == CanvasMode::Edit;
             let address = f.address;
             resp.clone().on_hover_ui_at_pointer(|ui| {
@@ -498,8 +500,8 @@ impl StageCanvas<'_> {
                 StrokeKind::Inside,
             );
         }
-        // Nur setzen, wenn nötig – sonst würde z. B. der Größenänderungs-Cursor
-        // der Bereichsgrenzen überschrieben.
+        // Only set when needed – otherwise e.g. the resize cursor of the area
+        // borders would be overwritten.
         if panning {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
         } else if self.mode == CanvasMode::Edit {
@@ -512,14 +514,14 @@ impl StageCanvas<'_> {
         moves
     }
 
-    /// Optional ein Raster über die ganze sichtbare Fläche (unbegrenzt).
+    /// Optionally a grid across the whole visible canvas (unbounded).
     fn paint_stage(&self, painter: &egui::Painter, rect: Rect, cam: Camera) {
         if !self.show_grid {
             return;
         }
         let cells = self.snap.unwrap_or(24).max(1) as f32;
         let step = cam.scale() / cells;
-        // Bei starkem Herauszoomen nur jede n-te Linie, damit es ruhig bleibt
+        // When zoomed far out, only every n-th line so it stays calm
         let mut every = 1.0;
         while step * every < 8.0 {
             every *= 2.0;
@@ -549,7 +551,7 @@ impl StageCanvas<'_> {
     }
 }
 
-/// Bildschirm-Rechteck eines Geräts bei einem Zoomfaktor.
+/// Screen rectangle of a fixture at a zoom factor.
 pub fn fixture_rect(show: &Show, id: FixtureId, center: Pos2, zoom: f32) -> Rect {
     let s = BOX * show.plan_size(id) * zoom;
     let size = match show.plan_shape(id) {
@@ -560,9 +562,10 @@ pub fn fixture_rect(show: &Show, id: FixtureId, center: Pos2, zoom: f32) -> Rect
     Rect::from_center_size(center, size)
 }
 
-/// Blitzfrequenz eines Geräts, wenn sein Strobe-Kanal blitzt (`Some(0.0)`:
-/// Shutter zu, `None`: offen). Nutzt die Wertebereiche der Gerätedatei; ohne
-/// sie gelten Werte unter 10 als offen, darüber 1 bis 20 Hz.
+/// Flash rate of a fixture when its strobe channel is flashing
+/// (`Some(0.0)`: shutter closed, `None`: open). Uses the value ranges of the
+/// fixture file; without them values below 10 count as open, above that
+/// 1 to 20 Hz.
 pub fn strobe_hz(show: &Show, id: FixtureId, frame: &DmxFrame) -> Option<f32> {
     let f = show.fixture(id)?;
     let ty = show.type_of(f)?;
@@ -574,16 +577,17 @@ pub fn strobe_hz(show: &Show, id: FixtureId, frame: &DmxFrame) -> Option<f32> {
     ty.channels[i].strobe(v)
 }
 
-/// Anzeigefarben der einzelnen Lichtarten (linear 0–1).
+/// Display colors of the individual light kinds (linear 0–1).
 const AMBER: [f32; 3] = [1.0, 0.55, 0.05];
 const UV: [f32; 3] = [0.5, 0.12, 1.0];
 const WHITE: [f32; 3] = [1.0, 0.95, 0.88];
 
-/// Eine Anzeigefarbe pro Pixel (bei Leisten mehrere, sonst eine) mit Helligkeit.
+/// One display color per pixel (several for bars, otherwise one) with
+/// brightness.
 ///
-/// Berücksichtigt Rot, Grün, Blau, Weiß, Amber und UV (UV violett), dazu
-/// Farbräder/Farbmakros: Stehen alle Farbkanäle auf 0, zeigt das Gerät die
-/// angenäherte Farbe des Rads.
+/// Takes red, green, blue, white, amber and UV (UV violet) into account, plus
+/// color wheels/color macros: if all color channels are at 0, the fixture
+/// shows the approximate color of the wheel.
 pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32, f32)> {
     let Some(f) = show.fixture(id) else {
         return vec![(Color32::DARK_GRAY, 0.0)];
@@ -643,7 +647,7 @@ pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32
             add(UV, pick(&uvs));
             let mixed = base.iter().any(|x| *x > 0.003);
             if !has_color || !mixed {
-                // Farbrad bzw. Farbmakro, sonst Halogen-Weiß
+                // Color wheel or color macro, otherwise halogen white
                 if let Some(w) = wheel.filter(|w| *w > 0.03 || !has_color) {
                     let raw = (w * 255.0).round() as u8;
                     let c = wheel_ch.map_or_else(
@@ -655,14 +659,15 @@ pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32
                     base = WHITE;
                 }
             }
-            // Pixel-Dimmer, falls vorhanden, sonst der erste Dimmer
+            // Pixel dimmer if present, otherwise the first dimmer
             let intensity = match (dimmers.len(), has_color || wheel.is_some()) {
                 (0, true) => 1.0,
                 (0, false) => 0.0,
                 (n, _) if n == pixels => value(dimmers[px]),
                 _ => value(dimmers[0]),
             };
-            // Farbrad ohne Farbkanäle und ohne Dimmer: an, sobald das Rad steht
+            // Color wheel without color channels and without dimmer: on as soon as the
+            // wheel is set
             let intensity = if !has_color && dimmers.is_empty() {
                 wheel.map_or(0.0, |w| if w > 0.03 { 1.0 } else { 0.0 })
             } else {
@@ -682,10 +687,9 @@ pub fn live_colors(show: &Show, id: FixtureId, frame: &DmxFrame) -> Vec<(Color32
         .collect()
 }
 
-/// Effekte über dem Gerät: Laser (bunte Punkte/Strahlen, drehen sich mit
-/// der Laser-Rotation), Nebel (Wolke nach Ausstoß und Lüfter) und die
-/// Pan/Tilt-Richtung bei Moving Heads. Gibt `true` zurück, solange etwas
-/// animiert wird.
+/// Effects above the fixture: laser (colored dots/beams that turn with the
+/// laser rotation), fog (cloud by output and fan) and the pan/tilt direction
+/// of moving heads. Returns `true` while something is animating.
 pub fn paint_effects(
     p: &egui::Painter,
     show: &Show,
@@ -716,7 +720,7 @@ pub fn paint_effects(
     let t = time as f32;
     let mut animating = false;
 
-    // ----- Nebel -----
+    // ----- Fog -----
     if let Some(i) = find(ChannelKind::Fog) {
         let out = value(i);
         let fan = find(ChannelKind::Fan).map_or(0.5, value);
@@ -744,7 +748,7 @@ pub fn paint_effects(
     // ----- Laser -----
     if let Some(i) = find(ChannelKind::Laser) {
         let v = value(i);
-        // eigener Laser-Strobe (Name enthält „laser“) schaltet dunkel
+        // the laser's own strobe (name contains “laser”) switches dark
         let gate = named(ChannelKind::Strobe, "laser").is_none_or(|s| {
             let sv = value(s);
             sv < 0.04 || (time * f64::from(1.0 + sv * 19.0)).fract() < 0.35
@@ -755,7 +759,7 @@ pub fn paint_effects(
                 .or_else(|| named(ChannelKind::Speed, "rot"))
                 .map_or(0.3, value);
             let angle = t * (0.2 + rot * 3.0);
-            // Muster aus dem Kanalwert: Anzahl Punkte und Farben wechseln
+            // Pattern from the channel value: number of dots and colors change
             let pattern = (v * 7.99) as usize;
             let dots = 6 + pattern * 3;
             let cols = [
@@ -775,12 +779,12 @@ pub fn paint_effects(
         }
     }
 
-    // ----- Pan/Tilt -----
+    // ----- Pan/tilt -----
     if let (Some(pi), Some(ti)) = (find(ChannelKind::Pan), find(ChannelKind::Tilt)) {
-        // Pan 0–540°, Tilt aus der Mitte (128) heraus = Länge des Zeigers
+        // Pan 0–540°, tilt away from the center (128) = length of the pointer
         let pan = value(pi) * 540f32.to_radians() - std::f32::consts::FRAC_PI_2;
         let tilt = (value(ti) - 0.5) * 2.0;
-        // nach hinten geneigt = Zeiger in Gegenrichtung
+        // tilted backwards = pointer in the opposite direction
         let dir = if tilt < 0.0 {
             -Vec2::angled(pan)
         } else {
@@ -794,18 +798,18 @@ pub fn paint_effects(
     animating
 }
 
-/// Zeichnet ein Gerät in seiner Form – vollflächig in der aktuellen Farbe,
-/// mit dünner Kontur, um `rot` Grad gedreht. Pixel-Geräte (Leisten, Matrix)
-/// zeigen ihre Pixel als Segmente, alle anderen eine Farbe.
-/// Markierung „Live-Werte gesetzt“: kleines Dreieck in der Ecke oben rechts
-/// (bei gedrehten Formen an der Ecke, die gerade oben rechts liegt). Liegt
-/// innerhalb des Geräts, damit eng stehende Nachbarn frei bleiben.
+/// Draws a fixture in its shape – filled with the current color, with a thin
+/// outline, rotated by `rot` degrees. Pixel fixtures (bars, matrix) show
+/// their pixels as segments, all others one color.
+/// Marker “live values set”: small triangle in the top right corner (for
+/// rotated shapes at the corner that is currently top right). Lies inside
+/// the fixture so closely spaced neighbors stay clear.
 fn paint_live_corner(p: &egui::Painter, shape: PlanShape, r: Rect, rot: f32) {
     let len = (r.width().min(r.height()) * 0.45).clamp(5.0, 10.0);
     let color = theme::WARN;
     let rotated = rot.rem_euclid(360.0) != 0.0 && shape != PlanShape::Round;
     if !rotated {
-        // runde Geräte: Ecke des umgebenden Quadrats (liegt neben dem Kreis)
+        // round fixtures: corner of the enclosing square (lies next to the circle)
         let c = r.right_top();
         p.add(egui::Shape::convex_polygon(
             vec![c, c - Vec2::new(len, 0.0), c + Vec2::new(0.0, len)],
@@ -827,7 +831,7 @@ fn paint_live_corner(p: &egui::Painter, shape: PlanShape, r: Rect, rot: f32) {
         r.left_bottom(),
     ]
     .map(turn);
-    // Ecke, die am weitesten oben rechts liegt
+    // Corner that lies furthest to the top right
     let i = (0..4)
         .max_by(|a, b| {
             let s = |q: Pos2| q.x - q.y;
@@ -866,7 +870,7 @@ fn paint_fixture(
     };
     let c = r.center();
     let (sin, cos) = rot.to_radians().sin_cos();
-    // Punkt um die Mitte drehen
+    // Rotate a point around the center
     let turn = |q: Pos2| -> Pos2 {
         let d = q - c;
         c + Vec2::new(d.x * cos - d.y * sin, d.x * sin + d.y * cos)
@@ -882,7 +886,7 @@ fn paint_fixture(
         .map(turn)
         .collect()
     };
-    // hellste Farbe für einfarbige Formen
+    // brightest color for single-colored shapes
     let (c0, l0) = colors
         .iter()
         .copied()
@@ -959,7 +963,7 @@ fn paint_fixture(
     }
 }
 
-/// Kleines Symbol einer Geräteform (für Menüs und Knöpfe). `None` = automatisch.
+/// Small icon of a fixture shape (for menus and buttons). `None` = automatic.
 pub fn paint_shape_icon(p: &egui::Painter, shape: Option<PlanShape>, r: Rect, color: Color32) {
     let stroke = Stroke::new(1.4, color);
     let c = r.center();

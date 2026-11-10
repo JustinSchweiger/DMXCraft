@@ -1,10 +1,10 @@
-//! Touch-Oberfläche: frei angeordnete Bedienelemente auf Seiten (Raster),
-//! gespeichert in der Show. Die Oberfläche läuft im Reiter „Touch“ und
-//! später auf einer mobilen App.
+//! Touch surface: freely arranged controls on pages (grid), stored in the
+//! show. The surface runs in the “Touch” tab and in the web app of the
+//! touch remote.
 //!
-//! Schaltflächen, Fader und Drehregler lösen ein [`Control`] aus wie eine
-//! Tastatur-/MIDI-Zuordnung. Farbrad und XY-Feld setzen Live-Werte der
-//! hinterlegten Geräte (Farbkanäle bzw. Pan/Tilt).
+//! Buttons, faders and knobs trigger a [`Control`] like a keyboard/MIDI
+//! mapping. Color wheel and XY pad set live values of the assigned fixtures
+//! (color channels or pan/tilt).
 
 use serde::{Deserialize, Serialize};
 
@@ -18,13 +18,13 @@ use crate::FixtureId;
 pub struct TouchLayout {
     pub pages: Vec<TouchPage>,
     pub next_id: u32,
-    /// Kantenlänge einer Rasterzelle (Bildpunkte bei 100 %).
+    /// Edge length of a grid cell (pixels at 100 %).
     pub cell: f32,
-    /// Beim Verschieben und Größe ändern am Raster einrasten.
+    /// Snap to the grid when moving and resizing.
     pub snap: bool,
-    /// Rasterzellen anzeigen.
+    /// Show grid cells.
     pub show_grid: bool,
-    /// Bilder für Hintergründe und Schaltflächen.
+    /// Images for backgrounds and buttons.
     pub images: Vec<TouchImage>,
 }
 
@@ -41,7 +41,7 @@ impl Default for TouchLayout {
     }
 }
 
-/// Ein Bild der Touch-Oberfläche (PNG/JPEG).
+/// An image of the touch surface (PNG/JPEG).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TouchImage {
     pub id: u32,
@@ -54,7 +54,7 @@ impl TouchLayout {
         self.pages.is_empty()
     }
 
-    /// Bild hinzufügen; gibt seine ID zurück.
+    /// Add an image; returns its ID.
     pub fn add_image(&mut self, name: impl Into<String>, data: Vec<u8>) -> u32 {
         let id = self.new_id();
         self.images.push(TouchImage {
@@ -69,7 +69,7 @@ impl TouchLayout {
         self.images.iter().find(|i| i.id == id)
     }
 
-    /// Nicht mehr verwendete Bilder entfernen.
+    /// Remove images no longer used.
     pub fn prune_images(&mut self) {
         let used: Vec<u32> = self
             .pages
@@ -90,7 +90,7 @@ impl TouchLayout {
         id
     }
 
-    /// Neue Seite anhängen; gibt ihre ID zurück.
+    /// Append a new page; returns its ID.
     pub fn add_page(&mut self, name: impl Into<String>) -> u32 {
         let id = self.new_id();
         self.pages.push(TouchPage {
@@ -111,7 +111,7 @@ impl TouchLayout {
         self.pages.iter_mut().find(|p| p.id == id)
     }
 
-    /// Element auf einer Seite an der ersten freien Stelle einfügen.
+    /// Insert an element on a page at the first free position.
     pub fn add_item(&mut self, page: u32, mut item: TouchItem) -> Option<u32> {
         self.page(page)?;
         let id = self.new_id();
@@ -124,7 +124,7 @@ impl TouchLayout {
         Some(id)
     }
 
-    /// Element mit neuer ID kopieren (neben das Original).
+    /// Copy an element with a new ID (next to the original).
     pub fn duplicate(&mut self, page: u32, item: u32) -> Option<u32> {
         let copy = self
             .page(page)?
@@ -135,7 +135,7 @@ impl TouchLayout {
         self.add_item(page, copy)
     }
 
-    /// Elemente entfernen, deren Szenen oder Geräte es nicht mehr gibt.
+    /// Remove elements whose scenes or fixtures no longer exist.
     pub fn retain(
         &mut self,
         scene_exists: impl Fn(crate::SceneId) -> bool,
@@ -166,7 +166,7 @@ pub struct TouchPage {
     pub id: u32,
     pub name: String,
     pub items: Vec<TouchItem>,
-    /// Hintergrundbild ([`TouchLayout::images`]).
+    /// Background image ([`TouchLayout::images`]).
     #[serde(default)]
     pub background: Option<u32>,
     #[serde(default)]
@@ -174,7 +174,7 @@ pub struct TouchPage {
 }
 
 impl TouchPage {
-    /// Ist die Fläche (in Zellen) frei?
+    /// Is the area (in cells) free?
     pub fn is_free(&self, x: f32, y: f32, w: f32, h: f32, except: Option<u32>) -> bool {
         const EPS: f32 = 0.001;
         self.items.iter().filter(|i| Some(i.id) != except).all(|i| {
@@ -182,7 +182,7 @@ impl TouchPage {
         })
     }
 
-    /// Erste freie Stelle (zeilenweise, 16 Spalten breit, ganze Zellen).
+    /// First free position (row by row, 16 columns wide, whole cells).
     pub fn free_spot(&self, w: f32, h: f32) -> (f32, f32) {
         const COLS: f32 = 16.0;
         for y in 0..200 {
@@ -198,24 +198,24 @@ impl TouchPage {
     }
 }
 
-/// Art eines Elements.
+/// Kind of an element.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TouchKind {
-    /// Nur Text (Überschrift).
+    /// Text only (heading).
     Label,
     #[default]
     Button,
     Fader,
     Knob,
-    /// Farbrad: setzt die Farbe der hinterlegten Geräte.
+    /// Color wheel: sets the color of the assigned fixtures.
     Color,
-    /// XY-Feld: setzt Pan/Tilt der hinterlegten Geräte.
+    /// XY pad: sets pan/tilt of the assigned fixtures.
     Xy,
 }
 
 impl TouchKind {
-    /// Standardgröße in Rasterzellen.
+    /// Default size in grid cells.
     pub fn default_size(self) -> (f32, f32) {
         match self {
             TouchKind::Label => (4.0, 1.0),
@@ -226,41 +226,41 @@ impl TouchKind {
         }
     }
 
-    /// Steuert dieses Element Geräte direkt (statt eines [`Control`])?
+    /// Does this element control fixtures directly (instead of a [`Control`])?
     pub fn uses_fixtures(self) -> bool {
         matches!(self, TouchKind::Color | TouchKind::Xy)
     }
 }
 
-/// Ein Element der Touch-Oberfläche. Position und Größe in Rasterzellen.
+/// An element of the touch surface. Position and size in grid cells.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TouchItem {
     pub id: u32,
     pub kind: TouchKind,
-    /// Position und Größe in Rasterzellen (ohne Einrasten auch Bruchteile).
+    /// Position and size in grid cells (fractions too without snapping).
     pub x: f32,
     pub y: f32,
     pub w: f32,
     pub h: f32,
     pub label: String,
-    /// Hintergrundfarbe (`None` = Standard).
+    /// Background color (`None` = default).
     pub color: Option<[u8; 3]>,
-    /// Textfarbe (`None` = passend zum Hintergrund).
+    /// Text color (`None` = matching the background).
     pub text_color: Option<[u8; 3]>,
-    /// Hintergrundbild ([`TouchLayout::images`]).
+    /// Background image ([`TouchLayout::images`]).
     pub image: Option<u32>,
-    /// Symbol aus der Symbolbibliothek (Name).
+    /// Icon from the icon library (name).
     pub icon: Option<String>,
-    /// Was ausgelöst wird (Schaltfläche, Fader, Drehregler).
+    /// What is triggered (button, fader, knob).
     pub control: Option<Control>,
-    /// Feste Kanäle bei [`Control::Channels`].
+    /// Fixed channels for [`Control::Channels`].
     pub channels: Vec<ChannelRef>,
-    /// Geräte für Farbrad und XY-Feld.
+    /// Fixtures for color wheel and XY pad.
     pub fixtures: Vec<FixtureId>,
-    /// Schaltfläche nur aktiv, solange sie gedrückt ist.
+    /// Button only active while it is pressed.
     pub flash: bool,
-    /// Textgröße (Punkte, 0 = automatisch).
+    /// Text size (points, 0 = automatic).
     pub text_size: f32,
 }
 
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn items_find_free_spots() {
         let mut t = TouchLayout::default();
-        let p = t.add_page("Seite 1");
+        let p = t.add_page("Page 1");
         let a = t.add_item(p, TouchItem::new(TouchKind::Button)).unwrap();
         let b = t.add_item(p, TouchItem::new(TouchKind::Button)).unwrap();
         let page = t.page(p).unwrap();
@@ -342,7 +342,7 @@ mod tests {
         t.page_mut(p).unwrap().background = Some(img);
         t.prune_images();
         assert_eq!(t.images.len(), 1);
-        // ältere Dateien: ganze Zahlen
+        // older files: whole numbers
         let json = r#"{"pages":[{"id":1,"name":"A","items":[{"id":2,"kind":"button","x":1,"y":2,"w":2,"h":2}]}]}"#;
         let old: TouchLayout = serde_json::from_str(json).unwrap();
         assert_eq!(old.pages[0].items[0].x, 1.0);

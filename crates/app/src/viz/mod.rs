@@ -1,8 +1,8 @@
-//! 3D-Visualisierer: Veranstaltungsort bauen und die Geräte live sehen.
+//! 3D visualizer: build the venue and see the fixtures live.
 //!
-//! Gezeichnet wird auf der Grafikkarte (wgpu: Vulkan, Metal oder DirectX 12)
-//! in eine Textur, die egui anzeigt – in einem eigenen
-//! Fenster (z. B. auf einem zweiten Bildschirm).
+//! Rendering happens on the graphics card (wgpu: Vulkan, Metal or
+//! DirectX 12) into a texture that egui displays – in its own window (e.g.
+//! on a second screen).
 
 mod assist;
 pub mod camera;
@@ -34,7 +34,7 @@ use crate::views::ViewCtx;
 use camera::OrbitCamera;
 use render::{Frame3d, Gpu, Instance, Light, MeshKey};
 
-/// Darstellungsqualität.
+/// Render quality.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Quality {
     Low,
@@ -64,7 +64,7 @@ impl Quality {
         Self::ALL.get(usize::from(k)).copied().unwrap_or_default()
     }
 
-    /// Einstellungen der Stufe.
+    /// Settings of the level.
     fn params(self) -> QualityParams {
         let p = |scale, msaa, lights, shadows, shadow_size, bloom| QualityParams {
             scale,
@@ -83,8 +83,8 @@ impl Quality {
     }
 }
 
-/// Auflösung (Anteil der Pixel), Mehrfachabtastung, Lichtquellen,
-/// Scheinwerfer mit Schatten, Größe der Schattenkarten, Bloom-Stärke.
+/// Resolution (share of pixels), multisampling, light sources, spotlights
+/// with shadows, size of the shadow maps, bloom strength.
 #[derive(Clone, Copy, Debug)]
 struct QualityParams {
     scale: f32,
@@ -124,55 +124,56 @@ pub struct VizView {
     mode: Mode,
     selected: Option<Pick>,
     start: Instant,
-    /// Ziehen eines Objekts auf dem Boden: Startpunkt und Ausgangslage.
+    /// Dragging an object on the floor: start point and initial placement.
     drag: Option<(Vec3, [f32; 3])>,
     dialog: Option<(DialogKind, Receiver<Option<PathBuf>>)>,
     fps: (Instant, u32, f32),
-    /// Geräte aus dem letzten Import ohne Gegenstück im Patch.
+    /// Fixtures from the last import without a counterpart in the patch.
     missing: Vec<Missing>,
-    /// Griff, an dem gerade gezogen wird (Achse 0–2, Ring 3–5),
-    /// Ausgangslage und Startpunkt des Zeigers.
+    /// Handle currently being dragged (axis 0–2, ring 3–5), initial placement
+    /// and start point of the pointer.
     gizmo: Option<GizmoDrag>,
-    /// Ausgewählte Objekte (Mehrfachauswahl; `selected` ist die Hauptauswahl).
+    /// Selected objects (multi-selection; `selected` is the main selection).
     sel_objects: std::collections::BTreeSet<u32>,
-    /// Lagen aller ausgewählten beim Beginn des Ziehens auf dem Boden.
+    /// Placements of all selected ones when dragging on the floor starts.
     drag_frames: Vec<(Pick, SelFrame)>,
-    /// Reiter der linken Leiste, Suchtext und Anker der Geräteliste.
+    /// Tab of the left bar, search text and anchor of the fixture list.
     outline: panels::OutlineTab,
     fixture_filter: String,
     fixture_sort: outline::FixtureSort,
-    /// Objekt oder Geräteordner, der gerade umbenannt wird.
+    /// Object or fixture folder currently being renamed.
     renaming: Option<outline::Renaming>,
     rename_focus: bool,
-    /// Objekt-Bibliothek (beim ersten Öffnen geladen).
+    /// Object library (loaded on first opening).
     library: Option<(Vec<library::Prefab>, Vec<library::UserPrefab>)>,
     fixture_anchor: Option<FixtureId>,
-    /// Objekt im Baum aufklappen und zeigen / Gerät in der Liste zeigen.
+    /// Expand and show an object in the tree / show a fixture in the list.
     reveal: Option<u32>,
     reveal_fixture: Option<FixtureId>,
-    /// Zielpunkt zum Ausrichten von Geräten.
+    /// Target point for aiming fixtures.
     aim: [f32; 3],
-    /// Nächster Klick ins Bild setzt den Zielpunkt.
+    /// The next click into the image sets the target point.
     aim_pick: bool,
-    /// Modell, das gerade im Hintergrund geladen wird.
+    /// Model currently being loaded in the background.
     model_job: Option<Receiver<Result<venue::model::Model, String>>>,
-    /// Kamerafahrt zu einem Kamerapunkt: von, nach, Beginn.
+    /// Camera move to a camera point: from, to, start.
     fly: Option<(OrbitCamera, OrbitCamera, Instant)>,
-    /// Kamerapunkt, der gerade umbenannt wird (Index, Text).
+    /// Camera point currently being renamed (index, text).
     cam_rename: Option<(usize, String)>,
     cam_rename_focus: bool,
 }
 
-/// Gerät aus einem Import ohne Gegenstück im Patch, mit vorgeschlagenem Typ.
+/// Fixture from an import without a counterpart in the patch, with a
+/// suggested type.
 struct Missing {
     fixture: venue::ev2::Ev2Fixture,
-    /// Typ aus der Bibliothek (bzw. generisch) und ob er sicher passt.
+    /// Type from the library (or generic) and whether it is a sure match.
     proposal: FixtureType,
     exact: bool,
     create: bool,
 }
 
-/// Gerätetyp zu einem Easy-View-Bibliotheksnamen: Bibliothek, sonst generisch.
+/// Fixture type for an Easy View library name: library, otherwise generic.
 fn propose_type(library_name: &str) -> (FixtureType, bool) {
     if let Some((_, m)) = dmxcraft_ofl::Library::embedded().best_match(library_name) {
         return (m.clone(), true);
@@ -196,11 +197,12 @@ fn propose_type(library_name: &str) -> (FixtureType, bool) {
         .find(|t| t.key == key)
         .or(types.first())
         .cloned()
-        .expect("eingebaute Gerätetypen");
+        .expect("built-in fixture types");
     (t, false)
 }
 
-/// Modelle und Bilder des Orts auf die Grafikkarte laden (nur fehlende).
+/// Upload the venue's models and images to the graphics card (only missing
+/// ones).
 fn upload_assets(gpu: &mut Gpu, rs: &egui_wgpu::RenderState, show: &dmxcraft_core::Show) {
     for (key, model) in &show.venue.models {
         for (i, part) in model.parts.iter().enumerate() {
@@ -242,14 +244,14 @@ fn upload_assets(gpu: &mut Gpu, rs: &egui_wgpu::RenderState, show: &dmxcraft_cor
     }
 }
 
-/// Achsenfarben der Griffe (x rot, y grün, z blau).
+/// Axis colors of the handles (x red, y green, z blue).
 const AXIS_COLORS: [Color32; 3] = [
     Color32::from_rgb(230, 80, 80),
     Color32::from_rgb(90, 200, 90),
     Color32::from_rgb(80, 140, 240),
 ];
 
-/// Welt- in Bildschirmkoordinaten.
+/// World to screen coordinates.
 fn project(vp: Mat4, rect: Rect, p: Vec3) -> Option<egui::Pos2> {
     let c = vp * p.extend(1.0);
     if c.w <= 0.01 {
@@ -262,7 +264,7 @@ fn project(vp: Mat4, rect: Rect, p: Vec3) -> Option<egui::Pos2> {
     ))
 }
 
-/// Lage der Auswahl: eigene Werte, Weltposition und Elternmatrix.
+/// Placement of the selection: own values, world position and parent matrix.
 #[derive(Clone, Copy, Debug)]
 struct SelFrame {
     local: Placement,
@@ -299,8 +301,8 @@ fn sel_frame(show: &Show, sel: Pick) -> Option<SelFrame> {
     }
 }
 
-/// Ziehen an einem Griff: welcher, Lage der Hauptauswahl und aller
-/// ausgewählten beim Start, Startpunkt des Zeigers.
+/// Dragging a handle: which one, placement of the main selection and of all
+/// selected ones at the start, start point of the pointer.
 struct GizmoDrag {
     handle: usize,
     primary: SelFrame,
@@ -308,7 +310,7 @@ struct GizmoDrag {
     start: egui::Pos2,
 }
 
-/// Alle um denselben Weg (Welt) verschieben.
+/// Move all by the same distance (world).
 fn move_all(cx: &mut ViewCtx<'_>, frames: &[(Pick, SelFrame)], delta: Vec3) {
     for (pick, f) in frames {
         let mut np = f.local;
@@ -321,7 +323,7 @@ fn move_all(cx: &mut ViewCtx<'_>, frames: &[(Pick, SelFrame)], delta: Vec3) {
     }
 }
 
-/// Alle an Ort und Stelle um dieselbe Weltachse drehen.
+/// Rotate all in place around the same world axis.
 fn rotate_all(cx: &mut ViewCtx<'_>, frames: &[(Pick, SelFrame)], axis: Vec3, deg: f32) {
     for (pick, f) in frames {
         let local_axis = (glam::Mat3::from_mat4(f.parent).inverse() * axis).normalize_or(axis);
@@ -333,13 +335,13 @@ fn rotate_all(cx: &mut ViewCtx<'_>, frames: &[(Pick, SelFrame)], axis: Vec3, deg
     }
 }
 
-/// Euler-Winkel (Grad; X, dann Y, dann Z) als Quaternion.
+/// Euler angles (degrees; X, then Y, then Z) as a quaternion.
 pub fn quat_deg(r: [f32; 3]) -> glam::Quat {
     let [x, y, z] = r.map(f32::to_radians);
     glam::Quat::from_euler(glam::EulerRot::ZYX, z, y, x)
 }
 
-/// Quaternion als Euler-Winkel (Grad, auf 0,01° gerundet).
+/// Quaternion as Euler angles (degrees, rounded to 0.01°).
 pub fn deg_quat(q: glam::Quat) -> [f32; 3] {
     let (z, y, x) = q.normalize().to_euler(glam::EulerRot::ZYX);
     [x, y, z].map(|a| {
@@ -352,12 +354,12 @@ pub fn deg_quat(q: glam::Quat) -> [f32; 3] {
     })
 }
 
-/// Griffe um `pos`: drei Achsen (Anfang, Ende) und drei Drehringe.
+/// Handles around `pos`: three axes (start, end) and three rotation rings.
 struct Handles {
     center: egui::Pos2,
     axes: [Option<(egui::Pos2, egui::Pos2)>; 3],
     rings: [Vec<egui::Pos2>; 3],
-    /// Weltlänge einer Achse
+    /// World length of an axis
     len: f32,
 }
 
@@ -393,7 +395,7 @@ fn seg_dist(p: egui::Pos2, a: egui::Pos2, b: egui::Pos2) -> f32 {
 }
 
 impl Handles {
-    /// Griff unter dem Zeiger: 0–2 Achsen, 3–5 Ringe (Achsen haben Vorrang).
+    /// Handle under the pointer: 0–2 axes, 3–5 rings (axes take precedence).
     fn hit(&self, p: egui::Pos2) -> Option<usize> {
         let near = |d: f32, max: f32| d < max;
         let axis = self
@@ -483,7 +485,8 @@ impl Default for VizView {
 const VENUE_EXT: &str = "dmxvenue";
 
 impl VizView {
-    /// `window`: läuft im eigenen Fenster (dort: Vollbild-Schalter statt „Fenster“).
+    /// `window`: runs in its own window (there: fullscreen toggle instead of
+    /// “Window”).
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
@@ -547,7 +550,7 @@ impl VizView {
         if self.advance_fly() {
             ui.ctx().request_repaint();
         }
-        // eigenes Drehen/Zoomen beendet eine Kamerafahrt
+        // own rotating/zooming ends a camera move
         if resp.dragged() || (resp.hovered() && ui.input(|i| i.smooth_scroll_delta.y != 0.0)) {
             self.fly = None;
         }
@@ -555,7 +558,7 @@ impl VizView {
             .camera
             .get_or_insert_with(|| OrbitCamera::for_room(self.room));
         let aspect = rect.width() / rect.height().max(1.0);
-        // ----- Eingabe -----
+        // ----- Input -----
         let (scroll, ptr, mods) = ui.input(|i| {
             (
                 i.smooth_scroll_delta.y + (i.zoom_delta() - 1.0) * 200.0,
@@ -574,7 +577,7 @@ impl VizView {
             )
         };
         let building = self.mode == Mode::Build && !cx.state.locked;
-        // Griffe der Auswahl (Achsen verschieben, Ringe drehen um x/y/z des Raums)
+        // Handles of the selection (axes move, rings rotate around the room's x/y/z)
         let vp = cam.proj(aspect) * cam.view();
         let sel_place = if building {
             self.selected.and_then(|s| sel_frame(cx.engine.show(), s))
@@ -584,8 +587,8 @@ impl VizView {
         let gizmo = sel_place.and_then(|f| handles(vp, cam.eye(), rect, f.world));
         let gizmo_hover = gizmo.as_ref().zip(ptr).and_then(|(g, p)| g.hit(p));
         if resp.drag_started_by(egui::PointerButton::Primary) {
-            // dort prüfen, wo die Taste gedrückt wurde (bei wenig Bildern pro Sekunde
-            // ist der Zeiger beim Erkennen des Ziehens schon weiter)
+            // check where the button was pressed (at a low frame rate the pointer has
+            // moved on by the time the drag is recognized)
             let origin = ui.input(|i| i.pointer.press_origin());
             let hit = gizmo
                 .as_ref()
@@ -617,8 +620,8 @@ impl VizView {
                 let axis = [Vec3::X, Vec3::Y, Vec3::Z][gd.handle - 3];
                 let ang = |q: egui::Pos2| (q.y - g.center.y).atan2(q.x - g.center.x);
                 let mut d = ang(p) - ang(gd.start);
-                // Bildschirm-y zeigt nach unten: zeigt die Achse zum Betrachter, dreht
-                // ein Ziehen im Uhrzeigersinn negativ
+                // Screen y points down: if the axis points towards the viewer, a clockwise
+                // drag rotates negatively
                 if axis.dot(cam.eye() - f0.world) > 0.0 {
                     d = -d;
                 }
@@ -630,13 +633,13 @@ impl VizView {
             }
         }
         if self.gizmo.is_some() {
-            // Griff zieht – die Kamera bleibt stehen
+            // A handle is being dragged – the camera stays put
         } else if resp.dragged_by(egui::PointerButton::Secondary)
             || resp.dragged_by(egui::PointerButton::Middle)
         {
             cam.pan(Vec2::new(delta.x, delta.y), rect.height());
         } else if resp.dragged_by(egui::PointerButton::Primary) {
-            // Bauen: ausgewähltes Objekt/Gerät auf dem Boden verschieben (Umschalt: Höhe)
+            // Building: move the selected object/fixture on the floor (Shift: height)
             if let (true, Some(sel), Some(p)) = (building, self.selected, ptr) {
                 let (o, d) = cam.ray(uv(p), aspect);
                 let show = cx.engine.show();
@@ -651,7 +654,7 @@ impl VizView {
                 if resp.drag_started() {
                     self.drag_frames = Self::group_frames(self.selected, &self.sel_objects, cx);
                     self.drag = pos.and_then(|pos| hit_y(o, d, pos[1]).map(|h| (h, pos)));
-                    // nur ziehen, wenn auf/nahe der Auswahl begonnen
+                    // only drag when it started on/near the selection
                     if let (Some((h, p0)), Some(pick)) =
                         (self.drag, Self::pick(cx.engine.show(), o, d))
                     {
@@ -674,8 +677,8 @@ impl VizView {
                         }
                     };
                     let new = [snap(new[0]), new[1], snap(new[2])];
-                    // Verschiebung der Hauptauswahl auf alle ausgewählten übertragen
-                    // (in Weltkoordinaten, auch in gedrehten Gruppen)
+                    // Transfer the movement of the main selection to all selected ones (in
+                    // world coordinates, also in rotated groups)
                     let parent = self
                         .drag_frames
                         .iter()
@@ -696,7 +699,7 @@ impl VizView {
             self.drag = None;
             self.gizmo = None;
         }
-        let cam = *self.camera.as_ref().expect("Kamera");
+        let cam = *self.camera.as_ref().expect("camera");
         if resp.clicked() && self.aim_pick {
             self.aim_pick = false;
             if let Some(p) = ptr {
@@ -712,7 +715,7 @@ impl VizView {
                 let hit = Self::pick(cx.engine.show(), o, d);
                 match hit {
                     Some(Pick::Fixture(id)) => {
-                        // Auswahl wie überall in DMXCraft (Programmer, Bühne)
+                        // Selection as everywhere in DMXCraft (programmer, stage)
                         if mods.command || mods.shift {
                             if !cx.state.selected.remove(&id) {
                                 cx.state.selected.insert(id);
@@ -739,7 +742,7 @@ impl VizView {
             }
         }
 
-        // ----- Bild -----
+        // ----- Image -----
         let q = cx.state.viz_quality.params();
         let (scale, msaa) = (q.scale, q.msaa);
         let ppp = ui.ctx().pixels_per_point();
@@ -760,7 +763,7 @@ impl VizView {
                 Color32::WHITE,
             );
         }
-        // Angaben oben rechts: Grafikkarte, Bilder pro Sekunde
+        // Info at the top right: graphics card, frames per second
         self.fps.1 += 1;
         let el = self.fps.0.elapsed().as_secs_f32();
         if el >= 1.0 {
@@ -815,12 +818,12 @@ impl VizView {
                 egui::CursorIcon::Grab
             });
         }
-        // laufend neu zeichnen (Szenen, Strobe)
+        // redraw continuously (scenes, strobe)
         ui.ctx().request_repaint();
         let _ = Stroke::NONE;
     }
 
-    /// Nächstes Objekt bzw. Gerät unter einem Strahl.
+    /// Nearest object or fixture under a ray.
     fn pick(show: &Show, o: Vec3, d: Vec3) -> Option<Pick> {
         let mut best: Option<(f32, Pick)> = None;
         let mut take = |t: f32, p: Pick| {
@@ -850,12 +853,12 @@ impl VizView {
             let Some((key_scale, _)) = shape_mesh(&ob.shape) else {
                 continue;
             };
-            // Flächen zum Anklicken etwas dicker
+            // Planes a bit thicker for clicking
             let s = match ob.shape {
                 Shape::Plane { .. } => key_scale * Mat4::from_scale(Vec3::new(1.0, 0.02, 1.0)),
                 _ => key_scale,
             };
-            // die Raumhülle (große Flächen) nur anklicken, wenn nichts anderes getroffen wird
+            // only click the room shell (large planes) when nothing else is hit
             let world = Mat4::from_cols_array_2d(&m) * s;
             if let Some(t) = ray_box(o, d, world) {
                 let penalty = if matches!(ob.shape, Shape::Plane { .. }) {
@@ -935,7 +938,7 @@ impl VizView {
                 mat.gloss,
                 if sel { 0.12 } else { mat.emissive },
             );
-            // Bild aufprojiziert (Traversen ohne)
+            // Projected image (trusses without)
             let tex = if mat.texture != 0
                 && venue.textures.contains_key(&mat.texture)
                 && !matches!(ob.shape, Shape::Truss { .. })
@@ -957,7 +960,7 @@ impl VizView {
         let half = Vec3::from(venue.size) * 0.5;
         let room_min = Vec3::new(-half.x, 0.0, -half.z) - Vec3::splat(0.5);
         let room_max = Vec3::new(half.x, venue.size[1], half.z) + Vec3::splat(0.5);
-        // Hindernisse für Lichtstrahlen (Traversen lassen Licht durch)
+        // Obstacles for light beams (trusses let light through)
         let solids: Vec<Mat4> = venue
             .flatten()
             .into_iter()
@@ -985,7 +988,7 @@ impl VizView {
                 ));
             }
             for b in &fx.beams {
-                // Strahl endet am ersten Hindernis (etwas hinter der Linse beginnen)
+                // The beam ends at the first obstacle (start a bit behind the lens)
                 let start = b.origin + b.dir * 0.05;
                 let wall = ray_aabb_exit(b.origin, b.dir, room_min, room_max).unwrap_or(15.0);
                 let hit = solids
@@ -996,7 +999,7 @@ impl VizView {
                 let r = b.lens + len * b.half_angle.to_radians().tan();
                 let rot = glam::Quat::from_rotation_arc(Vec3::NEG_Y, b.dir);
                 let m = Mat4::from_scale_rotation_translation(Vec3::new(r, len, r), rot, b.origin);
-                // Fokus: Schärfe dort, wo der Strahl auftrifft
+                // Focus: sharpness where the beam hits
                 let sharp = b.sharpness(len);
                 let gobo_sharp = if b.focus.is_some() { sharp } else { 1.0 };
                 let mut inst = Instance::new(m, b.color, 1.0, 0.0, 0.0);
@@ -1007,7 +1010,7 @@ impl VizView {
                 lights.push((
                     power,
                     Light {
-                        // Reichweite bis knapp hinter das Hindernis (ersetzt Schatten grob)
+                        // Range up to just behind the obstacle (roughly replaces shadows)
                         pos: b.origin.extend(len + 0.8).into(),
                         dir: b
                             .dir
@@ -1021,10 +1024,10 @@ impl VizView {
                 ));
             }
         }
-        // hellste zuerst, so viele wie die Qualität erlaubt
+        // brightest first, as many as the quality allows
         lights.sort_by(|a, b| b.0.total_cmp(&a.0));
         f.lights = lights.into_iter().take(q.lights).map(|l| l.1).collect();
-        // Schattenkarten für die hellsten Scheinwerfer
+        // Shadow maps for the brightest spotlights
         if q.shadows > 0 {
             for (i, l) in f.lights.iter_mut().take(q.shadows).enumerate() {
                 let pos = Vec3::new(l.pos[0], l.pos[1], l.pos[2]);
@@ -1045,9 +1048,9 @@ impl VizView {
         f
     }
 
-    // ---------- Bauen ----------
+    // ---------- Building ----------
 
-    // ---------- Dateien ----------
+    // ---------- Files ----------
 
     fn open_dialog(&mut self, ctx: &egui::Context, kind: DialogKind) {
         if self.dialog.is_some() {
@@ -1092,7 +1095,7 @@ impl VizView {
         self.dialog = Some((kind, rx));
     }
 
-    /// Fertig geladenes Modell in den Ort setzen (an den Blickpunkt).
+    /// Put a fully loaded model into the venue (at the look-at point).
     fn poll_model(&mut self, cx: &mut ViewCtx<'_>) {
         let Some(rx) = &self.model_job else {
             return;
@@ -1209,7 +1212,7 @@ impl VizView {
                             .file_stem()
                             .map_or(venue.name, |s| s.to_string_lossy().into_owned());
                         show.venue = venue;
-                        // Geräte über Universum und Adresse zuordnen
+                        // Match fixtures by universe and address
                         let mut matched = 0;
                         let mut missing = Vec::new();
                         for f in &imp.fixtures {
@@ -1251,7 +1254,7 @@ impl VizView {
     }
 }
 
-/// Bild-ID eines Modellbilds (oberes Bit gesetzt, getrennt von den Ort-Bildern).
+/// Image ID of a model image (top bit set, separate from the venue images).
 fn model_tex_id(key: &str, index: usize) -> u32 {
     let h = key
         .bytes()
@@ -1262,7 +1265,7 @@ fn model_tex_id(key: &str, index: usize) -> u32 {
     0x8000_0000 | (h & 0x7fff_ffff)
 }
 
-/// Bild lesen und auf höchstens 2048 Pixel Kantenlänge verkleinern.
+/// Read an image and shrink it to at most 2048 pixels edge length.
 pub fn decode_texture(bytes: &[u8]) -> Option<image::RgbaImage> {
     let img = image::load_from_memory(bytes).ok()?;
     let img = if img.width().max(img.height()) > 2048 {
@@ -1273,7 +1276,7 @@ pub fn decode_texture(bytes: &[u8]) -> Option<image::RgbaImage> {
     Some(img.to_rgba8())
 }
 
-/// Netz und Skalierung einer Form (`None` = Gruppe).
+/// Mesh and scale of a shape (`None` = group).
 fn shape_mesh(s: &Shape) -> Option<(Mat4, MeshKey)> {
     Some(match *s {
         Shape::Group | Shape::Model { .. } => return None,
@@ -1313,7 +1316,7 @@ fn vec3_row(ui: &mut egui::Ui, label: &str, v: &mut [f32; 3], speed: f64) {
         ui.label(label);
         for c in v.iter_mut() {
             if *c == 0.0 {
-                *c = 0.0; // kein „-0.0“ anzeigen
+                *c = 0.0; // do not show “-0.0”
             }
             ui.add(egui::DragValue::new(c).speed(speed).max_decimals(3));
         }
@@ -1321,8 +1324,8 @@ fn vec3_row(ui: &mut egui::Ui, label: &str, v: &mut [f32; 3], speed: f64) {
 }
 
 impl VizView {
-    /// Alle ausgewählten (Objekte und Geräte) mit ihrer Lage; Objekte, deren
-    /// Gruppe mit ausgewählt ist, bewegen sich mit der Gruppe.
+    /// All selected ones (objects and fixtures) with their placement; objects
+    /// whose group is selected too move with the group.
     fn group_frames(
         selected: Option<Pick>,
         sel_objects: &std::collections::BTreeSet<u32>,
@@ -1353,7 +1356,7 @@ impl VizView {
             .collect()
     }
 
-    /// Objekt auswählen (`add`: zur Auswahl hinzufügen bzw. wieder entfernen).
+    /// Select an object (`add`: add to the selection or remove it again).
     fn select_object(&mut self, cx: &mut ViewCtx<'_>, id: u32, add: bool) {
         self.select_object_in(&mut cx.state.selected, id, add);
     }
@@ -1379,7 +1382,7 @@ impl VizView {
     }
 }
 
-/// Lage eines Objekts oder Geräts setzen (gesperrte Objekte bleiben).
+/// Set the placement of an object or fixture (locked objects stay).
 fn apply_placement(cx: &mut ViewCtx<'_>, sel: Pick, p: Placement) {
     match sel {
         Pick::Object(id) => {
@@ -1398,7 +1401,7 @@ fn apply_placement(cx: &mut ViewCtx<'_>, sel: Pick, p: Placement) {
     }
 }
 
-/// Geräte, auf die eine Aktion wirkt: alle ausgewählten, mindestens das angeklickte.
+/// Fixtures an action applies to: all selected, at least the clicked one.
 fn targets(cx: &ViewCtx<'_>, sel: Option<Pick>) -> Vec<FixtureId> {
     let mut ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
     if let Some(Pick::Fixture(id)) = sel {
@@ -1417,7 +1420,7 @@ fn aim_selected(cx: &mut ViewCtx<'_>, sel: Option<Pick>, target: [f32; 3]) {
     }
 }
 
-// ---------- Strahl-Tests ----------
+// ---------- Ray tests ----------
 
 fn hit_y(o: Vec3, d: Vec3, y: f32) -> Option<Vec3> {
     if d.y.abs() < 1e-5 {
@@ -1439,7 +1442,8 @@ fn ray_sphere(o: Vec3, d: Vec3, c: Vec3, r: f32) -> Option<f32> {
     (t > 0.0).then_some(t)
 }
 
-/// Strahl gegen den Einheitswürfel nach `m` (Rückgabe: Abstand in Welt-Einheiten).
+/// Ray against the unit cube transformed by `m` (returns: distance in world
+/// units).
 fn ray_box(o: Vec3, d: Vec3, m: Mat4) -> Option<f32> {
     let inv = m.inverse();
     let lo = inv.transform_point3(o);
@@ -1467,7 +1471,7 @@ fn slab(o: Vec3, d: Vec3, min: Vec3, max: Vec3) -> Option<(f32, f32)> {
     (t1 >= t0.max(0.0)).then_some((t0, t1))
 }
 
-/// Wie weit ein Strahl im Raum läuft, bis er ihn verlässt.
+/// How far a ray travels inside the room until it leaves it.
 fn ray_aabb_exit(o: Vec3, d: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
     slab(o, d, min, max).map(|(_, t1)| t1)
 }

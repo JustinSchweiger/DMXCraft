@@ -1,7 +1,6 @@
-//! Effekte, die Kanäle („Features“) direkt bewegen: CHASER FX, VALUE FX,
-//! CURVE FX und MAPPINGS. Sie liefern je Beam einen Pegel 0..=1, der auf
-//! jedes zugeordnete Feature zwischen dessen Unter- und Obergrenze
-//! abgebildet wird.
+//! Effects that move channels (“features”) directly: CHASER FX, VALUE FX,
+//! CURVE FX and MAPPINGS. They return a level 0..=1 per beam that is mapped
+//! onto every assigned feature between its lower and upper bound.
 
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -13,7 +12,7 @@ use crate::fixture::ChannelKind;
 use crate::plan;
 use crate::show::{ChannelRef, FixtureId, Show};
 
-/// Ein vom Effekt bewegter Kanaltyp mit Wertebereich.
+/// A channel type moved by the effect, with value range.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Feature {
     pub kind: ChannelKind,
@@ -37,14 +36,14 @@ impl Feature {
     }
 }
 
-/// Ein Gerät als Beam für Feature-Effekte (Position im Bühnenplan).
+/// A fixture as a beam for feature effects (position in the stage plan).
 #[derive(Clone, Debug)]
 pub struct FixtureBeam {
     pub fixture: FixtureId,
     pub pos: [f32; 2],
 }
 
-/// Beams der Geräte in der angegebenen Reihenfolge (je Gerät einer).
+/// Beams of the fixtures in the given order (one per fixture).
 pub fn fixture_beams(show: &Show, fixtures: &[FixtureId]) -> Vec<FixtureBeam> {
     fixtures
         .iter()
@@ -59,8 +58,8 @@ pub fn fixture_beams(show: &Show, fixtures: &[FixtureId]) -> Vec<FixtureBeam> {
         .collect()
 }
 
-/// Pegel auf die Features schreiben. `relative`: um den bisherigen Wert
-/// (Pegel 0.5 = unverändert) statt absolut.
+/// Write the level to the features. `relative`: around the previous value
+/// (level 0.5 = unchanged) instead of absolute.
 pub fn apply_levels(
     show: &Show,
     beams: &[FixtureBeam],
@@ -103,16 +102,16 @@ pub fn apply_levels(
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChaserPreset {
-    /// Ein Lauflicht.
+    /// A chaser.
     #[default]
     Single,
-    /// Auffüllen und wieder leeren.
+    /// Fill up and empty again.
     Fill,
-    /// Zwei Lauflichter von außen zur Mitte.
+    /// Two chasers from the outside to the middle.
     Inward,
-    /// Zwei Lauflichter von der Mitte nach außen.
+    /// Two chasers from the middle outwards.
     Outward,
-    /// Zufällige Blitze.
+    /// Random flashes.
     Random,
 }
 
@@ -142,13 +141,13 @@ pub struct ChaserFx {
     pub preset: ChaserPreset,
     pub one_direction: bool,
     pub crossfade: bool,
-    /// Breite des Lichts in Beams.
+    /// Width of the light in beams.
     pub pixels: f32,
-    /// Random: Leuchtdauer eines Blitzes in % eines Schritts.
+    /// Random: duration of a flash in % of a step.
     pub flash: f32,
-    /// Random: Startwert des Zufalls.
+    /// Random: seed of the randomness.
     pub seed: f32,
-    /// Random: Blitze je Durchlauf.
+    /// Random: flashes per cycle.
     pub repeats: f32,
 }
 
@@ -166,8 +165,8 @@ impl Default for ChaserFx {
     }
 }
 
-/// Pegel eines Lichtblocks aus `w` Beams an Stelle `x`, der über `span`
-/// Stellen läuft (Anteil `t`). Hart: ganze Beams, weich: gleitend.
+/// Level of a light block of `w` beams at position `x` that runs across
+/// `span` positions (share `t`). Hard: whole beams, soft: gliding.
 fn block(x: f32, t: f32, span: f32, w: f32, soft: bool) -> f32 {
     if soft {
         let head = t * span - (w - 1.0);
@@ -183,7 +182,7 @@ fn block(x: f32, t: f32, span: f32, w: f32, soft: bool) -> f32 {
     }
 }
 
-/// Lage 0..1 eines umlaufenden bzw. pendelnden Laufs.
+/// Position 0..1 of a wrapping or ping-pong run.
 fn travel(phase: f32, one_direction: bool) -> f32 {
     if one_direction {
         phase
@@ -204,7 +203,7 @@ pub fn chaser_levels(fx: &ChaserFx, n: usize, cycles: f64) -> Vec<f32> {
     let soft = fx.crossfade;
     match fx.preset {
         ChaserPreset::Single => {
-            // ein voller Durchlauf, der Block schiebt sich herein und hinaus
+            // one full cycle, the block slides in and out
             let span = nf + w - 1.0;
             let t = travel(phase, fx.one_direction);
             (0..n).map(|i| block(i as f32, t, span, w, soft)).collect()
@@ -320,19 +319,19 @@ impl CurveShape {
 #[serde(default)]
 pub struct CurveFx {
     pub shape: CurveShape,
-    /// Perioden je Szenendurchlauf.
+    /// Periods per scene cycle.
     pub repeat: f32,
-    /// Ausschlag (1.0 = voller Bereich).
+    /// Amplitude (1.0 = full range).
     pub size: f32,
-    /// Verschiebung der Kurve in der Zeit (0..1 Periode).
+    /// Shift of the curve in time (0..1 period).
     pub phase: f32,
-    /// Verschiebung des Pegels (-1..1).
+    /// Shift of the level (-1..1).
     pub offset: f32,
-    /// Versatz von Beam zu Beam (0..1 Periode über alle Beams).
+    /// Offset from beam to beam (0..1 period across all beams).
     pub phasing: f32,
-    /// Relativ zum bisherigen Kanalwert statt absolut.
+    /// Relative to the previous channel value instead of absolute.
     pub relative: bool,
-    /// Stützpunkte der eigenen Kurve (x, y in 0..1).
+    /// Control points of the custom curve (x, y in 0..1).
     pub custom: Vec<[f32; 2]>,
 }
 
@@ -352,14 +351,14 @@ impl Default for CurveFx {
 }
 
 impl CurveFx {
-    /// Rohwert der Kurve an Stelle `x` (Periode 0..1), 0..1.
+    /// Raw value of the curve at position `x` (period 0..1), 0..1.
     pub fn shape_value(&self, x: f32, period: i64) -> f32 {
         let x = x.rem_euclid(1.0);
         match self.shape {
             CurveShape::Sine => 0.5 + 0.5 * (TAU * x).sin(),
             CurveShape::Sine3 => 0.5 + 0.5 * (TAU * x).sin().powi(3),
             CurveShape::Tangent => {
-                // steiler Anstieg in der Mitte, begrenzt
+                // steep rise in the middle, clamped
                 let v = (std::f32::consts::PI * (x - 0.5) * 0.9).tan() / 6.3;
                 (0.5 + v).clamp(0.0, 1.0)
             }
@@ -392,7 +391,7 @@ impl CurveFx {
         }
     }
 
-    /// Pegel nach Größe und Offset.
+    /// Level after size and offset.
     pub fn level(&self, x: f32, period: i64) -> f32 {
         let c = self.shape_value(x, period);
         ((c - 0.5) * self.size + 0.5 + self.offset / 2.0).clamp(0.0, 1.0)

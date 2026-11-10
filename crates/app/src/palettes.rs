@@ -1,5 +1,5 @@
-//! Farbpaletten für COLOR FX. Alle Paletten (anfangs die mitgelieferten)
-//! sind bearbeitbar und liegen im Konfigurationsordner (`palettes.json`).
+//! Color palettes for COLOR FX. All palettes (initially the bundled ones)
+//! are editable and live in the config folder (`palettes.json`).
 
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +18,7 @@ fn named(name: &str, colors: &[[u8; 3]]) -> NamedPalette {
     }
 }
 
-/// Mitgelieferte Paletten (eigene Zusammenstellung).
+/// Bundled palettes (own selection).
 pub fn builtin() -> Vec<NamedPalette> {
     vec![
         named(
@@ -103,7 +103,7 @@ fn path() -> Option<std::path::PathBuf> {
     crate::settings::Settings::path().map(|p| p.with_file_name("palettes.json"))
 }
 
-/// Alle Paletten laden. Ohne gespeicherte Datei: die mitgelieferten.
+/// Load all palettes. Without a saved file: the bundled ones.
 pub fn load_user() -> Vec<NamedPalette> {
     path()
         .and_then(|p| std::fs::read_to_string(p).ok())

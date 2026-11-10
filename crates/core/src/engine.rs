@@ -1,14 +1,14 @@
-//! Lichtengine: spielt Szenen ab und berechnet daraus DMX-Frames.
+//! Lighting engine: plays scenes and computes DMX frames from them.
 //!
-//! Merge-Regeln:
-//! * Alle Kanäle: LTP – die zuletzt gestartete Szene gewinnt, aber nur für
-//!   Kanäle, die sie gespeichert hat (auch gespeicherte 0-Werte). Nicht
-//!   gespeicherte Kanäle bleiben frei für andere Szenen.
-//! * Der Programmer (Edit-Werte) überschreibt die Szenen.
-//! * Live-Werte überschreiben alles; sie gehören nicht zur Show und werden
-//!   nicht gespeichert.
-//! * Master/Blackout skalieren Dimmer-Kanäle; Geräte ohne Dimmer-Kanal werden
-//!   über ihre Farbkanäle gedimmt.
+//! Merge rules:
+//! * All channels: LTP – the most recently started scene wins, but only for
+//!   channels it has stored (including stored 0 values). Channels not stored
+//!   stay free for other scenes.
+//! * The programmer (edit values) overrides the scenes.
+//! * Live values override everything; they do not belong to the show and are
+//!   not saved.
+//! * Master/blackout scale dimmer channels; fixtures without a dimmer channel
+//!   are dimmed via their color channels.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -17,44 +17,44 @@ use crate::dmx::DmxFrame;
 use crate::fixture::ChannelKind;
 use crate::show::{ChannelRef, FixtureLimits, LoopMode, SceneId, Show};
 
-/// Obergrenze für Schrittwechsel pro Tick (Schutz vor Endlosschleifen bei
-/// Szenen mit sehr kurzen Schritten).
+/// Upper limit for step changes per tick (protection against endless loops
+/// in scenes with very short steps).
 const MAX_STEP_ADVANCES_PER_TICK: usize = 1000;
 
 #[derive(Clone, Debug)]
 struct PlayingScene {
     scene: SceneId,
-    /// Startreihenfolge für LTP.
+    /// Start order for LTP.
     seq: u64,
     step: usize,
     elapsed_ms: f64,
-    /// Noch im ersten Durchlauf von Schritt 0 (es gibt keinen Vorgänger).
+    /// Still in the first pass of step 0 (there is no predecessor).
     first_entry: bool,
     finished: bool,
     paused: bool,
-    /// Zeit seit dem Start (für das Einblenden).
+    /// Time since the start (for fading in).
     age_ms: f64,
-    /// Zeit seit dem Stoppen, solange die Szene ausblendet.
+    /// Time since stopping, while the scene fades out.
     releasing: Option<f64>,
-    /// Abgeschlossene Durchläufe (für „X-mal abspielen“).
+    /// Completed cycles (for “play X times”).
     cycles: u32,
-    /// Effektzeit in ms (läuft mit Speed, steht bei Pause).
+    /// Effect time in ms (runs with speed, stands still when paused).
     fx_ms: f64,
 }
 
-/// Ein-/Ausblendzustand einer Szene (Pegel 0..=1).
+/// Fade in/out state of a scene (level 0..=1).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FadeState {
     In(f32),
     Out(f32),
 }
 
-/// Fortschritt einer laufenden Szene für die Oberfläche.
+/// Progress of a running scene for the UI.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SceneProgress {
     pub step: usize,
     pub step_count: usize,
-    /// 0.0..=1.0 innerhalb des aktuellen Schritts.
+    /// 0.0..=1.0 within the current step.
     pub step_fraction: f32,
     pub finished: bool,
     pub paused: bool,
@@ -65,21 +65,21 @@ pub struct Engine {
     playing: Vec<PlayingScene>,
     next_seq: u64,
     programmer: HashMap<ChannelRef, u8>,
-    /// Vorschau-Szenen (Edit-Modus): werden ausgegeben, auch wenn sie nicht
-    /// laufen – ihr erster Schritt liegt über den laufenden Szenen.
+    /// Preview scenes (edit mode): output even when they are not running –
+    /// their first step lies above the running scenes.
     preview: Vec<SceneId>,
-    /// Angezeigter Schritt der Vorschau (Schrittszenen im Edit-Modus).
+    /// Displayed step of the preview (step scenes in edit mode).
     preview_step: usize,
-    /// Live-Werte (Live-Modus): überschreiben alles, werden nicht gespeichert.
+    /// Live values (live mode): override everything, not saved.
     live: HashMap<ChannelRef, u8>,
-    /// Blind-Modus: Ausgang nutzt diesen eingefrorenen Stand ohne Edit-Werte.
+    /// Blind mode: the output uses this frozen state without edit values.
     blind_show: Option<Show>,
     master: f32,
     blackout: bool,
     speed: f32,
-    /// Laufende Uhr für die Effektvorschau nicht gestarteter Szenen.
+    /// Running clock for the effect preview of scenes not started.
     clock_ms: f64,
-    /// Vorschau-Stelle in Zeitleisten (SUPER SCENE, ms).
+    /// Preview position in timelines (SUPER SCENE, ms).
     timeline_cursor: f64,
 }
 
@@ -108,12 +108,12 @@ impl Engine {
         &self.show
     }
 
-    /// Zum Bearbeiten der Show. Danach ggf. [`Engine::sync`] aufrufen.
+    /// For editing the show. Call [`Engine::sync`] afterwards if needed.
     pub fn show_mut(&mut self) -> &mut Show {
         &mut self.show
     }
 
-    /// Ersetzt die Show komplett (z. B. nach dem Laden) und stoppt alles.
+    /// Replaces the whole show (e.g. after loading) and stops everything.
     pub fn replace_show(&mut self, show: Show) {
         self.show = show;
         self.playing.clear();
@@ -122,8 +122,8 @@ impl Engine {
         self.blind_show = None;
     }
 
-    /// Entfernt Wiedergabe-/Programmer-Zustand, der nach Show-Änderungen
-    /// nicht mehr gültig ist.
+    /// Removes playback/programmer state that is no longer valid after show
+    /// changes.
     pub fn sync(&mut self) {
         let show = &self.show;
         self.playing
@@ -140,9 +140,9 @@ impl Engine {
         self.live.retain(|ch, _| show.channel_def(*ch).is_some());
     }
 
-    // ---------- Szenen ----------
+    // ---------- Scenes ----------
 
-    /// Läuft die Szene (ausblendende Szenen zählen nicht mehr)?
+    /// Is the scene running (scenes fading out no longer count)?
     pub fn is_active(&self, id: SceneId) -> bool {
         self.playing
             .iter()
@@ -161,10 +161,10 @@ impl Engine {
         show.scene(id).map_or(0, |s| s.settings.fade_out_ms)
     }
 
-    /// Szene stoppen – mit ihrer Ausblendzeit, sonst sofort.
+    /// Stop a scene – with its fade-out time, otherwise immediately.
     fn stop(show: &Show, p: &mut PlayingScene) -> bool {
         if Self::fade_out_ms(show, p.scene) == 0 {
-            return false; // entfernen
+            return false; // remove
         }
         if p.releasing.is_none() {
             p.releasing = Some(0.0);
@@ -172,13 +172,13 @@ impl Engine {
         true
     }
 
-    /// Startet eine Szene (von vorn). Andere Szenen derselben Zone stoppen.
+    /// Starts a scene (from the beginning). Other scenes of the same zone stop.
     pub fn activate(&mut self, id: SceneId) {
         self.start(id, true);
     }
 
-    /// Startet eine Szene zusätzlich, ohne andere freizugeben (z. B. von
-    /// einem Audio-Trigger, während die SUPER SCENE derselben Bank läuft).
+    /// Starts a scene additionally without releasing others (e.g. from an audio
+    /// trigger while the SUPER SCENE of the same bank is running).
     pub fn activate_layered(&mut self, id: SceneId) {
         self.start(id, false);
     }
@@ -194,8 +194,8 @@ impl Engine {
         let zone = scene.zone;
         let mode = scene.settings.release_mode.clone();
         let show = &self.show;
-        // dieselbe Szene startet neu; andere Szenen werden nach dem
-        // Freigabe-Modus freigegeben, sofern sie nicht davor geschützt sind
+        // the same scene restarts; other scenes are released according to the
+        // release mode unless they are protected from it
         self.playing.retain_mut(|p| {
             if p.scene == id {
                 return false;
@@ -226,14 +226,14 @@ impl Engine {
         self.next_seq += 1;
     }
 
-    /// Stoppt eine Szene (mit ihrer Ausblendzeit).
+    /// Stops a scene (with its fade-out time).
     pub fn release(&mut self, id: SceneId) {
         let show = &self.show;
         self.playing
             .retain_mut(|p| p.scene != id || Self::stop(show, p));
     }
 
-    /// Springt in einer laufenden Szene an eine Stelle (0 = Anfang, 1 = Ende).
+    /// Jumps to a position in a running scene (0 = start, 1 = end).
     pub fn seek(&mut self, id: SceneId, fraction: f32) {
         let Some(scene) = self.show.scene(id) else {
             return;
@@ -262,7 +262,7 @@ impl Engine {
         }
     }
 
-    /// Blendet die Szene gerade ein oder aus?
+    /// Is the scene currently fading in or out?
     pub fn fade_state(&self, id: SceneId) -> Option<FadeState> {
         let p = self.playing.iter().rev().find(|p| p.scene == id)?;
         let st = &self.show.scene(id)?.settings;
@@ -274,7 +274,7 @@ impl Engine {
             .then(|| FadeState::In((p.age_ms / f64::from(st.fade_in_ms)) as f32))
     }
 
-    /// Fortschritt über die ganze Szene (0..=1), falls sie läuft.
+    /// Progress across the whole scene (0..=1), if it is running.
     pub fn scene_position(&self, id: SceneId) -> Option<f32> {
         let p = self
             .playing
@@ -320,15 +320,15 @@ impl Engine {
         })
     }
 
-    /// Hält eine laufende Szene an bzw. setzt sie fort.
+    /// Pauses or resumes a running scene.
     pub fn toggle_pause(&mut self, id: SceneId) {
         if let Some(p) = self.playing.iter_mut().find(|p| p.scene == id) {
             p.paused = !p.paused;
         }
     }
 
-    /// Springt zum nächsten (`delta = 1`) oder vorherigen (`-1`) Schritt.
-    /// Der neue Schritt blendet mit seiner Überblendzeit ein.
+    /// Jumps to the next (`delta = 1`) or previous (`-1`) step.
+    /// The new step fades in with its fade time.
     pub fn jump_step(&mut self, id: SceneId, delta: i32) {
         let Some(len) = self.show.scene(id).map(|s| s.steps.len()) else {
             return;
@@ -345,7 +345,7 @@ impl Engine {
         }
     }
 
-    /// Aktive Szene einer Zone (bei Zonen ist höchstens eine aktiv).
+    /// Active scene of a zone (at most one is active per zone).
     pub fn active_in_zone(&self, zone: crate::show::ZoneId) -> Option<SceneId> {
         self.playing
             .iter()
@@ -366,9 +366,8 @@ impl Engine {
 
     // ---------- Blind ----------
 
-    /// Blind-Modus ein/aus: beim Einschalten wird der Ausgang auf dem
-    /// aktuellen Stand eingefroren, Bearbeitungen wirken erst nach dem
-    /// Ausschalten.
+    /// Blind mode on/off: when switching on, the output is frozen at the current
+    /// state, edits only take effect after switching off.
     pub fn set_blind(&mut self, on: bool) {
         if on && self.blind_show.is_none() {
             self.blind_show = Some(self.show.clone());
@@ -381,7 +380,7 @@ impl Engine {
         self.blind_show.is_some()
     }
 
-    // ---------- Live-Werte ----------
+    // ---------- Live values ----------
 
     pub fn set_live(&mut self, ch: ChannelRef, value: u8) {
         self.live.insert(ch, value);
@@ -399,17 +398,17 @@ impl Engine {
         &self.live
     }
 
-    /// Alle Live-Werte ersetzen (z. B. Rückgängig).
+    /// Replace all live values (e.g. undo).
     pub fn replace_live(&mut self, live: HashMap<ChannelRef, u8>) {
         self.live = live;
     }
 
-    /// Vorschau-Szenen setzen (leer = keine Vorschau).
+    /// Set preview scenes (empty = no preview).
     pub fn set_preview(&mut self, scenes: Vec<SceneId>) {
         self.preview = scenes;
     }
 
-    /// Welcher Schritt der Vorschau-Szenen gezeigt wird (sonst der erste).
+    /// Which step of the preview scenes is shown (otherwise the first).
     pub fn set_preview_step(&mut self, step: usize) {
         self.preview_step = step;
     }
@@ -426,7 +425,7 @@ impl Engine {
         &self.programmer
     }
 
-    // ---------- Master / Speed ----------
+    // ---------- Master / speed ----------
 
     pub fn master(&self) -> f32 {
         self.master
@@ -444,7 +443,7 @@ impl Engine {
         self.blackout = on;
     }
 
-    /// Wiedergabegeschwindigkeit (1.0 = normal).
+    /// Playback speed (1.0 = normal).
     pub fn speed(&self) -> f32 {
         self.speed
     }
@@ -453,13 +452,13 @@ impl Engine {
         self.speed = v.clamp(0.05, 20.0);
     }
 
-    // ---------- Zeit ----------
+    // ---------- Time ----------
 
-    /// Zeit voranschreiten lassen.
+    /// Advance time.
     pub fn tick(&mut self, dt: Duration) {
         let dt_ms = dt.as_secs_f64() * 1000.0 * f64::from(self.speed);
         let real_ms = dt.as_secs_f64() * 1000.0;
-        // ausgeblendete Szenen entfernen
+        // remove scenes that have faded out
         let show = &self.show;
         self.playing.retain_mut(|p| match &mut p.releasing {
             Some(r) => {
@@ -482,7 +481,7 @@ impl Engine {
             if len == 0 {
                 continue;
             }
-            // Schritte können während der Wiedergabe gelöscht werden
+            // Steps can be deleted during playback
             if p.step >= len {
                 p.step = len - 1;
                 p.elapsed_ms = 0.0;
@@ -529,7 +528,7 @@ impl Engine {
                 }
             }
         }
-        // Ende nach X Durchläufen: freigeben und/oder zu einer Szene springen
+        // End after X cycles: release and/or jump to a scene
         for id in ended {
             let Some(st) = self.show.scene(id).map(|s| s.settings.clone()) else {
                 continue;
@@ -541,8 +540,8 @@ impl Engine {
         }
     }
 
-    /// Eine Szene vorzeitig beenden (z. B. „Ton ausfaden“): freigeben und wie
-    /// am regulären Ende zu den Szenen aus „Springe zu“ wechseln.
+    /// End a scene early (e.g. “Fade out sound”): release it and switch to the
+    /// scenes from “Jump to” as at the regular end.
     pub fn end_scene(&mut self, id: SceneId) {
         let jumps = self
             .show
@@ -561,10 +560,10 @@ impl Engine {
 
     // ---------- Rendering ----------
 
-    /// Intensitätskanal für den Szenen-Dimmer: Dimmer, bei Geräten ohne
-    /// Dimmer-Kanal die Farbkanäle.
-    /// Farbkanäle von Geräten mit virtuellem Dimmer mit dessen Wert skalieren
-    /// (Verhältnis der Farben bleibt erhalten, 255 = unverändert).
+    /// Intensity channel for the scene dimmer: dimmer, for fixtures without a
+    /// dimmer channel the color channels.
+    /// Scale the color channels of fixtures with a virtual dimmer by its value
+    /// (the ratio of the colors is kept, 255 = unchanged).
     fn apply_virtual_dimmers(show: &Show, values: &mut HashMap<ChannelRef, u8>) {
         for f in &show.fixtures {
             let Some(dim) = values.get(&ChannelRef::virtual_dimmer(f.id)).copied() else {
@@ -609,12 +608,12 @@ impl Engine {
         show.channel_def(ch).is_some_and(|d| d.kind.is_htp())
     }
 
-    /// Aktuelle (überblendete) Werte einer laufenden Szene.
+    /// Current (crossfaded) values of a running scene.
     fn scene_values(&self, show: &Show, p: &PlayingScene) -> HashMap<ChannelRef, u8> {
         self.scene_values_d(show, p, 0)
     }
 
-    /// Werte einer Szene; `depth` begrenzt verschachtelte SUPER SCENES.
+    /// Values of a scene; `depth` limits nested SUPER SCENES.
     fn scene_values_d(&self, show: &Show, p: &PlayingScene, depth: u8) -> HashMap<ChannelRef, u8> {
         let mut out = HashMap::new();
         let Some(scene) = show.scene(p.scene) else {
@@ -629,7 +628,7 @@ impl Engine {
             return out;
         };
         let current = step.value_map();
-        // Fade-Anteil der Szene skaliert die Schritt-Überblendung
+        // The scene's fade share scales the step crossfade
         let speed = f64::from(scene.settings.fade_speed.clamp(1, 40)) / 10.0;
         let fade = f64::from(step.fade_ms) / speed;
         let t = if fade < 1.0 {
@@ -640,7 +639,7 @@ impl Engine {
         let previous = if p.first_entry {
             None
         } else {
-            // Vorgänger in Abspielrichtung
+            // Predecessor in playback direction
             let prev = if scene.settings.reverse {
                 (p.step + 1) % len
             } else {
@@ -652,13 +651,13 @@ impl Engine {
         for (&ch, &to) in &current {
             let from = match previous.as_ref().and_then(|m| m.get(&ch)) {
                 Some(&v) => v,
-                // Ohne Vorgänger: Intensität blendet von 0 auf, Rest springt.
+                // Without a predecessor: intensity fades up from 0, the rest jumps.
                 None if Self::is_htp(show, ch) => 0,
                 None => to,
             };
             out.insert(ch, lerp(from, to, t));
         }
-        // Intensitäten, die im neuen Schritt fehlen, blenden aus.
+        // Intensities missing in the new step fade out.
         if let Some(prev) = previous {
             for (ch, from) in prev {
                 if !current.contains_key(&ch) && Self::is_htp(show, ch) {
@@ -670,9 +669,8 @@ impl Engine {
         out
     }
 
-    /// Werte einer Zeitleiste zum Zeitpunkt `t` (ms): Blöcke späterer Spuren
-    /// überschreiben frühere; Ein-/Ausblenden und Dimmer der Blöcke wirken
-    /// auf die Helligkeit.
+    /// Values of a timeline at time `t` (ms): blocks of later tracks override
+    /// earlier ones; fade in/out and dimmer of the blocks affect the brightness.
     fn timeline_values(
         &self,
         show: &Show,
@@ -715,7 +713,7 @@ impl Engine {
         out
     }
 
-    /// Wiedergabestand einer Szene an Stelle `local` (ms) ihres Ablaufs.
+    /// Playback state of a scene at position `local` (ms) of its sequence.
     fn virtual_play(scene: &crate::show::Scene, local: f64) -> PlayingScene {
         let mut rest = local.max(0.0);
         let mut step = 0;
@@ -742,7 +740,7 @@ impl Engine {
         }
     }
 
-    /// Laufzeit (ms) einer laufenden SUPER SCENE in ihrer Zeitleiste.
+    /// Run time (ms) of a running SUPER SCENE in its timeline.
     pub fn timeline_time(&self, id: SceneId) -> Option<f64> {
         let len = self.show.scene(id)?.timeline()?.length_ms().max(1) as f64;
         self.playing
@@ -751,16 +749,16 @@ impl Engine {
             .map(|p| p.fx_ms.rem_euclid(len))
     }
 
-    /// Läuft die SUPER SCENE gerade (nicht pausiert)?
+    /// Is the SUPER SCENE currently running (not paused)?
     pub fn timeline_running(&self, id: SceneId) -> bool {
         self.playing
             .iter()
             .any(|p| p.scene == id && p.releasing.is_none() && !p.paused && !p.finished)
     }
 
-    /// Play/Pause einer SUPER SCENE: läuft oder pausiert sie, wird pausiert
-    /// bzw. fortgesetzt; ist sie zu Ende oder gestoppt, startet sie neu – ab
-    /// `cursor`, nach dem Ende bzw. mit dem Cursor am Ende wieder von vorn.
+    /// Play/pause of a SUPER SCENE: if it is running or paused it is paused or
+    /// resumed; if it has ended or is stopped it starts again – from `cursor`,
+    /// after the end or with the cursor at the end from the beginning again.
     pub fn toggle_timeline(&mut self, id: SceneId, cursor: f64) {
         let paused = self.progress(id).is_some_and(|p| p.paused);
         if self.timeline_running(id) || paused {
@@ -782,7 +780,7 @@ impl Engine {
         self.seek_timeline(id, from);
     }
 
-    /// Wiedergabe einer SUPER SCENE auf `ms` setzen.
+    /// Set the playback of a SUPER SCENE to `ms`.
     pub fn seek_timeline(&mut self, id: SceneId, ms: f64) {
         for p in self.playing.iter_mut().filter(|p| p.scene == id) {
             p.fx_ms = ms.max(0.0);
@@ -792,18 +790,20 @@ impl Engine {
         }
     }
 
-    /// Stelle der Zeitleiste, die die Vorschau zeigt, solange die Szene nicht läuft.
+    /// Position of the timeline shown by the preview while the scene is not
+    /// running.
     pub fn set_timeline_cursor(&mut self, ms: f64) {
         self.timeline_cursor = ms;
     }
 
-    /// Effektzeit in Durchläufen (eine Szenendauer = 1.0) samt Phase.
+    /// Effect time in cycles (one scene duration = 1.0) including phase.
     fn fx_cycles_of(&self, scene: &crate::show::Scene, ms: f64) -> f64 {
         let dur = scene.duration_ms().max(100) as f64;
         ms / dur + f64::from(scene.settings.phase_deg) / 360.0
     }
 
-    /// Effektzeit einer Szene: läuft sie, ihre eigene, sonst die Vorschau-Uhr.
+    /// Effect time of a scene: its own if it is running, otherwise the preview
+    /// clock.
     pub fn fx_cycles(&self, id: SceneId) -> f64 {
         let Some(scene) = self.show.scene(id) else {
             return 0.0;
@@ -819,7 +819,7 @@ impl Engine {
         self.fx_cycles_of(scene, ms)
     }
 
-    /// Effekte der Szene über die Schrittwerte legen.
+    /// Put the scene's effects over the step values.
     fn apply_effects(
         show: &Show,
         scene: &crate::show::Scene,
@@ -831,8 +831,8 @@ impl Engine {
         }
     }
 
-    /// Berechnet den aktuellen DMX-Frame für den Ausgang. Im Blind-Modus ohne
-    /// Edit-Werte und mit dem beim Umschalten eingefrorenen Show-Stand.
+    /// Computes the current DMX frame for the output. In blind mode without edit
+    /// values and with the show state frozen when switching.
     pub fn render(&self, frame: &mut DmxFrame) {
         match &self.blind_show {
             Some(frozen) => self.render_show(frozen, false, frame),
@@ -840,8 +840,7 @@ impl Engine {
         }
     }
 
-    /// Frame mit allen Bearbeitungen (Vorschau für Bühne und Fader, auch im
-    /// Blind-Modus).
+    /// Frame with all edits (preview for stage and faders, also in blind mode).
     pub fn render_monitor(&self) -> DmxFrame {
         let mut f = DmxFrame::new(usize::from(self.show.universes));
         self.render_show(&self.show, true, &mut f);
@@ -869,23 +868,23 @@ impl Engine {
             }
         }
 
-        // Kanäle, die eine Quelle (Szene, Vorschau, Programmer, Effekt, Live)
-        // gesetzt hat – Gerätegrenzen gelten nur für diese, nicht für Grundwerte
+        // Channels set by a source (scene, preview, programmer, effect, live) –
+        // fixture limits only apply to these, not to base values
         let mut touched: std::collections::HashSet<ChannelRef> = std::collections::HashSet::new();
-        // 2) Szenen in Startreihenfolge (LTP: spätere überschreiben)
-        // Reihenfolge: Priorität, dann Startreihenfolge (später gewinnt)
+        // 2) Scenes in start order (LTP: later ones override)
+        // Order: priority, then start order (later wins)
         let mut order: Vec<&PlayingScene> = self.playing.iter().collect();
         order.sort_by_key(|p| {
             let prio = show.scene(p.scene).map_or(0, |s| s.settings.priority);
             (prio, p.seq)
         });
-        // Nur gespeicherte Kanäle einer Szene wirken; nicht gespeicherte
-        // bleiben frei für andere Szenen.
+        // Only stored channels of a scene take effect; channels not stored stay
+        // free for other scenes.
         for p in order {
             let Some(settings) = show.scene(p.scene).map(|s| &s.settings) else {
                 continue;
             };
-            // Ein-/Ausblenden der ganzen Szene (Überblendung zum Darunterliegenden)
+            // Fade in/out of the whole scene (crossfade to what lies below)
             let mut k = 1.0f64;
             if settings.fade_in_ms > 0 {
                 k *= (p.age_ms / f64::from(settings.fade_in_ms)).clamp(0.0, 1.0);
@@ -908,13 +907,13 @@ impl Engine {
             }
         }
 
-        // 3) Vorschau nicht laufender Szenen (erster Schritt, LTP)
+        // 3) Preview of scenes not running (first step, LTP)
         let preview: &[SceneId] = if edit { &self.preview } else { &[] };
         for id in preview {
             if self.is_active(*id) {
                 continue;
             }
-            // SUPER SCENE: Stand der Zeitleiste an der Vorschau-Stelle
+            // SUPER SCENE: state of the timeline at the preview position
             if let Some(tl) = show.scene(*id).and_then(|s| s.timeline()) {
                 for (ch, v) in self.timeline_values(show, tl, self.timeline_cursor, 0) {
                     touched.insert(ch);
@@ -949,7 +948,7 @@ impl Engine {
                 *slot = *v;
             }
         }
-        // 4b) Effekte der bearbeiteten Szenen liegen über ihren Grundwerten
+        // 4b) Effects of the edited scenes lie above their base values
         for id in preview {
             let Some(scene) = show.scene(*id).filter(|s| !s.effects.is_empty()) else {
                 continue;
@@ -964,7 +963,7 @@ impl Engine {
             }
         }
 
-        // 5) Live-Werte
+        // 5) Live values
         for (ch, v) in &self.live {
             touched.insert(*ch);
             if let Some(slot) = values.get_mut(ch) {
@@ -972,11 +971,11 @@ impl Engine {
             }
         }
 
-        // 5b) Virtuelle Dimmer: Farbkanäle anteilig herunterregeln. Die
-        // gespeicherten Werte bleiben unverändert, nur die Ausgabe wird skaliert.
+        // 5b) Virtual dimmers: turn down the color channels proportionally. The
+        // stored values stay unchanged, only the output is scaled.
         Self::apply_virtual_dimmers(show, &mut values);
 
-        // 6) Master / Blackout
+        // 6) Master / blackout
         let master = if self.blackout { 0.0 } else { self.master };
         if master < 1.0 {
             for f in &show.fixtures {
@@ -1003,7 +1002,7 @@ impl Engine {
             }
         }
 
-        // 4b) Gerätegrenzen
+        // 4b) Fixture limits
         for f in &show.fixtures {
             let lim = f.limits;
             if lim.is_default() {
@@ -1044,7 +1043,7 @@ impl Engine {
                     let fv = fine.and_then(|i| values.get(&ch(i)).copied()).unwrap_or(0);
                     Some(u16::from(c) << 8 | u16::from(fv))
                 };
-                // nur, was eine Quelle gesetzt hat (Ruhelage bleibt unverändert)
+                // only what a source has set (the rest position stays unchanged)
                 let set = |c: Option<usize>, f: Option<usize>| {
                     c.is_some_and(|i| touched.contains(&ch(i)))
                         || f.is_some_and(|i| touched.contains(&ch(i)))
@@ -1081,7 +1080,7 @@ impl Engine {
             }
         }
 
-        // 5) In den Frame schreiben
+        // 5) Write into the frame
         for f in &show.fixtures {
             for (ch, v) in values
                 .iter()
@@ -1092,14 +1091,14 @@ impl Engine {
         }
     }
 
-    /// Bequemlichkeitsfunktion: neuen Frame erzeugen.
+    /// Convenience function: create a new frame.
     pub fn render_frame(&self) -> DmxFrame {
         let mut f = DmxFrame::new(usize::from(self.show.universes));
         self.render(&mut f);
         f
     }
 
-    /// Aktueller Ausgabewert eines Gerätekanals (für Fader-Anzeigen).
+    /// Current output value of a fixture channel (for fader displays).
     pub fn output_value(&self, frame: &DmxFrame, ch: ChannelRef) -> Option<u8> {
         if ch.is_virtual() {
             return None;
@@ -1141,7 +1140,7 @@ mod tests {
         }
     }
 
-    /// Show mit einem D+RGB-PAR (Adr. 1) und einem RGB-PAR ohne Dimmer (Adr. 10).
+    /// Show with a D+RGB PAR (addr. 1) and an RGB PAR without dimmer (addr. 10).
     fn setup() -> (Show, FixtureId, FixtureId) {
         let mut s = Show::new("T", 2);
         for t in builtin_fixture_types() {
@@ -1172,16 +1171,16 @@ mod tests {
             let f = e.render_frame();
             (f.get(1, 10).unwrap(), f.get(1, 11).unwrap())
         };
-        assert_eq!(out(&e), (200, 100), "ohne Dimmerwert: unverändert");
+        assert_eq!(out(&e), (200, 100), "without dimmer value: unchanged");
         e.set_live(ChannelRef::virtual_dimmer(b), 128);
         assert_eq!(out(&e), (100, 50));
         e.set_live(ChannelRef::virtual_dimmer(b), 0);
         assert_eq!(out(&e), (0, 0));
-        // gespeicherte Farbwerte bleiben erhalten
+        // stored color values are kept
         assert_eq!(e.live().get(&r), Some(&200));
         e.set_live(ChannelRef::virtual_dimmer(b), 255);
         assert_eq!(out(&e), (200, 100));
-        // virtueller Kanal wird nicht ausgegeben (kein Überlauf der Adresse)
+        // the virtual channel is not output (no address overflow)
         assert_eq!(
             e.output_value(&e.render_frame(), ChannelRef::virtual_dimmer(b)),
             None
@@ -1225,9 +1224,9 @@ mod tests {
         let mut e = Engine::new(s);
         e.toggle_timeline(sup, 0.0);
         e.tick(Duration::from_millis(1500));
-        assert!(!e.timeline_running(sup), "zu Ende");
+        assert!(!e.timeline_running(sup), "finished");
         e.toggle_timeline(sup, 0.0);
-        assert!(e.timeline_running(sup), "startet neu");
+        assert!(e.timeline_running(sup), "restarts");
         e.tick(Duration::from_millis(300));
         assert!(e.timeline_time(sup).unwrap() < 500.0);
         e.toggle_timeline(sup, 0.0);
@@ -1260,11 +1259,11 @@ mod tests {
         let first = rgb(&e.render_frame());
         e.tick(Duration::from_millis(300));
         let later = rgb(&e.render_frame());
-        assert_ne!(first, later, "Farben laufen");
+        assert_ne!(first, later, "colors run");
         assert_eq!(
             e.render_frame().get(0, 1),
             Some(255),
-            "Dimmer aus dem Schritt"
+            "Dimmer from the step"
         );
     }
 
@@ -1282,10 +1281,10 @@ mod tests {
             ..FixtureLimits::default()
         };
         let mut e = Engine::new(show);
-        // nichts aktiv: Grundwerte unverändert (Pan/Tilt 128, nicht gespiegelt auf 127)
+        // nothing active: base values unchanged (pan/tilt 128, not mirrored to 127)
         let f = e.render_frame();
         assert_eq!(f.get(0, 1), Some(128));
-        // vom Programmer gesetzt: gespiegelt
+        // set by the programmer: mirrored
         e.set_programmer(
             ChannelRef {
                 fixture: id,
@@ -1369,13 +1368,13 @@ mod tests {
         let f = e.render_frame();
         assert_eq!(f.get(0, 1), Some(100), "Dimmer LTP");
         assert_eq!(f.get(0, 2), Some(99), "Rot LTP");
-        e.activate(s1); // neu gestartet -> jetzt die neueste
+        e.activate(s1); // restarted -> now the newest
         assert_eq!(e.render_frame().get(0, 2), Some(10));
     }
 
     #[test]
     fn unstored_channels_stay_free() {
-        // Rot-Szene speichert nur Rot, Blau-Szene nur Blau -> beide sichtbar.
+        // The red scene stores only red, the blue scene only blue -> both visible.
         let (mut s, a, _) = setup();
         let red = s.add_scene("R", None, vec![Step::new(vec![cv(a, 1, 255)])]);
         let blue = s.add_scene("B", None, vec![Step::new(vec![cv(a, 3, 255)])]);
@@ -1385,7 +1384,7 @@ mod tests {
         let f = e.render_frame();
         assert_eq!(f.get(0, 2), Some(255));
         assert_eq!(f.get(0, 4), Some(255));
-        // speichert die Blau-Szene Rot = 0, gewinnt sie (zuletzt gestartet)
+        // if the blue scene stores red = 0, it wins (started last)
         e.show_mut().scene_mut(blue).unwrap().steps[0]
             .values
             .push(cv(a, 1, 0));
@@ -1395,10 +1394,10 @@ mod tests {
     #[test]
     fn zones_are_exclusive() {
         let (mut s, a, _) = setup();
-        let z = s.add_zone("Farbe");
+        let z = s.add_zone("Color");
         let s1 = s.add_scene("Rot", Some(z), vec![Step::new(vec![cv(a, 1, 255)])]);
-        let s2 = s.add_scene("Blau", Some(z), vec![Step::new(vec![cv(a, 3, 255)])]);
-        let free = s.add_scene("Frei", None, vec![Step::new(vec![cv(a, 0, 255)])]);
+        let s2 = s.add_scene("Blue", Some(z), vec![Step::new(vec![cv(a, 3, 255)])]);
+        let free = s.add_scene("Free", None, vec![Step::new(vec![cv(a, 0, 255)])]);
         let mut e = Engine::new(s);
         e.activate(free);
         e.activate(s1);
@@ -1423,11 +1422,11 @@ mod tests {
         let mut e = Engine::new(s);
         e.activate(id);
         assert_eq!(e.render_frame().get(0, 2), Some(0));
-        e.tick(MS(100)); // Schritt 2 beginnt
+        e.tick(MS(100)); // Step 2 starts
         assert_eq!(e.progress(id).unwrap().step, 1);
-        e.tick(MS(500)); // Hälfte der Überblendung
+        e.tick(MS(500)); // Half of the crossfade
         assert_eq!(e.render_frame().get(0, 2), Some(100));
-        e.tick(MS(500)); // Ende -> Loop zu Schritt 1 (fade 0)
+        e.tick(MS(500)); // End -> loop to step 1 (fade 0)
         assert_eq!(e.progress(id).unwrap().step, 0);
         assert_eq!(e.render_frame().get(0, 2), Some(0));
     }
@@ -1442,8 +1441,8 @@ mod tests {
         e.activate(id);
         e.tick(MS(250));
         let f = e.render_frame();
-        assert_eq!(f.get(0, 1), Some(50), "Dimmer blendet auf");
-        assert_eq!(f.get(0, 2), Some(80), "Farbe springt");
+        assert_eq!(f.get(0, 1), Some(50), "Dimmer fades in");
+        assert_eq!(f.get(0, 2), Some(80), "color jumps");
     }
 
     #[test]
@@ -1474,7 +1473,7 @@ mod tests {
         let id = s.add_scene("Z", None, vec![st, st2]);
         let mut e = Engine::new(s);
         e.activate(id);
-        e.tick(Duration::from_secs(3600)); // darf nicht hängen
+        e.tick(Duration::from_secs(3600)); // must not hang
         assert!(e.is_active(id));
     }
 
@@ -1487,11 +1486,7 @@ mod tests {
         s.scene_mut(id).unwrap().settings.fade_out_ms = 1000;
         let mut e = Engine::new(s);
         e.activate(id);
-        assert_eq!(
-            e.render_frame().get(0, 1),
-            Some(0),
-            "Einblenden beginnt bei 0"
-        );
+        assert_eq!(e.render_frame().get(0, 1), Some(0), "Fade-in starts at 0");
         e.tick(Duration::from_millis(500));
         assert_eq!(
             e.render_frame().get(0, 1),
@@ -1503,12 +1498,12 @@ mod tests {
         e.release(id);
         assert!(!e.is_active(id));
         e.tick(Duration::from_millis(500));
-        assert_eq!(e.render_frame().get(0, 1), Some(50), "blendet aus");
+        assert_eq!(e.render_frame().get(0, 1), Some(50), "fades out");
         e.tick(Duration::from_millis(600));
         assert_eq!(e.render_frame().get(0, 1), Some(0));
         assert!(e.playing.is_empty());
 
-        // Seek in einem Ablauf
+        // Seek within a sequence
         let (mut s, a, _) = setup();
         let mut st = Step::new(vec![cv(a, 1, 1)]);
         st.hold_ms = 1000;
@@ -1541,7 +1536,7 @@ mod tests {
         assert_eq!(e.render_frame().get(0, 2), Some(2));
         e.tick(Duration::from_millis(100));
         e.tick(Duration::from_millis(100));
-        assert_eq!(e.render_frame().get(0, 2), Some(3), "Schleife rückwärts");
+        assert_eq!(e.render_frame().get(0, 2), Some(3), "Loop backwards");
     }
 
     #[test]
@@ -1556,21 +1551,21 @@ mod tests {
         let a2 = one(&mut s, z1, 2);
         let b1 = one(&mut s, z2, 3);
         let mut e = Engine::new(s);
-        // Standard: Bank -> nur Szenen derselben Bank
+        // Default: bank -> only scenes of the same bank
         e.activate(a1);
         e.activate(b1);
         e.activate(a2);
         assert!(!e.is_active(a1) && e.is_active(a2) && e.is_active(b1));
-        // Alle
+        // All
         e.show_mut().scene_mut(a1).unwrap().settings.release_mode = BankScope::All;
         e.activate(a1);
         assert!(e.is_active(a1) && !e.is_active(a2) && !e.is_active(b1));
-        // Schutz: b1 lässt sich von außerhalb seiner Bank nicht freigeben
+        // Protection: b1 cannot be released from outside its bank
         e.show_mut().scene_mut(b1).unwrap().settings.protect = BankScope::OutsideBank;
         e.activate(b1);
         e.activate(a1);
         assert!(e.is_active(b1));
-        // Aus
+        // Off
         e.show_mut().scene_mut(a2).unwrap().settings.release_mode = BankScope::Off;
         e.activate(a2);
         assert!(e.is_active(a1) && e.is_active(a2));
@@ -1605,7 +1600,7 @@ mod tests {
         let mut e = Engine::new(s);
         e.activate(first);
         e.tick(Duration::from_millis(150));
-        assert!(e.is_active(first), "erster von zwei Durchläufen");
+        assert!(e.is_active(first), "first of two runs");
         e.tick(Duration::from_millis(100));
         assert!(!e.is_active(first));
         assert!(e.is_active(next));
@@ -1618,7 +1613,7 @@ mod tests {
         let mut e = Engine::new(s);
         e.activate(red);
         e.set_blind(true);
-        // Szene bearbeiten und Programmer setzen: Ausgang bleibt
+        // Edit the scene and set the programmer: the output stays
         e.show_mut().scene_mut(red).unwrap().steps[0].values[0].value = 10;
         e.set_programmer(
             ChannelRef {
@@ -1697,9 +1692,13 @@ mod tests {
         assert_eq!(
             f.get(0, 2),
             Some(200),
-            "Farbe bei Gerät mit Dimmer unverändert"
+            "Color unchanged on fixture with dimmer"
         );
-        assert_eq!(f.get(1, 10), Some(100), "Gerät ohne Dimmer: Farbe skaliert");
+        assert_eq!(
+            f.get(1, 10),
+            Some(100),
+            "Fixture without dimmer: color scaled"
+        );
         e.set_blackout(true);
         let f = e.render_frame();
         assert_eq!(f.get(0, 1), Some(0));
@@ -1727,7 +1726,11 @@ mod tests {
         e.jump_step(id, 1);
         assert_eq!(e.render_frame().get(0, 2), Some(10));
         e.jump_step(id, -2);
-        assert_eq!(e.progress(id).unwrap().step, 2, "rückwärts mit Umlauf");
+        assert_eq!(
+            e.progress(id).unwrap().step,
+            2,
+            "backwards with wrap-around"
+        );
         e.toggle_pause(id);
         e.tick(MS(1000));
         assert_eq!(e.progress(id).unwrap().step, 0);
@@ -1742,7 +1745,7 @@ mod tests {
         let mh = s
             .add_fixture("MH", "generic/moving-head-spot-11ch", 0, 1)
             .unwrap();
-        // Kanäle: 0 Pan, 1 Pan fein, 2 Tilt, 3 Tilt fein, 5 Dimmer
+        // Channels: 0 pan, 1 pan fine, 2 tilt, 3 tilt fine, 5 dimmer
         let id = s.add_scene(
             "S",
             None,
@@ -1768,20 +1771,20 @@ mod tests {
         assert_eq!(
             e.render_frame().get(0, 6),
             Some((64 + 200u32 * 64 / 255) as u8),
-            "Bereich 64..128"
+            "range 64..128"
         );
         e.show_mut().fixture_mut(mh).unwrap().limits.dimmer_min = 0;
-        assert_eq!(f.get(0, 1), Some(191), "Pan voll -> Pan max");
-        assert_eq!(f.get(0, 2), Some(255), "Pan fein am oberen Ende");
-        assert_eq!(f.get(0, 3), Some(255), "Tilt 0 invertiert -> voll");
-        // Vertauschen
+        assert_eq!(f.get(0, 1), Some(191), "pan full -> pan max");
+        assert_eq!(f.get(0, 2), Some(255), "pan fine at the upper end");
+        assert_eq!(f.get(0, 3), Some(255), "tilt 0 inverted -> full");
+        // Swap
         e.show_mut().fixture_mut(mh).unwrap().limits = FixtureLimits {
             swap_pan_tilt: true,
             ..Default::default()
         };
         let f = e.render_frame();
-        assert_eq!(f.get(0, 1), Some(0), "Pan bekommt Tilt-Wert");
-        assert_eq!(f.get(0, 3), Some(255), "Tilt bekommt Pan-Wert");
+        assert_eq!(f.get(0, 1), Some(0), "pan gets the tilt value");
+        assert_eq!(f.get(0, 3), Some(255), "tilt gets the pan value");
     }
 
     #[test]

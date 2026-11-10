@@ -1,7 +1,7 @@
-//! Systemdialoge zum Öffnen und Speichern (Explorer, Finder, GTK/KDE-Portal).
+//! System dialogs for opening and saving (Explorer, Finder, GTK/KDE portal).
 //!
-//! Der Dialog läuft in einem eigenen Thread, damit die Oberfläche (und die
-//! DMX-Ausgabe-Anzeige) weiterzeichnet; das Ergebnis holt `poll` ab.
+//! The dialog runs in its own thread so the UI (and the DMX output display)
+//! keeps drawing; `poll` collects the result.
 
 use crate::i18n::t;
 use std::path::PathBuf;
@@ -9,8 +9,8 @@ use std::sync::mpsc::{channel, Receiver};
 
 use eframe::egui;
 
-/// Dateiendung der Shows (Inhalt ist JSON). Ältere `.json`-Shows lassen sich
-/// weiter öffnen.
+/// File extension of shows (content is JSON). Older `.json` shows can still
+/// be opened.
 pub const SHOW_EXT: &str = "dmxcraft";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,7 +25,7 @@ pub struct Pending {
 }
 
 impl Pending {
-    /// Öffnet den Dialog. `current` ist die aktuelle Show-Datei (Startordner, Name).
+    /// Opens the dialog. `current` is the current show file (start folder, name).
     pub fn start(purpose: Purpose, current: &str, ctx: &egui::Context) -> Self {
         let (tx, rx) = channel();
         let current = PathBuf::from(current);
@@ -58,13 +58,13 @@ impl Pending {
         Self { purpose, rx }
     }
 
-    /// `Some` sobald der Dialog geschlossen wurde (innerer Wert `None` = abgebrochen).
+    /// `Some` once the dialog has been closed (inner value `None` = cancelled).
     pub fn poll(&self) -> Option<(Purpose, Option<PathBuf>)> {
         self.rx.try_recv().ok().map(|r| (self.purpose, r))
     }
 }
 
-/// Speichern unter: immer mit `.dmxcraft` (auch wenn `.json` gewählt war).
+/// Save as: always with `.dmxcraft` (even if `.json` was chosen).
 fn with_show_extension(p: PathBuf) -> PathBuf {
     if p.extension()
         .is_some_and(|e| e.eq_ignore_ascii_case(SHOW_EXT))

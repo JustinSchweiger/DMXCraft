@@ -1,7 +1,7 @@
-//! Vertikaler Regler mit zwei Griffen (Untergrenze und Obergrenze), im
-//! Aussehen eines Programmer-Faders – nur ohne Statuspunkt. Oben steht die
-//! Obergrenze, unten die Untergrenze; beide Werte lassen sich wie am Fader
-//! ziehen (nach oben/unten) oder per Klick eintippen.
+//! Vertical slider with two handles (lower and upper bound), looking like a
+//! programmer fader – just without the status dot. The upper bound is at the
+//! top, the lower bound at the bottom; both values can be dragged (up/down)
+//! like on the fader or typed in with a click.
 
 use eframe::egui::{self, pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 
@@ -18,7 +18,7 @@ pub struct RangeSlider<'a> {
 }
 
 impl RangeSlider<'_> {
-    /// Gibt `true` zurück, wenn ein Wert geändert wurde.
+    /// Returns `true` if a value was changed.
     pub fn show(self, ui: &mut Ui) -> bool {
         let w = super::fader::FADER_W;
         let (outer, _) = ui.allocate_exact_size(Vec2::new(w, self.height), Sense::hover());
@@ -29,7 +29,7 @@ impl RangeSlider<'_> {
         let mut max = *self.max;
         let mut min = *self.min;
 
-        // Werte oben (Obergrenze) und unten (Untergrenze)
+        // Values at the top (upper bound) and bottom (lower bound)
         let top = Rect::from_min_size(
             pos2(outer.left() + 3.0, outer.top() + 2.0),
             Vec2::new(w - 6.0, VALUE_H - 4.0),
@@ -45,7 +45,7 @@ impl RangeSlider<'_> {
             min = v.min(max);
         }
 
-        // Schiene zwischen den Werten
+        // Track between the values
         let track_area = Rect::from_min_max(
             pos2(outer.left(), outer.top() + VALUE_H),
             pos2(outer.right(), outer.bottom() - VALUE_H),
@@ -74,7 +74,7 @@ impl RangeSlider<'_> {
             }
         }
 
-        // Schlitz, dazwischen der erlaubte Bereich
+        // Slot, with the allowed range in between
         let slot = Rect::from_center_size(
             pos2(travel.center().x, track_area.center().y),
             Vec2::new(6.0, track_area.height() - 6.0),
@@ -88,7 +88,7 @@ impl RangeSlider<'_> {
         };
         p.rect_filled(range, 3.0, c.gamma_multiply(0.7));
 
-        // Griffe wie am Fader
+        // Handles like on the fader
         for (v, r) in [(max, &r_max), (min, &r_min)] {
             let h = handle(v);
             let hot = r.hovered() || r.dragged();
@@ -131,8 +131,8 @@ fn from_pct(p: u8) -> u8 {
     (f32::from(p.min(100)) / 100.0 * 255.0).round() as u8
 }
 
-/// Wertfeld wie am Fader: Ziehen nach oben/unten ändert (1 % je 3 Punkte),
-/// ein Klick öffnet die Eingabe in Prozent.
+/// Value field like on the fader: dragging up/down changes it (1 % per
+/// 3 points), a click opens input in percent.
 fn value_field(
     ui: &mut Ui,
     p: &egui::Painter,

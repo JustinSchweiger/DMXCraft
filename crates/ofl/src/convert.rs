@@ -1,11 +1,11 @@
-//! Umwandlung einer OFL-Gerätedatei in DMXCraft-Gerätetypen.
+//! Conversion of an OFL fixture file into DMXCraft fixture types.
 //!
-//! Unterstützt: Kanäle mit `capability`/`capabilities`, feine Kanäle
-//! (`fineChannelAliases`), Standardwerte (Zahl oder Prozent), Matrix-Geräte
-//! (`pixelCount`, `pixelKeys`, `pixelGroups`, `templateChannels`,
-//! `insert: matrixChannels`) und Schaltkanäle (`switchChannels`).
-//! Unbekannte Kanalnamen werden als generische Kanäle übernommen, damit die
-//! Kanalzahl des Modus immer stimmt.
+//! Supported: channels with `capability`/`capabilities`, fine channels
+//! (`fineChannelAliases`), default values (number or percent), matrix
+//! fixtures (`pixelCount`, `pixelKeys`, `pixelGroups`, `templateChannels`,
+//! `insert: matrixChannels`) and switching channels (`switchChannels`).
+//! Unknown channel names are taken over as generic channels so the channel
+//! count of the mode is always right.
 
 use std::collections::HashMap;
 
@@ -17,15 +17,15 @@ use crate::LibraryFixture;
 
 #[derive(Debug, Error)]
 pub enum OflError {
-    #[error("Ungültiges JSON: {0}")]
+    #[error("Invalid JSON: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("Übersprungen: {0}")]
+    #[error("Skipped: {0}")]
     Skip(&'static str),
-    #[error("Ungültige OFL-Datei: {0}")]
+    #[error("Invalid OFL file: {0}")]
     Invalid(String),
 }
 
-/// Ein Pixel einer Matrix mit Position (x, y, z – 0-basiert).
+/// A pixel of a matrix with position (x, y, z – 0-based).
 #[derive(Clone, Debug)]
 struct Pixel {
     key: String,
@@ -104,7 +104,7 @@ impl Matrix {
             .chain(self.groups.iter().map(|(g, _)| g.as_str()))
     }
 
-    /// Reihenfolge der Pixel/Gruppen für ein `repeatFor`.
+    /// Order of the pixels/groups for a `repeatFor`.
     fn order(&self, repeat_for: &Value) -> Vec<String> {
         if let Some(list) = repeat_for.as_array() {
             return list
@@ -121,7 +121,7 @@ impl Matrix {
                 keys
             }
             s if s.starts_with("eachPixel") && s.len() == 12 => {
-                // z. B. eachPixelXYZ: X läuft am schnellsten, dann Y, dann Z.
+                // e.g. eachPixelXYZ: X runs fastest, then Y, then Z.
                 let axis = |c: char| match c {
                     'X' => 0,
                     'Y' => 1,
@@ -137,7 +137,7 @@ impl Matrix {
     }
 }
 
-/// Vergleich, bei dem Zahlen numerisch sortiert werden („2“ < „10“).
+/// Comparison that sorts numbers numerically (“2” < “10”).
 fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     let key = |s: &str| -> Vec<(u8, u64, String)> {
         let mut out = Vec::new();
@@ -168,7 +168,8 @@ fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     key(a).cmp(&key(b))
 }
 
-/// Ein aufgelöster Kanal: OFL-Kanaldefinition + ob es der n-te feine Kanal ist.
+/// A resolved channel: OFL channel definition + whether it is the n-th fine
+/// channel.
 #[derive(Clone, Copy)]
 struct Resolved<'a> {
     def: &'a Value,
@@ -285,7 +286,7 @@ impl<'a> Lookup<'a> {
     }
 }
 
-/// OFL-Geschwindigkeit („fast“, „5Hz“, „120bpm“, „50%“) in Hz.
+/// OFL speed (“fast”, “5Hz”, “120bpm”, “50%”) in Hz.
 fn speed_hz(v: Option<&Value>) -> Option<f32> {
     let s = v?.as_str()?.trim().to_lowercase();
     let num = |suffix: &str| {
@@ -316,14 +317,14 @@ fn hex_rgb(s: &str) -> Option<[u8; 3]> {
     Some([p(0)?, p(2)?, p(4)?])
 }
 
-/// Wertebereiche eines (groben) Kanals aus den OFL-Fähigkeiten.
+/// Value ranges of a (coarse) channel from the OFL capabilities.
 fn ofl_ranges(
     fixture: &Value,
     ch_name: &str,
     r: &Resolved<'_>,
 ) -> Vec<dmxcraft_core::ChannelRange> {
     use dmxcraft_core::{ChannelRange, RangeEffect};
-    // Bereichsangaben in höherer Auflösung auf 8 Bit
+    // Range values in higher resolution to 8 bit
     let shift = match r.def.get("dmxValueResolution").and_then(Value::as_str) {
         Some("8bit") => 0,
         Some("16bit") => 8,
@@ -332,7 +333,7 @@ fn ofl_ranges(
     };
     let caps = capabilities(r.def);
     if caps.len() < 2 && caps.first().is_none_or(|c| c.get("dmxRange").is_none()) {
-        // eine Fähigkeit für den ganzen Kanal: nur Strobe/Shutter ist interessant
+        // one capability for the whole channel: only strobe/shutter is interesting
         let Some(c) = caps.first() else {
             return Vec::new();
         };
@@ -423,7 +424,7 @@ fn ofl_ranges(
             _ => RangeEffect::Other,
         };
         if label.is_empty() && matches!(effect, RangeEffect::Other) {
-            // „PanTiltSpeed“ → „Pan Tilt Speed“
+            // “PanTiltSpeed” → “Pan Tilt Speed”
             let mut l = String::new();
             for (i, ch) in ty.chars().enumerate() {
                 if i > 0 && ch.is_uppercase() {
@@ -531,7 +532,7 @@ fn default_value(r: &Resolved<'_>) -> u8 {
         Some(Value::Number(n)) => {
             let v = n.as_u64().unwrap_or(0);
             if v > 255 && r.fine_count > 0 {
-                // In 16/24-Bit-Auflösung angegeben → nur das grobe Byte.
+                // Given in 16/24-bit resolution → only the coarse byte.
                 (v >> (8 * r.fine_count)).min(255) as u8
             } else {
                 v.min(255) as u8
@@ -559,10 +560,10 @@ pub(crate) fn slug(s: &str) -> String {
     out.trim_matches('-').to_string()
 }
 
-/// Wandelt eine OFL-Gerätedatei um.
+/// Converts an OFL fixture file.
 ///
-/// `manufacturer_key` / `fixture_key` sind Ordner- und Dateiname in der OFL
-/// (z. B. `cameo` / `flat-pro-18`), `manufacturer` der Anzeigename.
+/// `manufacturer_key` / `fixture_key` are the folder and file name in the
+/// OFL (e.g. `cameo` / `flat-pro-18`), `manufacturer` the display name.
 pub fn convert_fixture(
     manufacturer_key: &str,
     manufacturer: &str,
@@ -571,17 +572,17 @@ pub fn convert_fixture(
 ) -> Result<LibraryFixture, OflError> {
     let fixture: Value = serde_json::from_str(json)?;
     if fixture.get("redirectTo").is_some() {
-        return Err(OflError::Skip("Weiterleitung auf anderes Gerät"));
+        return Err(OflError::Skip("Redirect to another device"));
     }
     let name = fixture
         .get("name")
         .and_then(Value::as_str)
-        .ok_or_else(|| OflError::Invalid("kein Name".into()))?
+        .ok_or_else(|| OflError::Invalid("no name".into()))?
         .to_string();
     let modes = fixture
         .get("modes")
         .and_then(Value::as_array)
-        .ok_or_else(|| OflError::Invalid("keine Modi".into()))?;
+        .ok_or_else(|| OflError::Invalid("no modes".into()))?;
     let categories = fixture
         .get("categories")
         .and_then(Value::as_array)
@@ -636,15 +637,13 @@ pub fn convert_fixture(
             .flatten()
         {
             match entry {
-                Value::Null => {
-                    channels.push(ChannelDef::new("(unbenutzt)", ChannelKind::NoFunction))
-                }
+                Value::Null => channels.push(ChannelDef::new("(unused)", ChannelKind::NoFunction)),
                 Value::String(s) => channels.push(make_channel(s)),
                 Value::Object(o)
                     if o.get("insert").and_then(Value::as_str) == Some("matrixChannels") =>
                 {
                     let Some(m) = matrix.as_ref() else {
-                        return Err(OflError::Invalid("matrixChannels ohne matrix".into()));
+                        return Err(OflError::Invalid("matrixChannels without matrix".into()));
                     };
                     let keys = m.order(o.get("repeatFor").unwrap_or(&Value::Null));
                     let templates: Vec<&str> = o
@@ -680,7 +679,7 @@ pub fn convert_fixture(
         let n = used_keys.entry(base.clone()).or_insert(0);
         *n += 1;
         let key = if *n == 1 { base } else { format!("{base}-{n}") };
-        // physische Angaben: im Modus überschrieben, sonst die des Geräts
+        // physical data: overridden in the mode, otherwise that of the fixture
         let physical = dmxcraft_core::fixture::Physics::from_ofl(mode.get("physical"))
             .or_else(|| dmxcraft_core::fixture::Physics::from_ofl(fixture.get("physical")));
         out_modes.push(FixtureType {
@@ -693,7 +692,7 @@ pub fn convert_fixture(
         });
     }
     if out_modes.is_empty() {
-        return Err(OflError::Invalid("kein verwendbarer Modus".into()));
+        return Err(OflError::Invalid("no usable mode".into()));
     }
     Ok(LibraryFixture {
         manufacturer_key: manufacturer_key.to_string(),

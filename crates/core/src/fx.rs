@@ -1,11 +1,11 @@
-//! Effekte von FX-Szenen. Derzeit: COLOR FX – Farbverläufe über die
-//! ausgewählten Geräte („Beams“), berechnet aus einer Farbpalette und der
-//! Effektzeit. Die meisten Vorlagen laufen entlang der **Beam-Reihenfolge**
-//! (= Reihenfolge, in der die Geräte ausgewählt wurden); Plasma und Perlin
-//! nutzen die Lage im Bühnenplan.
+//! Effects of FX scenes. Currently: COLOR FX – color gradients across the
+//! selected fixtures (“beams”), computed from a color palette and the effect
+//! time. Most templates run along the **beam order** (= the order in which
+//! the fixtures were selected); plasma and Perlin use the position in the
+//! stage plan.
 //!
-//! Die Zeit wird in **Durchläufen** gemessen (`cycles`, 1.0 = eine
-//! Szenendauer); so wirken Dauer, Speed und Phase der Szene wie gewohnt.
+//! Time is measured in **cycles** (`cycles`, 1.0 = one scene duration); so
+//! duration, speed and phase of the scene work as usual.
 
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -20,7 +20,7 @@ use crate::fixture::ChannelKind;
 use crate::plan;
 use crate::show::{ChannelRef, FixtureId, Show};
 
-/// Vorlage eines COLOR FX.
+/// Template of a COLOR FX.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ColorPreset {
@@ -60,7 +60,7 @@ impl ColorPreset {
         }
     }
 
-    /// Passende Startpalette der Vorlage.
+    /// Matching start palette of the template.
     pub fn default_palette(self) -> Vec<[u8; 3]> {
         match self {
             ColorPreset::KnightRider => vec![[0, 0, 0], [255, 0, 0]],
@@ -79,19 +79,19 @@ impl ColorPreset {
     }
 }
 
-/// Umformung der Beam-Positionen vor der Berechnung.
+/// Transformation of the beam positions before the calculation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Transform {
     #[default]
     None,
-    /// Links und rechts gespiegelt (von der Mitte nach außen).
+    /// Mirrored left and right (from the center outwards).
     VerticalSymmetry,
-    /// Oben und unten gespiegelt.
+    /// Mirrored top and bottom.
     HorizontalSymmetry,
-    /// Beide Achsen gespiegelt.
+    /// Both axes mirrored.
     Center,
-    /// Laufrichtung umgekehrt.
+    /// Running direction reversed.
     Reverse,
 }
 
@@ -115,7 +115,7 @@ impl Transform {
     ];
 }
 
-/// Einstellungen eines COLOR FX. Nicht jede Vorlage nutzt jedes Feld.
+/// Settings of a COLOR FX. Not every template uses every field.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ColorFx {
@@ -123,33 +123,33 @@ pub struct ColorFx {
     pub palette: Vec<[u8; 3]>,
     pub grayscale: bool,
     pub transform: Transform,
-    /// Farbenbreite (Rainbow, Burst): 0..=100.
+    /// Color width (rainbow, burst): 0..=100.
     pub width: f32,
-    /// Winkel der Laufrichtung in Grad (Rainbow, Perlin): 0..=360.
+    /// Angle of the running direction in degrees (rainbow, Perlin): 0..=360.
     pub angle: f32,
-    /// Weichheit der Übergänge zwischen den Palettenfarben: 0..=100.
+    /// Softness of the transitions between the palette colors: 0..=100.
     pub blend: f32,
-    /// Knight Rider: Breite des Balkens in Beams.
+    /// Knight Rider: width of the bar in beams.
     pub size: f32,
     pub one_direction: bool,
-    /// Knight Rider: weiche Kanten.
+    /// Knight Rider: soft edges.
     pub crossfade: bool,
-    /// Knight Rider: Balken wird zur Mitte hin heller.
+    /// Knight Rider: the bar gets brighter towards the middle.
     pub fade_outward: bool,
-    /// Knight Rider: Nachleuchten in % der Beams.
+    /// Knight Rider: afterglow in % of the beams.
     pub trail: f32,
-    /// Plasma: Größe und Form je Achse, Geschwindigkeit je Achse.
+    /// Plasma: size and shape per axis, speed per axis.
     pub plasma_size: [f32; 2],
     pub plasma_param: [f32; 2],
     pub plasma_speed: [f32; 2],
     pub plasma_speed_param: [f32; 2],
-    /// Sweep: jede zweite Runde in Gegenrichtung.
+    /// Sweep: every second round in the opposite direction.
     pub alternate: bool,
-    /// Sparkle: Funken je Durchlauf, Lebensdauer (0..=1 Durchlauf), Breite.
+    /// Sparkle: sparks per cycle, lifetime (0..=1 cycle), width.
     pub sparkle_count: f32,
     pub sparkle_life: f32,
     pub sparkle_width: f32,
-    /// Random Fill: Beams je Punkt.
+    /// Random fill: beams per dot.
     pub dot_width: f32,
     /// Perlin.
     pub octaves: f32,
@@ -201,14 +201,14 @@ impl ColorFx {
         }
     }
 
-    /// VALUE FX: gleiche Vorlagen, Palette aus Grauwerten.
+    /// VALUE FX: same templates, palette of gray values.
     pub fn values() -> Self {
         let mut fx = Self::new(ColorPreset::Rainbow);
         fx.palette = vec![[255, 255, 255], [128, 128, 128], [0, 0, 0]];
         fx
     }
 
-    /// Andere Vorlage wählen: Palette und Einstellungen der Vorlage.
+    /// Choose another template: palette and settings of the template.
     pub fn set_preset(&mut self, preset: ColorPreset) {
         let grayscale = self.grayscale;
         let transform = self.transform;
@@ -218,21 +218,21 @@ impl ColorFx {
     }
 }
 
-/// Ein einzeln färbbarer Lichtpunkt: ein Gerät oder ein Segment eines
-/// Mehrfach-Geräts (z. B. eine Zelle einer LED-Leiste).
+/// A single colorable light point: a fixture or a segment of a multi-cell
+/// fixture (e.g. a cell of an LED bar).
 #[derive(Clone, Debug)]
 pub struct Beam {
     pub fixture: FixtureId,
-    /// Position im Bühnenplan (0..=1).
+    /// Position in the stage plan (0..=1).
     pub pos: [f32; 2],
     pub red: Option<u16>,
     pub green: Option<u16>,
     pub blue: Option<u16>,
-    /// Ohne Farbkanäle: Helligkeit über Dimmer bzw. Weiß.
+    /// Without color channels: brightness via dimmer or white.
     pub intensity: Option<u16>,
 }
 
-/// Beams der Geräte in der angegebenen Reihenfolge.
+/// Beams of the fixtures in the given order.
 pub fn beams(show: &Show, fixtures: &[FixtureId]) -> Vec<Beam> {
     let mut out = Vec::new();
     for &id in fixtures {
@@ -275,7 +275,7 @@ pub fn beams(show: &Show, fixtures: &[FixtureId]) -> Vec<Beam> {
             }
             continue;
         }
-        // Segmente nebeneinander entlang der Gerätedrehung
+        // Segments side by side along the fixture's rotation
         let rot = f.plan_rotation.unwrap_or(0.0).to_radians();
         let step = 0.012 * f.plan_size.unwrap_or(1.0);
         for k in 0..n {
@@ -293,7 +293,7 @@ pub fn beams(show: &Show, fixtures: &[FixtureId]) -> Vec<Beam> {
     out
 }
 
-/// Farben aller Beams zum Zeitpunkt `cycles`.
+/// Colors of all beams at time `cycles`.
 pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
     let n = beams.len();
     if n == 0 {
@@ -311,16 +311,16 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
     let phase = cycles.rem_euclid(1.0) as f32;
     let round = cycles.floor() as i64;
     let blend = (fx.blend / 100.0).clamp(0.0, 1.0);
-    // Lage in der Beam-Reihenfolge: zyklisch (i/n) bzw. von Anfang bis Ende
+    // Position in the beam order: cyclic (i/n) or from start to end
     let cyc = order_coords(n, fx.transform, true);
     let line = order_coords(n, fx.transform, false);
     let colors: Vec<[f32; 3]> = match fx.preset {
         ColorPreset::Rainbow => {
-            // Farbenbreite 0: jede Palettenfarbe einmal über alle Beams.
-            // Der Winkel dreht die
-            // Laufrichtung (180° = umgekehrt, 90° = alle gleich).
+            // Color width 0: every palette color once across all beams.
+            // The angle rotates the running direction (180° = reversed, 90° = all
+            // equal).
             let span = color_span(fx.width);
-            // gerundet, damit 180° die Reihenfolge exakt umkehrt
+            // rounded so 180° reverses the order exactly
             let dir = (fx.angle.to_radians().cos() * 1e4).round() / 1e4;
             let proj: Vec<f32> = cyc.iter().map(|u| u * dir).collect();
             let min = proj.iter().copied().fold(f32::INFINITY, f32::min);
@@ -329,7 +329,7 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
                 .collect()
         }
         ColorPreset::Burst => {
-            // von der Mitte nach außen; Farbenbreite wie beim Regenbogen
+            // from the center outwards; color width as for the rainbow
             let span = color_span(fx.width);
             let mid = (n as f32 - 1.0) / 2.0;
             (0..n)
@@ -363,7 +363,7 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
             u.iter()
                 .map(|&u| {
                     let u = if reverse { 1.0 - u } else { u };
-                    // Schritt so, dass bei Phase 1 alle gefüllt sind
+                    // Step so that all are filled at phase 1
                     if u * (n as f32 - 1.0) / n as f32 + 1.0 / n as f32 <= phase + 1e-6 {
                         cur
                     } else {
@@ -373,7 +373,7 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
                 .collect()
         }
         ColorPreset::Sparkle => {
-            // Funken auf Beam-Nummern, in der gewählten Reihenfolge
+            // Sparks on beam numbers, in the chosen order
             let base = sparkle(fx, &palette, n, cycles);
             ranks(&line).iter().map(|&r| base[r]).collect()
         }
@@ -426,7 +426,7 @@ pub fn render(fx: &ColorFx, beams: &[Beam], cycles: f64) -> Vec<[u8; 3]> {
         .collect()
 }
 
-/// Einen Effekt einer Szene ausgeben (überschreibt vorhandene Werte).
+/// Output an effect of a scene (overrides existing values).
 pub fn apply_effect(
     show: &Show,
     fx: &crate::show::Effect,
@@ -466,7 +466,7 @@ pub fn apply_effect(
     }
 }
 
-/// Pegel (0..1) je Beam eines Feature-Effekts; `None` = unberührt.
+/// Level (0..1) per beam of a feature effect; `None` = untouched.
 pub fn feature_levels(
     fx: &crate::show::Effect,
     beams: &[feature::FixtureBeam],
@@ -488,7 +488,7 @@ pub fn feature_levels(
             let Some(c) = &fx.color else {
                 return Vec::new();
             };
-            // gleiche Vorlagen wie COLOR FX, Pegel = Helligkeit
+            // same templates as COLOR FX, level = brightness
             let pseudo: Vec<Beam> = beams
                 .iter()
                 .map(|b| Beam {
@@ -531,7 +531,7 @@ fn to_rgb(c: [f32; 3]) -> [u8; 3] {
     c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
 }
 
-/// Farben auf die Beams schreiben (ohne Farbkanäle als Helligkeit).
+/// Write colors to the beams (as brightness without color channels).
 fn write_colors(beams: &[Beam], colors: &[Option<[u8; 3]>], out: &mut HashMap<ChannelRef, u8>) {
     for (b, c) in beams.iter().zip(colors) {
         let Some(c) = c else {
@@ -553,7 +553,8 @@ fn write_colors(beams: &[Beam], colors: &[Option<[u8; 3]>], out: &mut HashMap<Ch
     }
 }
 
-/// Ausgabewerte des Effekts in `out` schreiben (überschreibt vorhandene).
+/// Write the output values of the effect into `out` (overrides existing
+/// ones).
 pub fn apply(
     show: &Show,
     fx: &ColorFx,
@@ -582,8 +583,8 @@ pub fn apply(
     }
 }
 
-/// Positionen auf 0..=1 gestreckt (beide Achsen gemeinsam, Seitenverhältnis
-/// bleibt), dann umgeformt.
+/// Positions stretched to 0..=1 (both axes together, the aspect ratio is
+/// kept), then transformed.
 fn normalized(beams: &[Beam], t: Transform) -> Vec<[f32; 2]> {
     let (mut min, mut max) = ([f32::MAX; 2], [f32::MIN; 2]);
     for b in beams {
@@ -598,7 +599,7 @@ fn normalized(beams: &[Beam], t: Transform) -> Vec<[f32; 2]> {
         .map(|b| {
             let mut p = [0.0; 2];
             for a in 0..2 {
-                // kleinere Achse mittig
+                // smaller axis centered
                 let off = (ext - (max[a] - min[a])) / 2.0;
                 p[a] = (b.pos[a] - min[a] + off) / ext;
             }
@@ -616,11 +617,11 @@ fn normalized(beams: &[Beam], t: Transform) -> Vec<[f32; 2]> {
         .collect()
 }
 
-/// Lage jedes Beams in der Reihenfolge, umgeformt. `cyclic`: i/n (für
-/// umlaufende Verläufe, der letzte Beam schließt an den ersten an), sonst
-/// 0..=1 vom ersten bis zum letzten Beam.
-/// Anteil der Palette, der über alle Beams läuft: Farbenbreite 0 = ganze
-/// Palette, größer = breitere Farbflächen.
+/// Position of every beam in the order, transformed. `cyclic`: i/n (for
+/// wrapping gradients, the last beam connects to the first), otherwise
+/// 0..=1 from the first to the last beam.
+/// Share of the palette that runs across all beams: color width 0 = whole
+/// palette, larger = wider color areas.
 fn color_span(width: f32) -> f32 {
     1.0 / (1.0 + width.max(0.0) / 10.0)
 }
@@ -633,7 +634,7 @@ fn order_coords(n: usize, t: Transform, cyclic: bool) -> Vec<f32> {
             i as f32 / (n.max(2) - 1) as f32
         }
     };
-    // gespiegelt: gleiche Lage für i und n-1-i
+    // mirrored: same position for i and n-1-i
     let half = n.div_ceil(2).max(1);
     let mirror = |i: usize| {
         let m = i.min(n - 1 - i);
@@ -660,7 +661,7 @@ fn order_coords(n: usize, t: Transform, cyclic: bool) -> Vec<f32> {
         .collect()
 }
 
-/// Rang jedes Werts (0 = kleinster); bei Gleichstand gilt die Reihenfolge.
+/// Rank of every value (0 = smallest); ties keep the order.
 fn ranks(v: &[f32]) -> Vec<usize> {
     let mut idx: Vec<usize> = (0..v.len()).collect();
     idx.sort_by(|a, b| v[*a].total_cmp(&v[*b]).then(a.cmp(b)));
@@ -671,8 +672,8 @@ fn ranks(v: &[f32]) -> Vec<usize> {
     out
 }
 
-/// Farbe an Stelle `x` (zyklisch); `blend` 0 = harte Kanten, 1 = durchgehend
-/// überblendet.
+/// Color at position `x` (cyclic); `blend` 0 = hard edges, 1 = blended
+/// throughout.
 pub(crate) fn sample(palette: &[[f32; 3]], x: f32, blend: f32) -> [f32; 3] {
     let k = palette.len();
     if k == 1 {
@@ -681,7 +682,7 @@ pub(crate) fn sample(palette: &[[f32; 3]], x: f32, blend: f32) -> [f32; 3] {
     let x = x.rem_euclid(1.0) * k as f32;
     let i = x.floor() as usize % k;
     let f = x.fract();
-    // Überblendung nur im hinteren Teil jedes Abschnitts
+    // Blending only in the rear part of every section
     let edge = 1.0 - blend;
     let t = if blend <= 0.0 || f < edge {
         0.0
@@ -711,7 +712,7 @@ fn knight_rider(
     let fg = fgs[round.rem_euclid(fgs.len() as i64) as usize];
     let order = ranks(u);
     let last = (n as f32 - 1.0).max(1.0);
-    // Kopf läuft hin und zurück bzw. nur in eine Richtung
+    // The head runs back and forth or in one direction only
     let (head, forward) = if fx.one_direction || n == 1 {
         (phase * last, true)
     } else if phase < 0.5 {
@@ -726,7 +727,7 @@ fn knight_rider(
         .map(|&r| {
             let x = r as f32;
             let d = x - head;
-            // Balken
+            // Bar
             let mut level = if d.abs() <= half - 0.5 {
                 1.0
             } else if fx.crossfade {
@@ -737,7 +738,7 @@ fn knight_rider(
             if fx.fade_outward && level > 0.0 {
                 level *= 1.0 - (d.abs() / (half + 0.5)).min(1.0) * 0.7;
             }
-            // Nachleuchten hinter dem Kopf
+            // Afterglow behind the head
             let behind = if forward { -d } else { d };
             if trail > 0.0 && behind > half - 0.5 {
                 let t = 1.0 - (behind - (half - 0.5)) / trail;
@@ -778,8 +779,8 @@ fn sparkle(fx: &ColorFx, palette: &[[f32; 3]], n: usize, cycles: f64) -> Vec<[f3
     out
 }
 
-/// Pseudozufall 0..1 aus zwei Werten (fest, damit sich der Effekt
-/// wiederholbar verhält).
+/// Pseudo-random 0..1 from two values (fixed so the effect behaves
+/// reproducibly).
 pub(crate) fn hash01(a: u64, b: u64) -> f32 {
     let mut x = a.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ b.wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
     x ^= x >> 33;
@@ -788,7 +789,7 @@ pub(crate) fn hash01(a: u64, b: u64) -> f32 {
     (x >> 40) as f32 / (1u64 << 24) as f32
 }
 
-/// Wertrauschen mit glatter Interpolation.
+/// Value noise with smooth interpolation.
 fn noise(x: f32, y: f32) -> f32 {
     let (xi, yi) = (x.floor(), y.floor());
     let (xf, yf) = (x - xi, y - yi);
@@ -800,7 +801,7 @@ fn noise(x: f32, y: f32) -> f32 {
     a + (b - a) * sy
 }
 
-/// Mehrere Oktaven Rauschen, Ergebnis 0..1.
+/// Several octaves of noise, result 0..1.
 pub(crate) fn fbm(x: f32, y: f32, octaves: u32) -> f32 {
     let (mut sum, mut amp, mut freq, mut norm) = (0.0, 1.0, 1.0, 0.0);
     for _ in 0..octaves {
@@ -837,7 +838,7 @@ mod tests {
         let c = render(&fx, &b, 0.25);
         assert_eq!(a.len(), 8);
         assert_ne!(a, c);
-        // ein voller Durchlauf ergibt wieder dasselbe Bild
+        // a full cycle gives the same image again
         assert_eq!(a, render(&fx, &b, 1.0));
     }
 
@@ -845,14 +846,14 @@ mod tests {
     fn rainbow_follows_beam_order() {
         let mut fx = ColorFx::new(ColorPreset::Rainbow);
         fx.palette = (0..9).map(|i| [i * 20, 0, 0]).collect();
-        // Lage im Plan egal: Reihenfolge zählt
+        // Position in the plan does not matter: the order counts
         let mut b = line(9);
         b.reverse();
         let now = render(&fx, &b, 0.0);
         for (i, c) in now.iter().enumerate() {
             assert_eq!(*c, fx.palette[i], "Beam {i}");
         }
-        // einen Beam weiter: Farbe wandert von Beam i zu Beam i+1
+        // one beam further: the color moves from beam i to beam i+1
         let next = render(&fx, &b, 1.0 / 9.0);
         for i in 1..9 {
             assert_eq!(next[i], now[i - 1]);
@@ -892,7 +893,7 @@ mod tests {
     fn sweep_fills_with_next_color() {
         let mut fx = ColorFx::new(ColorPreset::Sweep);
         fx.palette = vec![[255, 0, 0], [0, 255, 0]];
-        let c = render(&fx, &line(4), 1.5); // Runde 1: grün füllt über rot
+        let c = render(&fx, &line(4), 1.5); // Round 1: green fills over red
         assert_eq!(c[0], [0, 255, 0]);
         assert_eq!(c[3], [255, 0, 0]);
     }
@@ -907,7 +908,7 @@ mod tests {
         fx.angle = 180.0;
         let mut back = render(&fx, &b, 0.0);
         back.reverse();
-        // umgekehrte Reihenfolge, gleiche Farben
+        // reversed order, same colors
         assert_eq!(back, fwd);
         fx.angle = 90.0;
         let flat = render(&fx, &b, 0.0);
@@ -925,7 +926,7 @@ mod tests {
         fx.width = 50.0;
         let wide = spread(&render(&fx, &b, 0.0)).abs();
         assert!(wide < narrow, "{wide} < {narrow}");
-        // symmetrisch zur Mitte
+        // symmetrical to the center
         let c = render(&fx, &b, 0.3);
         assert_eq!(c[0], c[6]);
     }

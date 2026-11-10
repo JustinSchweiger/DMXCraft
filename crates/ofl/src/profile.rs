@@ -1,16 +1,16 @@
-//! Eigene Geräteprofile (Profile Builder).
+//! Custom fixture profiles (Profile Builder).
 //!
-//! Ein [`Profile`] beschreibt ein Gerät so, wie es der Fixture-Editor der
-//! Open Fixture Library tut: allgemeine Angaben, physische Daten, Kanäle mit
-//! ihren Funktionen (DMX-Bereichen) und Modi als Kanalreihenfolgen.
+//! A [`Profile`] describes a fixture the way the fixture editor of the Open
+//! Fixture Library does: general info, physical data, channels with their
+//! functions (DMX ranges) and modes as channel orders.
 //!
-//! * Gespeichert wird es als eigene Datei (`.dmxfixture`, JSON, abwärts-
-//!   kompatibel über `#[serde(default)]`).
-//! * [`Profile::to_ofl`] erzeugt eine gültige OFL-Gerätedatei (zum Teilen
-//!   oder Einreichen bei der OFL), [`Profile::from_ofl`] liest eine ein.
-//! * [`Profile::fixture_types`] liefert die Gerätetypen für Patch und Show –
-//!   über denselben Konverter wie die eingebettete Bibliothek, damit die
-//!   Kanalarten überall gleich erkannt werden.
+//! * It is saved as its own file (`.dmxfixture`, JSON, backwards compatible
+//!   via `#[serde(default)]`).
+//! * [`Profile::to_ofl`] creates a valid OFL fixture file (to share or
+//!   submit to the OFL), [`Profile::from_ofl`] reads one.
+//! * [`Profile::fixture_types`] returns the fixture types for patch and show
+//!   – through the same converter as the embedded library, so channel kinds
+//!   are detected the same way everywhere.
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -20,15 +20,15 @@ use serde_json::{json, Map, Value};
 
 use crate::convert::{convert_fixture, slug, OflError};
 
-/// Dateiendung eigener Profile.
+/// File extension of custom profiles.
 pub const PROFILE_EXT: &str = "dmxfixture";
-/// Präfix der Gerätetyp-Schlüssel eigener Profile.
+/// Prefix of the fixture type keys of custom profiles.
 pub const KEY_PREFIX: &str = "user/";
 
 const OFL_SCHEMA: &str =
     "https://raw.githubusercontent.com/OpenLightingProject/open-fixture-library/master/schemas/fixture.json";
 
-/// Gerätekategorien der OFL (feste Liste).
+/// Fixture categories of the OFL (fixed list).
 pub const CATEGORIES: [&str; 17] = [
     "Barrel Scanner",
     "Blinder",
@@ -49,7 +49,7 @@ pub const CATEGORIES: [&str; 17] = [
     "Other",
 ];
 
-/// Farben für `ColorIntensity` (OFL-Bezeichnungen).
+/// Colors for `ColorIntensity` (OFL names).
 pub const INTENSITY_COLORS: [&str; 13] = [
     "Red",
     "Green",
@@ -66,7 +66,7 @@ pub const INTENSITY_COLORS: [&str; 13] = [
     "Indigo",
 ];
 
-/// DMX-Anschlüsse (OFL-Bezeichnungen).
+/// DMX connectors (OFL names).
 pub const DMX_CONNECTORS: [&str; 7] = [
     "3-pin",
     "5-pin",
@@ -77,24 +77,24 @@ pub const DMX_CONNECTORS: [&str; 7] = [
     "RJ45",
 ];
 
-/// Dateiname aus einem Gerätenamen (Kleinbuchstaben, Bindestriche).
+/// File name from a fixture name (lowercase, hyphens).
 pub fn file_slug(s: &str) -> String {
     let k = slug(s);
     if k.is_empty() {
-        "geraet".into()
+        "fixture".into()
     } else {
         k
     }
 }
 
-/// Ein komplettes Geräteprofil.
+/// A complete fixture profile.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Profile {
     pub format_version: u32,
-    /// Fester Schlüssel (Dateiname, Gerätetyp-Schlüssel). Wird beim ersten
-    /// Speichern vergeben und danach nicht mehr geändert – auch nicht beim
-    /// Umbenennen, damit gepatchte Geräte ihr Profil wiederfinden.
+    /// Fixed key (file name, fixture type key). Assigned on the first save and
+    /// never changed afterwards – not even when renaming, so patched fixtures
+    /// find their profile again.
     pub key: String,
     pub manufacturer: String,
     pub name: String,
@@ -104,7 +104,7 @@ pub struct Profile {
     pub comment: String,
     pub manual_url: String,
     pub product_url: String,
-    /// Datum JJJJ-MM-TT.
+    /// Date YYYY-MM-DD.
     pub created: String,
     pub modified: String,
     pub physical: Physical,
@@ -134,36 +134,36 @@ impl Default for Profile {
     }
 }
 
-/// Physische Daten. 0 bzw. leer = unbekannt (wird nicht exportiert).
+/// Physical data. 0 or empty = unknown (not exported).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Physical {
-    /// Breite, Höhe, Tiefe in mm.
+    /// Width, height, depth in mm.
     pub dimensions: [f32; 3],
     /// kg
     pub weight: f32,
     /// W
     pub power: f32,
     pub dmx_connector: String,
-    /// z. B. „LED“, „Halogen“.
+    /// e.g. “LED”, “Halogen”.
     pub bulb: String,
     /// K
     pub color_temperature: f32,
     /// lm
     pub lumens: f32,
     pub lens: String,
-    /// Abstrahlwinkel in Grad (min, max); gleich bei fester Optik.
+    /// Beam angle in degrees (min, max); equal for fixed optics.
     pub beam_angle: [f32; 2],
 }
 
-/// Ein Kanal mit seinen Funktionen.
+/// A channel with its functions.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProfileChannel {
     pub name: String,
-    /// Anzahl feiner Kanäle (0 = 8 Bit, 1 = 16 Bit, 2 = 24 Bit).
+    /// Number of fine channels (0 = 8 bit, 1 = 16 bit, 2 = 24 bit).
     pub fine: u8,
-    /// Standardwert (grobes Byte).
+    /// Default value (coarse byte).
     pub default: u8,
     pub capabilities: Vec<Capability>,
 }
@@ -189,12 +189,12 @@ impl ProfileChannel {
         }
     }
 
-    /// Namen der feinen Kanäle („Pan fine“, „Pan fine^2“).
+    /// Names of the fine channels (“Pan fine”, “Pan fine^2”).
     pub fn fine_names(&self) -> Vec<String> {
         fine_names(&self.name, self.fine)
     }
 
-    /// Kanalart, die DMXCraft daraus ableitet (wie der OFL-Konverter).
+    /// Channel kind DMXCraft derives from it (like the OFL converter).
     pub fn kind(&self) -> ChannelKind {
         self.kind_from_capabilities().refine(&self.name)
     }
@@ -211,7 +211,7 @@ impl ProfileChannel {
         if main.kind != CapabilityKind::WheelSlot {
             return main.channel_kind();
         }
-        // wie der Konverter: Mehrheit der Slot-Arten des Rads
+        // like the converter: majority of the wheel's slot kinds
         let slots: BTreeMap<u8, SlotKind> = self
             .capabilities
             .iter()
@@ -229,9 +229,9 @@ impl ProfileChannel {
         }
     }
 
-    /// Bereiche lückenlos machen: der erste beginnt bei 0, jeder weitere
-    /// direkt nach dem vorherigen, der letzte endet bei 255. Jeder Bereich
-    /// umfasst mindestens einen Wert; die Reihenfolge bleibt erhalten.
+    /// Make the ranges gapless: the first starts at 0, each further one right
+    /// after the previous one, the last ends at 255. Every range covers at least
+    /// one value; the order is kept.
     pub fn normalize_ranges(&mut self) {
         if self.capabilities.is_empty() {
             self.capabilities.push(Capability::default());
@@ -252,10 +252,10 @@ impl ProfileChannel {
         }
     }
 
-    /// Ende eines Bereichs setzen. Die folgenden Bereiche rücken nach (der
-    /// nächste beginnt direkt dahinter, zu kleine werden nach oben
-    /// geschoben). Endet der letzte Bereich vor 255, entsteht für den Rest
-    /// automatisch ein neuer Bereich.
+    /// Set the end of a range. The following ranges move up (the next one
+    /// starts right after it, ranges that are too small are pushed up). If the
+    /// last range ends before 255, a new range is created automatically for the
+    /// rest.
     pub fn set_range_end(&mut self, index: usize, end: u8) {
         self.normalize_ranges();
         let n = self.capabilities.len();
@@ -278,9 +278,9 @@ impl ProfileChannel {
         self.normalize_ranges();
     }
 
-    /// Neuen Bereich anhängen: übernimmt die obere Hälfte des letzten
-    /// Bereichs. Ist der letzte nur einen Wert breit, wird stattdessen der
-    /// breiteste Bereich geteilt (der neue steht direkt dahinter).
+    /// Append a new range: takes over the upper half of the last range. If the
+    /// last one is only one value wide, the widest range is split instead (the
+    /// new one comes right after it).
     pub fn add_range(&mut self) {
         self.normalize_ranges();
         if self.capabilities.len() >= 256 {
@@ -298,7 +298,7 @@ impl ProfileChannel {
         };
         let c = &mut self.capabilities[target];
         if c.end == c.start {
-            return; // alle 256 Werte einzeln belegt
+            return; // all 256 values assigned individually
         }
         let end = c.end;
         let mid = c.start + (c.end - c.start) / 2;
@@ -314,8 +314,8 @@ impl ProfileChannel {
         self.normalize_ranges();
     }
 
-    /// Bereich löschen; der nächste (bzw. beim letzten der vorherige)
-    /// übernimmt die frei gewordenen Werte.
+    /// Delete a range; the next one (or for the last one the previous one) takes
+    /// over the freed values.
     pub fn remove_range(&mut self, index: usize) {
         if self.capabilities.len() <= 1 || index >= self.capabilities.len() {
             return;
@@ -342,26 +342,26 @@ fn fine_names(name: &str, fine: u8) -> Vec<String> {
         .collect()
 }
 
-/// Ein DMX-Bereich eines Kanals mit seiner Bedeutung.
+/// A DMX range of a channel with its meaning.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Capability {
     pub start: u8,
     pub end: u8,
     pub kind: CapabilityKind,
-    /// Farbe bei `ColorIntensity` (z. B. „Red“).
+    /// Color for `ColorIntensity` (e.g. “Red”).
     pub color: String,
-    /// Shutter-Effekt bei `ShutterStrobe`.
+    /// Shutter effect for `ShutterStrobe`.
     pub shutter: ShutterEffect,
-    /// Rad-Slot (1-basiert) bei `WheelSlot`.
+    /// Wheel slot (1-based) for `WheelSlot`.
     pub slot: u8,
     pub slot_kind: SlotKind,
-    /// Name des Slots, des Effekts oder der Farbe.
+    /// Name of the slot, the effect or the color.
     pub label: String,
-    /// Anzeigefarbe (#rrggbb) für Farb-Slots und Farbvorgaben.
+    /// Display color (#rrggbb) for color slots and color presets.
     pub hex: String,
-    /// Wert am Anfang/Ende des Bereichs als OFL-Angabe, z. B. „0deg“ / „540deg“,
-    /// „slow“ / „fast“, „0%“ / „100%“. Leer = keine Angabe.
+    /// Value at the start/end of the range as an OFL value, e.g. “0deg” /
+    /// “540deg”, “slow” / “fast”, “0%” / “100%”. Empty = not given.
     pub from: String,
     pub to: String,
     pub comment: String,
@@ -404,7 +404,7 @@ impl Capability {
         self
     }
 
-    /// Typ wechseln und typische Werte vorbelegen.
+    /// Change the type and prefill typical values.
     pub fn set_kind(&mut self, kind: CapabilityKind) {
         if self.kind == kind {
             return;
@@ -418,7 +418,7 @@ impl Capability {
         }
     }
 
-    /// Kanalart nach den Regeln des OFL-Konverters.
+    /// Channel kind by the rules of the OFL converter.
     pub fn channel_kind(&self) -> ChannelKind {
         use CapabilityKind as C;
         match self.kind {
@@ -575,7 +575,7 @@ impl Capability {
     }
 }
 
-/// Zahlen bleiben Zahlen, alles andere Text („540deg“, „fast“).
+/// Numbers stay numbers, everything else text (“540deg”, “fast”).
 fn entity(s: &str) -> Value {
     match s.parse::<f64>() {
         Ok(n) if n.fract() == 0.0 => json!(n as i64),
@@ -592,7 +592,7 @@ fn entity_text(v: &Value) -> String {
     }
 }
 
-/// Bedeutung eines DMX-Bereichs (OFL-Capability-Typen, Auswahl).
+/// Meaning of a DMX range (OFL capability types, a selection).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CapabilityKind {
     NoFunction,
@@ -658,7 +658,7 @@ impl CapabilityKind {
         CapabilityKind::NoFunction,
     ];
 
-    /// Typname in der OFL-Datei.
+    /// Type name in the OFL file.
     pub fn ofl(self) -> &'static str {
         use CapabilityKind as C;
         match self {
@@ -700,7 +700,7 @@ impl CapabilityKind {
             .unwrap_or(CapabilityKind::Generic)
     }
 
-    /// OFL-Eigenschaft für den Wert des Bereichs (mit `…Start`/`…End`).
+    /// OFL property for the value of the range (with `…Start`/`…End`).
     pub fn property(self) -> Option<&'static str> {
         use CapabilityKind as C;
         Some(match self {
@@ -725,7 +725,7 @@ impl CapabilityKind {
         })
     }
 
-    /// Muss die OFL-Eigenschaft angegeben sein?
+    /// Must the OFL property be given?
     pub fn property_required(self) -> bool {
         use CapabilityKind as C;
         !matches!(
@@ -734,7 +734,7 @@ impl CapabilityKind {
         ) && self.property().is_some()
     }
 
-    /// Typische Werte beim Wechsel auf diesen Typ.
+    /// Typical values when switching to this type.
     pub fn default_values(self) -> (&'static str, &'static str) {
         use CapabilityKind as C;
         match self {
@@ -759,7 +759,7 @@ impl CapabilityKind {
     }
 }
 
-/// Shutter-Effekte (`ShutterStrobe`).
+/// Shutter effects (`ShutterStrobe`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ShutterEffect {
     Open,
@@ -812,7 +812,7 @@ impl ShutterEffect {
     }
 }
 
-/// Art eines Rad-Slots.
+/// Kind of a wheel slot.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SlotKind {
     Open,
@@ -853,19 +853,19 @@ impl SlotKind {
     }
 }
 
-/// Ein DMX-Modus: Reihenfolge der Kanäle.
+/// A DMX mode: order of the channels.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProfileMode {
-    /// Fest pro Profil, bestimmt den Gerätetyp-Schlüssel (bleibt beim Umbenennen).
+    /// Fixed per profile, determines the fixture type key (stays when renaming).
     pub id: u32,
     pub name: String,
     pub short_name: String,
-    /// Kanalnamen (auch feine wie „Pan fine“); leer = unbenutzter Kanal.
+    /// Channel names (also fine ones like “Pan fine”); empty = unused channel.
     pub channels: Vec<String>,
 }
 
-/// Fehler im Profil, die das Speichern verhindern.
+/// Errors in the profile that prevent saving.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Problem {
     NoManufacturer,
@@ -876,23 +876,23 @@ pub enum Problem {
     EmptyChannelName,
     DuplicateChannel(String),
     NoCapabilities(String),
-    /// Kanal, erster nicht abgedeckter Wert
+    /// Channel, first value not covered
     Gap(String, u8),
-    /// Kanal, Wert, an dem sich Bereiche überschneiden oder rückwärts laufen
+    /// Channel, value at which ranges overlap or run backwards
     Overlap(String, u8),
-    /// Kanal, Wert, dem eine nötige Angabe fehlt (z. B. Winkel bei Pan)
+    /// Channel, value that is missing a required detail (e.g. angle for pan)
     MissingValue(String, u8),
     EmptyModeName,
     DuplicateMode(String),
     EmptyMode(String),
     TooManyChannels(String),
-    /// Modus, Kanal
+    /// Mode, channel
     UnknownChannel(String, String),
     DuplicateInMode(String, String),
 }
 
 impl Profile {
-    /// Name des Geräts in Listen.
+    /// Name of the fixture in lists.
     pub fn display_name(&self) -> String {
         match (self.manufacturer.trim(), self.name.trim()) {
             ("", n) => n.to_string(),
@@ -904,7 +904,7 @@ impl Profile {
         self.channels.iter().find(|c| c.name == name)
     }
 
-    /// Alle Namen, die in einem Modus stehen dürfen (inkl. feiner Kanäle).
+    /// All names that may appear in a mode (incl. fine channels).
     pub fn available_names(&self) -> Vec<String> {
         let mut out = Vec::new();
         for c in &self.channels {
@@ -914,7 +914,7 @@ impl Profile {
         out
     }
 
-    /// Kanal und Feinstufe (0 = grob) zu einem Namen aus einem Modus.
+    /// Channel and fine level (0 = coarse) for a name from a mode.
     pub fn resolve(&self, name: &str) -> Option<(&ProfileChannel, u8)> {
         self.channels.iter().find_map(|c| {
             if c.name == name {
@@ -927,7 +927,7 @@ impl Profile {
         })
     }
 
-    /// Kanalart eines Modus-Eintrags, wie DMXCraft sie verwendet.
+    /// Channel kind of a mode entry as DMXCraft uses it.
     pub fn kind_of(&self, name: &str) -> ChannelKind {
         match self.resolve(name) {
             Some((c, 0)) => c.kind(),
@@ -940,12 +940,12 @@ impl Profile {
         }
     }
 
-    /// Nächste freie Modus-Id.
+    /// Next free mode ID.
     pub fn next_mode_id(&self) -> u32 {
         self.modes.iter().map(|m| m.id).max().map_or(1, |m| m + 1)
     }
 
-    /// Kanal umbenennen und alle Verweise in den Modi mitziehen.
+    /// Rename a channel and update all references in the modes.
     pub fn rename_channel(&mut self, index: usize, new_name: &str) {
         let Some(ch) = self.channels.get_mut(index) else {
             return;
@@ -966,7 +966,7 @@ impl Profile {
         }
     }
 
-    /// Kanal entfernen (auch aus allen Modi).
+    /// Remove a channel (also from all modes).
     pub fn remove_channel(&mut self, index: usize) {
         if index >= self.channels.len() {
             return;
@@ -975,7 +975,7 @@ impl Profile {
         let names: HashSet<String> = std::iter::once(ch.name.clone())
             .chain(ch.fine_names())
             .collect();
-        // gleichnamige Kanäle (Tippfehler-Duplikate) behalten ihre Verweise
+        // channels with the same name (typo duplicates) keep their references
         if self.channels.iter().any(|c| c.name == ch.name) {
             return;
         }
@@ -984,7 +984,8 @@ impl Profile {
         }
     }
 
-    /// Auflösung ändern: feine Kanäle, die wegfallen, verschwinden aus den Modi.
+    /// Change the resolution: fine channels that drop away disappear from the
+    /// modes.
     pub fn set_fine(&mut self, index: usize, fine: u8) {
         let Some(ch) = self.channels.get_mut(index) else {
             return;
@@ -998,7 +999,7 @@ impl Profile {
         }
     }
 
-    /// Alle Fehler, die das Speichern verhindern.
+    /// All errors that prevent saving.
     pub fn problems(&self) -> Vec<Problem> {
         let mut out = Vec::new();
         if self.manufacturer.trim().is_empty() {
@@ -1077,7 +1078,7 @@ impl Profile {
         out
     }
 
-    /// Gültige OFL-Gerätedatei.
+    /// Valid OFL fixture file.
     pub fn to_ofl(&self) -> Value {
         let mut root = Map::new();
         root.insert("$schema".into(), json!(OFL_SCHEMA));
@@ -1124,7 +1125,7 @@ impl Profile {
             root.insert("physical".into(), Value::Object(phys));
         }
 
-        // Räder aus den WheelSlot-Bereichen (ein Rad pro Kanal)
+        // Wheels from the WheelSlot ranges (one wheel per channel)
         let mut wheels = Map::new();
         for c in &self.channels {
             let slots: BTreeMap<u8, &Capability> = c
@@ -1206,20 +1207,20 @@ impl Profile {
         Value::Object(root)
     }
 
-    /// OFL-Datei als hübsch formatierter Text.
+    /// OFL file as pretty-printed text.
     pub fn to_ofl_string(&self) -> String {
         serde_json::to_string_pretty(&self.to_ofl()).unwrap_or_default()
     }
 
-    /// Liest eine OFL-Gerätedatei. Matrix-Geräte (Pixel-Vorlagen) werden
-    /// noch nicht unterstützt.
+    /// Reads an OFL fixture file. Matrix fixtures (pixel templates) are not
+    /// supported yet.
     pub fn from_ofl(manufacturer: &str, json: &str) -> Result<Profile, OflError> {
         let v: Value = serde_json::from_str(json)?;
         if v.get("redirectTo").is_some() {
-            return Err(OflError::Skip("Weiterleitung auf anderes Gerät"));
+            return Err(OflError::Skip("Redirect to another device"));
         }
         if v.get("matrix").is_some() || v.get("templateChannels").is_some() {
-            return Err(OflError::Invalid("Matrix-Geräte".into()));
+            return Err(OflError::Invalid("Matrix fixtures".into()));
         }
         let s = |o: &Value, k: &str| o.get(k).and_then(Value::as_str).unwrap_or("").to_string();
         let strings = |o: Option<&Value>| -> Vec<String> {
@@ -1233,7 +1234,7 @@ impl Profile {
         };
         let name = s(&v, "name");
         if name.is_empty() {
-            return Err(OflError::Invalid("kein Name".into()));
+            return Err(OflError::Invalid("no name".into()));
         }
         let meta = v.get("meta").cloned().unwrap_or(Value::Null);
         let links = v.get("links").cloned().unwrap_or(Value::Null);
@@ -1296,7 +1297,7 @@ impl Profile {
                         c.end = 255;
                     }
                 } else if !res_8bit && fine > 0 {
-                    // Bereiche in 16/24 Bit → aufs grobe Byte zurückrechnen
+                    // Ranges in 16/24 bit → convert back to the coarse byte
                     rescale_ranges(def, &mut caps, fine);
                 }
                 let ch = ProfileChannel {
@@ -1305,7 +1306,7 @@ impl Profile {
                     default,
                     capabilities: caps,
                 };
-                // Aliasnamen der OFL-Datei auf unser Schema („X fine“) bringen
+                // Bring the alias names of the OFL file into our scheme (“X fine”)
                 let aliases = strings(def.get("fineChannelAliases"));
                 for (alias, ours) in aliases.into_iter().zip(ch.fine_names()) {
                     if alias != ours {
@@ -1349,16 +1350,16 @@ impl Profile {
         Ok(p)
     }
 
-    /// Vorlage aus vorhandenen Gerätetypen (z. B. aus der Bibliothek, ohne
-    /// Funktionsbereiche): Kanäle aus allen Modi, Feinkanäle von Pan/Tilt
-    /// werden als 16-Bit-Auflösung übernommen.
+    /// Template from existing fixture types (e.g. from the library, without
+    /// function ranges): channels from all modes, fine channels of pan/tilt are
+    /// taken over as 16-bit resolution.
     pub fn from_types(manufacturer: &str, name: &str, types: &[FixtureType]) -> Profile {
         let mut p = Profile {
             manufacturer: manufacturer.to_string(),
             name: name.to_string(),
             ..Profile::default()
         };
-        // Name eines Feinkanals → Name in unserem Schema („Pan fine“)
+        // Name of a fine channel → name in our scheme (“Pan fine”)
         let mut fine_of: Vec<(String, String)> = Vec::new();
         for ty in types {
             for c in &ty.channels {
@@ -1376,7 +1377,10 @@ impl Profile {
                     }
                     continue;
                 }
-                if c.name == "(unbenutzt)" || p.channel(&c.name).is_some() {
+                // "(unbenutzt)": name used by older versions and the bundled library data
+                if matches!(c.name.as_str(), "(unused)" | "(unbenutzt)")
+                    || p.channel(&c.name).is_some()
+                {
                     continue;
                 }
                 let mut ch = ProfileChannel::new(c.name.clone(), cap_for_kind(c.kind, &c.name));
@@ -1389,7 +1393,7 @@ impl Profile {
                 .channels
                 .iter()
                 .map(|c| {
-                    if c.name == "(unbenutzt)" {
+                    if matches!(c.name.as_str(), "(unused)" | "(unbenutzt)") {
                         return String::new();
                     }
                     fine_of
@@ -1405,7 +1409,7 @@ impl Profile {
                 channels,
             });
         }
-        // Kategorie aus den Kanälen raten
+        // Guess the category from the channels
         let has = |k: ChannelKind| types.iter().any(|t| t.has_kind(k));
         let cat = if has(ChannelKind::Pan) || has(ChannelKind::Tilt) {
             "Moving Head"
@@ -1420,8 +1424,8 @@ impl Profile {
         p
     }
 
-    /// Gerätetypen für Show und Patch (ein Typ pro Modus). Schlüssel:
-    /// `user/<profil>/<modus-id>`.
+    /// Fixture types for show and patch (one type per mode). Key:
+    /// `user/<profile>/<mode-id>`.
     pub fn fixture_types(&self) -> Result<Vec<FixtureType>, OflError> {
         let key = if self.key.is_empty() {
             self.suggested_key()
@@ -1431,7 +1435,7 @@ impl Profile {
         let json = serde_json::to_string(&self.to_ofl())?;
         let lib = convert_fixture("user", self.manufacturer.trim(), &key, &json)?;
         if lib.modes.len() != self.modes.len() {
-            return Err(OflError::Invalid("Modus ohne Kanäle".into()));
+            return Err(OflError::Invalid("Mode without channels".into()));
         }
         Ok(lib
             .modes
@@ -1444,12 +1448,12 @@ impl Profile {
             .collect())
     }
 
-    /// Schlüssel aus Hersteller und Name (für neue Profile).
+    /// Key from manufacturer and name (for new profiles).
     pub fn suggested_key(&self) -> String {
         let k = format!("{}-{}", slug(&self.manufacturer), slug(&self.name));
         let k = k.trim_matches('-').to_string();
         if k.is_empty() {
-            "geraet".into()
+            "fixture".into()
         } else {
             k
         }
@@ -1464,7 +1468,7 @@ impl Profile {
     }
 }
 
-/// Der letzte grobe Kanal einer Art vor `fine` im selben Modus.
+/// The last coarse channel of a kind before `fine` in the same mode.
 fn last_matching(
     ty: &FixtureType,
     fine: &dmxcraft_core::ChannelDef,
@@ -1478,7 +1482,7 @@ fn last_matching(
         .map(|c| c.name.clone())
 }
 
-/// Passende Funktion für eine DMXCraft-Kanalart (Vorlagen).
+/// Matching function for a DMXCraft channel kind (templates).
 fn cap_for_kind(kind: ChannelKind, name: &str) -> Capability {
     use CapabilityKind as C;
     let cap = match kind {
@@ -1510,13 +1514,13 @@ fn cap_for_kind(kind: ChannelKind, name: &str) -> Capability {
         }
         ChannelKind::Control => Capability::new(C::Maintenance),
         ChannelKind::NoFunction => Capability::new(C::NoFunction),
-        // OFL kennt keine eigenen Typen dafür – der Kanalname macht es eindeutig
+        // OFL has no own types for these – the channel name makes it unambiguous
         ChannelKind::Generic | ChannelKind::Laser | ChannelKind::Fan => Capability::new(C::Generic),
     };
     cap.range(0, 255)
 }
 
-/// Bereiche in 16/24-Bit-Auflösung auf 8 Bit umrechnen (OFL-Standard ohne
+/// Convert ranges in 16/24-bit resolution to 8 bit (OFL default without
 /// `dmxValueResolution`).
 fn rescale_ranges(def: &Value, caps: &mut [Capability], fine: u8) {
     let Some(list) = def.get("capabilities").and_then(Value::as_array) else {
@@ -1712,7 +1716,7 @@ mod tests {
         );
         assert_eq!(types[0].channels[0].default, 128);
         assert_eq!(types[1].channel_count(), 2);
-        // gleiche Erkennung wie die Vorschau im Builder
+        // same detection as the preview in the builder
         let p = spot();
         for (c, name) in types[0].channels.iter().zip(&p.modes[0].channels) {
             assert_eq!(c.kind, p.kind_of(name), "{name}");
@@ -1735,7 +1739,7 @@ mod tests {
     fn own_format_round_trip() {
         let p = spot();
         assert_eq!(Profile::from_json(&p.to_json()).unwrap(), p);
-        // ältere/fremde Dateien mit fehlenden Feldern
+        // older/foreign files with missing fields
         let p = Profile::from_json(r#"{"name":"X","neu":1}"#).unwrap();
         assert_eq!(p.name, "X");
     }
@@ -1745,7 +1749,7 @@ mod tests {
         let mut p = spot();
         p.channels[1].capabilities[0].start = 5;
         p.channels[2].capabilities[0].end = 200;
-        p.modes[1].channels.push("Gibt es nicht".into());
+        p.modes[1].channels.push("Does not exist".into());
         p.modes[1].channels.push("Dimmer".into());
         p.channels[0].capabilities[0].from.clear();
         p.channels[0].capabilities[0].to.clear();
@@ -1755,7 +1759,7 @@ mod tests {
         assert!(pr.contains(&Problem::MissingValue("Pan".into(), 0)));
         assert!(pr.contains(&Problem::UnknownChannel(
             "Basic".into(),
-            "Gibt es nicht".into()
+            "Does not exist".into()
         )));
         assert!(pr.contains(&Problem::DuplicateInMode("Basic".into(), "Dimmer".into())));
     }
@@ -1763,8 +1767,8 @@ mod tests {
     #[test]
     fn rename_and_resolution_update_modes() {
         let mut p = spot();
-        p.rename_channel(0, "Drehen");
-        assert_eq!(p.modes[0].channels[..2], ["Drehen", "Drehen fine"]);
+        p.rename_channel(0, "Rotate");
+        assert_eq!(p.modes[0].channels[..2], ["Rotate", "Rotate fine"]);
         p.set_fine(0, 0);
         assert_eq!(p.modes[0].channels.len(), 4);
         p.remove_channel(1);
@@ -1779,10 +1783,10 @@ mod tests {
     #[test]
     fn ranges_always_cover_0_to_255() {
         let mut c = ProfileChannel::default();
-        // Ende des einzigen Bereichs auf 100 → Rest wird neuer Bereich
+        // End of the only range at 100 → the rest becomes a new range
         c.set_range_end(0, 100);
         assert_eq!(ranges(&c), [(0, 100), (101, 255)]);
-        // weiter anhängen: immer möglich, teilt den letzten
+        // keep appending: always possible, splits the last one
         for _ in 0..10 {
             c.add_range();
         }
@@ -1792,7 +1796,7 @@ mod tests {
         for w in c.capabilities.windows(2) {
             assert_eq!(u16::from(w[0].end) + 1, u16::from(w[1].start));
         }
-        // ersten Bereich vergrößern: alle folgenden rücken nach oben
+        // enlarge the first range: all following ones move up
         let mut c = ProfileChannel::default();
         c.set_range_end(0, 10);
         c.set_range_end(1, 20);
@@ -1802,10 +1806,10 @@ mod tests {
         assert_eq!(ranges(&c), [(0, 25), (26, 26), (27, 30), (31, 255)]);
         c.set_range_end(0, 250);
         assert_eq!(ranges(&c), [(0, 250), (251, 251), (252, 252), (253, 255)]);
-        // kleiner machen: der nächste beginnt früher
+        // make it smaller: the next one starts earlier
         c.set_range_end(0, 5);
         assert_eq!(ranges(&c)[..2], [(0, 5), (6, 251)]);
-        // löschen: der nächste übernimmt
+        // delete: the next one takes over
         c.remove_range(1);
         assert_eq!(ranges(&c), [(0, 5), (6, 252), (253, 255)]);
         c.remove_range(2);
@@ -1843,7 +1847,7 @@ mod tests {
     #[test]
     fn template_from_types() {
         let lib_types = spot().fixture_types().unwrap();
-        let p = Profile::from_types("Test", "Kopie", &lib_types);
+        let p = Profile::from_types("Test", "Copy", &lib_types);
         assert_eq!(p.channels.len(), 4);
         assert_eq!(p.channel("Pan").unwrap().fine, 1);
         assert_eq!(p.modes[0].channels[1], "Pan fine");

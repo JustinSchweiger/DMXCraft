@@ -1,14 +1,12 @@
-//! TOUCH: frei angeordnete Bedienelemente auf Seiten. Im Bearbeiten-Modus
-//! lassen sich Elemente anlegen, verschieben, in der Größe ändern,
-//! beschriften, einfärben und mit Symbol oder Bild versehen; sonst werden sie
-//! bedient.
+//! TOUCH: freely arranged controls on pages. In edit mode elements can be
+//! created, moved, resized, labeled, colored and given an icon or image;
+//! otherwise they are operated.
 //!
-//! Positionen und Größen sind in Einheiten zu [`UNIT`] Bildpunkten (bei
-//! 100 %) gespeichert. Das Raster (Schrittweite, Einrasten, Anzeige) ist
-//! einstellbar.
+//! Positions and sizes are stored in units of [`UNIT`] pixels (at 100 %).
+//! The grid (step size, snapping, display) is adjustable.
 //!
-//! Elemente kommen per Alt + Klick auf ein Bedienelement (Szene, Bank,
-//! Fader, Gerät …), über das Kontextmenü oder die Leiste „Hinzufügen“.
+//! Elements are added via Alt + click on a control (scene, bank, fader,
+//! fixture …), via the context menu or the “Add” bar.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -31,18 +29,18 @@ use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::{section_header, text_field, Icon, IconButton, Toggle};
 use crate::views::{View, ViewCtx};
 
-/// Bildpunkte einer Einheit bei 100 %.
+/// Pixels of one unit at 100 %.
 pub const UNIT: f32 = 72.0;
-/// Abstand zwischen Elementen.
+/// Spacing between elements.
 const GAP: f32 = 6.0;
-/// Rand um die Seite (damit oben/links nichts abgeschnitten wird).
+/// Margin around the page (so nothing is cut off at the top/left).
 const PAD: f32 = 10.0;
-/// Breite der Bearbeiten-Leiste rechts.
+/// Width of the edit bar on the right.
 const PANEL_W: f32 = 300.0;
-/// Rasterschritte (Bildpunkte bei 100 %).
+/// Grid steps (pixels at 100 %).
 const GRID_STEPS: [f32; 6] = [12.0, 18.0, 24.0, 36.0, 48.0, 72.0];
 
-/// Farben für Flächen und Text.
+/// Colors for surfaces and text.
 const COLORS: [[u8; 3]; 14] = [
     [239, 68, 68],
     [249, 115, 22],
@@ -60,14 +58,14 @@ const COLORS: [[u8; 3]; 14] = [
     [20, 20, 24],
 ];
 
-/// Ziehen im Bearbeiten-Modus.
+/// Dragging in edit mode.
 #[derive(Clone, Copy)]
 enum Drag {
     Move { id: u32, grab: egui::Vec2 },
     Resize { id: u32 },
 }
 
-/// Wofür ein Bild geladen wird.
+/// What an image is loaded for.
 #[derive(Clone, Copy)]
 enum ImageTarget {
     Page(u32),
@@ -75,14 +73,14 @@ enum ImageTarget {
 }
 
 pub struct TouchView {
-    /// Ansichtsgröße (1.0 = 100 %).
+    /// View size (1.0 = 100 %).
     zoom: f32,
     drag: Option<Drag>,
-    /// Auswahlrechteck: Startpunkt.
+    /// Selection rectangle: start point.
     marquee: Option<Pos2>,
     rename_page: Option<(u32, String)>,
     rename_focus: bool,
-    /// Gedrückte Schaltflächen (für Loslassen).
+    /// Pressed buttons (for releasing).
     held: Vec<u32>,
     textures: HashMap<u32, egui::TextureHandle>,
     image_dialog: Option<(ImageTarget, Receiver<Option<PathBuf>>)>,
@@ -103,13 +101,13 @@ impl Default for TouchView {
     }
 }
 
-/// Nur dieses Element auswählen.
+/// Select only this element.
 fn select_only(st: &mut AppState, id: u32) {
     st.touch_sel = Some(id);
     st.touch_multi = vec![id];
 }
 
-/// Element zur Auswahl hinzufügen bzw. entfernen (Umschalt/Strg + Klick).
+/// Add the element to the selection or remove it (Shift/Ctrl + click).
 fn toggle_selected(st: &mut AppState, id: u32) {
     if let Some(pos) = st.touch_multi.iter().position(|i| *i == id) {
         st.touch_multi.remove(pos);
@@ -123,7 +121,7 @@ fn toggle_selected(st: &mut AppState, id: u32) {
     };
 }
 
-/// Zuordnung, mit der ein Element auslöst (wie eine Taste).
+/// Mapping an element triggers with (like a key).
 pub(crate) fn mapping_of(item: &TouchItem) -> Option<Mapping> {
     let control = item.control?;
     let fader = matches!(item.kind, TouchKind::Fader | TouchKind::Knob);
@@ -160,7 +158,7 @@ impl View for TouchView {
             cx.state.touch_page = pages.first().map(|p| p.0);
         }
 
-        // ----- Kopfzeile: Seiten, Zoom, Bearbeiten -----
+        // ----- Header: pages, zoom, edit -----
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = theme::SP_S;
             self.page_tabs(ui, cx, &pages, editing);
@@ -309,7 +307,7 @@ impl TouchView {
         }
     }
 
-    /// Noch keine Seite.
+    /// No page yet.
     fn empty(&mut self, ui: &mut Ui, rect: Rect, cx: &mut ViewCtx<'_>) {
         let mut child = ui.new_child(
             egui::UiBuilder::new()
@@ -329,7 +327,7 @@ impl TouchView {
         }
     }
 
-    /// Bildpunkte je Einheit (mit Zoom).
+    /// Pixels per unit (with zoom).
     fn unit(&self) -> f32 {
         UNIT * self.zoom
     }
@@ -355,7 +353,7 @@ impl TouchView {
         Some(tex)
     }
 
-    /// Raster mit den Elementen einer Seite.
+    /// Grid with the elements of a page.
     fn grid(&mut self, ui: &mut Ui, cx: &mut ViewCtx<'_>, page_id: u32, editing: bool) {
         let Some(page) = cx.engine.show().touch.page(page_id).cloned() else {
             return;
@@ -366,7 +364,7 @@ impl TouchView {
         };
         let u = self.unit();
         let step = step_px * self.zoom;
-        // Fläche: sichtbarer Bereich oder bis hinter das letzte Element
+        // Area: visible region or up to beyond the last element
         let right = page.items.iter().map(|i| i.x + i.w).fold(0.0, f32::max) + 2.0;
         let bottom = page.items.iter().map(|i| i.y + i.h).fold(0.0, f32::max) + 2.0;
         let avail = ui.available_size();
@@ -383,7 +381,8 @@ impl TouchView {
             },
         );
         let origin = area.min + vec2(PAD, PAD);
-        // Auswahl bereinigen: nur Elemente dieser Seite, Hauptauswahl enthalten
+        // Clean up the selection: only elements of this page, main selection
+        // included
         {
             let st = &mut *cx.state;
             st.touch_multi
@@ -398,7 +397,7 @@ impl TouchView {
         let additive = mods.shift || mods.command;
         let p = ui.painter().clone();
 
-        // Hintergrund der Seite
+        // Background of the page
         if let Some(c) = page.background_color {
             p.rect_filled(area, 0.0, theme::rgb(c));
         }
@@ -408,7 +407,7 @@ impl TouchView {
         {
             paint_cover(&p, ui.clip_rect().intersect(area), &tex, 1.0);
         }
-        // Raster
+        // Grid
         if show_grid || editing {
             let vis = ui.clip_rect().intersect(area);
             let alpha = if editing { 1.0 } else { 0.5 };
@@ -428,7 +427,7 @@ impl TouchView {
                     }
                 }
             } else {
-                // feines Raster: Punkte an den Schnittpunkten
+                // fine grid: dots at the intersections
                 for y in first_y..first_y + ny {
                     for x in first_x..first_x + nx {
                         let c = origin + vec2(x as f32 * step, y as f32 * step);
@@ -485,7 +484,7 @@ impl TouchView {
                         StrokeKind::Outside,
                     );
                 }
-                // Griff zum Größe ändern
+                // Handle for resizing
                 let handle =
                     Rect::from_min_size(rect.right_bottom() - vec2(16.0, 16.0), vec2(16.0, 16.0));
                 let hresp = ui.interact(handle, id.with("resize"), Sense::drag());
@@ -511,7 +510,7 @@ impl TouchView {
                         .interact_pointer_pos()
                         .map_or(vec2(0.0, 0.0), |p| p - rect.min);
                     self.drag = Some(Drag::Move { id: item.id, grab });
-                    // in einer Mehrfachauswahl: alle zusammen verschieben
+                    // in a multi-selection: move all together
                     if !sel {
                         select_only(cx.state, item.id);
                     }
@@ -526,7 +525,7 @@ impl TouchView {
                 if resp.secondary_clicked() && !sel {
                     select_only(cx.state, item.id);
                 }
-                // Kontextmenü wirkt auf die ganze Auswahl, wenn das Element dazugehört
+                // The context menu acts on the whole selection if the element belongs to it
                 let group: Vec<u32> = if sel && multi.len() > 1 {
                     multi.clone()
                 } else {
@@ -563,7 +562,7 @@ impl TouchView {
             }
         }
 
-        // Ziehen anwenden
+        // Apply the drag
         let snap_to = |v: f32| {
             if snap {
                 let s = step_px / UNIT;
@@ -584,7 +583,7 @@ impl TouchView {
                             .iter()
                             .filter(|i| i.id == id || cx.state.touch_multi.contains(&i.id))
                             .collect();
-                        // Versatz des gezogenen Elements, die Gruppe bleibt im Bereich
+                        // Offset of the dragged element, the group stays within the area
                         let min_x = group.iter().map(|i| i.x).fold(f32::MAX, f32::min);
                         let min_y = group.iter().map(|i| i.y).fold(f32::MAX, f32::min);
                         let dx = (snap_to(tl.x) - it.x).max(-min_x);
@@ -631,7 +630,7 @@ impl TouchView {
             }
         }
 
-        // Auswahlrechteck
+        // Selection rectangle
         if let Some(start) = self.marquee {
             let pointer = ui.input(|i| i.pointer.interact_pos());
             let released = ui.input(|i| i.pointer.any_released());
@@ -676,7 +675,7 @@ impl TouchView {
             }
         }
 
-        // Entf löscht, Pfeiltasten verschieben das gewählte Element
+        // Delete deletes, arrow keys move the selected element
         if editing && !ui.ctx().egui_wants_keyboard_input() {
             if remove.is_empty()
                 && ui.input(|i| {
@@ -685,7 +684,7 @@ impl TouchView {
             {
                 remove = cx.state.touch_multi.clone();
             }
-            // Strg+A: alles auf der Seite auswählen
+            // Ctrl+A: select everything on the page
             if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::A)) {
                 cx.state.touch_multi = page.items.iter().map(|i| i.id).collect();
                 cx.state.touch_sel = cx.state.touch_multi.first().copied();
@@ -743,7 +742,7 @@ impl TouchView {
             touch.prune_images();
         }
         if !duplicate.is_empty() {
-            // Kopien werden die neue Auswahl
+            // Copies become the new selection
             let copies: Vec<u32> = duplicate
                 .iter()
                 .filter_map(|id| touch.duplicate(page_id, *id))
@@ -753,7 +752,7 @@ impl TouchView {
         }
     }
 
-    /// Element bedienen.
+    /// Operate an element.
     #[allow(clippy::too_many_arguments)]
     fn play_item(
         &mut self,
@@ -841,7 +840,7 @@ impl TouchView {
         }
     }
 
-    /// Bearbeiten-Leiste: Seite, Raster, neue Elemente, Eigenschaften.
+    /// Edit bar: page, grid, new elements, properties.
     fn panel(&mut self, ui: &mut Ui, rect: Rect, cx: &mut ViewCtx<'_>, page: Option<u32>) {
         ui.painter().line_segment(
             [
@@ -863,7 +862,7 @@ impl TouchView {
                 let Some(page) = page else {
                     return;
                 };
-                // ----- Hinzufügen -----
+                // ----- Add -----
                 section_header(ui, t("Add"), |_| {});
                 let kinds = [
                     (TouchKind::Button, "square", t("Button")),
@@ -894,21 +893,21 @@ impl TouchView {
                     ui.add_space(theme::SP_S);
                 }
 
-                // ----- Mehrfachauswahl -----
+                // ----- Multi-selection -----
                 if cx.state.touch_multi.len() > 1 {
                     ui.add_space(theme::SP_S);
                     self.multi_panel(ui, cx, page);
                     return;
                 }
 
-                // ----- Eigenschaften des gewählten Elements -----
+                // ----- Properties of the selected element -----
                 if let Some(sel) = cx.state.touch_sel {
                     ui.add_space(theme::SP_S);
                     self.properties(ui, cx, page, sel);
                     return;
                 }
 
-                // ----- Seite -----
+                // ----- Page -----
                 ui.add_space(theme::SP_S);
                 section_header(ui, t("Side"), |_| {});
                 let (mut bg, mut img) = cx
@@ -942,7 +941,7 @@ impl TouchView {
                     }
                 }
 
-                // ----- Raster -----
+                // ----- Grid -----
                 ui.add_space(theme::SP_M);
                 section_header(ui, t("Grid"), |_| {});
                 let tl = cx.engine.show().touch.clone();
@@ -974,8 +973,8 @@ impl TouchView {
             });
     }
 
-    /// Eigenschaften des gewählten Elements.
-    /// Mehrere Elemente gewählt: Anzahl, Farbe für alle, Duplizieren, Löschen.
+    /// Properties of the selected element.
+    /// Several elements selected: count, color for all, duplicate, delete.
     fn multi_panel(&mut self, ui: &mut Ui, cx: &mut ViewCtx<'_>, page: u32) {
         let ids = cx.state.touch_multi.clone();
         section_header(ui, &tr!("{n} items selected", n = ids.len()), |_| {});
@@ -1185,7 +1184,7 @@ impl TouchView {
         }
     }
 
-    /// Ergebnis des Bild-Dialogs übernehmen.
+    /// Take over the result of the image dialog.
     fn poll_image(&mut self, ctx: &egui::Context, cx: &mut ViewCtx<'_>) {
         let Some((target, rx)) = &self.image_dialog else {
             return;
@@ -1228,7 +1227,7 @@ impl TouchView {
     }
 }
 
-/// Kachel „Element hinzufügen“: Symbol und Name.
+/// “Add element” tile: icon and name.
 fn add_tile(ui: &mut Ui, w: f32, kind: TouchKind, icon: &str, label: &str) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 64.0), Sense::click());
     let p = ui.painter();
@@ -1272,7 +1271,7 @@ fn add_tile(ui: &mut Ui, w: f32, kind: TouchKind, icon: &str, label: &str) -> bo
     resp.clicked()
 }
 
-/// Farbfelder (optional mit „keine“). Gibt `true` zurück, wenn geändert.
+/// Color swatches (optionally with “none”). Returns `true` if changed.
 fn swatch_row(ui: &mut Ui, value: &mut Option<[u8; 3]>, allow_none: bool) -> bool {
     let mut changed = false;
     ui.horizontal_wrapped(|ui| {
@@ -1321,7 +1320,7 @@ fn swatch_row(ui: &mut Ui, value: &mut Option<[u8; 3]>, allow_none: bool) -> boo
                 changed = true;
             }
         }
-        // eigene Farbe
+        // own color
         let mut rgb = value.unwrap_or([255, 255, 255]);
         let custom = value.is_some_and(|v| !COLORS.contains(&v));
         let (r, resp) = ui.allocate_exact_size(vec2(S, S), Sense::click());
@@ -1366,7 +1365,7 @@ fn swatch_row(ui: &mut Ui, value: &mut Option<[u8; 3]>, allow_none: bool) -> boo
     changed
 }
 
-/// Knopf mit dem gewählten Symbol; Klick öffnet die Symbolbibliothek.
+/// Button with the chosen icon; click opens the icon library.
 fn icon_picker(ui: &mut Ui, id: impl std::hash::Hash, icon: &mut Option<String>) {
     let (rect, resp) = ui.allocate_exact_size(vec2(40.0, 28.0), Sense::click());
     let p = ui.painter();
@@ -1440,7 +1439,7 @@ fn icon_picker(ui: &mut Ui, id: impl std::hash::Hash, icon: &mut Option<String>)
     });
 }
 
-/// Menüeintrag mit dem Ziel des Elements (zur Fehlersuche).
+/// Menu entry with the element's target (for debugging).
 fn target_entry(ui: &mut Ui, show: &Show, item: &TouchItem) {
     let text = if item.kind.uses_fixtures() {
         let names: Vec<String> = item
@@ -1490,7 +1489,7 @@ fn pick_image(ctx: &egui::Context) -> Receiver<Option<PathBuf>> {
     rx
 }
 
-/// Bild lesen und auf eine sinnvolle Größe bringen (max. 1600 px).
+/// Read an image and bring it to a sensible size (max. 1600 px).
 fn prepare_image(path: &std::path::Path) -> Result<Vec<u8>, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     let img = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
@@ -1508,7 +1507,7 @@ fn prepare_image(path: &std::path::Path) -> Result<Vec<u8>, String> {
     Ok(out.into_inner())
 }
 
-/// Bild füllend (beschnitten) zeichnen.
+/// Draw an image filling the area (cropped).
 fn paint_cover(p: &egui::Painter, rect: Rect, tex: &egui::TextureHandle, alpha: f32) {
     let [w, h] = tex.size();
     let (iw, ih) = (w as f32, h as f32);
@@ -1545,7 +1544,7 @@ fn kind_name(k: TouchKind) -> &'static str {
     }
 }
 
-/// Ziel eines Elements als Text.
+/// Target of an element as text.
 fn item_target(show: &Show, item: &TouchItem) -> String {
     match (mapping_of(item), item.control) {
         (Some(m), Some(_)) => {
@@ -1564,7 +1563,7 @@ fn item_title(item: &TouchItem) -> String {
     }
 }
 
-/// Beschriftung: eigene oder aus dem Ziel.
+/// Label: own or from the target.
 pub(crate) fn display_label(show: &Show, item: &TouchItem) -> String {
     if !item.label.is_empty() {
         return item.label.clone();
@@ -1578,13 +1577,13 @@ pub(crate) fn display_label(show: &Show, item: &TouchItem) -> String {
     String::new()
 }
 
-/// Fläche unter der Beschriftung (Farbrad, XY-Feld).
+/// Area below the label (color wheel, XY pad).
 fn content_rect(rect: Rect, item: &TouchItem) -> Rect {
     let top = if item.label.is_empty() { 8.0 } else { 28.0 };
     Rect::from_min_max(rect.min + vec2(8.0, top), rect.max - vec2(8.0, 8.0))
 }
 
-/// Fader: (Schiene mit Griff, Weg des Griffmittelpunkts).
+/// Fader: (track with handle, travel of the handle center).
 fn fader_parts(rect: Rect) -> (Rect, Rect) {
     const HANDLE_H: f32 = 34.0;
     let track = Rect::from_min_max(
@@ -1598,7 +1597,7 @@ fn fader_parts(rect: Rect) -> (Rect, Rect) {
     (track, travel)
 }
 
-/// Lesbare Textfarbe auf einem Hintergrund.
+/// Readable text color on a background.
 fn text_on(bg: Color32) -> Color32 {
     let l = 0.299 * f32::from(bg.r()) + 0.587 * f32::from(bg.g()) + 0.114 * f32::from(bg.b());
     if l > 150.0 {
@@ -1608,8 +1607,8 @@ fn text_on(bg: Color32) -> Color32 {
     }
 }
 
-/// Element zeichnen. `value`: Fader/Drehregler 0–1; `hot`: gedrückt bzw.
-/// unter dem Zeiger.
+/// Draw an element. `value`: fader/knob 0–1; `hot`: pressed or under the
+/// pointer.
 #[allow(clippy::too_many_arguments)]
 fn paint_item(
     p: &egui::Painter,
@@ -1664,7 +1663,7 @@ fn paint_item(
                     StrokeKind::Inside,
                 );
                 if on {
-                    // leuchtender Streifen oben
+                    // glowing strip at the top
                     let bar = Rect::from_min_size(
                         rect.min + vec2(8.0, 6.0),
                         vec2(rect.width() - 16.0, 3.0),
@@ -1681,7 +1680,7 @@ fn paint_item(
                     text_on(fill)
                 }
             });
-            // Symbol über der Beschriftung (allein: mittig und groß)
+            // Icon above the label (alone: centered and large)
             let mut text_center = rect.center();
             if let Some(icon) = &item.icon {
                 let icon_size = if label.is_empty() {
@@ -1706,7 +1705,7 @@ fn paint_item(
                 );
                 let pos = text_center - galley.size() * 0.5;
                 if tex.is_some() && item.text_color.is_none() {
-                    // Schatten für Lesbarkeit auf Bildern
+                    // Shadow for readability on images
                     p.galley(
                         pos + vec2(1.0, 1.0),
                         galley.clone(),
@@ -1730,7 +1729,7 @@ fn paint_item(
                 theme::heading_font(),
                 text_color,
             );
-            // Schlitz mit Pegel in der Elementfarbe
+            // Slot with level in the element color
             let slot = Rect::from_center_size(
                 pos2(track.center().x, track.center().y),
                 vec2(6.0, track.height() - 6.0),
@@ -1739,7 +1738,7 @@ fn paint_item(
             let hy = travel.bottom() - travel.height() * value;
             let level = Rect::from_min_max(pos2(slot.left(), hy), slot.max);
             p.rect_filled(level, 3.0, accent);
-            // Griff wie im Programmer
+            // Handle like in the programmer
             let handle = Rect::from_center_size(
                 pos2(track.center().x, hy),
                 vec2((rect.width() - 16.0).min(40.0), 34.0),
@@ -1936,8 +1935,8 @@ fn paint_item(
     }
 }
 
-/// Aktueller Wert 0–1 eines Faders/Drehreglers (lesbarer Zustand, sonst
-/// der zuletzt gesetzte Wert – gemeinsam für Touch-Modus und Fernbedienung).
+/// Current value 0–1 of a fader/knob (readable state, otherwise the last
+/// set value – shared by touch mode and remote).
 pub(crate) fn item_value(e: &Engine, st: &AppState, item: &TouchItem) -> f32 {
     let live = |c: &ChannelRef| {
         e.live()
@@ -1955,7 +1954,7 @@ pub(crate) fn item_value(e: &Engine, st: &AppState, item: &TouchItem) -> f32 {
     }
 }
 
-/// Kanäle einer Art eines Geräts.
+/// Channels of one kind of a fixture.
 fn channels_of(show: &Show, f: FixtureId, kind: ChannelKind) -> Vec<ChannelRef> {
     show.fixture(f)
         .and_then(|fx| show.type_of(fx))
@@ -1973,7 +1972,7 @@ fn channels_of(show: &Show, f: FixtureId, kind: ChannelKind) -> Vec<ChannelRef> 
         .unwrap_or_default()
 }
 
-/// Farbe als Live-Werte setzen (Rot/Grün/Blau aller Zellen).
+/// Set a color as live values (red/green/blue of all cells).
 pub(crate) fn set_color(e: &mut Engine, fixtures: &[FixtureId], rgb: [u8; 3]) {
     for f in fixtures {
         for (kind, v) in [
@@ -2001,7 +2000,7 @@ pub(crate) fn current_color(e: &Engine, f: FixtureId) -> Option<[u8; 3]> {
     ])
 }
 
-/// Pan/Tilt als Live-Werte setzen (0–1, Feinkanäle 0).
+/// Set pan/tilt as live values (0–1, fine channels 0).
 pub(crate) fn set_position(e: &mut Engine, fixtures: &[FixtureId], x: f32, y: f32) {
     for f in fixtures {
         for (kind, v) in [
@@ -2028,8 +2027,8 @@ pub(crate) fn current_position(e: &Engine, f: FixtureId) -> Option<(f32, f32)> {
     Some((f32::from(x) / 255.0, f32::from(y) / 255.0))
 }
 
-/// Vorgemerktes Element (Alt + Klick) übernehmen: dem gewählten Element als
-/// Ziel geben (Touch bearbeiten) oder auf der aktuellen Seite anlegen.
+/// Take over the queued element (Alt + click): give it to the selected
+/// element as target (editing touch) or create it on the current page.
 pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::TouchPick) {
     use crate::state::Mode;
     let show = e.show();
@@ -2041,14 +2040,14 @@ pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::Touch
         (None, Some(c)) => crate::mapping::describe(show, &c).1,
         (None, None) => String::new(),
     };
-    // Programmer-Fader: fest die gerade gesteuerten Kanäle
+    // Programmer fader: fixed to the channels currently controlled
     let (control, channels) = if pick.channels.is_empty() {
         (pick.control, Vec::new())
     } else {
         (Some(Control::Channels), pick.channels.clone())
     };
     let touch = &mut e.show_mut().touch;
-    // gewähltes Element im Bearbeiten-Modus bekommt das Ziel
+    // the selected element in edit mode gets the target
     if st.mode == Mode::Touch && st.touch_edit {
         if let (Some(page), Some(sel)) = (st.touch_page, st.touch_sel) {
             if let Some(item) = touch
@@ -2139,7 +2138,7 @@ mod tests {
         assert_eq!(page.items[0].label, "Intro");
         assert_eq!(page.items[0].control, Some(scene));
 
-        // gewähltes Element im Bearbeiten-Modus bekommt das Ziel
+        // the selected element in edit mode gets the target
         st.mode = crate::state::Mode::Touch;
         st.touch_edit = true;
         apply_pick(

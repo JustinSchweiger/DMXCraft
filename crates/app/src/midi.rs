@@ -1,7 +1,6 @@
-//! MIDI-Ein- und -Ausgänge (midir: WinMM, CoreMIDI, ALSA). Alle Eingänge
-//! werden geöffnet; neue Geräte werden alle paar Sekunden erkannt. Eingehende
-//! Nachrichten landen in einer Warteschlange, die der App-Rahmen je Bild
-//! abholt.
+//! MIDI inputs and outputs (midir: WinMM, CoreMIDI, ALSA). All inputs are
+//! opened; new devices are detected every few seconds. Incoming messages
+//! land in a queue that the app frame collects every frame.
 
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -9,19 +8,19 @@ use std::time::{Duration, Instant};
 
 use dmxcraft_core::mapping::MidiMessage;
 
-/// Eine eingegangene Nachricht.
+/// A received message.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MidiEvent {
     pub device: String,
-    /// Kanal 1–16.
+    /// Channel 1–16.
     pub channel: u8,
     pub message: MidiMessage,
     pub number: u8,
-    /// Anschlag bzw. Reglerwert 0–127 (Note Off = 0).
+    /// Velocity or controller value 0–127 (note off = 0).
     pub value: u8,
 }
 
-/// Rohbytes → Ereignis (nur Note On/Off und Control Change).
+/// Raw bytes → event (only Note On/Off and Control Change).
 pub fn parse(device: &str, bytes: &[u8]) -> Option<MidiEvent> {
     let (&status, rest) = bytes.split_first()?;
     let channel = (status & 0x0f) + 1;
@@ -45,11 +44,11 @@ pub struct MidiHub {
     rx: Receiver<MidiEvent>,
     inputs: HashMap<String, midir::MidiInputConnection<()>>,
     outputs: HashMap<String, midir::MidiOutputConnection>,
-    /// Namen der Ausgänge (für Auswahllisten).
+    /// Names of the outputs (for selection lists).
     pub output_names: Vec<String>,
     pub input_names: Vec<String>,
     last_scan: Option<Instant>,
-    /// Seit dem letzten Abholen neu verbundene Ausgänge (Rückmeldung neu senden).
+    /// Outputs connected since the last collection (send feedback again).
     pub new_outputs: bool,
 }
 
@@ -70,7 +69,7 @@ impl Default for MidiHub {
 }
 
 impl MidiHub {
-    /// Geräte suchen (höchstens alle 3 s) und neue Eingänge öffnen.
+    /// Look for devices (at most every 3 s) and open new inputs.
     pub fn scan(&mut self) {
         if self
             .last_scan
@@ -129,12 +128,12 @@ impl MidiHub {
         }
     }
 
-    /// Eingegangene Nachrichten abholen.
+    /// Collect received messages.
     pub fn drain(&mut self) -> Vec<MidiEvent> {
         self.rx.try_iter().collect()
     }
 
-    /// Nachricht an ein Ausgabegerät senden (öffnet es bei Bedarf).
+    /// Send a message to an output device (opens it if needed).
     pub fn send(&mut self, device: &str, bytes: &[u8]) {
         if !self.outputs.contains_key(device) {
             let Ok(out) = midir::MidiOutput::new("DMXCraft") else {

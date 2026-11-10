@@ -1,7 +1,7 @@
-//! Audio-Trigger der SUPER SCENES: je Trigger wird die Datei einmal mit dem
-//! gewählten Filter gelesen (Hüllkurve im Hintergrund), daraus entstehen mit
-//! Schwellwert/Hysterese die Ereignisse. Beim Abspielen lösen sie das Ziel
-//! wie eine Taste aus (über `touch_fire`, verarbeitet vom Zuordnungs-Rahmen).
+//! Audio triggers of the SUPER SCENES: per trigger the file is read once
+//! with the chosen filter (envelope in the background); threshold/hysteresis
+//! turn it into events. During playback they trigger the target like a key
+//! (via `touch_fire`, processed by the mapping frame).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -30,7 +30,7 @@ enum EnvState {
 pub struct TriggerEngine {
     envs: Arc<Mutex<HashMap<EnvKey, EnvState>>>,
     events: Mutex<HashMap<EventKey, Events>>,
-    /// Gerade ausgelöste Trigger (Szene, Block, Trigger) und ihre Zuordnung.
+    /// Triggers just fired (scene, block, trigger) and their mapping.
     active: HashMap<(SceneId, u32, u32), Mapping>,
 }
 
@@ -38,7 +38,7 @@ fn env_key(path: &str, t: &AudioTrigger) -> EnvKey {
     (path.to_string(), t.low_hz.to_bits(), t.high_hz.to_bits())
 }
 
-/// Ist das Ziel ein Regler (Wert statt Taste)?
+/// Is the target a knob (value instead of key)?
 fn is_fader(c: Control) -> bool {
     matches!(
         c,
@@ -69,7 +69,7 @@ fn mapping(t: &AudioTrigger, control: Control) -> Mapping {
 }
 
 impl TriggerEngine {
-    /// Hüllkurve des Trigger-Bands (startet die Berechnung beim ersten Aufruf).
+    /// Envelope of the trigger band (starts the calculation on the first call).
     pub fn envelope(
         &self,
         path: &str,
@@ -77,7 +77,7 @@ impl TriggerEngine {
         ctx: &egui::Context,
     ) -> Option<Arc<Vec<u8>>> {
         let key = env_key(path, t);
-        let mut map = self.envs.lock().expect("Hüllkurven");
+        let mut map = self.envs.lock().expect("Envelopes");
         match map.get(&key) {
             Some(EnvState::Ready(v)) => return Some(v.clone()),
             Some(_) => return None,
@@ -92,13 +92,13 @@ impl TriggerEngine {
                 Some(v) => EnvState::Ready(Arc::new(v)),
                 None => EnvState::Failed,
             };
-            envs.lock().expect("Hüllkurven").insert(key, state);
+            envs.lock().expect("Envelopes").insert(key, state);
             ctx.request_repaint();
         });
         None
     }
 
-    /// Ereignisse eines Triggers (ms in der Datei), sobald die Hüllkurve da ist.
+    /// Events of a trigger (ms in the file), once the envelope is available.
     pub fn events(&self, path: &str, t: &AudioTrigger, ctx: &egui::Context) -> Option<Events> {
         let key = (
             path.to_string(),
@@ -111,7 +111,7 @@ impl TriggerEngine {
                 t.hold_ms,
             ],
         );
-        if let Some(ev) = self.events.lock().expect("Ereignisse").get(&key) {
+        if let Some(ev) = self.events.lock().expect("events").get(&key) {
             return Some(ev.clone());
         }
         let env = self.envelope(path, t, ctx)?;
@@ -122,7 +122,7 @@ impl TriggerEngine {
             f64::from(t.min_gap_ms),
             f64::from(t.hold_ms),
         ));
-        let mut map = self.events.lock().expect("Ereignisse");
+        let mut map = self.events.lock().expect("events");
         if map.len() > 256 {
             map.clear();
         }
@@ -130,7 +130,7 @@ impl TriggerEngine {
         Some(ev)
     }
 
-    /// Laufende SUPER SCENES abgleichen: Ereignisse drücken bzw. lösen ihr Ziel.
+    /// Match the running SUPER SCENES: events press or release their target.
     pub fn update(&mut self, ctx: &egui::Context, e: &mut Engine, st: &mut AppState) {
         let mut now_on: HashMap<(SceneId, u32, u32), Mapping> = HashMap::new();
         for scene in &e.show().scenes {
@@ -167,7 +167,7 @@ impl TriggerEngine {
                 }
             }
         }
-        // loslassen, was nicht mehr aktiv ist
+        // release what is no longer active
         let ended: Vec<_> = self
             .active
             .keys()
@@ -196,8 +196,8 @@ impl TriggerEngine {
     }
 }
 
-/// Ziel drücken bzw. loslassen. Szenen starten zusätzlich (ohne die laufende
-/// SUPER SCENE derselben Bank zu beenden); alles andere wie eine Taste.
+/// Press or release the target. Scenes additionally start (without ending
+/// the running SUPER SCENE of the same bank); everything else like a key.
 fn fire(e: &mut Engine, st: &mut AppState, m: Mapping, pressed: bool) {
     if let Control::Scene {
         target: SceneTarget::Scene { id },
@@ -217,7 +217,7 @@ fn fire(e: &mut Engine, st: &mut AppState, m: Mapping, pressed: bool) {
     st.touch_fire.push((m, pressed, value, fader));
 }
 
-/// Datei dekodieren (Mono) und die Hüllkurve des Bands berechnen.
+/// Decode the file (mono) and calculate the envelope of the band.
 fn compute(path: &str, lo: f32, hi: f32) -> Option<Vec<u8>> {
     let dec = crate::audio::open_decoder(path)?;
     let channels = usize::from(dec.channels()).max(1);

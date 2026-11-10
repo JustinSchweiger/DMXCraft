@@ -1,21 +1,21 @@
-//! Kreisende Kamera (wie in Easy View): drehen, verschieben, zoomen.
+//! Orbiting camera (as in Easy View): rotate, pan, zoom.
 
 use glam::{Mat4, Vec2, Vec3};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OrbitCamera {
     pub target: Vec3,
-    /// Grad um die Hochachse.
+    /// Degrees around the vertical axis.
     pub yaw: f32,
-    /// Grad, positiv = von oben.
+    /// Degrees, positive = from above.
     pub pitch: f32,
     pub distance: f32,
-    /// Öffnungswinkel senkrecht (Grad).
+    /// Vertical field of view (degrees).
     pub fov: f32,
 }
 
 impl OrbitCamera {
-    /// Blick schräg von vorn oben auf einen Raum dieser Größe.
+    /// View at an angle from the front and above onto a room of this size.
     pub fn for_room(size: [f32; 3]) -> Self {
         let [w, h, d] = size;
         Self {
@@ -27,7 +27,7 @@ impl OrbitCamera {
         }
     }
 
-    /// Aus einem gespeicherten Kamerapunkt.
+    /// From a saved camera point.
     pub fn from_preset(p: &dmxcraft_core::venue::CameraPreset) -> Self {
         Self {
             target: Vec3::from(p.target),
@@ -38,7 +38,7 @@ impl OrbitCamera {
         }
     }
 
-    /// Als Kamerapunkt speichern.
+    /// Save as a camera point.
     pub fn to_preset(self, name: impl Into<String>) -> dmxcraft_core::venue::CameraPreset {
         let r = |v: f32| (v * 1000.0).round() / 1000.0;
         dmxcraft_core::venue::CameraPreset {
@@ -51,7 +51,7 @@ impl OrbitCamera {
         }
     }
 
-    /// Fast gleich (für die Markierung des aktiven Kamerapunkts).
+    /// Almost equal (for marking the active camera point).
     pub fn near(&self, o: &Self) -> bool {
         let dyaw = ((self.yaw - o.yaw + 540.0).rem_euclid(360.0) - 180.0).abs();
         dyaw < 0.5
@@ -61,7 +61,7 @@ impl OrbitCamera {
             && (self.fov - o.fov).abs() < 0.5
     }
 
-    /// Zwischenstellung für Kamerafahrten (`k` 0–1, Drehung auf kurzem Weg).
+    /// Intermediate position for camera moves (`k` 0–1, rotation the short way).
     pub fn lerp(&self, o: &Self, k: f32) -> Self {
         let dyaw = (o.yaw - self.yaw + 540.0).rem_euclid(360.0) - 180.0;
         Self {
@@ -91,7 +91,7 @@ impl OrbitCamera {
         self.pitch = (self.pitch + d.y * 0.35).clamp(-89.0, 89.0);
     }
 
-    /// Verschieben in der Bildebene (Pixel → Meter abhängig vom Abstand).
+    /// Pan in the image plane (pixels → meters depending on the distance).
     pub fn pan(&mut self, d: Vec2, viewport_h: f32) {
         let k = self.distance * (self.fov.to_radians() * 0.5).tan() * 2.0 / viewport_h.max(1.0);
         let v = self.view();
@@ -104,7 +104,7 @@ impl OrbitCamera {
         self.distance = (self.distance * factor).clamp(0.5, 300.0);
     }
 
-    /// Strahl durch einen Punkt im Bild (0–1, oben links = 0,0).
+    /// Ray through a point in the image (0–1, top left = 0,0).
     pub fn ray(&self, uv: Vec2, aspect: f32) -> (Vec3, Vec3) {
         let inv = (self.proj(aspect) * self.view()).inverse();
         let ndc = Vec2::new(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);

@@ -1,17 +1,17 @@
-//! Rückgängig/Wiederherstellen für die Show und die Live-Werte.
+//! Undo/redo for the show and the live values.
 //!
-//! Statt jede Änderung einzeln zu erfassen, vergleicht `track` nach jedem
-//! Frame die Show mit dem letzten Stand. Solange die Maus gedrückt ist oder
-//! ein Textfeld den Fokus hat, wird nicht übernommen – so wird ein Ziehen
-//! oder ein Umbenennen zu genau einem Schritt.
+//! Instead of recording every change individually, `track` compares the
+//! show with the last state after every frame. While the mouse is pressed
+//! or a text field has focus nothing is taken over – so a drag or a rename
+//! becomes exactly one step.
 
 use dmxcraft_core::{ChannelRef, Engine, Show};
 
-/// Stand, der rückgängig gemacht werden kann.
+/// State that can be undone.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Snapshot {
     pub show: Show,
-    /// Live-Werte, sortiert (gehören nicht zur gespeicherten Show).
+    /// Live values, sorted (not part of the saved show).
     pub live: Vec<(ChannelRef, u8)>,
 }
 
@@ -29,12 +29,12 @@ impl Snapshot {
         live
     }
 
-    /// Entspricht der Stand der Engine (ohne die Show zu kopieren)?
+    /// Does the state match the engine (without copying the show)?
     fn matches(&self, e: &Engine) -> bool {
         self.show == *e.show() && self.live == Self::live_of(e)
     }
 
-    /// Stand in die Engine übernehmen.
+    /// Apply the state to the engine.
     pub fn restore(self, e: &mut Engine) {
         *e.show_mut() = self.show;
         e.replace_live(self.live.into_iter().collect());
@@ -52,14 +52,14 @@ pub struct History {
 }
 
 impl History {
-    /// Neuer Ausgangsstand (neue Show geladen): Verlauf leeren.
+    /// New initial state (new show loaded): clear the history.
     pub fn reset(&mut self, show: &Snapshot) {
         self.undo.clear();
         self.redo.clear();
         self.last = Some(show.clone());
     }
 
-    /// Nach jedem Frame aufrufen. `busy` = Maus gedrückt oder Texteingabe.
+    /// Call after every frame. `busy` = mouse pressed or text input.
     pub fn track(&mut self, e: &Engine, busy: bool) {
         if busy {
             return;
@@ -86,7 +86,7 @@ impl History {
         !self.redo.is_empty()
     }
 
-    /// Liefert den vorherigen Stand; `current` ist der aktuelle.
+    /// Returns the previous state; `current` is the current one.
     pub fn undo(&mut self, current: &Snapshot) -> Option<Snapshot> {
         let prev = self.undo.pop()?;
         self.redo.push(current.clone());
@@ -112,7 +112,7 @@ mod tests {
         let mut e = Engine::new(Show::new("A", 8));
         h.reset(&Snapshot::of(&e));
         e.show_mut().name = "B".into();
-        h.track(&e, true); // beschäftigt: nichts übernehmen
+        h.track(&e, true); // busy: take nothing over
         assert!(!h.can_undo());
         h.track(&e, false);
         assert!(h.can_undo());
@@ -122,7 +122,7 @@ mod tests {
         let next = h.redo(&Snapshot::of(&e)).unwrap();
         assert_eq!(next.show.name, "B");
         next.restore(&mut e);
-        // Unveränderter Stand erzeugt keinen Schritt
+        // An unchanged state does not create a step
         h.track(&e, false);
         assert!(!h.can_redo());
         assert_eq!(h.undo.len(), 1);

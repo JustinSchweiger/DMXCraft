@@ -2,7 +2,7 @@ use eframe::egui::{Color32, Response, Sense, Stroke, StrokeKind, Ui, Vec2, Widge
 
 use crate::ui::theme;
 
-/// Klickbares Farbfeld.
+/// Clickable color swatch.
 pub struct Swatch(pub Color32);
 
 impl Widget for Swatch {

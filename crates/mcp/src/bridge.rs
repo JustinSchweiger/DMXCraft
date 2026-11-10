@@ -1,11 +1,11 @@
-//! stdio-Brücke: `dmxcraft mcp` liest JSON-RPC-Nachrichten zeilenweise von
-//! stdin, schickt sie an den HTTP-Endpunkt der laufenden DMXCraft-Instanz
-//! und schreibt die Antworten nach stdout. So können MCP-Clients, die Server
-//! als Prozess starten (z. B. Claude Desktop), DMXCraft steuern.
+//! stdio bridge: `dmxcraft mcp` reads JSON-RPC messages line by line from
+//! stdin, sends them to the HTTP endpoint of the running DMXCraft instance
+//! and writes the answers to stdout. That way MCP clients that start
+//! servers as a process (e.g. Claude Desktop) can control DMXCraft.
 //!
-//! Nur `std` und `serde_json`: dieselbe Datei steckt auch im kleinen
-//! Programm `dmxcraft-mcp` (crates/app/src/bin), damit die laufende Brücke
-//! nicht `dmxcraft.exe` sperrt (Neubauen unter Windows).
+//! Only `std` and `serde_json`: the same file is also part of the small
+//! `dmxcraft-mcp` program (crates/app/src/bin) so the running bridge does
+//! not lock `dmxcraft.exe` (rebuilding on Windows).
 
 use std::io::{BufRead, Read, Write};
 use std::net::TcpStream;
@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-/// Läuft, bis stdin endet.
+/// Runs until stdin ends.
 pub fn run(port: u16) {
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
@@ -31,7 +31,7 @@ pub fn run(port: u16) {
             Err(err) => error_for(line, &err),
         };
         if let Some(a) = answer {
-            // eine Nachricht pro Zeile
+            // one message per line
             let a = a.replace(['\n', '\r'], " ");
             if writeln!(stdout, "{a}")
                 .and_then(|_| stdout.flush())
@@ -43,7 +43,8 @@ pub fn run(port: u16) {
     }
 }
 
-/// Fehlerantwort, wenn DMXCraft nicht erreichbar ist (nur für Anfragen mit ID).
+/// Error answer when DMXCraft is not reachable (only for requests with an
+/// ID).
 fn error_for(line: &str, err: &str) -> Option<String> {
     let msg: Value = serde_json::from_str(line).ok()?;
     let id = msg.get("id")?.clone();
@@ -57,12 +58,12 @@ fn error_for(line: &str, err: &str) -> Option<String> {
     )
 }
 
-/// Eine Nachricht per HTTP weitergeben. `Ok(None)` bei 202 (keine Antwort).
+/// Forward a message via HTTP. `Ok(None)` for 202 (no answer).
 pub(crate) fn forward(port: u16, body: &str) -> Result<Option<String>, String> {
     let not_running = || {
         format!(
-            "DMXCraft ist nicht erreichbar (127.0.0.1:{port}). Bitte DMXCraft starten und unter \
-             Einstellungen → MCP den Server einschalten."
+            "DMXCraft is not reachable (127.0.0.1:{port}). Please start DMXCraft and enable \
+             the server under Settings → MCP."
         )
     };
     let mut s = TcpStream::connect(("127.0.0.1", port)).map_err(|_| not_running())?;
@@ -76,12 +77,12 @@ pub(crate) fn forward(port: u16, body: &str) -> Result<Option<String>, String> {
     let mut raw = Vec::new();
     s.read_to_end(&mut raw).map_err(|e| e.to_string())?;
     let text = String::from_utf8_lossy(&raw);
-    let (head, rest) = text.split_once("\r\n\r\n").ok_or("ungültige Antwort")?;
+    let (head, rest) = text.split_once("\r\n\r\n").ok_or("invalid response")?;
     let status: u16 = head
         .split_whitespace()
         .nth(1)
         .and_then(|s| s.parse().ok())
-        .ok_or("ungültige Antwort")?;
+        .ok_or("invalid response")?;
     let chunked = head.lines().any(|l| {
         l.to_ascii_lowercase()
             .starts_with("transfer-encoding: chunked")
@@ -95,13 +96,13 @@ pub(crate) fn forward(port: u16, body: &str) -> Result<Option<String>, String> {
         202 => Ok(None),
         200 => Ok(Some(body)),
         _ => Err(format!(
-            "DMXCraft antwortete mit HTTP {status}: {}",
+            "DMXCraft answered with HTTP {status}: {}",
             body.trim()
         )),
     }
 }
 
-/// `Transfer-Encoding: chunked` auflösen.
+/// Resolve `Transfer-Encoding: chunked`.
 fn dechunk(mut s: &str) -> String {
     let mut out = String::new();
     while let Some((len, rest)) = s.split_once("\r\n") {
@@ -128,7 +129,7 @@ mod tests {
 
     #[test]
     fn not_running_gives_error_with_id() {
-        // Port 1 ist praktisch nie belegt
+        // Port 1 is practically never in use
         let e = forward(1, r#"{"jsonrpc":"2.0","id":7,"method":"ping"}"#).unwrap_err();
         let a = error_for(r#"{"jsonrpc":"2.0","id":7,"method":"ping"}"#, &e).unwrap();
         assert!(a.contains("\"id\":7"));

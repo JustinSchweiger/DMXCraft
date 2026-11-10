@@ -1,4 +1,4 @@
-//! App-Rahmen: Titelleiste, Layout der Ansichten, Dialoge, Ausgabe-Runtime.
+//! App frame: title bar, layout of the views, dialogs, output runtime.
 
 use crate::i18n::t;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -24,10 +24,10 @@ use crate::views::setup::SetupView;
 use crate::views::windows::Windows;
 use crate::views::{View, ViewCtx};
 
-/// DMX-Wiederholrate des Ausgabe-Threads.
+/// DMX refresh rate of the output thread.
 pub const OUTPUT_HZ: u32 = 50;
 
-/// Ansichten unter STEUERN.
+/// Views in CONTROL.
 #[derive(Default)]
 struct ControlViews {
     grid: SceneGridView,
@@ -37,7 +37,7 @@ struct ControlViews {
     touch: crate::views::touch::TouchView,
 }
 
-/// Dialog zum Sperren (Passwort festlegen) oder Entsperren.
+/// Dialog for locking (set a password) or unlocking.
 struct LockDialog {
     set_password: bool,
     pw: String,
@@ -56,10 +56,10 @@ pub struct DmxCraftApp {
     settings_open: bool,
     settings_window: SettingsWindow,
     about_open: bool,
-    /// Offener Systemdialog (Öffnen / Speichern unter).
+    /// Open system dialog (Open / Save as).
     file_dialog: Option<file_dialog::Pending>,
     lock_dialog: Option<LockDialog>,
-    /// Hash des Sperr-Passworts – nur im Speicher, nach dem Entsperren vergessen.
+    /// Hash of the lock password – kept in memory only, forgotten after unlocking.
     lock_hash: Option<String>,
     state: AppState,
     control: ControlViews,
@@ -67,32 +67,32 @@ pub struct DmxCraftApp {
     sound: crate::views::sound::SoundView,
     windows: Windows,
     history: History,
-    /// MCP-Server für KI-Assistenten.
+    /// MCP server for AI assistants.
     mcp: crate::mcp::McpLink,
     remote: crate::remote::RemoteLink,
     mapper: crate::mapping::Mapper,
-    /// 3D-Visualisierer.
+    /// 3D visualizer.
     viz: crate::viz::VizView,
-    /// Profile Builder (eigenes Fenster).
+    /// Profile Builder (separate window).
     builder: crate::views::profile_builder::ProfileBuilder,
     fullscreen: Fullscreen,
-    /// Vollbild beim nächsten Frame umschalten.
+    /// Toggle fullscreen in the next frame.
     toggle_fullscreen: bool,
-    /// Zuletzt erkannte USB-DMX-Kabel (für die Einstellungen).
+    /// Last detected USB DMX cables (for the settings).
     usb_ports: Vec<dmxcraft_output::UsbDmxPort>,
-    /// Stand der Show beim letzten Laden/Speichern (für „ungespeichert“).
+    /// State of the show at the last load/save (for “unsaved”).
     saved_show: Show,
-    /// Frage „Vor dem Schließen speichern?“ offen.
+    /// Question “Save before closing?” open.
     close_dialog: bool,
-    /// Nach erfolgreichem Speichern schließen.
+    /// Close after saving successfully.
     close_after_save: bool,
-    /// Schließen ohne weitere Nachfrage zulassen.
+    /// Allow closing without asking again.
     allow_close: bool,
-    /// Im nächsten Frame schließen.
+    /// Close in the next frame.
     request_close: bool,
 }
 
-/// Fehlende Angaben der Gerätetypen ergänzen (Bibliothek und eigene Profile).
+/// Fill in missing data of the fixture types (library and custom profiles).
 fn fill_types(s: &mut Show) {
     let own: Vec<dmxcraft_core::FixtureType> = crate::profiles::load_user()
         .into_iter()
@@ -113,7 +113,7 @@ impl DmxCraftApp {
                     s
                 }
                 Err(e) => {
-                    message = Some((format!("{p}: {e} – Demo-Show geladen"), true));
+                    message = Some((format!("{p}: {e} – demo show loaded"), true));
                     demo::demo_show()
                 }
             },
@@ -168,8 +168,8 @@ impl DmxCraftApp {
         }
     }
 
-    /// Angezeigter Name: der Dateiname der Show (ohne Endung), sonst der
-    /// Name der ungespeicherten Show.
+    /// Displayed name: the file name of the show (without extension), otherwise
+    /// the name of the unsaved show.
     fn display_name(&self, e: &Engine) -> String {
         std::path::Path::new(&self.state.show_path)
             .file_stem()
@@ -178,24 +178,24 @@ impl DmxCraftApp {
             .unwrap_or_else(|| e.show().name.clone())
     }
 
-    /// Ungespeicherte Änderungen an der Show?
+    /// Unsaved changes to the show?
     fn dirty(&self) -> bool {
         *Self::lock(&self.engine).show() != self.saved_show
     }
 
-    /// Aktuellen Stand als gespeichert merken.
+    /// Remember the current state as saved.
     fn mark_saved(&mut self) {
         self.saved_show = Self::lock(&self.engine).show().clone();
     }
 
     fn lock(engine: &Arc<Mutex<Engine>>) -> MutexGuard<'_, Engine> {
-        // Ein vergifteter Mutex heißt: der Ausgabe-Thread ist abgestürzt.
-        // Die Daten sind trotzdem konsistent genug, um weiterzuarbeiten.
+        // A poisoned mutex means: the output thread crashed.
+        // The data is still consistent enough to keep working.
         engine.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Ausgang mit den aktuellen Einstellungen neu starten (z. B. nach
-    /// geänderter Kabelzuordnung).
+    /// Restart the output with the current settings (e.g. after the cable
+    /// assignment changed).
     fn restart_output(&mut self) {
         self.output_kind = self.settings.output_kind();
         self.settings.output = self.output_kind.key().into();
@@ -233,7 +233,7 @@ impl DmxCraftApp {
     }
 
     fn save_show(&mut self, path: &str) {
-        // Name der Show = Dateiname
+        // Name of the show = file name
         if let Some(stem) = std::path::Path::new(path).file_stem() {
             Self::lock(&self.engine).show_mut().name = stem.to_string_lossy().into_owned();
         }
@@ -258,7 +258,7 @@ impl DmxCraftApp {
     }
 
     fn start_file_dialog(&mut self, ctx: &egui::Context, purpose: Purpose) {
-        // Nur ein Dialog zur Zeit
+        // Only one dialog at a time
         if self.file_dialog.is_none() {
             self.file_dialog = Some(file_dialog::Pending::start(
                 purpose,
@@ -275,7 +275,7 @@ impl DmxCraftApp {
                 self.history.reset(&Snapshot::of(&Self::lock(&self.engine)));
                 self.mark_saved();
                 self.state.reset_for_new_show();
-                // neue Datei: erstes Speichern fragt nach dem Ort
+                // new file: the first save asks for the location
                 self.state.show_path.clear();
                 self.state.info(t("New, empty show"));
             }
@@ -309,7 +309,7 @@ impl DmxCraftApp {
                 match restored {
                     Some(snap) => {
                         snap.restore(&mut e);
-                        // Edit-Werte aus der wiederhergestellten Szene neu laden
+                        // Reload the edit values from the restored scene
                         self.state.edit_reload = true;
                         self.state
                             .selected
@@ -410,7 +410,7 @@ impl DmxCraftApp {
 
     fn unlock_ui(&mut self) {
         self.state.locked = false;
-        // Das Passwort gilt nur für eine Sperrung – beim nächsten Mal neu festlegen.
+        // The password is only valid for one lock – set a new one next time.
         self.lock_hash = None;
         self.state.info(t("Interface unlocked"));
     }
@@ -498,7 +498,7 @@ impl DmxCraftApp {
         let free = !self.state.locked;
         let cmd = Modifiers::COMMAND;
         let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
-        // Strg+D dupliziert im Patch bzw. in der Zeitleiste, sonst DMX-Werte
+        // Ctrl+D duplicates in the patch or in the timeline, otherwise DMX values
         let duplicate = (self.state.mode == Mode::Setup && !self.state.selected.is_empty())
             || (self.state.focus == crate::state::Focus::Timeline
                 && !self.state.timeline_sel.is_empty());
@@ -510,7 +510,7 @@ impl DmxCraftApp {
                         out.push(a);
                     }
                 };
-            // Umschalt-Varianten zuerst, sonst greift Strg+S
+            // Shift variants first, otherwise Ctrl+S takes over
             key(i, cmd_shift, Key::S, free, MenuAction::SaveShowAs);
             key(i, cmd_shift, Key::Z, free && !typing, MenuAction::Redo);
             key(i, cmd, Key::N, free, MenuAction::NewShow);
@@ -563,7 +563,7 @@ impl DmxCraftApp {
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
-        // Ergebnis eines Systemdialogs
+        // Result of a system dialog
         if let Some((purpose, result)) = self.file_dialog.as_ref().and_then(|d| d.poll()) {
             self.file_dialog = None;
             match result {
@@ -574,12 +574,12 @@ impl DmxCraftApp {
                         Purpose::SaveShowAs => self.save_show(&path),
                     }
                 }
-                // Speichern abgebrochen: nicht schließen
+                // Saving cancelled: do not close
                 None => self.close_after_save = false,
             }
         }
 
-        // Vor dem Schließen: ungespeicherte Änderungen?
+        // Before closing: unsaved changes?
         if self.close_dialog {
             let mut open = true;
             let name = {
@@ -615,7 +615,7 @@ impl DmxCraftApp {
             self.close_dialog = open;
         }
 
-        // Einstellungen
+        // Settings
         if self.settings_open {
             let mut open = true;
             let mut e = Self::lock(&self.engine);
@@ -659,7 +659,7 @@ impl DmxCraftApp {
             self.settings_open = open;
         }
 
-        // Über
+        // About
         if self.about_open {
             let mut open = true;
             let logo = self.logo.clone();
@@ -718,12 +718,12 @@ impl eframe::App for DmxCraftApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame_: &mut eframe::Frame) {
         let rs = frame_.wgpu_render_state().cloned();
         let ctx = ui.ctx().clone();
-        // Laufende Szenen und Live-Farben flüssig anzeigen.
+        // Show running scenes and live colors smoothly.
         ctx.request_repaint_after(Duration::from_millis(33));
         if !self.started {
             self.started = true;
             theme::apply(&ctx);
-            // Zoom-Tasten selbst behandeln, damit die Größe gespeichert wird.
+            // Handle the zoom keys ourselves so the size is saved.
             ctx.options_mut(|o| o.zoom_with_keyboard = false);
             ctx.set_zoom_factor(self.settings.ui_scale.clamp(0.6, 2.0));
             self.logo = crate::icon::texture(&ctx);
@@ -739,7 +739,7 @@ impl eframe::App for DmxCraftApp {
             }
         }
 
-        // ----- KI-Assistent (MCP) -----
+        // ----- AI assistant (MCP) -----
         let events = self.mcp.update(
             &ctx,
             &self.engine,
@@ -769,7 +769,7 @@ impl eframe::App for DmxCraftApp {
             }
         }
 
-        // ----- Schließen: bei ungespeicherten Änderungen erst nachfragen -----
+        // ----- Closing: ask first when there are unsaved changes -----
         if std::mem::take(&mut self.request_close) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -778,7 +778,7 @@ impl eframe::App for DmxCraftApp {
             self.close_dialog = true;
         }
 
-        // ----- Tastatur-/MIDI-Zuordnung: Überlagerung für dieses Bild -----
+        // ----- Keyboard/MIDI mapping: overlay for this frame -----
         if self.state.locked {
             self.state.mapping = None;
             self.state.map_learn = false;
@@ -789,7 +789,7 @@ impl eframe::App for DmxCraftApp {
         self.mapper
             .begin_frame(&ctx, Self::lock(&self.engine).show(), &self.state);
 
-        // ----- Titelleiste -----
+        // ----- Title bar -----
         let (mut show_name, fps, status, blackout) = self.title_info();
         if self.dirty() {
             show_name.push_str(" *");
@@ -851,8 +851,8 @@ impl eframe::App for DmxCraftApp {
         }
         self.fullscreen.update(&ctx);
 
-        // ----- Inhalt (randlos, Bereiche nur durch Trennlinien getrennt) -----
-        // Blind: Bühne und Fader zeigen die Bearbeitung, nicht den Ausgang
+        // ----- Content (borderless, areas separated only by divider lines) -----
+        // Blind: stage and faders show the edit, not the output
         let frame = {
             let e = Self::lock(&self.engine);
             if e.is_blind() {
@@ -880,7 +880,7 @@ impl eframe::App for DmxCraftApp {
             let area = egui::Frame::new()
                 .fill(theme::surface())
                 .inner_margin(egui::Margin::same(6));
-            // Reiter der Tools nur mit der Einstellung (Builder nicht gesperrt)
+            // Tool tabs only with the setting (Builder not locked)
             let tool_tab = match cx.state.mode {
                 Mode::Visualizer => true,
                 Mode::Builder => !cx.state.locked,
@@ -956,7 +956,7 @@ impl eframe::App for DmxCraftApp {
                             .frame(area)
                             .show(ui, |ui| control.touch.ui(ui, &mut cx));
                     } else {
-                        // Seitenleiste mit den Einstellungen der ausgewählten Szene
+                        // Sidebar with the settings of the selected scene
                         egui::Panel::right("scene_props")
                             .resizable(true)
                             .default_size(360.0)
@@ -970,10 +970,10 @@ impl eframe::App for DmxCraftApp {
                 }
             }
             crate::mapping::window::show(&ctx, cx.engine, cx.state, &mut self.mapper);
-            // Touch-Fernbedienung (Web-App) vor den Zuordnungen auswerten
+            // Evaluate the touch remote (web app) before the mappings
             self.remote
                 .update(&ctx, cx.engine, cx.state, &self.settings);
-            // Audio-Trigger laufender SUPER SCENES (vor der Zuordnung)
+            // Audio triggers of running SUPER SCENES (before the mapping)
             let mut triggers = std::mem::take(&mut cx.state.triggers);
             triggers.update(&ctx, cx.engine, cx.state);
             cx.state.triggers = triggers;
@@ -989,7 +989,7 @@ impl eframe::App for DmxCraftApp {
                     ctx.request_repaint_after(std::time::Duration::from_millis(50));
                 }
             }
-            // Alt + Klick: Element zur Touch-Oberfläche bzw. als Trigger-Ziel
+            // Alt + click: element to the touch surface or as trigger target
             for p in crate::mapping::take_touch_picks(&ctx) {
                 if cx.state.locked {
                     continue;
@@ -1012,7 +1012,7 @@ impl eframe::App for DmxCraftApp {
             }
         }
         self.state.viewport_busy = false;
-        // Aufträge des KI-Assistenten an den Visualisierer (Kamera, Bild)
+        // Requests of the AI assistant to the visualizer (camera, image)
         let jobs = self.mcp.take_viz_jobs();
         if !jobs.is_empty() {
             let mut e = Self::lock(&self.engine);
@@ -1026,7 +1026,7 @@ impl eframe::App for DmxCraftApp {
                 let _ = job.reply.send(r);
             }
         }
-        // 3D-Visualisierer im eigenen Fenster (z. B. auf dem zweiten Bildschirm)
+        // 3D visualizer in its own window (e.g. on the second screen)
         if self.state.viz_window {
             let engine = self.engine.clone();
             let viz = &mut self.viz;
@@ -1060,9 +1060,9 @@ impl eframe::App for DmxCraftApp {
                 },
             );
         }
-        // Profile Builder im eigenen Fenster
+        // Profile Builder in its own window
         if let Some(req) = self.state.builder.take() {
-            // als Reiter: dort öffnen, außer das Fenster ist schon offen
+            // as a tab: open there, unless the window is already open
             if self.settings.tools_as_tabs && !self.builder.is_open() {
                 self.builder.request(req, false);
                 self.state.mode = Mode::Builder;
@@ -1113,7 +1113,7 @@ impl eframe::App for DmxCraftApp {
         self.lock_window(&ctx);
         titlebar::resize_handles(&ctx, self.fullscreen.is_on());
 
-        // Rückgängig: Änderungen erst übernehmen, wenn Ziehen/Tippen beendet ist.
+        // Undo: only take over changes once dragging/typing has finished.
         let busy = ctx.input(|i| i.pointer.any_down())
             || ctx.memory(|m| m.focused().is_some())
             || self.state.viewport_busy;
@@ -1121,10 +1121,9 @@ impl eframe::App for DmxCraftApp {
     }
 }
 
-/// Eingaben eines eigenen Fensters: Ziehen/Tippen dort zählt für den
-/// Verlauf als „beschäftigt“ (sonst würde jeder Zwischenstand eines Ziehens
-/// ein eigener Rückgängig-Schritt), und Strg+Z / Strg+Y / Strg+Umschalt+Z
-/// wirken auch dort.
+/// Input of a separate window: dragging/typing there counts as “busy” for
+/// the history (otherwise every intermediate state of a drag would become
+/// its own undo step), and Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z work there too.
 fn viewport_input(ui: &mut egui::Ui, state: &mut AppState, undo_keys: bool) {
     use egui::{Key, Modifiers};
     let typing = ui.memory(|m| m.focused().is_some());
@@ -1147,13 +1146,13 @@ fn viewport_input(ui: &mut egui::Ui, state: &mut AppState, undo_keys: bool) {
     }
 }
 
-/// Edit-Modus: markierte Szenen werden ausgegeben (auch wenn sie nicht laufen)
-/// und ihre Geräte beim Markieren ausgewählt. Bühne und DMX-Ausgang zeigen
-/// damit die Szene, die man gerade bearbeitet.
+/// Edit mode: selected scenes are output (even when they are not running)
+/// and their fixtures are selected when the scene is selected. Stage and
+/// DMX output therefore show the scene being edited.
 ///
-/// Ist genau eine Szene markiert, ist sie die Bearbeitungsszene: beim
-/// Markieren werden ihre Werte in den Programmer geladen, und jede Änderung
-/// am Programmer wird sofort in ihrem (ersten) Schritt gespeichert.
+/// If exactly one scene is selected, it is the edit scene: when it is
+/// selected its values are loaded into the programmer, and every change in
+/// the programmer is saved immediately in its (first) step.
 fn edit_preview(e: &mut Engine, st: &mut AppState) {
     st.sync_selection_order(e.show());
     let edit = st.programmer_mode.is_edit();
@@ -1170,13 +1169,13 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
         (true, 1) => st.selected_scenes.iter().next().copied(),
         _ => None,
     };
-    // bearbeiteter Schritt innerhalb der Szene halten
+    // keep the edited step within the scene
     let steps = target
         .and_then(|id| e.show().scene(id))
         .map_or(1, |s| s.steps.len().max(1));
     st.edit_step = st.edit_step.min(steps - 1);
     e.set_preview_step(st.edit_step);
-    // Wechsel in den Edit-Modus lädt die markierte Szene wie ein neues Markieren
+    // Switching to edit mode loads the selected scene like a new selection
     if st.programmer_mode != st.programmer_mode_seen {
         let was_edit = st.programmer_mode_seen.is_edit();
         st.programmer_mode_seen = st.programmer_mode;
@@ -1184,11 +1183,11 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
             st.scene_selection_seen.clear();
             st.scene_selection_seen.insert(SceneId(u32::MAX));
         } else if !edit && was_edit {
-            // Edit-Werte liegen in der Szene; der Programmer gibt sie nicht weiter aus
+            // Edit values live in the scene; the programmer does not output them as well
             e.clear_programmer();
         }
     }
-    // anderer Schritt gewählt: dessen Werte laden
+    // another step chosen: load its values
     if st.edit_step != st.edit_step_seen {
         st.edit_step_seen = st.edit_step;
         st.edit_reload = true;
@@ -1204,7 +1203,7 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
     }
     if st.selected_scenes != st.scene_selection_seen {
         st.scene_selection_seen = st.selected_scenes.clone();
-        // neue Szene: beim ersten Schritt beginnen, kein Effekt als FX-Ziel
+        // new scene: start at the first step, no effect as FX target
         st.edit_step = 0;
         st.fx_target = st
             .fx_target
@@ -1214,7 +1213,7 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
         if edit {
             if !st.selected_scenes.is_empty() {
                 let show = e.show();
-                // Effekt-Geräte zuerst (ihre Reihenfolge zählt), dann die übrigen
+                // Effect fixtures first (their order matters), then the others
                 let mut ids: Vec<dmxcraft_core::FixtureId> = Vec::new();
                 for s in st.selected_scenes.iter().filter_map(|id| show.scene(*id)) {
                     let fx = s.effects.iter().flat_map(|e| e.fixtures.iter().copied());
@@ -1230,7 +1229,7 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
                 }
                 st.select_ordered(&ids);
             }
-            // Werte der neuen Bearbeitungsszene in den Programmer laden
+            // Load the values of the new edit scene into the programmer
             e.clear_programmer();
             if let Some(id) = target {
                 load_step(e, id, 0);
@@ -1238,7 +1237,7 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
             return;
         }
     }
-    // Programmer-Änderungen im bearbeiteten Schritt speichern
+    // Save programmer changes in the edited step
     let Some(id) = target else {
         return;
     };
@@ -1258,7 +1257,7 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
     }
 }
 
-/// Werte eines Schritts der Szene in den Programmer laden.
+/// Load the values of a step of the scene into the programmer.
 fn load_step(e: &mut Engine, id: SceneId, i: usize) {
     let Some(step) = e
         .show()
@@ -1279,8 +1278,8 @@ fn load_step(e: &mut Engine, id: SceneId, i: usize) {
     }
 }
 
-/// Platzhalter im Reiter, wenn das Tool im eigenen Fenster läuft. `true`, wenn
-/// es in den Reiter zurückgeholt werden soll.
+/// Placeholder in the tab while the tool runs in its own window. `true` if
+/// it should be brought back into the tab.
 fn moved_out(ui: &mut egui::Ui, text: &str) -> bool {
     let mut back = false;
     ui.vertical_centered(|ui| {

@@ -1,5 +1,5 @@
-//! Sperre der Bedienoberfläche mit Passwort. Gespeichert wird nur ein
-//! gesalzener SHA-256-Hash in den Einstellungen.
+//! Password lock of the user interface. Only a salted SHA-256 hash is
+//! stored in the settings.
 
 use sha2::{Digest, Sha256};
 
@@ -15,10 +15,10 @@ fn digest(salt: &str, password: &str) -> String {
     hex(&h.finalize())
 }
 
-/// Erzeugt den zu speichernden Wert „salz:hash“.
+/// Creates the value to store, “salt:hash”.
 pub fn hash_password(password: &str) -> String {
-    // Salz aus Zeit und Adresse eines Stack-Werts – genügt, damit gleiche
-    // Passwörter unterschiedlich gespeichert werden.
+    // Salt from the time and the address of a stack value – enough for equal
+    // passwords to be stored differently.
     let marker = 0u8;
     let seed = format!(
         "{:?}{:p}",

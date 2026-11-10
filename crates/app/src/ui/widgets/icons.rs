@@ -1,16 +1,16 @@
-//! Symbole der Oberfläche aus der Phosphor-Icon-Schrift (MIT, siehe
-//! assets/fonts/Phosphor-LICENSE.txt) – einheitlicher Stil für alle Knöpfe.
-//! Nur „FX“ (Text) und „rückwärts abspielen“ werden selbst gezeichnet.
+//! Interface icons from the Phosphor icon font (MIT, see
+//! assets/fonts/Phosphor-LICENSE.txt) – a uniform style for all buttons.
+//! Only “FX” (text) and “play backwards” are drawn by hand.
 
 use eframe::egui::{self, pos2, Color32, Rect, Response, Sense, Shape, Stroke, Ui, Vec2, Widget};
 
 use crate::ui::theme;
 
-/// Schriftfamilien der Symbole (in `theme::install_fonts` registriert).
+/// Font families of the icons (registered in `theme::install_fonts`).
 pub const ICON_FAMILY: &str = "phosphor";
 pub const ICON_FILL_FAMILY: &str = "phosphor-fill";
 
-/// Nicht jedes Symbol ist schon in Gebrauch – die Liste ist der Vorrat.
+/// Not every icon is in use yet – the list is the stock.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
@@ -48,9 +48,9 @@ pub enum Icon {
     ZoomIn,
     ZoomOut,
     ZoomReset,
-    /// Lupe ohne Zeichen (Mauszeiger im Zeitlineal).
+    /// Magnifier without a sign (mouse pointer in the time ruler).
     Magnifier,
-    /// KI-Assistent (MCP).
+    /// AI assistant (MCP).
     Robot,
     Cube,
     Levels,
@@ -96,16 +96,16 @@ pub enum Icon {
     Waveform,
     Clock,
     MusicNote,
-    /// Abspielen rückwärts (Dreieck nach links).
+    /// Play backwards (triangle pointing left).
     PlayBack,
-    /// Stopp (gefülltes Quadrat, selbst gezeichnet).
+    /// Stop (filled square, drawn by hand).
     Stop,
-    /// Schriftzug „FX“ (Effekte).
+    /// Lettering “FX” (effects).
     Fx,
 }
 
 impl Icon {
-    /// Glyphe und ob die gefüllte Variante genutzt wird.
+    /// Glyph and whether the filled variant is used.
     fn glyph(self) -> Option<(&'static str, bool)> {
         match self {
             Icon::Play => Some(("\u{E3D0}", true)),
@@ -230,7 +230,7 @@ impl Icon {
     }
 }
 
-/// Kleiner quadratischer Knopf mit Symbol.
+/// Small square button with an icon.
 pub struct IconButton {
     icon: Icon,
     size: f32,
@@ -238,9 +238,9 @@ pub struct IconButton {
     active: bool,
     flat: bool,
     danger: bool,
-    /// Kleine Beschriftung unter dem Symbol (z. B. „ALLE“).
+    /// Small label below the icon (e.g. “ALL”).
     caption: Option<String>,
-    /// Farbe für den aktiven Zustand statt der Akzentfarbe.
+    /// Color for the active state instead of the accent color.
     tint: Option<egui::Color32>,
 }
 
@@ -257,12 +257,12 @@ impl IconButton {
             tint: None,
         }
     }
-    /// Farbe des aktiven Zustands (z. B. Szenenfarbe).
+    /// Color of the active state (e.g. scene color).
     pub fn tint(mut self, c: egui::Color32) -> Self {
         self.tint = Some(c);
         self
     }
-    /// Kleine Beschriftung unter dem Symbol.
+    /// Small label below the icon.
     pub fn caption(mut self, text: impl Into<String>) -> Self {
         self.caption = Some(text.into());
         self
@@ -279,12 +279,12 @@ impl IconButton {
         self.size = s;
         self
     }
-    /// Ohne Hintergrund (nur beim Überfahren hinterlegt).
+    /// Without background (highlighted only on hover).
     pub fn flat(mut self) -> Self {
         self.flat = true;
         self
     }
-    /// Beim Überfahren rot (Schließen-Knopf).
+    /// Red on hover (close button).
     pub fn danger(mut self) -> Self {
         self.danger = true;
         self
@@ -342,7 +342,7 @@ impl Widget for IconButton {
     }
 }
 
-/// Warnzeichen: gefüllter Kreis mit Ausrufezeichen (Strich und Punkt).
+/// Warning sign: filled circle with an exclamation mark (bar and dot).
 pub fn paint_alert(p: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
     let c = rect.center();
     let r = rect.width().min(rect.height()) / 2.0;

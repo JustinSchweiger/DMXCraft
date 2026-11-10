@@ -1,13 +1,13 @@
-//! Touch-Fernbedienung im lokalen Netzwerk: ein kleiner Webserver liefert
-//! eine Web-App (iOS, iPadOS, Android – im Browser, auf Wunsch auf dem
-//! Home-Bildschirm), die die Seiten des Touch-Modus zeigt und bedient.
+//! Touch remote on the local network: a small web server delivers a web app
+//! (iOS, iPadOS, Android – in the browser, optionally on the home screen)
+//! that shows and operates the pages of the touch mode.
 //!
-//! * Der Server läuft nur, wenn er in den Einstellungen eingeschaltet ist
-//!   (lauscht dann auf allen Netzwerkschnittstellen), optional mit PIN.
-//! * Die Web-App fragt Layout und Zustände ab (`/api/layout`, `/api/state`)
-//!   und schickt Bedienbefehle (`/api/cmd`). Die Befehle landen hier in einer
-//!   Warteschlange und werden im Oberflächen-Thread genauso ausgeführt wie
-//!   die Bedienung im Touch-Modus (Zuordnungen, Live-Werte).
+//! * The server only runs when it is enabled in the settings (it then
+//!   listens on all network interfaces), optionally with a PIN.
+//! * The web app queries layout and states (`/api/layout`, `/api/state`) and
+//!   sends commands (`/api/cmd`). The commands land in a queue here and are
+//!   executed in the UI thread exactly like operating the touch mode
+//!   (mappings, live values).
 
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -29,7 +29,7 @@ use crate::views::touch::{
     current_color, current_position, display_label, item_value, mapping_of, set_color, set_position,
 };
 
-/// Standard-Port der Fernbedienung.
+/// Default port of the remote.
 pub const DEFAULT_PORT: u16 = 8420;
 
 const INDEX_HTML: &str = include_str!("web/index.html");
@@ -38,10 +38,10 @@ const MANIFEST: &str = include_str!("web/manifest.webmanifest");
 const FONT_TEXT: &[u8] = include_bytes!("../../assets/fonts/NotoSans-SemiBold.ttf");
 const FONT_ICONS: &[u8] = include_bytes!("../../assets/fonts/Phosphor.ttf");
 
-/// Ein Gerät gilt als verbunden, solange es sich so oft meldet.
+/// A device counts as connected as long as it checks in this often.
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(4);
 
-/// Zustand für die Anzeige in den Einstellungen.
+/// State for display in the settings.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum RemoteStatus {
     #[default]
@@ -50,21 +50,21 @@ pub enum RemoteStatus {
     Error(String),
 }
 
-/// Bedienbefehl der Web-App.
+/// Command from the web app.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum Cmd {
-    /// Schaltfläche gedrückt / losgelassen.
+    /// Button pressed / released.
     Press { item: u32, down: bool },
-    /// Fader / Drehregler (0–1).
+    /// Fader / knob (0–1).
     Value { item: u32, v: f32 },
-    /// Farbrad.
+    /// Color wheel.
     Color { item: u32, rgb: [u8; 3] },
-    /// XY-Feld (0–1).
+    /// XY pad (0–1).
     Xy { item: u32, x: f32, y: f32 },
 }
 
-/// Mit dem Server-Thread geteilt.
+/// Shared with the server thread.
 #[derive(Default)]
 struct Shared {
     layout: Arc<String>,
@@ -94,12 +94,12 @@ impl Drop for Running {
 pub struct RemoteLink {
     shared: Arc<Mutex<Shared>>,
     running: Option<Running>,
-    /// Zuletzt angewendete Einstellung (Port, wenn eingeschaltet).
+    /// Last applied setting (port, if enabled).
     wanted: Option<u16>,
     pub status: RemoteStatus,
-    /// Verbundene Geräte (für die Anzeige).
+    /// Connected devices (for display).
     pub clients: usize,
-    /// Adressen der Web-App (beim Start ermittelt).
+    /// Addresses of the web app (determined at startup).
     pub addresses: Vec<String>,
     last_layout: Option<String>,
     last_layout_at: Option<Instant>,
@@ -123,8 +123,8 @@ impl Default for RemoteLink {
 }
 
 impl RemoteLink {
-    /// Einmal pro Frame: Server starten/stoppen, Befehle ausführen, Layout
-    /// und Zustände für die Web-App bereitstellen.
+    /// Once per frame: start/stop the server, execute commands, provide layout
+    /// and states for the web app.
     pub fn update(
         &mut self,
         ctx: &egui::Context,
@@ -165,8 +165,8 @@ impl RemoteLink {
         if self.clients == 0 {
             return;
         }
-        // Layout höchstens zweimal pro Sekunde neu aufbauen (Namen, Farben,
-        // Elemente können sich ändern), Zustände etwa 15-mal pro Sekunde
+        // Rebuild the layout at most twice per second (names, colors, elements can
+        // change), states about 15 times per second
         let now = Instant::now();
         if self
             .last_layout_at
@@ -202,7 +202,7 @@ impl RemoteLink {
             let state = state_json(e, st, &states, rev).to_string();
             self.shared.lock().unwrap_or_else(|p| p.into_inner()).state = Arc::new(state);
         }
-        // solange Geräte verbunden sind, regelmäßig aktualisieren
+        // update regularly while devices are connected
         ctx.request_repaint_after(Duration::from_millis(60));
     }
 
@@ -226,14 +226,14 @@ impl RemoteLink {
         Ok(())
     }
 
-    /// Erneut versuchen (z. B. nach „Port belegt“).
+    /// Try again (e.g. after “port in use”).
     pub fn retry(&mut self) {
         self.wanted = None;
         self.running = None;
     }
 }
 
-/// Befehl ausführen – wie die Bedienung im Touch-Modus.
+/// Execute a command – like operating the touch mode.
 fn apply(e: &mut Engine, st: &mut AppState, cmd: &Cmd) {
     let id = match cmd {
         Cmd::Press { item, .. }
@@ -279,7 +279,7 @@ fn rgb_hex(c: [u8; 3]) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
-/// Seiten und Elemente für die Web-App (ohne Bilddaten).
+/// Pages and elements for the web app (without image data).
 fn layout_json(e: &Engine, settings: &Settings) -> String {
     let show = e.show();
     let t = &show.touch;
@@ -335,7 +335,7 @@ fn layout_json(e: &Engine, settings: &Settings) -> String {
     .to_string()
 }
 
-/// Zustände aller Elemente: Werte, Ein/Aus, Farbe, Position.
+/// States of all elements: values, on/off, color, position.
 fn state_json(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, layout_rev: u64) -> Value {
     let mut values = serde_json::Map::new();
     let mut on = Vec::new();
@@ -379,7 +379,7 @@ fn state_json(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, layout_rev
 // ------------------------------------------------------------ HTTP
 
 fn header(name: &str, value: &str) -> Header {
-    Header::from_bytes(name.as_bytes(), value.as_bytes()).expect("gültiger Header")
+    Header::from_bytes(name.as_bytes(), value.as_bytes()).expect("valid header")
 }
 
 fn send(req: Request, status: u16, ctype: &str, body: Vec<u8>, cache: bool) {
@@ -432,7 +432,7 @@ fn image_type(data: &[u8]) -> &'static str {
 fn serve(shared: &Arc<Mutex<Shared>>, mut req: Request) {
     let path = req.url().split('?').next().unwrap_or("/").to_string();
     let method = req.method().clone();
-    // statische Dateien (ohne PIN – enthalten nichts von der Show)
+    // static files (without PIN – they contain nothing from the show)
     let fixed: Option<(&str, &[u8], bool)> = match path.as_str() {
         "/" | "/index.html" => Some(("text/html; charset=utf-8", INDEX_HTML.as_bytes(), false)),
         "/app.js" => Some(("text/javascript; charset=utf-8", APP_JS.as_bytes(), false)),
@@ -475,7 +475,7 @@ fn serve(shared: &Arc<Mutex<Shared>>, mut req: Request) {
                 wake(&sh);
                 (sh.layout.clone(), sh.layout_rev)
             };
-            // Rev mitschicken, damit die Web-App weiß, welchen Stand sie hat
+            // send the rev along so the web app knows which state it has
             let body = if layout.is_empty() {
                 format!(r#"{{"rev":{rev},"loading":true}}"#)
             } else {
@@ -539,18 +539,18 @@ fn serve(shared: &Arc<Mutex<Shared>>, mut req: Request) {
     }
 }
 
-/// Oberfläche aufwecken, damit Befehle sofort ausgeführt werden.
+/// Wake up the UI so commands are executed immediately.
 fn wake(sh: &Shared) {
     if let Some(ctx) = &sh.ctx {
         ctx.request_repaint();
     }
 }
 
-/// Adressen, unter denen die Fernbedienung erreichbar ist (IP im lokalen
-/// Netz und Rechnername mit `.local`).
+/// Addresses under which the remote can be reached (IP on the local network
+/// and computer name with `.local`).
 pub fn addresses(port: u16) -> Vec<String> {
     let mut out = Vec::new();
-    // Trick ohne Netzverkehr: ausgehende Schnittstelle bestimmen
+    // Trick without network traffic: determine the outgoing interface
     if let Ok(sock) = std::net::UdpSocket::bind(("0.0.0.0", 0)) {
         if sock.connect(("8.8.8.8", 80)).is_ok() {
             if let Ok(addr) = sock.local_addr() {
@@ -622,7 +622,7 @@ mod tests {
         assert_eq!(image_type(&[0xff, 0xd8, 0]), "image/jpeg");
     }
 
-    /// Server im Prozess starten und die Web-App/API abfragen.
+    /// Start the server in the process and query the web app/API.
     #[test]
     fn serves_app_and_api() {
         let shared: Arc<Mutex<Shared>> = Arc::default();
@@ -656,7 +656,7 @@ mod tests {
         assert!(get("/api/layout", "").starts_with("HTTP/1.1 401"));
         let ok = get("/api/layout", "X-Pin: 42\r\n");
         assert!(ok.contains(r#""rev":7"#), "{ok}");
-        // Befehl landet in der Warteschlange
+        // The command lands in the queue
         {
             use std::io::{Read, Write};
             let body = r#"{"t":"press","item":1,"down":true}"#;

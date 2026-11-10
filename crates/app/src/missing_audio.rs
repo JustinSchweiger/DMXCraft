@@ -1,6 +1,6 @@
-//! Fehlende Audiodateien der SUPER SCENES: regelmäßige Prüfung, Fenster zum
-//! neu Verknüpfen (einzeln oder per Ordnersuche). Beim Verknüpfen ändert sich
-//! nur der Pfad – Schnitt, Versatz, Länge und Korrekturen bleiben.
+//! Missing audio files of the SUPER SCENES: regular check, window to relink
+//! them (one by one or by searching a folder). Relinking only changes the
+//! path – cut, offset, length and corrections stay.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -15,21 +15,21 @@ use crate::ui::theme;
 use crate::ui::widgets::Dialog;
 use crate::views::ViewCtx;
 
-/// Prüfabstand (Dateien können während des Betriebs verschwinden).
+/// Check interval (files can disappear while running).
 const CHECK_EVERY: Duration = Duration::from_secs(3);
 
-/// Ergebnis der letzten Prüfung.
+/// Result of the last check.
 #[derive(Default)]
 pub struct MissingAudio {
-    /// Fehlende Pfade mit den SUPER SCENES, die sie verwenden.
+    /// Missing paths with the SUPER SCENES that use them.
     pub files: BTreeMap<String, Vec<SceneId>>,
     checked: Option<Instant>,
-    /// Fenster offen.
+    /// Window open.
     pub open: bool,
 }
 
 impl MissingAudio {
-    /// Pfade prüfen (höchstens alle paar Sekunden, `force` sofort).
+    /// Check the paths (at most every few seconds, `force` immediately).
     pub fn check(&mut self, show: &Show, force: bool) {
         if !force && self.checked.is_some_and(|c| c.elapsed() < CHECK_EVERY) {
             return;
@@ -45,7 +45,7 @@ impl MissingAudio {
         !self.files.is_empty()
     }
 
-    /// Betroffene SUPER SCENES für die Szenenkarten bereitlegen (Kontext).
+    /// Provide the affected SUPER SCENES for the scene cards (context).
     pub fn publish(&self, ctx: &egui::Context) {
         let ids: Vec<SceneId> = self.files.values().flatten().copied().collect();
         ctx.data_mut(|d| d.insert_temp(missing_id(), ids));
@@ -56,7 +56,7 @@ fn missing_id() -> egui::Id {
     egui::Id::unique("missing_audio_scenes")
 }
 
-/// Fehlt einer SUPER SCENE eine Audiodatei? (für die Szenenkarten)
+/// Is an audio file of a SUPER SCENE missing? (for the scene cards)
 pub fn scene_missing(ctx: &egui::Context, id: SceneId) -> bool {
     ctx.data(|d| {
         d.get_temp::<Vec<SceneId>>(missing_id())
@@ -64,7 +64,7 @@ pub fn scene_missing(ctx: &egui::Context, id: SceneId) -> bool {
     })
 }
 
-/// Alle Audiopfade der Show, die es nicht (mehr) gibt.
+/// All audio paths of the show that do not exist (any more).
 fn scan(show: &Show) -> BTreeMap<String, Vec<SceneId>> {
     let mut out: BTreeMap<String, Vec<SceneId>> = BTreeMap::new();
     let mut exists: HashMap<&str, bool> = HashMap::new();
@@ -86,7 +86,7 @@ fn scan(show: &Show) -> BTreeMap<String, Vec<SceneId>> {
             }
         }
     }
-    // Reiter SOUND (ohne Szene)
+    // SOUND tab (without a scene)
     for path in show.sound.paths() {
         if !*exists
             .entry(path)
@@ -98,7 +98,7 @@ fn scan(show: &Show) -> BTreeMap<String, Vec<SceneId>> {
     out
 }
 
-/// Alle Blöcke mit Pfad `old` auf `new` umstellen; Anzahl der Blöcke.
+/// Switch all blocks with path `old` to `new`; number of blocks.
 pub fn relink(show: &mut Show, old: &str, new: &str) -> usize {
     let mut n = 0;
     for sc in &mut show.scenes {
@@ -120,7 +120,7 @@ pub fn relink(show: &mut Show, old: &str, new: &str) -> usize {
     n
 }
 
-/// Dateien eines Ordners (rekursiv, begrenzt) nach Dateiname (klein).
+/// Files of a folder (recursive, limited) by file name (lowercase).
 fn index_folder(dir: &Path) -> HashMap<String, PathBuf> {
     let mut out = HashMap::new();
     let mut stack = vec![(dir.to_path_buf(), 0u8)];
@@ -148,7 +148,7 @@ fn index_folder(dir: &Path) -> HashMap<String, PathBuf> {
     out
 }
 
-/// Dateiname eines (auch fremden, z. B. Windows-)Pfads.
+/// File name of a path (also a foreign one, e.g. Windows).
 fn file_name(path: &str) -> String {
     path.rsplit(['/', '\\']).next().unwrap_or(path).to_string()
 }
@@ -157,7 +157,7 @@ const AUDIO_EXT: [&str; 11] = [
     "mp3", "wav", "flac", "ogg", "m4a", "aac", "mp4", "mov", "m4v", "mkv", "webm",
 ];
 
-/// Fenster „Fehlende Audiodateien“.
+/// “Missing audio files” window.
 pub fn window(ctx: &egui::Context, cx: &mut ViewCtx<'_>) {
     if !cx.state.missing.open {
         return;
@@ -295,7 +295,7 @@ mod tests {
         let cid = tl.add_clip(
             1,
             ClipContent::Audio {
-                path: "/nicht/da/song.mp3".into(),
+                path: "/not/there/song.mp3".into(),
                 offset_ms: 1234,
                 length_ms: 60_000,
                 grid: None,
@@ -306,11 +306,11 @@ mod tests {
             20_000,
         );
         let files = scan(&show);
-        assert_eq!(files.get("/nicht/da/song.mp3"), Some(&vec![id]));
-        // neue Datei (existiert)
+        assert_eq!(files.get("/not/there/song.mp3"), Some(&vec![id]));
+        // new file (exists)
         let new = std::env::temp_dir().join("dmxcraft_relink.mp3");
         std::fs::write(&new, b"x").unwrap();
-        let n = relink(&mut show, "/nicht/da/song.mp3", &new.to_string_lossy());
+        let n = relink(&mut show, "/not/there/song.mp3", &new.to_string_lossy());
         assert_eq!(n, 1);
         assert!(scan(&show).is_empty());
         let (_, c) = show
@@ -333,7 +333,7 @@ mod tests {
 
     #[test]
     fn folder_search_matches_file_names() {
-        let dir = std::env::temp_dir().join("dmxcraft_search/unter");
+        let dir = std::env::temp_dir().join("dmxcraft_search/sub");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("Song.MP3"), b"x").unwrap();
         let index = index_folder(dir.parent().unwrap());

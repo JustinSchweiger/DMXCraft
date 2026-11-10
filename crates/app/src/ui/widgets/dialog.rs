@@ -1,7 +1,7 @@
-//! Einheitliches Dialogfenster: Kopf mit Titel und Schließen-Symbol,
-//! Inhalt, Fußzeile mit den Aktionsknöpfen unten rechts.
+//! Uniform dialog window: header with title and close icon, content, footer
+//! with the action buttons at the bottom right.
 //!
-//! Alle Fenster der App laufen hierüber (siehe docs/UI-GUIDELINES.md, 4.).
+//! All windows of the app go through this (see docs/UI-GUIDELINES.md, 4.).
 
 use eframe::egui::{
     self, vec2, Align, Align2, CornerRadius, Frame, Id, Layout, Rect, Response, Sense, Stroke,
@@ -14,9 +14,9 @@ use crate::ui::widgets::{Icon, IconButton};
 
 const HEADER_H: f32 = 36.0;
 const FOOTER_H: f32 = 48.0;
-/// Höhe von Eingabefeldern in Formularen.
+/// Height of input fields in forms.
 pub const INPUT_H: f32 = 28.0;
-/// Breite der Beschriftungsspalte in Formularen.
+/// Width of the label column in forms.
 pub const LABEL_W: f32 = 120.0;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -37,9 +37,9 @@ pub struct Dialog<'a> {
     id: Id,
     width: f32,
     size: Option<Vec2>,
-    /// Feste Inhaltshöhe (nicht veränderbare Dialoge), z. B. bei Reitern.
+    /// Fixed content height (non-resizable dialogs), e.g. with tabs.
     height: Option<f32>,
-    /// Inhalt ohne Innenabstand (eigene Aufteilung wie Reiterleiste).
+    /// Content without inner padding (own layout such as a tab bar).
     flush: bool,
     buttons: Vec<Button>,
     top_right: Option<egui::Pos2>,
@@ -47,8 +47,8 @@ pub struct Dialog<'a> {
 }
 
 pub struct DialogResult {
-    /// Index des geklickten Knopfs (in der Reihenfolge des Hinzufügens).
-    /// Primär-Knöpfe werden auch durch Enter ausgelöst.
+    /// Index of the clicked button (in the order they were added).
+    /// Primary buttons are also triggered by Enter.
     pub clicked: Option<usize>,
 }
 
@@ -78,41 +78,42 @@ impl<'a> Dialog<'a> {
         self
     }
 
-    /// Feste Inhaltsbreite (nicht veränderbare Dialoge).
+    /// Fixed content width (non-resizable dialogs).
     pub fn width(mut self, w: f32) -> Self {
         self.width = w;
         self
     }
 
-    /// Feste Inhaltshöhe – das Fenster springt nicht, wenn sich der Inhalt ändert.
+    /// Fixed content height – the window does not jump when the content changes.
     pub fn height(mut self, h: f32) -> Self {
         self.height = Some(h);
         self
     }
 
-    /// Inhalt ohne Innenabstand; `width`/`height` gelten dann für die ganze Fläche.
+    /// Content without inner padding; `width`/`height` then apply to the whole
+    /// area.
     pub fn flush(mut self) -> Self {
         self.flush = true;
         self
     }
 
-    /// Größenveränderbar mit Startgröße.
+    /// Resizable with a start size.
     pub fn resizable(mut self, size: impl Into<Vec2>) -> Self {
         self.size = Some(size.into());
         self
     }
 
-    /// Schließt den Dialog ohne weitere Aktion (z. B. „Abbrechen“).
+    /// Closes the dialog without further action (e.g. “Cancel”).
     pub fn cancel(self, label: &str) -> Self {
         self.push(label, Kind::Cancel, true)
     }
 
-    /// Weitere Aktion ohne Hervorhebung (z. B. „Nicht speichern“).
+    /// Further action without emphasis (e.g. “Don't save”).
     pub fn secondary(self, label: &str) -> Self {
         self.push(label, Kind::Secondary, true)
     }
 
-    /// Hauptaktion, ganz rechts, auch per Enter.
+    /// Main action, far right, also via Enter.
     pub fn primary(self, label: &str) -> Self {
         self.push(label, Kind::Primary, true)
     }
@@ -126,15 +127,15 @@ impl<'a> Dialog<'a> {
         self
     }
 
-    /// Zeigt den Dialog. `body` bekommt `true` in den ersten Frames nach dem
-    /// Öffnen (zum Fokussieren des ersten Felds – nur dann, sonst geht Tab nicht).
-    /// Startposition (rechte obere Ecke) statt Bildschirmmitte.
+    /// Shows the dialog. `body` gets `true` in the first frames after opening
+    /// (to focus the first field – only then, otherwise Tab does not work).
+    /// Start position (top right corner) instead of the screen center.
     pub fn top_right(mut self, pos: egui::Pos2) -> Self {
         self.top_right = Some(pos);
         self
     }
 
-    /// Esc schließt den Dialog nicht (z. B. wenn Esc eine Eingabe abbricht).
+    /// Esc does not close the dialog (e.g. when Esc cancels an input).
     pub fn keep_on_escape(mut self) -> Self {
         self.escape = false;
         self
@@ -147,8 +148,8 @@ impl<'a> Dialog<'a> {
         body: impl FnOnce(&mut Ui, bool),
     ) -> DialogResult {
         let frame_nr = ctx.cumulative_frame_nr();
-        // (Öffnungs-Frame, letzter Frame, Fokus vor dem Öffnen):
-        // neu geöffnet, wenn ein Frame fehlt.
+        // (opening frame, last frame, focus before opening): newly opened if a
+        // frame is missing.
         let key = self.id.with("frames");
         let last: Option<(u64, u64, Option<Id>)> = ctx.data(|d| d.get_temp(key));
         let focused = ctx.memory(|m| m.focused());
@@ -157,8 +158,8 @@ impl<'a> Dialog<'a> {
             _ => (frame_nr, focused),
         };
         ctx.data_mut(|d| d.insert_temp(key, (opened, frame_nr, before)));
-        // egui misst neue Fenster zuerst nur aus und ignoriert dabei Fokus-
-        // anfragen. Daher anfragen, bis sich der Fokus geändert hat.
+        // egui only measures new windows at first and ignores focus requests
+        // meanwhile. So keep requesting until the focus has changed.
         let first = frame_nr - opened <= 30 && focused == before;
 
         let mut clicked = None;
@@ -207,7 +208,7 @@ impl<'a> Dialog<'a> {
             };
             ui.set_width(w);
 
-            // Kopf
+            // Header
             let (head, _) = ui.allocate_exact_size(vec2(w, HEADER_H), Sense::hover());
             let r = theme::R_M;
             ui.painter().rect_filled(
@@ -244,7 +245,7 @@ impl<'a> Dialog<'a> {
                 close = true;
             }
 
-            // Inhalt
+            // Content
             let footer_h = if buttons.is_empty() { 0.0 } else { FOOTER_H };
             let body_rect = if resizable {
                 let h = (ui.available_height() - footer_h).max(60.0);
@@ -282,7 +283,7 @@ impl<'a> Dialog<'a> {
                 }
             }
 
-            // Fußzeile
+            // Footer
             if !buttons.is_empty() {
                 let (foot, _) = ui.allocate_exact_size(vec2(w, FOOTER_H), Sense::hover());
                 ui.painter().rect_filled(
@@ -330,8 +331,8 @@ impl<'a> Dialog<'a> {
     }
 }
 
-/// Knopf der Fußzeile: feste Mindestbreite, Überschrift-Schrift.
-/// Auch für eigene Fenster mit Dialog-Fußzeile (Profile Builder).
+/// Footer button: fixed minimum width, heading font.
+/// Also for custom windows with a dialog footer (Profile Builder).
 pub struct FooterButton<'a> {
     label: &'a str,
     primary: bool,
@@ -399,7 +400,8 @@ impl Widget for FooterButton<'_> {
     }
 }
 
-/// Einzeiliges Eingabefeld im App-Stil: Text vertikal mittig, feste Höhe.
+/// Single-line input field in app style: text vertically centered, fixed
+/// height.
 pub fn text_field<'t>(text: &'t mut dyn TextBuffer) -> egui::TextEdit<'t> {
     egui::TextEdit::singleline(text)
         .align(Align2::LEFT_CENTER)
@@ -408,7 +410,7 @@ pub fn text_field<'t>(text: &'t mut dyn TextBuffer) -> egui::TextEdit<'t> {
         .background_color(theme::bg())
 }
 
-/// Formular: Beschriftung links, Bedienelement rechts, Zeilen bündig.
+/// Form: label on the left, control on the right, rows aligned.
 pub fn form(ui: &mut Ui, id: &str, rows: impl FnOnce(&mut Form<'_>)) {
     egui::Grid::new(id)
         .num_columns(2)
@@ -423,7 +425,7 @@ pub struct Form<'u> {
 }
 
 impl Form<'_> {
-    /// Eine Zeile; das Bedienelement füllt die restliche Breite.
+    /// One row; the control fills the remaining width.
     pub fn row<R>(&mut self, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
         self.ui
             .label(egui::RichText::new(label).color(theme::text_dim()));
@@ -435,7 +437,7 @@ impl Form<'_> {
         r
     }
 
-    /// Zeile ohne Beschriftung (z. B. Fehlermeldung unter den Feldern).
+    /// Row without a label (e.g. error message below the fields).
     pub fn note(&mut self, add: impl FnOnce(&mut Ui)) {
         self.ui.label("");
         self.ui
@@ -444,7 +446,7 @@ impl Form<'_> {
     }
 }
 
-/// Ganzen Text eines Eingabefelds markieren, damit man sofort tippen kann.
+/// Select the whole text of an input field so you can type right away.
 pub fn select_all(ctx: &egui::Context, id: egui::Id, text: &str) {
     let mut st = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
     st.cursor.set_char_range(Some(egui::text::CCursorRange::two(

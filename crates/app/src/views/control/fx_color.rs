@@ -1,6 +1,6 @@
-//! Einstellungen eines COLOR FX in der Seitenleiste „Effekte“: Vorlage,
-//! Vorschau der Beams, Farbpalette (mit gespeicherten Paletten), Graustufen,
-//! Umformung und die Regler der jeweiligen Vorlage.
+//! Settings of a COLOR FX in the “Effects” sidebar: template, preview of the
+//! beams, color palette (with saved palettes), gray levels, transform and
+//! the sliders of the respective template.
 
 use crate::i18n::t;
 use dmxcraft_core::fx::{ColorFx, ColorPreset, Transform};
@@ -11,21 +11,21 @@ use crate::ui::theme;
 use crate::ui::widgets::dialog::text_field;
 use crate::ui::widgets::{Dialog, Toggle};
 
-/// Breite der Beschriftungsspalte.
+/// Width of the label column.
 pub(super) const LABEL_W: f32 = 112.0;
-/// Breite der Wertanzeige vor einem Regler.
+/// Width of the value display before a slider.
 const VALUE_W: f32 = 38.0;
 pub(super) const ROW_H: f32 = 24.0;
 
-/// Eigene Paletten und die zugehörigen Fenster.
+/// Custom palettes and their windows.
 #[derive(Default)]
 pub struct PaletteStore {
     user: Option<Vec<NamedPalette>>,
-    /// „Speichern…“ offen: Name und zu speichernde Farben.
+    /// “Save…” open: name and colors to save.
     save: Option<(String, Vec<[u8; 3]>)>,
-    /// „Verwalten…“ offen.
+    /// “Manage…” open.
     manage: bool,
-    /// Umbenennen in „Verwalten…“: Index und neuer Name.
+    /// Rename in “Manage…”: index and new name.
     rename: Option<(usize, String)>,
     pub error: Option<String>,
 }
@@ -41,7 +41,7 @@ impl PaletteStore {
         }
     }
 
-    /// Fenster „Palette speichern“ und „Paletten verwalten“.
+    /// “Save palette” and “Manage palettes” windows.
     pub fn windows(&mut self, ctx: &egui::Context) {
         if let Some((name, colors)) = self.save.as_mut() {
             let mut open = true;
@@ -182,7 +182,7 @@ impl PaletteStore {
                 rename = None;
             }
             if res.clicked(0) {
-                // fehlende mitgelieferte Paletten wieder anhängen
+                // append missing bundled palettes again
                 for b in palettes::builtin() {
                     if !list.iter().any(|p| p.name == b.name) {
                         list.push(b);
@@ -202,8 +202,8 @@ impl PaletteStore {
     }
 }
 
-/// Farbfelder bearbeiten: Klick = Farbwähler, Rechtsklick = entfernen,
-/// „+“ = hinzufügen. `true`, wenn sich etwas geändert hat.
+/// Edit color swatches: click = color picker, right-click = remove,
+/// “+” = add. `true` if something changed.
 pub(super) fn edit_colors(
     ui: &mut egui::Ui,
     salt: impl std::hash::Hash + Copy + std::fmt::Debug,
@@ -277,7 +277,7 @@ pub(super) fn edit_colors(
     *colors != before
 }
 
-/// Zeigt die Einstellungen; `true`, wenn sich etwas geändert hat.
+/// Shows the settings; `true` if something changed.
 #[allow(clippy::too_many_arguments)]
 pub fn color_fx_ui(
     ui: &mut egui::Ui,
@@ -293,7 +293,7 @@ pub fn color_fx_ui(
     let id = |s: &str| egui::Id::unique(("color_fx", salt, s.to_owned()));
     ui.spacing_mut().item_spacing.y = 2.0;
 
-    // Vorlage
+    // Template
     ui.add_enabled_ui(enabled, |ui| {
         egui::ComboBox::from_id_salt(id("preset"))
             .selected_text(fx.preset.label())
@@ -304,7 +304,7 @@ pub fn color_fx_ui(
                         let keep = fx.palette.clone();
                         fx.set_preset(p);
                         if values {
-                            // VALUE FX behält seine Grauwerte
+                            // VALUE FX keeps its gray values
                             fx.palette = keep;
                         }
                     }
@@ -312,13 +312,14 @@ pub fn color_fx_ui(
             });
     });
     ui.add_space(theme::SP_XS);
-    // Vorschau: aktuelle Farbe jedes Beams
+    // Preview: current color of every beam
     let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 22.0), Sense::hover());
     paint_strip(ui.painter(), r, preview);
     ui.add_space(theme::SP_XS);
 
-    // Farbpalette
-    // Zeile mit Paletten-Menü, darunter die Farbfelder über die volle Breite
+    // Color palette
+    // Row with the palette menu, below it the color swatches across the full
+    // width
     label_row(ui, if values { t("Values") } else { t("Palette") }, |ui| {
         palette_editor(ui, &mut fx.palette, enabled, store);
     });
@@ -342,7 +343,7 @@ pub fn color_fx_ui(
         });
     });
 
-    // Regler der Vorlage
+    // Sliders of the template
     let s =
         |ui: &mut egui::Ui, key: &str, label: &str, v: &mut f32, min: f32, max: f32, dec: usize| {
             slider_row(ui, id(key), label, v, (min, max), dec, enabled, accent);
@@ -493,7 +494,7 @@ pub fn color_fx_ui(
     *fx != before
 }
 
-/// Zeile: Beschriftung links, Inhalt rechts daneben.
+/// Row: label on the left, content to the right of it.
 pub(super) fn label_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         ui.set_min_height(ROW_H);
@@ -519,7 +520,7 @@ pub(super) fn toggle_row(ui: &mut egui::Ui, label: &str, v: &mut bool, enabled: 
     });
 }
 
-/// Regler mit Wertanzeige; ganzzahlig bei `dec == 0`.
+/// Slider with value display; integer when `dec == 0`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn slider_row(
     ui: &mut egui::Ui,
@@ -563,7 +564,7 @@ pub(super) fn slider_row(
             }
         }
         if resp.double_clicked() {
-            // Doppelklick: Mitte bzw. Minimum
+            // Double-click: center or minimum
             *v = if min < 0.0 { 0.0 } else { min };
         }
         let f = ((*v - min) / (max - min)).clamp(0.0, 1.0);
@@ -602,8 +603,8 @@ pub(super) fn slider_row(
     });
 }
 
-/// Farbfelder der Palette: Klick = Farbe wählen, Rechtsklick = entfernen,
-/// „+“ = Farbe hinzufügen, „…“ = gespeicherte Paletten.
+/// Color swatches of the palette: click = choose color, right-click =
+/// remove, “+” = add color, “…” = saved palettes.
 pub(super) fn palette_editor(
     ui: &mut egui::Ui,
     palette: &mut Vec<[u8; 3]>,
@@ -666,7 +667,7 @@ pub(super) fn palette_editor(
     });
 }
 
-/// Farbstreifen mit gleich breiten Feldern.
+/// Color strip with equally wide fields.
 pub(super) fn paint_strip(p: &egui::Painter, r: Rect, colors: &[[u8; 3]]) {
     p.rect_filled(r, 2.0, theme::bg());
     if colors.is_empty() {

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// Bedeutung eines Kanals. Bestimmt Merge-Verhalten (HTP/LTP) und
-/// wie der Master auf den Kanal wirkt.
+/// Meaning of a channel. Determines the merge behavior (HTP/LTP) and how the
+/// master affects the channel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChannelKind {
@@ -21,19 +21,19 @@ pub enum ChannelKind {
     Gobo,
     Speed,
     Generic,
-    /// Laser-Ausgabe/Muster.
+    /// Laser output/pattern.
     Laser,
-    /// Nebel-/Hazer-Ausstoß (Pumpe).
+    /// Fog/hazer output (pump).
     Fog,
-    /// Lüfter (Nebel, Hazer).
+    /// Fan (fog, hazer).
     Fan,
     Zoom,
     Focus,
-    /// Programme, Makros, Auto-/Sound-Modi, Effekte.
+    /// Programs, macros, auto/sound modes, effects.
     Program,
-    /// Betriebsart, Reset, Einstellungen.
+    /// Operating mode, reset, settings.
     Control,
-    /// Kanal ohne Funktion.
+    /// Channel without a function.
     NoFunction,
 }
 
@@ -65,14 +65,14 @@ impl ChannelKind {
         ChannelKind::NoFunction,
     ];
 
-    /// Intensitätskanäle werden HTP (höchster Wert gewinnt) gemischt,
-    /// alle anderen LTP (zuletzt aktivierte Szene gewinnt).
+    /// Intensity channels are merged HTP (highest value wins), all others LTP
+    /// (most recently activated scene wins).
     pub fn is_htp(self) -> bool {
         matches!(self, ChannelKind::Dimmer)
     }
 
-    /// Farbkanäle, die bei Geräten ohne eigenen Dimmer-Kanal vom Master
-    /// skaliert werden („virtueller Dimmer“).
+    /// Color channels that are scaled by the master for fixtures without their
+    /// own dimmer channel (“virtual dimmer”).
     pub fn is_color_intensity(self) -> bool {
         matches!(
             self,
@@ -114,13 +114,13 @@ impl ChannelKind {
         }
     }
 
-    /// Kanalart anhand des Kanalnamens verfeinern. Gerätedateien liefern oft
-    /// nur „Dimmer“, „Speed“ oder gar nichts (Generisch) – der Name verrät
-    /// mehr: „UV1 Dimmer“ ist UV, „Pump“ ist Nebel, „Flash rate“ ist Strobe,
-    /// „Laser (10CH)“ ist Laser, „Auto Programs“ ein Programm.
+    /// Refine the channel kind based on the channel name. Fixture files often
+    /// only give “Dimmer”, “Speed” or nothing at all (generic) – the name tells
+    /// more: “UV1 Dimmer” is UV, “Pump” is fog, “Flash rate” is strobe,
+    /// “Laser (10CH)” is laser, “Auto Programs” a program.
     ///
-    /// Nur Dimmer, Speed und Generisch werden verfeinert; Feinkanäle bleiben
-    /// unverändert. Mehrfaches Anwenden ändert nichts mehr.
+    /// Only dimmer, speed and generic are refined; fine channels stay unchanged.
+    /// Applying it several times changes nothing further.
     pub fn refine(self, name: &str) -> ChannelKind {
         use ChannelKind as K;
         if !matches!(self, K::Dimmer | K::Speed | K::Generic) {
@@ -232,43 +232,43 @@ impl ChannelKind {
 pub struct ChannelDef {
     pub name: String,
     pub kind: ChannelKind,
-    /// Wert, wenn keine Szene und kein Programmer den Kanal setzt.
+    /// Value when no scene and no programmer sets the channel.
     #[serde(default)]
     pub default: u8,
-    /// Wertebereiche mit Bedeutung (aus OFL/QLC+ bzw. dem Profile Builder).
+    /// Value ranges with meaning (from OFL/QLC+ or the Profile Builder).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ranges: Vec<ChannelRange>,
 }
 
-/// Wertebereich eines Kanals, z. B. 0–7 „Shutter offen“, 8–250 Strobe.
+/// Value range of a channel, e.g. 0–7 “shutter open”, 8–250 strobe.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChannelRange {
     pub from: u8,
     pub to: u8,
-    /// Bezeichnung aus der Gerätedatei (leer: aus `effect` abgeleitet).
+    /// Label from the fixture file (empty: derived from `effect`).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
     #[serde(default)]
     pub effect: RangeEffect,
 }
 
-/// Was ein Bereich bewirkt – soweit der Visualisierer es darstellen kann.
+/// What a range does – as far as the visualizer can show it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RangeEffect {
     #[default]
     Other,
-    /// Shutter offen (Licht an, kein Strobe).
+    /// Shutter open (light on, no strobe).
     Open,
-    /// Shutter zu (kein Licht).
+    /// Shutter closed (no light).
     Closed,
-    /// Blitzen; Frequenz von `from_hz` (Bereichsanfang) bis `to_hz` (Ende).
+    /// Flashing; rate from `from_hz` (start of the range) to `to_hz` (end).
     Strobe { from_hz: f32, to_hz: f32 },
-    /// Farbe (Farbrad-Feld oder Farbvorgabe), sRGB.
+    /// Color (color wheel slot or color preset), sRGB.
     Color { rgb: [u8; 3] },
-    /// Gobo-Feld (1-basiert).
+    /// Gobo slot (1-based).
     Gobo { slot: u8 },
-    /// Offenes Feld eines Rads (weiß bzw. ohne Gobo).
+    /// Open slot of a wheel (white or without gobo).
     WheelOpen,
 }
 
@@ -287,7 +287,7 @@ impl ChannelRange {
         self
     }
 
-    /// Lage des Werts im Bereich, 0–1.
+    /// Position of the value within the range, 0–1.
     pub fn fraction(&self, v: u8) -> f32 {
         if self.to <= self.from {
             0.0
@@ -298,8 +298,8 @@ impl ChannelRange {
 }
 
 impl RangeEffect {
-    /// Strobe-Frequenz bzw. Shutter-Zustand für `v` in `r`:
-    /// `Some(None)` offen, `Some(Some(0.0))` zu, `Some(Some(hz))` blitzt.
+    /// Strobe rate or shutter state for `v` in `r`:
+    /// `Some(None)` open, `Some(Some(0.0))` closed, `Some(Some(hz))` flashing.
     pub fn shutter(&self, r: &ChannelRange, v: u8) -> Option<Option<f32>> {
         match *self {
             RangeEffect::Open | RangeEffect::WheelOpen => Some(None),
@@ -322,13 +322,13 @@ impl ChannelDef {
         }
     }
 
-    /// Bereich, in dem `v` liegt.
+    /// Range `v` lies in.
     pub fn range_at(&self, v: u8) -> Option<&ChannelRange> {
         self.ranges.iter().find(|r| (r.from..=r.to).contains(&v))
     }
 
-    /// Shutter/Strobe für den Wert `v`: `None` offen, `Some(0.0)` zu,
-    /// `Some(hz)` blitzt. Ohne Bereiche: unter 10 offen, darüber 1–20 Hz.
+    /// Shutter/strobe for the value `v`: `None` open, `Some(0.0)` closed,
+    /// `Some(hz)` flashing. Without ranges: below 10 open, above that 1–20 Hz.
     pub fn strobe(&self, v: u8) -> Option<f32> {
         if !self.ranges.is_empty() {
             return self
@@ -345,17 +345,17 @@ impl ChannelDef {
     }
 }
 
-/// Physische Angaben eines Geräts (für den 3D-Visualisierer).
+/// Physical data of a fixture (for the 3D visualizer).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Physics {
-    /// Abstrahlwinkel in Grad (min, max); gleich bei fester Optik.
+    /// Beam angle in degrees (min, max); equal for fixed optics.
     pub beam_angle: [f32; 2],
-    /// Schwenkbereich in Grad (0 = kein Pan).
+    /// Pan range in degrees (0 = no pan).
     pub pan_range: f32,
-    /// Neigebereich in Grad (0 = kein Tilt).
+    /// Tilt range in degrees (0 = no tilt).
     pub tilt_range: f32,
-    /// Breite, Höhe, Tiefe in mm (0 = unbekannt).
+    /// Width, height, depth in mm (0 = unknown).
     pub size_mm: [f32; 3],
 }
 
@@ -371,7 +371,7 @@ impl Default for Physics {
 }
 
 impl Physics {
-    /// Aus dem `physical`-Block einer OFL-Gerätedatei (fehlende Angaben = Standard).
+    /// From the `physical` block of an OFL fixture file (missing data = default).
     pub fn from_ofl(v: Option<&serde_json::Value>) -> Option<Self> {
         let v = v?;
         let num = |p: &[&str]| {
@@ -421,16 +421,16 @@ impl Physics {
     }
 }
 
-/// Ein Gerätetyp in einem bestimmten DMX-Modus.
+/// A fixture type in a specific DMX mode.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FixtureType {
-    /// Eindeutiger Schlüssel, z. B. `generic/rgb-par-3ch`.
+    /// Unique key, e.g. `generic/rgb-par-3ch`.
     pub key: String,
     pub manufacturer: String,
     pub model: String,
     pub mode: String,
     pub channels: Vec<ChannelDef>,
-    /// Abstrahlwinkel, Pan/Tilt-Bereich, Maße – falls bekannt.
+    /// Beam angle, pan/tilt range, dimensions – if known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub physical: Option<Physics>,
 }
@@ -444,8 +444,8 @@ impl FixtureType {
         self.channels.iter().any(|c| c.kind == kind)
     }
 
-    /// Farbgerät ohne eigenen Dimmer-Kanal: bekommt einen virtuellen Dimmer
-    /// ([`crate::ChannelRef::VIRTUAL_DIMMER`]), der die Farbkanäle skaliert.
+    /// Color fixture without its own dimmer channel: gets a virtual dimmer
+    /// ([`crate::ChannelRef::VIRTUAL_DIMMER`]) that scales the color channels.
     pub fn needs_virtual_dimmer(&self) -> bool {
         !self.channels.iter().any(|c| c.kind.is_htp())
             && self.channels.iter().any(|c| c.kind.is_color_intensity())
@@ -453,7 +453,7 @@ impl FixtureType {
 
     pub fn display_name(&self) -> String {
         format!(
-            "{} {} ({}, {} Kan.)",
+            "{} {} ({}, {} ch.)",
             self.manufacturer,
             self.model,
             self.mode,
@@ -516,7 +516,7 @@ mod refine_tests {
             (K::Generic, "Operating mode selection", K::Control),
             (K::Generic, "Reset", K::Control),
             (K::Generic, "No function", K::NoFunction),
-            (K::Generic, "(unbenutzt)", K::NoFunction),
+            (K::Generic, "(unused)", K::NoFunction),
             (K::Dimmer, "Master Dimmer", K::Dimmer),
             (K::Dimmer, "Dimmer", K::Dimmer),
             (K::Speed, "Speed (Matrix)", K::Speed),

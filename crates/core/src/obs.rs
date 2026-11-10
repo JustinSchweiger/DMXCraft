@@ -1,20 +1,20 @@
-//! OBS-Anbindung (obs-websocket 5): Verbindungsdaten der Show und Aktionen,
-//! die Blöcke einer SUPER SCENE in OBS auslösen.
+//! OBS connection (obs-websocket 5): connection data of the show and
+//! actions that blocks of a SUPER SCENE trigger in OBS.
 
 use serde::{Deserialize, Serialize};
 
-/// Verbindung zu OBS (wird mit der Show gespeichert).
+/// Connection to OBS (saved with the show).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ObsSettings {
-    /// Verbinden, solange die Show offen ist.
+    /// Connect while the show is open.
     pub enabled: bool,
     pub host: String,
     pub port: u16,
-    /// Passwort des WebSocket-Servers von OBS (leer = ohne Anmeldung).
+    /// Password of OBS's WebSocket server (empty = no authentication).
     pub password: String,
-    /// Medienquelle, in der Videoblöcke abgespielt werden (wird bei Bedarf
-    /// in der OBS-Szene des Blocks bzw. der aktuellen Szene angelegt).
+    /// Media source in which video blocks are played (created if needed in the
+    /// block's OBS scene or the current scene).
     pub video_source: String,
 }
 
@@ -36,12 +36,12 @@ impl ObsSettings {
     }
 }
 
-/// Aktion eines OBS-Blocks, ausgelöst beim Erreichen des Blocks.
+/// Action of an OBS block, triggered when the block is reached.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObsAction {
-    /// Zur OBS-Szene wechseln.
+    /// Switch to the OBS scene.
     Scene(String),
-    /// Quelle in einer Szene ein- bzw. ausblenden.
+    /// Show or hide a source in a scene.
     Source {
         scene: String,
         source: String,
@@ -55,8 +55,8 @@ impl Default for ObsAction {
     }
 }
 
-/// Länge einer MP4/MOV-Datei aus dem `mvhd`-Kopf (ohne den Inhalt zu
-/// dekodieren). `None`, wenn der Kopf nicht gefunden wird.
+/// Length of an MP4/MOV file from the `mvhd` header (without decoding the
+/// content). `None` if the header is not found.
 pub fn mp4_duration_ms<R: std::io::Read + std::io::Seek>(r: &mut R) -> Option<u64> {
     use std::io::SeekFrom;
     let end = r.seek(SeekFrom::End(0)).ok()?;
@@ -84,7 +84,8 @@ pub fn mp4_duration_ms<R: std::io::Read + std::io::Seek>(r: &mut R) -> Option<u6
     })
 }
 
-/// Box `kind` zwischen `start` und `end` suchen: Beginn und Ende ihres Inhalts.
+/// Find the box `kind` between `start` and `end`: start and end of its
+/// content.
 fn find_box<R: std::io::Read + std::io::Seek>(
     r: &mut R,
     start: u64,
@@ -131,7 +132,7 @@ mod tests {
 
     #[test]
     fn reads_mp4_length() {
-        // mvhd v0: Version/Flags, Erstellt, Geändert, Zeitbasis 1000, Dauer 12 345
+        // mvhd v0: version/flags, created, modified, timescale 1000, duration 12 345
         let mut mvhd = vec![0u8; 12];
         mvhd.extend_from_slice(&1000u32.to_be_bytes());
         mvhd.extend_from_slice(&12_345u32.to_be_bytes());

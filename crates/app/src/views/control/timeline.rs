@@ -1,7 +1,7 @@
-//! Zeitleiste einer SUPER SCENE – ersetzt den Programmer, solange eine
-//! SUPER SCENE markiert ist. Aufbau wie in einem Schnittprogramm: oben die
-//! Werkzeugleiste, darunter Zoom-/Scrollleiste, Zeitlineal und die Spuren mit
-//! ihren Blöcken (Szenen und Audio).
+//! Timeline of a SUPER SCENE – replaces the programmer while a SUPER SCENE
+//! is selected. Laid out like a video editor: toolbar at the top, below it
+//! the zoom/scroll bar, the time ruler and the tracks with their blocks
+//! (scenes and audio).
 
 use crate::i18n::t;
 use crate::ui::widgets::color_picker::color_swatches;
@@ -18,14 +18,14 @@ const HEADER_W: f32 = 132.0;
 const RULER_H: f32 = 22.0;
 const ZOOMBAR_H: f32 = 12.0;
 const TRACK_H: f32 = 44.0;
-/// Spuren mit Audio sind höher (Wellenform).
+/// Tracks with audio are taller (waveform).
 const AUDIO_TRACK_H: f32 = 84.0;
 const LANE_H: f32 = 36.0;
 const EDGE: f32 = 6.0;
-/// Länge neuer Szenenblöcke ohne eigene Dauer.
+/// Length of new scene blocks without their own duration.
 const DEFAULT_CLIP_MS: u64 = 5000;
 
-/// Laufender Zieh-Vorgang an einem Block.
+/// Ongoing drag on a block.
 #[derive(Clone, Copy, PartialEq)]
 enum Drag {
     Move { grab_ms: f64 },
@@ -36,50 +36,52 @@ enum Drag {
 }
 
 pub struct TimelineView {
-    /// Pixel je Millisekunde.
+    /// Pixels per millisecond.
     zoom: f32,
-    /// Zeit am linken Rand (ms).
+    /// Time at the left edge (ms).
     scroll_ms: f64,
     scroll_y: f32,
-    /// Ziehen im Lineal (Zoom/Scroll): Startpunkt des Zeigers.
+    /// Dragging in the ruler (zoom/scroll): start point of the pointer.
     ruler_grab: Option<egui::Pos2>,
-    /// Achse beim Ziehen im Lineal: `Some(true)` = waagerecht (scrollen),
-    /// `Some(false)` = senkrecht (zoomen), `None` = noch offen.
+    /// Axis when dragging in the ruler: `Some(true)` = horizontal (scroll),
+    /// `Some(false)` = vertical (zoom), `None` = not decided yet.
     ruler_axis: Option<bool>,
-    /// Bewegung, bis die Achse feststeht.
+    /// Movement until the axis is decided.
     ruler_acc: Vec2,
-    /// Erwarteter Sprung nach dem Zurücksetzen des Zeigers.
+    /// Expected jump after resetting the pointer.
     ruler_jump: Option<Vec2>,
-    /// Frames, die nach dem Zurücksetzen des Zeigers noch gewartet werden.
+    /// Frames still waited for after resetting the pointer.
     ruler_warp: u8,
     ruler_no_warp: bool,
-    /// Zuletzt angeklickte Spur: Ziel für Einfügen (Strg+V).
+    /// Last clicked track: target for pasting (Ctrl+V).
     paste_track: Option<usize>,
-    /// Spur, die gerade umbenannt wird (ID, Text).
+    /// Track currently being renamed (ID, text).
     rename: Option<(u32, String)>,
-    /// Wo das Kontextmenü der Spuren geöffnet wurde.
+    /// Where the track context menu was opened.
     menu_pos: Option<egui::Pos2>,
-    /// Auswahlrahmen: Startpunkt und Auswahl davor (Strg/Umschalt ergänzt).
+    /// Selection box: start point and the selection before it (Ctrl/Shift
+    /// extends).
     marquee: Option<(egui::Pos2, std::collections::BTreeSet<u32>)>,
     drag: Option<(u32, Drag)>,
-    /// Zwischenablage (Ausschneiden/Kopieren).
+    /// Clipboard (cut/copy).
     clipboard: Vec<(usize, Clip)>,
-    /// Stand vor dem Ziehen (für „keine Überlappung“).
+    /// State before dragging (for “no overlap”).
     before_drag: Option<Clip>,
-    /// Erster Audio-Block: Raster übernehmen, sobald die Analyse fertig ist.
+    /// First audio block: take over the grid as soon as the analysis is done.
     pending_grid: Option<u32>,
-    /// Schläge der Audio-Blöcke im sichtbaren Bereich (Raster folgt Audio).
+    /// Beats of the audio blocks in the visible range (grid follows the audio).
     marks: Vec<Mark>,
-    /// Stelle (Zeitleiste, ms) des letzten Rechtsklicks auf einen Block.
+    /// Position (timeline, ms) of the last right-click on a block.
     menu_clip_ms: Option<f64>,
 }
 
-/// Schlag eines Audio-Blocks in der Zeitleiste.
+/// Beat of an audio block on the timeline.
 #[derive(Clone, Copy)]
 struct Mark {
     ms: f64,
     down: bool,
-    /// Takt im Stück (ab 1) und Stück (ab 0) samt Anzahl der Stücke.
+    /// Bar within the piece (from 1) and piece (from 0) with the number of
+    /// pieces.
     bar: i64,
     seg: usize,
     segs: usize,
@@ -112,8 +114,8 @@ impl Default for TimelineView {
     }
 }
 
-/// Zeit als „00m40s86“ (Hundertstel).
-/// Höhe des Blockbereichs einer Spur (ohne Unterspur).
+/// Time as “00m40s86” (hundredths).
+/// Height of the block area of a track (without sub-track).
 fn track_h(tr: &dmxcraft_core::timeline::Track) -> f32 {
     if tr
         .clips
@@ -140,7 +142,7 @@ pub fn fmt_ms(ms: f64) -> String {
     )
 }
 
-/// Markierte SUPER SCENE (genau eine Szene markiert).
+/// Selected SUPER SCENE (exactly one scene selected).
 pub fn super_scene(e: &Engine, st: &AppState) -> Option<SceneId> {
     if st.selected_scenes.len() != 1 {
         return None;
@@ -155,10 +157,10 @@ impl TimelineView {
             return;
         };
         let before = tl.clone();
-        // Live: Zeitleiste nur ansehen (abspielen, navigieren), nicht bearbeiten
+        // Live: only view the timeline (play, navigate), do not edit
         let live = st.programmer_mode == crate::state::ProgrammerMode::Live;
         let locked = st.locked || live;
-        // laufende Wiedergabe: Abspielposition folgt der Engine
+        // running playback: the play position follows the engine
         let running = e.timeline_running(scene);
         if let Some(t) = e.timeline_time(scene) {
             st.timeline_cursor = t;
@@ -170,7 +172,7 @@ impl TimelineView {
             self.pending_grid(ui.ctx(), &mut tl, st);
         }
 
-        // Werkzeugleiste
+        // Toolbar
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = theme::SP_XS;
             super::programmer::mode_switch(ui, &mut st.programmer_mode, st.locked);
@@ -211,7 +213,7 @@ impl TimelineView {
                 Icon::ArrowsH,
                 t("Stretch block when resizing"),
             );
-            // die beiden schließen sich aus
+            // the two exclude each other
             if lp != tl.loop_resize && lp {
                 st_ = false;
             } else if st_ != tl.stretch_resize && st_ {
@@ -254,7 +256,7 @@ impl TimelineView {
             area.max,
         );
         let total = (tl.length_ms() as f64 + 30_000.0).max(60_000.0);
-        // Mausrad: Strg = Zoom, Alt/Umschalt = waagerecht, sonst senkrecht
+        // Mouse wheel: Ctrl = zoom, Alt/Shift = horizontal, otherwise vertical
         if ui.rect_contains_pointer(area) {
             let (scroll, zoom, alt, shift, pointer) = ui.input(|i| {
                 (
@@ -266,7 +268,7 @@ impl TimelineView {
                 )
             });
             if (zoom - 1.0).abs() > 1e-4 {
-                // egui wandelt Strg+Mausrad in einen Zoomfaktor um
+                // egui turns Ctrl+mouse wheel into a zoom factor
                 let x = pointer.map_or(lanes.left(), |q| q.x.max(lanes.left()));
                 self.zoom_at(zoom, x, lanes);
             } else if alt || shift || scroll.x != 0.0 {
@@ -277,7 +279,7 @@ impl TimelineView {
             }
         }
         let visible_ms = f64::from(lanes.width() / self.zoom);
-        // Auto-Scroll hält die Abspielposition sichtbar
+        // Auto-scroll keeps the play position visible
         if running && tl.auto_scroll {
             let c = st.timeline_cursor;
             if c > self.scroll_ms + visible_ms * 0.9 || c < self.scroll_ms {
@@ -295,17 +297,18 @@ impl TimelineView {
         self.zoom_bar(ui, area, lanes, total);
         self.ruler(ui, &p, area, lanes, &tl, e, scene, st);
 
-        // Spuren
+        // Tracks
         let content_h: f32 = tl.tracks.iter().map(row_h).sum::<f32>() + 30.0;
         self.scroll_y = self
             .scroll_y
             .clamp(0.0, (content_h - lanes.height()).max(0.0));
         let clip_area = Rect::from_min_max(pos2(area.left(), lanes.top()), area.max);
         let tp = ui.painter_at(clip_area);
-        // Spurköpfe und Blöcke nicht über Lineal/Zoomleiste zeichnen
+        // Do not draw track headers and blocks over the ruler/zoom bar
         let outer_clip = ui.clip_rect();
         ui.set_clip_rect(clip_area.intersect(outer_clip));
-        // Blöcke nur rechts der Spurköpfe (auch beim waagerechten Scrollen)
+        // Blocks only to the right of the track headers (also when scrolling
+        // horizontally)
         let lanes_clip = Rect::from_min_max(lanes.min, area.max).intersect(outer_clip);
         let lp = ui.painter_at(lanes_clip);
         self.grid_lines(&lp, lanes, &tl);
@@ -323,7 +326,7 @@ impl TimelineView {
                 .map(|(i, _, _)| *i)
         };
 
-        // Hintergrund der Spuren (Klick leert die Auswahl, Rechtsklick: Menü)
+        // Background of the tracks (click clears the selection, right-click: menu)
         let bg = ui.interact(
             clip_area,
             ui.scope_id().with("tl_bg"),
@@ -334,14 +337,15 @@ impl TimelineView {
             if let Some(q) = bg.interact_pointer_pos() {
                 self.paste_track = track_at(q.y);
             }
-            // Klick in die Spuren setzt die Abspielposition
+            // A click into the tracks sets the play position
             if let Some(q) = bg.interact_pointer_pos().filter(|q| q.x >= lanes.left()) {
                 let ms = self.snap(self.ms_at(q.x, lanes).max(0.0), &tl, &[], 0);
                 st.timeline_cursor = ms;
                 e.seek_timeline(scene, ms);
             }
         }
-        // Position des Rechtsklicks merken (beim Klick ins Menü ist der Zeiger woanders)
+        // Remember the position of the right-click (when clicking into the menu the
+        // pointer is elsewhere)
         if bg.secondary_clicked() {
             self.menu_pos = bg.interact_pointer_pos();
             if let Some(q) = self.menu_pos {
@@ -418,7 +422,7 @@ impl TimelineView {
             if row.bottom() < lanes.top() || row.top() > area.bottom() {
                 continue;
             }
-            // eingefärbte Spur: ganz leichte Tönung des Gitters dahinter
+            // colored track: very light tint of the grid behind it
             if let Some(c) = tl.tracks[i].color {
                 lp.rect_filled(
                     Rect::from_min_max(pos2(lanes.left(), row.top()), row.max),
@@ -426,7 +430,7 @@ impl TimelineView {
                     theme::rgb(c).gamma_multiply(0.06),
                 );
             }
-            // Zeilenlinie
+            // Row line
             tp.line_segment(
                 [
                     pos2(area.left(), row.bottom()),
@@ -440,7 +444,7 @@ impl TimelineView {
                 header_action = Some((i, a));
             }
         }
-        // „+ Spur“ unter der letzten Spur
+        // “+ Track” below the last track
         let add_rect = Rect::from_min_size(
             pos2(area.left() + 6.0, add_y + 4.0),
             Vec2::new(HEADER_W - 12.0, 22.0),
@@ -453,7 +457,8 @@ impl TimelineView {
                 tl.add_track(None);
             }
         }
-        // Blöcke: nur im Spurbereich rechts der Spurköpfe zeichnen und anklicken
+        // Blocks: draw and click only in the track area to the right of the track
+        // headers
         let names = |id: SceneId| {
             e.show().scene(id).map(|s| {
                 (
@@ -518,7 +523,7 @@ impl TimelineView {
                     ClipContent::Obs(a) => (obs_label(a), OBS_COLOR, 0),
                 };
                 paint_clip(ui, &lp, r, &c, &name, color, sel, scene_ms, st);
-                // Unterspur: Dimmer bzw. Lautstärke als Linie
+                // Sub-track: dimmer or volume as a line
                 if expanded {
                     let lane = Rect::from_min_max(
                         pos2(r.left(), ty + th + 2.0),
@@ -549,7 +554,7 @@ impl TimelineView {
                 if tr_locked {
                     continue;
                 }
-                // Zonen: Ränder (Länge), obere Ecken (Ein-/Ausblenden), Fläche
+                // Zones: edges (length), top corners (fade in/out), area
                 let sense = Sense::click_and_drag();
                 let body = ui.interact(r, ui.scope_id().with(("clip", cid)), sense);
                 let left = ui.interact(
@@ -583,8 +588,8 @@ impl TimelineView {
                     ui.scope_id().with(("fo", cid)),
                     Sense::drag(),
                 );
-                // Schneiden: waagerechter Pfeil; Fades: schräg wie die
-                // Fade-Linie (unter Windows sind alle waagerechten Zeiger gleich)
+                // Trimming: horizontal arrow; fades: diagonal like the fade line (on
+                // Windows all horizontal pointers look the same)
                 for (resp, cursor) in [
                     (&left, egui::CursorIcon::ResizeHorizontal),
                     (&right, egui::CursorIcon::ResizeHorizontal),
@@ -698,7 +703,7 @@ impl TimelineView {
         }
 
         ui.set_clip_rect(clip_area.intersect(outer_clip));
-        // Ziehen auswerten
+        // Evaluate the drag
         if let (Some((cid, d)), Some(q)) = (self.drag, pointer) {
             let down = ui.input(|i| i.pointer.primary_down());
             if !down {
@@ -712,7 +717,7 @@ impl TimelineView {
                 match d {
                     Drag::Move { grab_ms } => {
                         let s = snap((ms - grab_ms).max(0.0), &tl, self);
-                        // auch das Ende darf einrasten
+                        // the end may snap too
                         let e_ = snap(s + c.duration_ms as f64, &tl, self) - c.duration_ms as f64;
                         n.start_ms = if (e_ - s).abs() > 0.5
                             && (e_ - (ms - grab_ms)).abs() < (s - (ms - grab_ms)).abs()
@@ -740,7 +745,7 @@ impl TimelineView {
                         let end = (snap(ms, &tl, self) as u64).max(c.start_ms + 40);
                         n.duration_ms = end - c.start_ms;
                         if let Some((offset_ms, length_ms)) = n.content.media_len() {
-                            // Audio/Video nicht über das Dateiende verlängern
+                            // do not extend audio/video beyond the end of the file
                             if length_ms > 0 {
                                 n.duration_ms = n
                                     .duration_ms
@@ -762,7 +767,7 @@ impl TimelineView {
                     && st.timeline_sel.len() > 1
                     && st.timeline_sel.contains(&cid);
                 if group {
-                    // mehrere markierte Blöcke: alle um denselben Versatz
+                    // several selected blocks: all by the same offset
                     tl.move_group(
                         &st.timeline_sel,
                         n.start_ms as i64 - c.start_ms as i64,
@@ -781,7 +786,7 @@ impl TimelineView {
             }
         }
 
-        // Szene aus der Szenenliste hineinziehen
+        // Drag a scene in from the scene list
         if let Some(dragged) = egui::DragAndDrop::payload::<SceneId>(ui.ctx()) {
             if let Some(q) = pointer.filter(|q| clip_area.contains(*q)) {
                 let ti = track_at(q.y).unwrap_or(tl.tracks.len());
@@ -811,7 +816,7 @@ impl TimelineView {
                 }
             }
         }
-        // Audiodateien aus dem Dateimanager
+        // Audio files from the file manager
         let dropped = ui.input(|i| i.raw.dropped_files.clone());
         if !dropped.is_empty() && !locked {
             let q = ui
@@ -839,11 +844,11 @@ impl TimelineView {
             }
         }
 
-        // Auswahl und Menüaktionen
+        // Selection and menu actions
         if let Some((cid, _)) = clicked_clip {
             self.paste_track = tl.clip(cid).map(|(t, _)| t);
         }
-        // Auswahlrahmen: Klicken und Ziehen im Spurbereich
+        // Selection box: click and drag in the track area
         if bg.drag_started() && !locked {
             let add = ui.input(|i| i.modifiers.command || i.modifiers.shift);
             let origin = ui.input(|i| i.pointer.press_origin());
@@ -900,9 +905,9 @@ impl TimelineView {
         if let Some(id) = double {
             st.selected_scenes = [id].into();
         }
-        // Tastatur
-        // (Strg+X/C/V kommen von egui als Cut/Copy/Paste-Ereignisse, nicht als Tasten)
-        // Klick in die Zeitleiste macht sie zum Ziel der Tastatur
+        // Keyboard
+        // (Ctrl+X/C/V come from egui as cut/copy/paste events, not as keys)
+        // A click into the timeline makes it the keyboard target
         if ui.input(|i| i.pointer.any_pressed())
             && ui
                 .input(|i| i.pointer.interact_pos())
@@ -945,7 +950,7 @@ impl TimelineView {
         }
 
         ui.set_clip_rect(outer_clip);
-        // Live: graue Ebene über allem – nur ansehen, nicht bearbeiten
+        // Live: gray layer over everything – only view, do not edit
         if live {
             p.rect_filled(area, 0.0, theme::text_faint().gamma_multiply(0.32));
             let chip = p.layout_no_wrap(
@@ -963,7 +968,7 @@ impl TimelineView {
             p.rect_filled(cr, 4.0, theme::raised());
             p.galley(cr.min + Vec2::new(6.0, 3.0), chip, theme::text());
         }
-        // Abspielposition
+        // Play position
         let cx = self.x_at(st.timeline_cursor, lanes);
         if cx >= lanes.left() && cx <= lanes.right() {
             p.line_segment(
@@ -978,7 +983,8 @@ impl TimelineView {
             p.add(Shape::convex_polygon(head, theme::OK, Stroke::NONE));
         }
 
-        // Spur-Aktionen erst am Ende: die Zeilen oben zeigen noch auf die alten Spuren
+        // Track actions only at the end: the rows above still point to the old
+        // tracks
         if let Some((i, a)) = header_action.filter(|(i, _)| *i < tl.tracks.len()) {
             match a {
                 HeaderAction::Toggle => tl.tracks[i].expanded = !tl.tracks[i].expanded,
@@ -1007,7 +1013,7 @@ impl TimelineView {
             }
         }
 
-        // Änderungen übernehmen
+        // Apply changes
         if tl != before && !locked {
             if let Some(sc) = e.show_mut().scene_mut(scene) {
                 if let Some(t) = sc.timeline_mut() {
@@ -1018,7 +1024,7 @@ impl TimelineView {
         }
     }
 
-    /// Zoomen um den Faktor `f`, die Zeit unter `x` bleibt stehen.
+    /// Zoom by the factor `f`, the time under `x` stays in place.
     fn zoom_at(&mut self, f: f32, x: f32, lanes: Rect) {
         let at = self.ms_at(x, lanes);
         self.zoom = (self.zoom * f).clamp(0.002, 2.0);
@@ -1033,7 +1039,7 @@ impl TimelineView {
         self.scroll_ms + f64::from((x - lanes.left()) / self.zoom)
     }
 
-    /// Rasterabstand (ms) passend zum Zoom.
+    /// Grid spacing (ms) matching the zoom.
     fn grid_step(&self, tl: &Timeline) -> f64 {
         match tl.grid {
             GridMode::Beat => {
@@ -1060,7 +1066,7 @@ impl TimelineView {
         }
     }
 
-    /// Einrasten an Raster, Blockkanten und Abspielposition.
+    /// Snap to the grid, block edges and play position.
     fn snap(&self, v: f64, tl: &Timeline, targets: &[u64], _except: u32) -> f64 {
         if !tl.snap {
             return v.round();
@@ -1075,7 +1081,7 @@ impl TimelineView {
             return n;
         }
         if self.follows_audio(tl) {
-            // nächster Schlag der Audio-Blöcke (bei kleinem Zoom nur Takte)
+            // next beat of the audio blocks (only bars when zoomed out)
             let bars_only = self
                 .marks
                 .first()
@@ -1098,8 +1104,7 @@ impl TimelineView {
         ((v - off) / step).round() * step + off
     }
 
-    /// Länge geändert: Schleife (Szene wiederholt sich) oder Dehnen (schneller/
-    /// langsamer abspielen).
+    /// Length changed: loop (the scene repeats) or stretch (play faster/slower).
     fn apply_resize(&self, n: &mut Clip, old: &Clip, tl: &Timeline, e: &Engine) {
         if !tl.stretch_resize {
             return;
@@ -1114,7 +1119,7 @@ impl TimelineView {
         if dur == 0 || old.duration_ms == 0 {
             return;
         }
-        // gleiche Anzahl Durchläufe in der neuen Länge
+        // same number of cycles in the new length
         let runs = old.duration_ms as f64 * f64::from(old.speed) / dur as f64;
         n.speed = ((runs * dur as f64) / n.duration_ms as f64).clamp(0.05, 20.0) as f32;
     }
@@ -1143,7 +1148,7 @@ impl TimelineView {
         );
         let ms_per_px = total / f64::from(bar.width());
         if rl.dragged() || rr.dragged() {
-            // Griffe an den Enden ändern den sichtbaren Bereich (Zoom)
+            // Handles at the ends change the visible range (zoom)
             let (mut s, mut e) = (self.scroll_ms, self.scroll_ms + visible);
             if rl.dragged() {
                 s = (s + f64::from(rl.drag_delta().x) * ms_per_px).clamp(0.0, e - 500.0);
@@ -1189,8 +1194,8 @@ impl TimelineView {
         p.rect_filled(r, 0.0, theme::surface());
         let follow = self.follows_audio(tl);
         if follow {
-            // Takte der Stücke: „Stück · Takt“, Abstand mind. 60 px; der
-            // Beginn eines Stücks hat Vorrang vor dem Takt davor
+            // Bars of the pieces: “piece · bar”, spacing at least 60 px; the start of
+            // a piece takes precedence over the bar before it
             let mut labels: Vec<(f32, String)> = Vec::new();
             let mut last_seg = usize::MAX;
             for m in self.marks.iter().filter(|m| m.down) {
@@ -1228,7 +1233,7 @@ impl TimelineView {
                 );
             }
         }
-        // Beschriftung im sinnvollen Abstand
+        // Labels at a sensible spacing
         let label_step = {
             let mut s = self.grid_step(tl);
             while (s as f32) * self.zoom < 70.0 {
@@ -1236,7 +1241,7 @@ impl TimelineView {
             }
             s
         };
-        // Beat-Raster: Beschriftung ab dem Offset (Takt 1)
+        // Beat grid: labels from the offset (bar 1)
         let off = if tl.grid == GridMode::Beat {
             f64::from(tl.offset_ms)
         } else {
@@ -1268,10 +1273,10 @@ impl TimelineView {
             }
             v += label_step;
         }
-        // Klick setzt die Abspielposition; Ziehen (Mauszeiger verschwindet):
-        // hoch/runter zoomt, links/rechts scrollt
+        // Click sets the play position; dragging (the mouse pointer disappears):
+        // up/down zooms, left/right scrolls
         let resp = ui.interact(r, ui.scope_id().with("ruler"), Sense::click_and_drag());
-        // Abspielkopf (Dreieck) bleibt greifbar und liegt über dem Lineal
+        // The playhead (triangle) stays grabbable and lies on top of the ruler
         let cx = self.x_at(st.timeline_cursor, lanes);
         let head = ui.interact(
             Rect::from_min_max(pos2(cx - 7.0, r.top()), pos2(cx + 7.0, r.bottom())).intersect(r),
@@ -1281,7 +1286,7 @@ impl TimelineView {
         if head.hovered() || head.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
         } else if resp.hovered() && self.ruler_grab.is_none() {
-            // eigene Lupe: der System-Zeiger „zoom-in“ fehlt in vielen Themes
+            // own magnifier: the “zoom-in” system pointer is missing in many themes
             if let Some(q) = ui.input(|i| i.pointer.hover_pos()) {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::None);
                 let fg = ui.ctx().layer_painter(egui::LayerId::new(
@@ -1293,7 +1298,7 @@ impl TimelineView {
             }
         }
         if head.dragged() {
-            // beim Ziehen kein Ton, erst nach dem Loslassen an der neuen Stelle
+            // no sound while dragging, only after releasing at the new position
             st.audio.scrubbing = true;
         }
         if let Some(q) = head.interact_pointer_pos().filter(|_| head.dragged()) {
@@ -1319,9 +1324,9 @@ impl TimelineView {
         if let Some(origin) = self.ruler_grab {
             if resp.dragged() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::None);
-                // Bewegung wie gewohnt aus egui; weit vom Startpunkt entfernt wird
-                // der (unsichtbare) Zeiger zurückgesetzt, damit er nicht auf einen
-                // anderen Bildschirm wandert. Der Sprung wird herausgerechnet.
+                // Movement as usual from egui; far from the start point the (invisible)
+                // pointer is reset so it does not wander onto another screen. The jump is
+                // subtracted.
                 let (mut d, q) = ui.input(|i| (i.pointer.delta(), i.pointer.latest_pos()));
                 if let Some(jump) = self.ruler_jump {
                     if (d - jump).length() < jump.length() * 0.5 {
@@ -1331,7 +1336,7 @@ impl TimelineView {
                     } else {
                         self.ruler_warp = self.ruler_warp.saturating_sub(1);
                         if self.ruler_warp == 0 {
-                            // Versetzen wird nicht unterstützt (z. B. Wayland)
+                            // Warping is not supported (e.g. Wayland)
                             self.ruler_jump = None;
                             self.ruler_no_warp = true;
                         }
@@ -1344,8 +1349,8 @@ impl TimelineView {
                         self.ruler_warp = 20;
                     }
                 }
-                // immer nur eine Achse: die zuletzt deutlich überwiegende Richtung
-                // (abklingende Summe der letzten Bewegung); Wechsel jederzeit möglich
+                // always only one axis: the direction that clearly dominated last
+                // (decaying sum of the recent movement); switching is possible at any time
                 self.ruler_acc = self.ruler_acc * 0.85 + d;
                 let (ax, ay) = (self.ruler_acc.x.abs(), self.ruler_acc.y.abs());
                 match self.ruler_axis {
@@ -1365,7 +1370,7 @@ impl TimelineView {
                     None => {}
                 }
             } else {
-                // Zeiger zurück an die Stelle, an der gezogen wurde
+                // Pointer back to where the drag started
                 ui.ctx()
                     .send_viewport_cmd(egui::ViewportCommand::CursorPosition(origin));
                 self.ruler_grab = None;
@@ -1373,7 +1378,7 @@ impl TimelineView {
         }
     }
 
-    /// Folgt das Beat-Raster gerade den Audio-Blöcken?
+    /// Is the beat grid currently following the audio blocks?
     fn follows_audio(&self, tl: &Timeline) -> bool {
         tl.grid == GridMode::Beat && tl.follow_audio && !self.marks.is_empty()
     }
@@ -1504,7 +1509,7 @@ impl TimelineView {
                     }),
                 ) = (current, tl.clip_mut(cid).map(|c| &mut c.content))
                 {
-                    // alte Korrektur der ganzen Datei geht in die Stück-Korrektur über
+                    // the old correction of the whole file turns into the piece correction
                     *grid = None;
                     segment_grids.retain(|(k, _)| *k != key);
                     let new = match edit {
@@ -1522,8 +1527,8 @@ impl TimelineView {
         }
     }
 
-    /// Raster des ersten Audio-Blocks übernehmen, sobald seine Analyse
-    /// fertig ist.
+    /// Take over the grid of the first audio block as soon as its analysis is
+    /// done.
     fn pending_grid(&mut self, ctx: &egui::Context, tl: &mut Timeline, st: &AppState) {
         let Some(id) = self.pending_grid else {
             return;
@@ -1546,7 +1551,7 @@ impl TimelineView {
             crate::audio::WaveState::Loading => {}
             crate::audio::WaveState::Failed(_) => self.pending_grid = None,
             crate::audio::WaveState::Ready(a) => {
-                // mehrere Stücke: Raster folgt dem Audio; sonst Tempo übernehmen
+                // several pieces: the grid follows the audio; otherwise take over the tempo
                 let segs = a.effective_segments(*grid, &[]);
                 tl.grid = GridMode::Beat;
                 if segs.len() > 1 {
@@ -1559,9 +1564,9 @@ impl TimelineView {
         }
     }
 
-    /// Zwischenablage an `at` (ms) einfügen; erste Spur = `track`.
-    /// Einfügen an der ersten freien Stelle ab `at` auf Spur `track`
-    /// (Abstände und Spurversatz der kopierten Blöcke bleiben erhalten).
+    /// Paste the clipboard at `at` (ms); first track = `track`.
+    /// Paste at the first free position from `at` on track `track` (spacing and
+    /// track offset of the copied blocks are kept).
     fn paste(&mut self, tl: &mut Timeline, st: &mut AppState, track: usize, at: u64) {
         let ids = tl.paste_group(&self.clipboard, track, at);
         if !ids.is_empty() {
@@ -1570,7 +1575,7 @@ impl TimelineView {
     }
 }
 
-/// Korrektur des Beat-Rasters eines Audio-Blocks.
+/// Correction of the beat grid of an audio block.
 #[derive(Clone, Copy, PartialEq)]
 enum GridEdit {
     Double,
@@ -1580,8 +1585,8 @@ enum GridEdit {
     Reset,
 }
 
-/// Stück eines Audio-Blocks an Stelle `at` (Zeitleiste, ms; ohne Angabe
-/// der Beginn des Blocks): Schlüssel (Beginn in der Datei) und Raster.
+/// Piece of an audio block at position `at` (timeline, ms; if not given the
+/// start of the block): key (start in the file) and grid.
 fn audio_segment(
     st: &AppState,
     c: &Clip,
@@ -1609,7 +1614,7 @@ fn audio_segment(
     Some((sg.start_ms.round() as u64, sg.grid?))
 }
 
-/// Schläge aller Audio-Blöcke im Bereich `from..to` (Zeitleiste, ms).
+/// Beats of all audio blocks in the range `from..to` (timeline, ms).
 fn audio_marks(tl: &Timeline, st: &AppState, from: f64, to: f64) -> Vec<Mark> {
     let mut out = Vec::new();
     for tr in tl.tracks.iter().filter(|t| !t.muted) {
@@ -1631,7 +1636,7 @@ fn audio_marks(tl: &Timeline, st: &AppState, from: f64, to: f64) -> Vec<Mark> {
             let Some(a) = st.audio.ready(path) else {
                 continue;
             };
-            let shift = cs - *offset_ms as f64; // Datei → Zeitleiste
+            let shift = cs - *offset_ms as f64; // File → timeline
             let segs = a.effective_segments(*grid, segment_grids);
             let n = segs.len();
             for (si, sg) in segs.iter().enumerate() {
@@ -1644,7 +1649,7 @@ fn audio_marks(tl: &Timeline, st: &AppState, from: f64, to: f64) -> Vec<Mark> {
                     continue;
                 }
                 let beat = g.beat_ms();
-                // erster Downbeat im Stück = Takt 1
+                // first downbeat in the piece = bar 1
                 let first = g.downbeat_ms
                     + ((sg.start_ms - g.downbeat_ms) / g.bar_ms()).ceil() * g.bar_ms();
                 for (ms, down) in g.beats(a0 - shift, b0 - shift) {
@@ -1693,9 +1698,9 @@ enum HeaderAction {
     Duplicate,
 }
 
-/// Abspielen/Pausieren; nicht laufend: an der Abspielposition starten.
-/// Text in die System-Zwischenablage legen: egui meldet Strg+V nur, wenn
-/// dort Text liegt (die Blöcke selbst bleiben in der Zeitleiste).
+/// Play/pause; when not running: start at the play position.
+/// Put text on the system clipboard: egui only reports Ctrl+V when there is
+/// text on it (the blocks themselves stay in the timeline).
 fn mark_clipboard(ctx: &egui::Context) {
     ctx.copy_text("DMXCraft".into());
 }
@@ -1710,7 +1715,7 @@ fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {
     ui.set_min_width(W);
     ui.set_max_width(W);
     menu::title(ui, t("Grid lines"));
-    // Zeile: Beschriftung links, Bedienelement rechts (feste Breite)
+    // Row: label on the left, control on the right (fixed width)
     let row = |ui: &mut egui::Ui, label: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
         ui.allocate_ui_with_layout(
             Vec2::new(W, 28.0),
@@ -1773,9 +1778,9 @@ fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {
     });
 }
 
-/// Kopf einer Spur: Pfeil (Unterspuren), Nummer, Auge (stumm), Schloss.
-/// Kopf einer Spur: Farbstreifen, Aufklappen, Name (Doppelklick: umbenennen),
-/// Ein-/Ausblenden; Rechtsklick: Menü mit Farbe.
+/// Header of a track: arrow (sub-tracks), number, eye (mute), lock.
+/// Header of a track: color strip, expand, name (double-click: rename),
+/// show/hide; right-click: menu with color.
 fn track_header(
     ui: &mut egui::Ui,
     p: &egui::Painter,
@@ -1793,7 +1798,7 @@ fn track_header(
     if let Some(c) = color {
         p.rect_filled(top, 0.0, c.gamma_multiply(0.14));
     }
-    // Farbstreifen links
+    // Color strip on the left
     p.rect_filled(
         Rect::from_min_size(top.min + Vec2::new(0.0, 3.0), Vec2::new(4.0, th - 6.0)),
         2.0,
@@ -1969,7 +1974,7 @@ fn paint_clip(
     p.rect_filled(r, 3.0, body);
     let head = Rect::from_min_max(r.min, pos2(r.right(), r.top() + 15.0));
     p.rect_filled(head, 3.0, color);
-    // Audio: Wellenform
+    // Audio: waveform
     if let ClipContent::Audio {
         path, offset_ms, ..
     } = &c.content
@@ -2001,7 +2006,7 @@ fn paint_clip(
             paint_segments(p, r, head, wave, c, *offset_ms, &segs);
         }
     }
-    // Schleifen-Marken der Szene
+    // Loop markers of the scene
     if c.looped && scene_ms > 0 && c.scene().is_some() {
         let period = scene_ms as f64 / f64::from(c.speed.max(0.01));
         let per_px = c.duration_ms as f64 / f64::from(r.width().max(1.0));
@@ -2019,11 +2024,11 @@ fn paint_clip(
             }
         }
     }
-    // Ein-/Ausblenden als Schräge
+    // Fade in/out as a slope
     let per_ms = r.width() / c.duration_ms.max(1) as f32;
     let shade = Color32::from_black_alpha(110);
-    // nur die Schräge als Linie (ein Polygon-Rand bildet bei spitzen Winkeln
-    // Zacken über den Block hinaus) – und alles auf den Block begrenzt
+    // only the slope as a line (a polygon outline forms spikes beyond the block
+    // at acute angles) – and everything clipped to the block
     let clip = p.with_clip_rect(r.intersect(p.clip_rect()));
     let line = Stroke::new(1.0, Color32::WHITE);
     if c.fade_in_ms > 0 {
@@ -2084,7 +2089,7 @@ fn paint_clip(
     );
 }
 
-/// Wellenform nach Bändern: Low (außen), Mid, High (innen).
+/// Waveform by bands: low (outside), mid, high (inside).
 fn paint_bands(
     p: &egui::Painter,
     wave: Rect,
@@ -2123,7 +2128,8 @@ fn paint_bands(
     }
 }
 
-/// Ereignisse der Trigger als Balken am unteren Rand (eine Zeile je Trigger).
+/// Events of the triggers as bars along the bottom edge (one row per
+/// trigger).
 #[allow(clippy::too_many_arguments)]
 fn paint_triggers(
     ui: &egui::Ui,
@@ -2166,8 +2172,8 @@ fn paint_triggers(
     }
 }
 
-/// Stücke im Block: abwechselnd leicht getönt, Grenze als helle Linie mit
-/// Nummer und Tempo; darin das Beat-Raster des Stücks.
+/// Pieces in the block: alternately lightly tinted, boundary as a light line
+/// with number and tempo; inside it the beat grid of the piece.
 #[allow(clippy::too_many_arguments)]
 fn paint_segments(
     p: &egui::Painter,
@@ -2200,7 +2206,7 @@ fn paint_segments(
         if let Some(g) = sg.grid {
             paint_beats(&clip, wave, x_of, a, b, &g);
         }
-        // Kennzeichnung im Kopf: Nummer und Tempo am Beginn des Stücks
+        // Marker in the header: number and tempo at the start of the piece
         let text = match (many, sg.grid) {
             (true, Some(g)) => format!("{} · {:.1} BPM", i + 1, g.bpm),
             (true, None) => format!("{}", i + 1),
@@ -2224,7 +2230,7 @@ fn paint_segments(
                     Color32::BLACK,
                 );
             } else if x1 - x0 > 90.0 {
-                // am Beginn des Stücks; liegt dort der Blockname, am Ende
+                // at the start of the piece; if the block name is there, at the end
                 let (pos, align) = if x0 < r.left() + 90.0 {
                     (
                         pos2(x1.min(r.right()) - 4.0, head.center().y),
@@ -2239,7 +2245,7 @@ fn paint_segments(
     }
 }
 
-/// Beat-Raster im Block: Downbeats als Linie, Schläge als kurze Striche.
+/// Beat grid in the block: downbeats as lines, beats as short ticks.
 fn paint_beats(
     clip: &egui::Painter,
     wave: Rect,
@@ -2281,7 +2287,7 @@ fn is_video(path: &std::path::Path) -> bool {
         .is_some_and(|e| VIDEO_EXT.contains(&e.to_lowercase().as_str()))
 }
 
-/// Anzeigename eines OBS-Blocks.
+/// Display name of an OBS block.
 pub(crate) fn obs_label(a: &dmxcraft_core::obs::ObsAction) -> String {
     use dmxcraft_core::obs::ObsAction;
     match a {
@@ -2295,7 +2301,7 @@ pub(crate) fn obs_label(a: &dmxcraft_core::obs::ObsAction) -> String {
     }
 }
 
-/// Videodatei als Block anlegen (OBS spielt sie ab); gibt ID und Länge zurück.
+/// Create a block from a video file (OBS plays it); returns ID and length.
 fn add_video(tl: &mut Timeline, track: usize, at: u64, path: &str) -> (u32, u64) {
     let len = std::fs::File::open(path)
         .ok()
@@ -2317,7 +2323,7 @@ fn add_video(tl: &mut Timeline, track: usize, at: u64, path: &str) -> (u32, u64)
     (id, len)
 }
 
-/// Audiodatei als Block anlegen; gibt ID und Länge zurück.
+/// Create a block from an audio file; returns ID and length.
 fn add_audio(tl: &mut Timeline, track: usize, at: u64, path: &str) -> (u32, u64) {
     let len = crate::audio::duration_ms(path).unwrap_or(DEFAULT_CLIP_MS);
     let id = tl.add_clip(

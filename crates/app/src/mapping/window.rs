@@ -1,6 +1,5 @@
-//! Fenster „Tastatur-Zuordnung“ bzw. „MIDI-Zuordnung“: Voreinstellungen
-//! (löschen, importieren, exportieren), Liste aller Zuordnungen und die
-//! Einstellungen der gewählten Zuordnung.
+//! “Keyboard mapping” or “MIDI mapping” window: presets (clear, import,
+//! export), list of all mappings and the settings of the selected mapping.
 
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
@@ -21,31 +20,31 @@ use crate::ui::widgets::menu::dropdown;
 use crate::ui::widgets::section::section_header;
 use crate::ui::widgets::{Icon, IconButton};
 
-/// Dateiendung exportierter Zuordnungen.
+/// File extension of exported mappings.
 pub const MAP_EXT: &str = "dmxmap";
 
 const ROW_H: f32 = 22.0;
 const LIST_H: f32 = 200.0;
 
-/// Zustand des Fensters zwischen den Bildern.
+/// State of the window between frames.
 #[derive(Default)]
 pub struct WindowState {
-    /// Sortierung nach Kategorie absteigend.
+    /// Sort by category descending.
     sort_desc: bool,
-    /// Bearbeiteter LED-Zustand: an (sonst aus).
+    /// Edited LED state: on (otherwise off).
     pub(super) edit_on: bool,
     import: Option<(MapKind, Receiver<Option<PathBuf>>)>,
     export: Option<(MapKind, Vec<Mapping>, Receiver<Option<PathBuf>>)>,
 }
 
-/// Datei mit exportierten Zuordnungen.
+/// File with exported mappings.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct MapFile {
     kind: MapKind,
     mappings: Vec<Mapping>,
 }
 
-/// Fenster zeigen (nur im Zuordnungsmodus).
+/// Show the window (only in mapping mode).
 pub fn show(ctx: &egui::Context, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper) {
     poll_files(e, st, mapper);
     let Some(kind) = st.mapping else {
@@ -78,8 +77,7 @@ pub fn show(ctx: &egui::Context, e: &mut Engine, st: &mut AppState, mapper: &mut
     }
 }
 
-/// Kopf „Voreinstellungen“ mit Löschen, Import, Export und „+“ für globale
-/// Befehle.
+/// “Presets” header with clear, import, export and “+” for global commands.
 fn presets(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, kind: MapKind) {
     section_header(ui, t("Presets"), |ui| {
         let empty = e.show().mappings.list(kind).is_empty();
@@ -140,7 +138,7 @@ fn presets(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, 
     });
 }
 
-/// Liste: Kategorie, Ziel, Eingabe.
+/// List: category, target, input.
 fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, kind: MapKind) {
     let w = ui.available_width();
     let cols = [w * 0.24, w * 0.46, w * 0.30];
@@ -167,7 +165,7 @@ fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, ki
         }
     });
 
-    // Kopfzeile
+    // Header row
     let (head, resp) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::click());
     if resp.clicked()
         && ui
@@ -193,7 +191,7 @@ fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, ki
             theme::text_dim(),
         );
         if i == 0 {
-            // Sortierpfeil
+            // Sort arrow
             let w0 = p
                 .layout_no_wrap(h.to_uppercase(), theme::caption(), theme::text_dim())
                 .size()
@@ -269,7 +267,7 @@ fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, ki
                     }
                 });
                 if sel && st.map_learn {
-                    // sichtbar halten, wenn über das Overlay gewählt
+                    // keep it visible when chosen via the overlay
                     resp.scroll_to_me(None);
                 }
             }
@@ -289,7 +287,7 @@ fn table(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, ki
     }
 }
 
-/// Einstellungen der gewählten Zuordnung.
+/// Settings of the selected mapping.
 fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper, kind: MapKind) {
     section_header(ui, t("Settings"), |_| {});
     let Some(id) = st.map_sel else {
@@ -318,7 +316,7 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
     let mut remove = false;
 
     form(ui, &format!("mapping_settings_{kind:?}"), |f| {
-        // Eingabe
+        // Input
         f.row(
             match kind {
                 MapKind::Keyboard => t("Key"),
@@ -342,7 +340,7 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
                 });
             },
         );
-        // Ziel (Szenen: welche Szene, Geräte: Auswahl oder einzelner Kanal)
+        // Target (scenes: which scene, fixtures: selection or a single channel)
         {
             let options = targets(show, &m);
             if options.len() > 1 {
@@ -359,7 +357,7 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
                 });
             }
         }
-        // Modus
+        // Mode
         f.row(t("Button mode"), |ui| {
             let label = |b: ButtonMode| match b {
                 ButtonMode::Toggle => t("On / Off"),
@@ -384,7 +382,7 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
                     .on_hover_text(t("Only active while the button is held"));
             });
         }
-        // MIDI-Eingang
+        // MIDI input
         if let Some(Input::Midi {
             device,
             channel,
@@ -440,7 +438,7 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
         }
     });
 
-    // MIDI-Ausgang (LED-Rückmeldung)
+    // MIDI output (LED feedback)
     if kind == MapKind::Midi {
         ui.add_space(theme::SP_S);
         section_header(ui, t("MIDI output"), |_| {});
@@ -531,13 +529,13 @@ fn settings(ui: &mut Ui, e: &mut Engine, st: &mut AppState, mapper: &mut Mapper,
     }
 }
 
-/// Mögliche Ziele einer Zuordnung, ausgehend vom angeklickten Element:
-/// bei Szenen die Szene, die Auswahl oder eine Position in der Bank, bei
-/// Geräten die Auswahl oder ein einzelner Kanal.
+/// Possible targets of a mapping, based on the clicked element: for scenes
+/// the scene, the selection or a position in the bank, for fixtures the
+/// selection or a single channel.
 fn targets(show: &Show, m: &Mapping) -> Vec<(Control, String)> {
     let scene = |target| Control::Scene { target };
     let mut out = Vec::new();
-    // Programmer-Fader: feste Geräte oder der Auswahl folgen
+    // Programmer fader: fixed fixtures or follow the selection
     if let (Control::Ui { key, fader: true }, false) = (m.element(), m.channels.is_empty()) {
         let fixtures: std::collections::BTreeSet<_> =
             m.channels.iter().map(|c| c.fixture).collect();
@@ -609,7 +607,7 @@ fn targets(show: &Show, m: &Mapping) -> Vec<(Control, String)> {
     out
 }
 
-/// Kanal der Rückmeldung, bei bekannten Geräten mit Bedeutung.
+/// Channel of the feedback, with its meaning for known devices.
 fn channel_label(c: u8, model: DeviceModel) -> String {
     match model.channel_meaning(c) {
         Some(m) => format!("{c} – {m}"),
@@ -617,7 +615,7 @@ fn channel_label(c: u8, model: DeviceModel) -> String {
     }
 }
 
-/// Farbfeld der gewählten Anschlagstärke; Klick öffnet die Palette des Geräts.
+/// Color swatch of the chosen velocity; click opens the device's palette.
 fn palette_button(
     ui: &mut Ui,
     id: impl std::hash::Hash + std::fmt::Debug,
@@ -721,7 +719,7 @@ fn pick_export(ctx: &egui::Context, kind: MapKind) -> Receiver<Option<PathBuf>> 
     rx
 }
 
-/// Ergebnisse der Dateidialoge verarbeiten.
+/// Process the results of the file dialogs.
 fn poll_files(e: &mut Engine, st: &mut AppState, mapper: &mut Mapper) {
     if let Some((kind, rx)) = &mapper.win.import {
         if let Ok(path) = rx.try_recv() {

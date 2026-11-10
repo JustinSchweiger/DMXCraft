@@ -1,5 +1,5 @@
-//! Die Show: alles, was gespeichert wird. Die Datei ist JSON und enthält die
-//! verwendeten Gerätetypen als Kopie, damit sie auf jedem Rechner lädt.
+//! The show: everything that is saved. The file is JSON and contains a copy
+//! of the fixture types used so it loads on every computer.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -12,7 +12,7 @@ use crate::fixture::{ChannelDef, FixtureType};
 
 pub const SHOW_FORMAT_VERSION: u32 = 1;
 
-/// Feste Anzahl DMX-Universen jeder Show.
+/// Fixed number of DMX universes of every show.
 pub const UNIVERSES: u8 = 8;
 
 macro_rules! id_type {
@@ -30,47 +30,47 @@ id_type!(SceneId);
 id_type!(ZoneId);
 id_type!(GroupId);
 
-/// Ein gepatchtes Gerät.
+/// A patched fixture.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Fixture {
     pub id: FixtureId,
     pub name: String,
-    /// Schlüssel des Gerätetyps ([`FixtureType::key`]).
+    /// Key of the fixture type ([`FixtureType::key`]).
     pub type_key: String,
-    /// 0-basiert (Universum 1 in der Oberfläche = 0 hier).
+    /// 0-based (universe 1 in the UI = 0 here).
     pub universe: u8,
-    /// Startadresse, 1-basiert (1..=512).
+    /// Start address, 1-based (1..=512).
     pub address: u16,
-    /// Position im Bühnenplan (0.0..=1.0 in beiden Achsen). `None` = automatisch.
+    /// Position in the stage plan (0.0..=1.0 on both axes). `None` = automatic.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_pos: Option<[f32; 2]>,
-    /// Darstellung im Bühnenplan. `None` = automatisch nach Gerätetyp.
+    /// Display in the stage plan. `None` = automatic by fixture type.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_shape: Option<PlanShape>,
-    /// Größenfaktor im Bühnenplan (1.0 = normal).
+    /// Size factor in the stage plan (1.0 = normal).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_size: Option<f32>,
-    /// Drehung im Bühnenplan in Grad (im Uhrzeigersinn).
+    /// Rotation in the stage plan in degrees (clockwise).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_rotation: Option<f32>,
-    /// Ausgangsgrenzen (Dimmer-Limit, Pan/Tilt-Bereich, Invertieren).
+    /// Output limits (dimmer limit, pan/tilt range, invert).
     #[serde(default, skip_serializing_if = "FixtureLimits::is_default")]
     pub limits: FixtureLimits,
-    /// Lage im 3D-Visualisierer. `None` = automatisch aus dem Bühnenplan.
+    /// Placement in the 3D visualizer. `None` = automatic from the stage plan.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place3d: Option<crate::venue::Placement>,
 }
 
-/// Grenzen, die beim Ausgeben auf ein Gerät angewendet werden – unabhängig
-/// von Szenen und Programmer (z. B. um zu helle Geräte zu zähmen oder Moving
-/// Heads vom Publikum fernzuhalten).
+/// Limits applied to a fixture on output – independent of scenes and
+/// programmer (e.g. to tame fixtures that are too bright or keep moving
+/// heads away from the audience).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FixtureLimits {
-    /// Niedrigster Dimmerwert, sobald das Gerät an ist (0 = keine Begrenzung).
-    /// Ein Dimmerwert von 0 bleibt 0, damit Blackout und „aus“ funktionieren.
+    /// Lowest dimmer value once the fixture is on (0 = no limit).
+    /// A dimmer value of 0 stays 0 so blackout and “off” work.
     pub dimmer_min: u8,
-    /// Höchster Dimmerwert (255 = keine Begrenzung).
+    /// Highest dimmer value (255 = no limit).
     pub dimmer_max: u8,
     pub pan_min: u8,
     pub pan_max: u8,
@@ -78,7 +78,7 @@ pub struct FixtureLimits {
     pub tilt_max: u8,
     pub invert_pan: bool,
     pub invert_tilt: bool,
-    /// Pan und Tilt vertauschen (z. B. für seitlich montierte Geräte).
+    /// Swap pan and tilt (e.g. for fixtures mounted sideways).
     pub swap_pan_tilt: bool,
 }
 
@@ -107,7 +107,7 @@ impl FixtureLimits {
         self.dimmer_min != 0 || self.dimmer_max != 255
     }
 
-    /// Dimmerwert in den erlaubten Bereich abbilden (0 bleibt 0).
+    /// Map a dimmer value into the allowed range (0 stays 0).
     pub fn map_dimmer(&self, v: u8) -> u8 {
         if v == 0 {
             return 0;
@@ -129,7 +129,7 @@ impl FixtureLimits {
             || self.swap_pan_tilt
     }
 
-    /// Bildet einen 16-Bit-Wert (0..=65535) auf den erlaubten Bereich ab.
+    /// Maps a 16-bit value (0..=65535) into the allowed range.
     pub fn map16(value: u16, min: u8, max: u8, invert: bool) -> u16 {
         let v = if invert { u16::MAX - value } else { value };
         let (lo, hi) = (u32::from(min) << 8, (u32::from(max) << 8) | 0xFF);
@@ -138,23 +138,23 @@ impl FixtureLimits {
     }
 }
 
-/// Form eines Geräts im Bühnenplan.
+/// Shape of a fixture in the stage plan.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanShape {
-    /// Runder Scheinwerfer (PAR, Spot, Moving Head). Ältere Shows mit
-    /// „moving_head“ werden als rund gelesen.
+    /// Round spotlight (PAR, spot, moving head). Older shows with “moving_head”
+    /// are read as round.
     #[serde(alias = "moving_head")]
     Round,
-    /// Quadratisches Gerät (Fluter, Panel).
+    /// Square fixture (flood, panel).
     Square,
-    /// Quadratisches Pixel-Raster (Matrix-Panel).
+    /// Square pixel grid (matrix panel).
     Matrix,
-    /// Waagerechte Leiste (LED-Bar, Pixel-Leiste).
+    /// Horizontal bar (LED bar, pixel bar).
     BarHorizontal,
-    /// Senkrechte Leiste.
+    /// Vertical bar.
     BarVertical,
-    /// Effekt / Laser / Sonstiges.
+    /// Effect / laser / other.
     Effect,
 }
 
@@ -179,7 +179,7 @@ impl PlanShape {
         }
     }
 
-    /// Passende Form für einen Gerätetyp.
+    /// Matching shape for a fixture type.
     pub fn guess(ty: &FixtureType) -> PlanShape {
         use crate::fixture::ChannelKind as K;
         let reds = ty.channels.iter().filter(|c| c.kind == K::Red).count();
@@ -198,10 +198,11 @@ impl PlanShape {
     }
 }
 
-/// Erlaubter Bereich für [`Fixture::plan_size`].
+/// Allowed range for [`Fixture::plan_size`].
 pub const PLAN_SIZE_RANGE: std::ops::RangeInclusive<f32> = 0.5..=4.0;
 
-/// Verweis auf einen Kanal eines Geräts (Kanalindex 0-basiert im Gerätetyp).
+/// Reference to a channel of a fixture (channel index 0-based in the fixture
+/// type).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ChannelRef {
     pub fixture: FixtureId,
@@ -209,9 +210,9 @@ pub struct ChannelRef {
 }
 
 impl ChannelRef {
-    /// Kanalnummer des virtuellen Dimmers (Geräte mit Farbkanälen, aber ohne
-    /// eigenen Dimmer). Er wird wie ein Kanal gespeichert und gemischt, aber
-    /// nicht ausgegeben: Er skaliert die Farbkanäle des Geräts.
+    /// Channel number of the virtual dimmer (fixtures with color channels but
+    /// without their own dimmer). It is stored and merged like a channel but not
+    /// output: it scales the fixture's color channels.
     pub const VIRTUAL_DIMMER: u16 = u16::MAX;
 
     pub fn virtual_dimmer(fixture: FixtureId) -> Self {
@@ -242,13 +243,13 @@ impl ChannelValue {
     }
 }
 
-/// Ein Schritt einer Szene: Kanalwerte, Überblendzeit und Haltezeit.
+/// A step of a scene: channel values, fade time and hold time.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Step {
     pub values: Vec<ChannelValue>,
-    /// Überblendzeit vom vorherigen Schritt in Millisekunden.
+    /// Fade time from the previous step in milliseconds.
     pub fade_ms: u32,
-    /// Haltezeit nach der Überblendung in Millisekunden.
+    /// Hold time after the fade in milliseconds.
     pub hold_ms: u32,
 }
 
@@ -276,10 +277,10 @@ impl Step {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LoopMode {
-    /// Nach dem letzten Schritt wieder von vorn.
+    /// Start over after the last step.
     #[default]
     Loop,
-    /// Nach dem letzten Schritt stehen bleiben.
+    /// Stay at the last step.
     Once,
 }
 
@@ -287,27 +288,27 @@ pub enum LoopMode {
 pub struct Scene {
     pub id: SceneId,
     pub name: String,
-    /// Szenen derselben Zone schließen sich gegenseitig aus.
-    /// `None` = frei kombinierbar.
+    /// Scenes of the same zone exclude each other.
+    /// `None` = freely combinable.
     pub zone: Option<ZoneId>,
     pub steps: Vec<Step>,
     #[serde(default)]
     pub loop_mode: LoopMode,
-    /// Eigene Farbe der Szene; `None` = Farbe der Bank.
+    /// Own color of the scene; `None` = color of the bank.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<[u8; 3]>,
-    /// Wiedergabe-Einstellungen (Dimmer, Speed, Ein-/Ausblenden …).
+    /// Playback settings (dimmer, speed, fade in/out …).
     #[serde(default, skip_serializing_if = "SceneSettings::is_default")]
     pub settings: SceneSettings,
-    /// Effekte; eine Szene mit Effekten ist eine FX-Szene.
+    /// Effects; a scene with effects is an FX scene.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<Effect>,
-    /// In der Szenenübersicht ausgeblendet (Bank-Menü blendet wieder ein).
+    /// Hidden in the scene overview (the bank menu shows it again).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
 }
 
-/// Art eines Effekts.
+/// Kind of an effect.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EffectKind {
     Steps,
@@ -318,7 +319,7 @@ pub enum EffectKind {
     CurveFx,
     Mappings,
     ColorMappings,
-    /// Zeitleiste mit Szenen und Audio (kein weiterer Effekt möglich).
+    /// Timeline with scenes and audio (no further effect possible).
     SuperScene,
 }
 
@@ -335,13 +336,13 @@ impl EffectKind {
         EffectKind::SuperScene,
     ];
 
-    /// Effekt steht allein in einer Szene (STEPS, SUPER SCENE).
+    /// The effect stands alone in a scene (STEPS, SUPER SCENE).
     pub fn exclusive(self) -> bool {
         matches!(self, EffectKind::Steps | EffectKind::SuperScene)
     }
 
-    /// Anzeigename (Fachbegriff, nicht übersetzt).
-    /// Effekt bewegt zugeordnete Kanäle („Features“).
+    /// Display name (technical term, not translated).
+    /// The effect moves assigned channels (“features”).
     pub fn uses_features(self) -> bool {
         matches!(
             self,
@@ -364,21 +365,21 @@ impl EffectKind {
     }
 }
 
-/// Ein Effekt einer FX-Szene.
+/// An effect of an FX scene.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Effect {
     pub id: u32,
     pub kind: EffectKind,
-    /// In der Seitenleiste zugeklappt.
+    /// Collapsed in the sidebar.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
-    /// Geräte, auf die der Effekt wirkt (Reihenfolge = Beam-Reihenfolge).
+    /// Fixtures the effect acts on (order = beam order).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fixtures: Vec<FixtureId>,
-    /// Einstellungen eines COLOR FX bzw. (mit Grauwerten) eines VALUE FX.
+    /// Settings of a COLOR FX or (with gray values) a VALUE FX.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<crate::fx::ColorFx>,
-    /// Vom Effekt bewegte Kanäle (CHASER, VALUE, CURVE, MAPPINGS).
+    /// Channels moved by the effect (CHASER, VALUE, CURVE, MAPPINGS).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub features: Vec<crate::fx::feature::Feature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -389,7 +390,7 @@ pub struct Effect {
     pub motion: Option<crate::fx::motion::MoveFx>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mapping: Option<crate::fx::mapping::MappingFx>,
-    /// Zeitleiste einer SUPER SCENE.
+    /// Timeline of a SUPER SCENE.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeline: Option<crate::timeline::Timeline>,
 }
@@ -431,7 +432,7 @@ impl Effect {
         }
     }
 
-    /// Fehlende Einstellungen ergänzen (ältere Shows/Importe).
+    /// Fill in missing settings (older shows/imports).
     pub fn ensure_settings(&mut self) {
         let fresh = Effect::new(self.id, self.kind);
         if self.color.is_none() {
@@ -455,7 +456,7 @@ impl Effect {
     }
 }
 
-/// Art einer Szene (für Anzeige und Seitenleiste).
+/// Kind of a scene (for display and sidebar).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SceneKind {
     Static,
@@ -463,24 +464,24 @@ pub enum SceneKind {
     Super,
 }
 
-/// Bezug auf Bänke für Freigabe und Freigabeschutz.
+/// Reference to banks for release and release protection.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BankScope {
-    /// Keine Szenen.
+    /// No scenes.
     Off,
-    /// Alle Szenen.
+    /// All scenes.
     All,
-    /// Szenen derselben Bank.
+    /// Scenes of the same bank.
     #[default]
     Bank,
-    /// Szenen außerhalb der eigenen Bank.
+    /// Scenes outside the own bank.
     OutsideBank,
-    /// Szenen bestimmter Bänke.
+    /// Scenes of specific banks.
     Banks(Vec<ZoneId>),
 }
 
 impl BankScope {
-    /// Trifft der Bezug eine Szene der Bank `other`, gesehen von `own`?
+    /// Does the reference hit a scene of bank `other`, seen from `own`?
     pub fn matches(&self, own: Option<ZoneId>, other: Option<ZoneId>) -> bool {
         match self {
             BankScope::Off => false,
@@ -492,46 +493,46 @@ impl BankScope {
     }
 }
 
-/// Einstellungen einer Szene in der Seitenleiste „Eigenschaften“.
+/// Settings of a scene in the “Properties” sidebar.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SceneSettings {
-    /// Szenen-Dimmer für die Intensität (0–255, Standard voll).
+    /// Scene dimmer for the intensity (0–255, default full).
     pub dimmer: u8,
-    /// Ablaufgeschwindigkeit in Prozent (100 = normal).
+    /// Playback speed in percent (100 = normal).
     pub speed_pct: u16,
-    /// Phase in Grad (für Effekte).
+    /// Phase in degrees (for effects).
     pub phase_deg: u16,
-    /// Größe in Prozent (für Effekte).
+    /// Size in percent (for effects).
     pub size_pct: u8,
-    /// Einblendzeit beim Start.
+    /// Fade-in time on start.
     pub fade_in_ms: u32,
-    /// Ausblendzeit beim Stoppen.
+    /// Fade-out time on stop.
     pub fade_out_ms: u32,
-    /// Tempo der Schritt-Überblendungen in Zehnteln (10 = 1.0 wie
-    /// programmiert, 20 = doppelt so schnell; 1..=40).
+    /// Tempo of the step crossfades in tenths (10 = 1.0 as programmed, 20 =
+    /// twice as fast; 1..=40).
     pub fade_speed: u8,
-    /// Schritte rückwärts abspielen.
+    /// Play the steps backwards.
     pub reverse: bool,
-    /// Priorität: höhere Priorität gewinnt bei Überschneidungen, auch wenn
-    /// eine niedrigere später gestartet wurde.
+    /// Priority: the higher priority wins on overlaps, even if a lower one was
+    /// started later.
     pub priority: i8,
-    /// Durchläufe, wenn nicht endlos (`Scene::loop_mode == Once`).
+    /// Cycles when not endless (`Scene::loop_mode == Once`).
     pub repeat_count: u16,
-    /// Am Ende (nach den Durchläufen) diese Szenen starten.
+    /// At the end (after the cycles) start these scenes.
     pub jump_to_scenes: Vec<SceneId>,
-    /// Am Ende (nach den Durchläufen) freigeben.
+    /// At the end (after the cycles) release.
     pub release_at_end: bool,
-    /// Welche laufenden Szenen beim Start freigegeben werden.
+    /// Which running scenes are released on start.
     pub release_mode: BankScope,
-    /// Von welchen Szenen diese Szene nicht freigegeben werden kann.
+    /// Which scenes cannot release this scene.
     pub protect: BankScope,
-    /// Flash: läuft nur, solange die Szene gedrückt wird.
+    /// Flash: only runs while the scene is pressed.
     pub flash: bool,
-    /// Phasen-Versatz beim Start/Stoppen (für Effekte).
+    /// Phase offset on start/stop (for effects).
     pub phase_in_ms: u32,
     pub phase_out_ms: u32,
-    /// SUPER SCENE: Dauer von „Ton ausfaden“ in ms (0 = Programmeinstellung).
+    /// SUPER SCENE: duration of “Fade out sound” in ms (0 = program setting).
     pub audio_fade_ms: u32,
 }
 
@@ -577,7 +578,7 @@ impl Scene {
         }
     }
 
-    /// Zeitleiste, falls es eine SUPER SCENE ist.
+    /// Timeline, if it is a SUPER SCENE.
     pub fn timeline(&self) -> Option<&crate::timeline::Timeline> {
         self.effects.iter().find_map(|e| e.timeline.as_ref())
     }
@@ -586,8 +587,8 @@ impl Scene {
         self.effects.iter_mut().find_map(|e| e.timeline.as_mut())
     }
 
-    /// SUPER SCENE: einzigen Schritt auf die Länge der Zeitleiste setzen,
-    /// damit Wiederholen/Freigeben am Ende wie bei anderen Szenen wirken.
+    /// SUPER SCENE: set the only step to the length of the timeline so
+    /// repeat/release at the end work as for other scenes.
     pub fn sync_timeline_length(&mut self) {
         let Some(len) = self.timeline().map(|t| t.length_ms()) else {
             return;
@@ -600,13 +601,14 @@ impl Scene {
         self.steps[0].hold_ms = len.clamp(100, u64::from(u32::MAX)) as u32;
     }
 
-    /// Szene mit STEPS-Effekt (Schrittfolge; kein weiterer Effekt möglich).
+    /// Scene with a STEPS effect (sequence of steps; no further effect
+    /// possible).
     pub fn has_steps(&self) -> bool {
         self.effects.iter().any(|e| e.kind == EffectKind::Steps)
     }
 
-    /// Neuen Schritt nach `after` einfügen (Kopie dieses Schritts, Haltezeit
-    /// 1 s); gibt seinen Index zurück.
+    /// Insert a new step after `after` (copy of that step, hold time 1 s);
+    /// returns its index.
     pub fn insert_step(&mut self, after: usize) -> usize {
         let mut st = self
             .steps
@@ -620,7 +622,7 @@ impl Scene {
         at
     }
 
-    /// Schritt löschen (der letzte bleibt immer erhalten).
+    /// Delete a step (the last one always stays).
     pub fn remove_step(&mut self, i: usize) -> bool {
         if self.steps.len() <= 1 || i >= self.steps.len() {
             return false;
@@ -629,20 +631,20 @@ impl Scene {
         true
     }
 
-    /// Effekt anhängen; gibt seine ID zurück.
+    /// Append an effect; returns its ID.
     pub fn add_effect(&mut self, kind: EffectKind) -> u32 {
         let id = self.effects.iter().map(|e| e.id).max().unwrap_or(0) + 1;
         self.effects.push(Effect::new(id, kind));
         id
     }
 
-    /// Gesamtdauer eines Durchlaufs aller Schritte.
+    /// Total duration of one cycle of all steps.
     pub fn duration_ms(&self) -> u64 {
         self.steps.iter().map(Step::duration_ms).sum()
     }
 
-    /// Gesamtdauer setzen: Schritte werden anteilig gestreckt bzw. gestaucht
-    /// (eine Szene mit einem Schritt bekommt diese Haltezeit).
+    /// Set the total duration: steps are stretched or compressed
+    /// proportionally (a scene with one step gets this hold time).
     pub fn set_duration_ms(&mut self, ms: u64) {
         let old = self.duration_ms();
         if self.steps.is_empty() {
@@ -668,18 +670,18 @@ impl Scene {
 pub struct Zone {
     pub id: ZoneId,
     pub name: String,
-    /// Akzentfarbe der Zone in der Oberfläche (RGB).
+    /// Accent color of the zone in the UI (RGB).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<[u8; 3]>,
-    /// In STEUERN ausgeblendet (Szenen laufen trotzdem weiter).
+    /// Hidden in CONTROL (scenes keep running anyway).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
-    /// Kompaktansicht in STEUERN: niedrige Szenenkarten nur mit Namen.
+    /// Compact view in CONTROL: low scene cards with the name only.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub compact: bool,
 }
 
-/// Eine benannte Geräteauswahl (z. B. „Moving Heads“, „PARs Traverse“).
+/// A named fixture selection (e.g. “Moving heads”, “PARs truss”).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Group {
     pub id: GroupId,
@@ -689,23 +691,23 @@ pub struct Group {
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PatchError {
-    #[error("Unbekannter Gerätetyp „{0}“")]
+    #[error("Unknown fixture type “{0}”")]
     UnknownType(String),
-    #[error("Universum {0} existiert nicht (vorhanden: {1})")]
+    #[error("Universe {0} does not exist (available: {1})")]
     BadUniverse(u8, u8),
-    #[error("Adresse {address} + {channels} Kanäle passt nicht in ein Universum")]
+    #[error("Address {address} + {channels} channels does not fit into a universe")]
     OutOfRange { address: u16, channels: u16 },
-    #[error("Überschneidung mit „{0}“")]
+    #[error("Overlaps with “{0}”")]
     Overlap(String),
 }
 
 #[derive(Debug, Error)]
 pub enum ShowError {
-    #[error("Datei konnte nicht gelesen/geschrieben werden: {0}")]
+    #[error("Could not read/write file: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Ungültiges Show-Format: {0}")]
+    #[error("Invalid show format: {0}")]
     Format(#[from] serde_json::Error),
-    #[error("Show-Version {0} wird nicht unterstützt (maximal {SHOW_FORMAT_VERSION})")]
+    #[error("Show version {0} is not supported (maximum {SHOW_FORMAT_VERSION})")]
     Version(u32),
 }
 
@@ -713,7 +715,8 @@ pub enum ShowError {
 pub struct Show {
     pub format_version: u32,
     pub name: String,
-    /// Anzahl DMX-Universen – immer [`UNIVERSES`] (ältere Dateien werden beim Laden angepasst).
+    /// Number of DMX universes – always [`UNIVERSES`] (older files are adjusted
+    /// on load).
     pub universes: u8,
     pub fixture_types: Vec<FixtureType>,
     pub fixtures: Vec<Fixture>,
@@ -721,31 +724,31 @@ pub struct Show {
     pub scenes: Vec<Scene>,
     #[serde(default)]
     pub groups: Vec<Group>,
-    /// Veranstaltungsort für den 3D-Visualisierer.
+    /// Venue for the 3D visualizer.
     #[serde(default)]
     pub venue: crate::venue::Venue,
-    /// Tastatur- und MIDI-Zuordnungen.
+    /// Keyboard and MIDI mappings.
     #[serde(default, skip_serializing_if = "crate::mapping::Mappings::is_empty")]
     pub mappings: crate::mapping::Mappings,
-    /// Touch-Oberfläche (Seiten mit frei angeordneten Bedienelementen).
+    /// Touch surface (pages with freely arranged controls).
     #[serde(default, skip_serializing_if = "crate::touch::TouchLayout::is_empty")]
     pub touch: crate::touch::TouchLayout,
-    /// Verbindung zu OBS (Videoblöcke, OBS-Aktionen).
+    /// Connection to OBS (video blocks, OBS actions).
     #[serde(default, skip_serializing_if = "crate::obs::ObsSettings::is_default")]
     pub obs: crate::obs::ObsSettings,
-    /// Reiter SOUND: Player, Playlisten, Jingle-Pads.
+    /// SOUND tab: players, playlists, jingle pads.
     #[serde(default, skip_serializing_if = "crate::sound::SoundBoard::is_default")]
     pub sound: crate::sound::SoundBoard,
 }
 
 impl Default for Show {
     fn default() -> Self {
-        Self::new("Neue Show", 2)
+        Self::new("New show", 2)
     }
 }
 
 impl Show {
-    /// Neue Show. `_universes` wird ignoriert; jede Show hat [`UNIVERSES`] Universen.
+    /// New show. `_universes` is ignored; every show has [`UNIVERSES`] universes.
     pub fn new(name: impl Into<String>, _universes: u8) -> Self {
         Self {
             format_version: SHOW_FORMAT_VERSION,
@@ -764,8 +767,8 @@ impl Show {
         }
     }
 
-    /// Ältere Shows: Szenen mit mehreren Schritten bekommen den
-    /// STEPS-Effekt, damit ihre Schritte bearbeitbar sind.
+    /// Older shows: scenes with several steps get the STEPS effect so their
+    /// steps can be edited.
     pub fn normalize(&mut self) {
         for fx in self.scenes.iter_mut().flat_map(|s| s.effects.iter_mut()) {
             fx.ensure_settings();
@@ -783,7 +786,7 @@ impl Show {
         }
     }
 
-    // ---------- Laden / Speichern ----------
+    // ---------- Load / save ----------
 
     pub fn to_json(&self) -> Result<String, ShowError> {
         Ok(serde_json::to_string_pretty(self)?)
@@ -809,9 +812,9 @@ impl Show {
         Self::from_json(&std::fs::read_to_string(path)?)
     }
 
-    /// Kanalarten der gespeicherten Gerätetypen anhand der Kanalnamen
-    /// verfeinern (ältere Shows kennen z. B. Laser oder Nebel noch nicht).
-    /// Gibt die Anzahl geänderter Kanäle zurück.
+    /// Refine the channel kinds of the stored fixture types based on the
+    /// channel names (older shows do not know e.g. laser or fog yet).
+    /// Returns the number of changed channels.
     pub fn refine_channel_kinds(&mut self) -> usize {
         let mut n = 0;
         for ty in &mut self.fixture_types {
@@ -826,13 +829,13 @@ impl Show {
         n
     }
 
-    // ---------- Gerätetypen ----------
+    // ---------- Fixture types ----------
 
     pub fn fixture_type(&self, key: &str) -> Option<&FixtureType> {
         self.fixture_types.iter().find(|t| t.key == key)
     }
 
-    /// Fügt einen Gerätetyp hinzu oder ersetzt ihn (gleicher Schlüssel).
+    /// Adds a fixture type or replaces it (same key).
     pub fn upsert_fixture_type(&mut self, ty: FixtureType) {
         match self.fixture_types.iter_mut().find(|t| t.key == ty.key) {
             Some(existing) => *existing = ty,
@@ -854,7 +857,7 @@ impl Show {
         self.fixture_type(&fixture.type_key)
     }
 
-    /// Virtueller Dimmer eines Geräts, falls es einen braucht.
+    /// Virtual dimmer of a fixture, if it needs one.
     pub fn virtual_dimmer(&self, id: FixtureId) -> Option<ChannelRef> {
         let f = self.fixture(id)?;
         self.type_of(f)?
@@ -871,8 +874,8 @@ impl Show {
         FixtureId(self.fixtures.iter().map(|f| f.id.0).max().unwrap_or(0) + 1)
     }
 
-    /// Prüft, ob ein Gerät an diese Stelle passt. `ignore` erlaubt das
-    /// Umpatchen eines vorhandenen Geräts.
+    /// Checks whether a fixture fits at this position. `ignore` allows
+    /// repatching an existing fixture.
     pub fn check_placement(
         &self,
         type_key: &str,
@@ -951,7 +954,7 @@ impl Show {
         Ok(())
     }
 
-    /// Entfernt ein Gerät und alle Szenenwerte, die es betreffen.
+    /// Removes a fixture and all scene values that concern it.
     pub fn remove_fixture(&mut self, id: FixtureId) {
         self.fixtures.retain(|f| f.id != id);
         for g in &mut self.groups {
@@ -964,7 +967,7 @@ impl Show {
         }
     }
 
-    /// Form eines Geräts im Bühnenplan (gespeichert oder nach Typ geschätzt).
+    /// Shape of a fixture in the stage plan (stored or estimated by type).
     pub fn plan_shape(&self, id: FixtureId) -> PlanShape {
         let Some(f) = self.fixture(id) else {
             return PlanShape::Round;
@@ -974,7 +977,7 @@ impl Show {
             .unwrap_or(PlanShape::Round)
     }
 
-    /// Drehung eines Geräts im Bühnenplan (Grad, 0..360).
+    /// Rotation of a fixture in the stage plan (degrees, 0..360).
     pub fn plan_rotation(&self, id: FixtureId) -> f32 {
         self.fixture(id)
             .and_then(|f| f.plan_rotation)
@@ -982,7 +985,7 @@ impl Show {
             .rem_euclid(360.0)
     }
 
-    /// Größenfaktor eines Geräts im Bühnenplan.
+    /// Size factor of a fixture in the stage plan.
     pub fn plan_size(&self, id: FixtureId) -> f32 {
         self.fixture(id)
             .and_then(|f| f.plan_size)
@@ -990,14 +993,14 @@ impl Show {
             .clamp(*PLAN_SIZE_RANGE.start(), *PLAN_SIZE_RANGE.end())
     }
 
-    /// Kanalanzahl eines gepatchten Geräts.
+    /// Channel count of a patched fixture.
     pub fn fixture_channels(&self, id: FixtureId) -> u16 {
         self.fixture(id)
             .and_then(|f| self.type_of(f))
             .map_or(0, |t| t.channel_count())
     }
 
-    /// Belegung eines Universums: Index = Adresse − 1 → Gerät (falls belegt).
+    /// Usage of a universe: index = address − 1 → fixture (if occupied).
     pub fn address_map(&self, universe: u8) -> Vec<Option<FixtureId>> {
         let mut map = vec![None; UNIVERSE_SIZE];
         for f in self.fixtures.iter().filter(|f| f.universe == universe) {
@@ -1010,10 +1013,10 @@ impl Show {
         map
     }
 
-    /// Kopien von Geräten patchen: jede an die erste freie Adresse ab
-    /// `from` (wenn nötig in den folgenden Universen), in der gegebenen
-    /// Reihenfolge. Namen werden weitergezählt („PAR 4“ → „PAR 5“), die
-    /// Bühnenposition leicht versetzt. Liefert die neuen IDs.
+    /// Patch copies of fixtures: each at the first free address from `from`
+    /// (in the following universes if needed), in the given order. Names are
+    /// counted on (“PAR 4” → “PAR 5”), the stage position slightly offset.
+    /// Returns the new IDs.
     pub fn paste_fixtures(&mut self, src: &[Fixture], universe: u8, from: u16) -> Vec<FixtureId> {
         let mut out = Vec::new();
         let (mut u, mut a) = (universe, from.max(1));
@@ -1021,7 +1024,7 @@ impl Show {
             let Some(ch) = self.fixture_type(&f.type_key).map(|t| t.channel_count()) else {
                 continue;
             };
-            // erste freie Stelle ab (u, a) suchen
+            // find the first free position from (u, a)
             let mut place = None;
             while u < self.universes && place.is_none() {
                 let mut addr = a;
@@ -1064,9 +1067,9 @@ impl Show {
         out
     }
 
-    /// Position im Bühnenplan (eigene oder automatische).
-    /// Lage eines Geräts im 3D-Raum: gespeichert oder aus dem Bühnenplan
-    /// abgeleitet (unter der Decke, nach unten strahlend).
+    /// Position in the stage plan (own or automatic).
+    /// Placement of a fixture in 3D space: stored or derived from the stage plan
+    /// (below the ceiling, pointing down).
     pub fn placement3d(&self, id: FixtureId) -> crate::venue::Placement {
         if let Some(p) = self.fixture(id).and_then(|f| f.place3d) {
             return p;
@@ -1090,8 +1093,8 @@ impl Show {
             .unwrap_or_else(|| crate::plan::default_position(idx))
     }
 
-    /// Nächster freier Platz im Bühnenplan neben `from` (ringförmig nach
-    /// außen gesucht), damit eingefügte Geräte nicht übereinander liegen.
+    /// Next free spot in the stage plan next to `from` (searched in rings
+    /// outwards) so pasted fixtures do not lie on top of each other.
     pub fn free_plan_position(&self, from: [f32; 2]) -> [f32; 2] {
         const STEP: f32 = 0.06;
         const MIN_DIST: f32 = 0.035;
@@ -1107,7 +1110,7 @@ impl Show {
         };
         let inside = |p: [f32; 2]| (0.02..=0.98).contains(&p[0]) && (0.02..=0.98).contains(&p[1]);
         for ring in 1..20i32 {
-            // zuerst rechts daneben, dann links, dann darunter, zuletzt darüber
+            // first to the right, then to the left, then below, finally above
             let mut cands = Vec::new();
             for dy in -ring..=ring {
                 for dx in -ring..=ring {
@@ -1127,8 +1130,8 @@ impl Show {
         from
     }
 
-    /// Freier Name: endet `name` auf eine Zahl, wird bis zum ersten freien
-    /// Namen weitergezählt, sonst „name 2“, „name 3“ ….
+    /// Free name: if `name` ends in a number it is counted up to the first free
+    /// name, otherwise “name 2”, “name 3” ….
     fn next_fixture_name(&self, name: &str) -> String {
         let taken = |n: &str| self.fixtures.iter().any(|f| f.name == n);
         if !taken(name) {
@@ -1150,7 +1153,7 @@ impl Show {
         }
     }
 
-    /// Erste freie Adresse in einem Universum, an die `channels` Kanäle passen.
+    /// First free address in a universe where `channels` channels fit.
     pub fn next_free_address(&self, universe: u8, channels: u16) -> Option<u16> {
         if channels == 0 || usize::from(channels) > UNIVERSE_SIZE {
             return None;
@@ -1169,7 +1172,7 @@ impl Show {
             .map(|s| s as u16 + 1)
     }
 
-    // ---------- Zonen & Szenen ----------
+    // ---------- Zones & scenes ----------
 
     pub fn add_zone(&mut self, name: impl Into<String>) -> ZoneId {
         let id = ZoneId(self.zones.iter().map(|z| z.id.0).max().unwrap_or(0) + 1);
@@ -1187,7 +1190,7 @@ impl Show {
         self.zones.iter_mut().find(|z| z.id == id)
     }
 
-    /// Kopiert eine Bank samt ihrer Szenen; die Kopie steht direkt dahinter.
+    /// Copies a bank together with its scenes; the copy comes right after it.
     pub fn duplicate_zone(&mut self, id: ZoneId, name: impl Into<String>) -> Option<ZoneId> {
         let pos = self.zones.iter().position(|z| z.id == id)?;
         let new_id = ZoneId(self.zones.iter().map(|z| z.id.0).max().unwrap_or(0) + 1);
@@ -1210,7 +1213,7 @@ impl Show {
         Some(new_id)
     }
 
-    /// Löscht eine Bank mitsamt ihren Szenen.
+    /// Deletes a bank together with its scenes.
     pub fn remove_zone_with_scenes(&mut self, id: ZoneId) {
         self.zones.retain(|z| z.id != id);
         self.scenes.retain(|s| s.zone != Some(id));
@@ -1220,7 +1223,7 @@ impl Show {
         self.zones.iter().find(|z| z.id == id)
     }
 
-    // ---------- Gruppen ----------
+    // ---------- Groups ----------
 
     pub fn add_group(&mut self, name: impl Into<String>, fixtures: Vec<FixtureId>) -> GroupId {
         let id = GroupId(self.groups.iter().map(|g| g.id.0).max().unwrap_or(0) + 1);
@@ -1236,8 +1239,8 @@ impl Show {
         self.groups.retain(|g| g.id != id);
     }
 
-    /// Szenen ohne Bank in eine Bank übernehmen (erste Bank, sonst neue mit
-    /// `name`). Gibt `true` zurück, wenn etwas geändert wurde.
+    /// Move scenes without a bank into a bank (the first bank, otherwise a new
+    /// one named `name`). Returns `true` if something changed.
     pub fn adopt_free_scenes(&mut self, name: impl Into<String>) -> bool {
         if !self.scenes.iter().any(|s| s.zone.is_none()) {
             return false;
@@ -1252,11 +1255,12 @@ impl Show {
         true
     }
 
-    /// Szenen in eine Bank verschieben, vor `before` (sonst ans Ende der
-    /// Bank). Die Reihenfolge der verschobenen Szenen bleibt erhalten.
+    /// Move scenes into a bank, before `before` (otherwise to the end of the
+    /// bank). The order of the moved scenes is kept.
     pub fn move_scenes(&mut self, ids: &[SceneId], zone: ZoneId, before: Option<SceneId>) {
         let moving = |id: SceneId| ids.contains(&id);
-        // Ziel darf keine der verschobenen Szenen sein: nächste andere in der Bank
+        // The target must not be one of the moved scenes: the next other one in
+        // the bank
         let before = before.and_then(|b| {
             let start = self.scenes.iter().position(|s| s.id == b)?;
             self.scenes[start..]
@@ -1325,8 +1329,8 @@ impl Show {
         id
     }
 
-    /// Neue SUPER SCENE hinter der ersten Szene aus `ids`: die Szenen liegen
-    /// nacheinander auf Spur 1.
+    /// New SUPER SCENE after the first scene from `ids`: the scenes lie one
+    /// after another on track 1.
     pub fn create_super_scene(
         &mut self,
         ids: &[SceneId],
@@ -1347,13 +1351,13 @@ impl Show {
             }
         }
         sc.sync_timeline_length();
-        // direkt hinter die erste Szene
+        // right after the first scene
         let new = self.scenes.pop()?;
         self.scenes.insert(pos + 1, new);
         Some(id)
     }
 
-    /// Kopiert eine Szene; die Kopie steht direkt hinter dem Original.
+    /// Copies a scene; the copy comes right after the original.
     pub fn duplicate_scene(&mut self, id: SceneId, name: impl Into<String>) -> Option<SceneId> {
         let pos = self.scenes.iter().position(|s| s.id == id)?;
         let mut copy = self.scenes[pos].clone();
@@ -1396,7 +1400,7 @@ mod zone_tests {
         assert_eq!(order(&s, z1), vec![b]);
         s.move_scenes(&[a, c], z1, None);
         assert_eq!(order(&s, z1), vec![b, a, c]);
-        // vor sich selbst einfügen = vor die nächste nicht verschobene Szene
+        // inserting before itself = before the next scene not moved
         s.move_scenes(&[a], z1, Some(a));
         assert_eq!(order(&s, z1), vec![b, a, c]);
         s.move_scenes(&[c], z1, Some(b));
@@ -1425,11 +1429,11 @@ mod zone_tests {
         s.add_scene("x", Some(a), vec![]);
         s.add_scene("y", Some(a), vec![]);
         s.add_scene("z", Some(b), vec![]);
-        let c = s.duplicate_zone(a, "A (Kopie)").unwrap();
+        let c = s.duplicate_zone(a, "A (copy)").unwrap();
         assert_eq!(s.zones.iter().map(|z| z.id).collect::<Vec<_>>(), [a, c, b]);
         let copied: Vec<_> = s.scenes.iter().filter(|x| x.zone == Some(c)).collect();
         assert_eq!(copied.len(), 2);
-        // neue, eindeutige IDs
+        // new, unique IDs
         let mut ids: Vec<_> = s.scenes.iter().map(|x| x.id).collect();
         ids.dedup();
         assert_eq!(ids.len(), 5);
@@ -1440,7 +1444,7 @@ mod zone_tests {
         s.remove_scene(dup);
         s.remove_zone_with_scenes(a);
         assert_eq!(s.scenes.len(), 3);
-        // Show-Format: ausgeblendet/Farbe nur gespeichert, wenn gesetzt
+        // Show format: hidden/color only saved when set
         let json = s.to_json().unwrap();
         assert!(!json.contains("hidden"));
     }
@@ -1470,7 +1474,7 @@ mod tests {
         assert_eq!((sc.steps[1].hold_ms, sc.steps[1].fade_ms), (1000, 0));
         assert!(sc.remove_step(1));
         assert!(sc.remove_step(0));
-        assert!(!sc.remove_step(0), "der letzte Schritt bleibt");
+        assert!(!sc.remove_step(0), "the last step stays");
     }
 
     fn show() -> Show {
@@ -1502,12 +1506,12 @@ mod tests {
                 (f.name.clone(), f.address)
             })
             .collect();
-        // 1..6 belegt, 7..12 frei, 13..18 belegt, danach 19
+        // 1..6 occupied, 7..12 free, 13..18 occupied, then 19
         assert_eq!(got, vec![("PAR 3".into(), 7), ("PAR 4".into(), 19)]);
-        // volles Universum: weiter im nächsten
+        // full universe: continue in the next one
         let ids = s.paste_fixtures(&src, 0, 510);
         assert_eq!(s.fixture(ids[0]).unwrap().universe, 1);
-        // keine zwei Geräte an derselben Stelle im Bühnenplan
+        // no two fixtures at the same position in the stage plan
         let pos: Vec<[f32; 2]> = s.fixtures.iter().map(|f| s.plan_position(f.id)).collect();
         for (i, a) in pos.iter().enumerate() {
             for b in &pos[i + 1..] {
@@ -1593,7 +1597,7 @@ mod tests {
     fn json_roundtrip() {
         let mut s = show();
         let f = s.add_fixture("A", "generic/rgb-3ch", 0, 1).unwrap();
-        let z = s.add_zone("Farben");
+        let z = s.add_zone("Colors");
         s.add_scene(
             "Rot",
             Some(z),
@@ -1623,7 +1627,7 @@ mod tests {
         let mut s = show();
         let a = s.add_fixture("A", "generic/rgb-3ch", 0, 1).unwrap();
         let b = s.add_fixture("B", "generic/rgb-3ch", 0, 4).unwrap();
-        let g = s.add_group("Alle", vec![a, b]);
+        let g = s.add_group("All", vec![a, b]);
         s.remove_fixture(a);
         assert_eq!(
             s.groups.iter().find(|x| x.id == g).unwrap().fixtures,

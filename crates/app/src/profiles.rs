@@ -1,5 +1,5 @@
-//! Eigene Geräteprofile (Profile Builder) im Konfigurationsordner:
-//! `<config>/fixtures/<schlüssel>.dmxfixture`.
+//! Custom fixture profiles (Profile Builder) in the config folder:
+//! `<config>/fixtures/<key>.dmxfixture`.
 
 use std::path::PathBuf;
 
@@ -17,7 +17,7 @@ fn file(key: &str) -> Option<PathBuf> {
     dir().map(|d| d.join(format!("{key}.{PROFILE_EXT}")))
 }
 
-/// Ein gespeichertes Profil mit seinen Gerätetypen (für Bibliothek und Patch).
+/// A saved profile with its fixture types (for library and patch).
 #[derive(Clone, Debug)]
 pub struct UserProfile {
     pub profile: Profile,
@@ -31,7 +31,7 @@ impl UserProfile {
     }
 }
 
-/// Alle gespeicherten Profile mit Gerätetypen.
+/// All saved profiles with fixture types.
 pub fn load_user() -> Vec<UserProfile> {
     let mut list: Vec<UserProfile> = load_all().into_iter().map(UserProfile::new).collect();
     sort_user(&mut list);
@@ -47,7 +47,7 @@ pub fn sort_user(list: &mut [UserProfile]) {
     });
 }
 
-/// Alle gespeicherten Profile, nach Hersteller und Name sortiert.
+/// All saved profiles, sorted by manufacturer and name.
 pub fn load_all() -> Vec<Profile> {
     let Some(dir) = dir() else {
         return Vec::new();
@@ -75,7 +75,7 @@ pub fn sort(list: &mut [Profile]) {
     list.sort_by_key(|p| (p.manufacturer.to_lowercase(), p.name.to_lowercase()));
 }
 
-/// Vergibt beim ersten Speichern einen freien Schlüssel und schreibt die Datei.
+/// Assigns a free key on the first save and writes the file.
 pub fn save(p: &mut Profile, taken: &[Profile]) -> Result<PathBuf, String> {
     if p.key.is_empty() {
         let base = p.suggested_key();
@@ -97,8 +97,8 @@ pub fn save(p: &mut Profile, taken: &[Profile]) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-/// Entfernt ein Profil aus der Bibliothek. Die Datei wandert nach
-/// `fixtures/geloescht/`, damit nichts endgültig verloren geht.
+/// Removes a profile from the library. The file moves to
+/// `fixtures/geloescht/` so nothing is lost for good.
 pub fn delete(key: &str) -> Result<(), String> {
     let (Some(f), Some(d)) = (file(key), dir()) else {
         return Ok(());
@@ -112,7 +112,7 @@ pub fn delete(key: &str) -> Result<(), String> {
     std::fs::rename(&f, target).map_err(|e| e.to_string())
 }
 
-/// Heutiges Datum JJJJ-MM-TT (UTC, ohne zusätzliche Abhängigkeit).
+/// Today's date YYYY-MM-DD (UTC, without an extra dependency).
 pub fn today() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

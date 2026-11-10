@@ -1,6 +1,6 @@
-//! XY-Feld für Bewegungsgrenzen: das Rechteck zeigt den erlaubten Pan-
-//! (waagerecht) und Tilt-Bereich (senkrecht). Griffe an Ecken und Kanten
-//! ändern die Grenzen, Ziehen im Inneren verschiebt den ganzen Bereich.
+//! XY pad for movement limits: the rectangle shows the allowed pan
+//! (horizontal) and tilt range (vertical). Handles at corners and edges
+//! change the limits, dragging inside moves the whole range.
 
 use crate::i18n::t;
 use eframe::egui::{self, pos2, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
@@ -115,7 +115,7 @@ impl LimitPad<'_> {
             ui.data_mut(|d| d.remove::<Option<Grip>>(id));
         }
 
-        // Zeichnen
+        // Drawing
         let p = ui.painter();
         p.rect_filled(rect, 0.0, theme::bg());
         let faint = Stroke::new(1.0, theme::raised());

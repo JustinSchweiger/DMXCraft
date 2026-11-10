@@ -1,12 +1,12 @@
-//! DIP-Schalter-Stellung für eine DMX-Startadresse.
+//! DIP switch setting for a DMX start address.
 //!
-//! Übliche Belegung an Geräten: Schalter 1–9 binär (1, 2, 4, … 256),
-//! Schalter 10 ist meist eine Sonderfunktion und bleibt aus.
+//! Usual layout on fixtures: switches 1–9 binary (1, 2, 4, … 256), switch 10
+//! is usually a special function and stays off.
 
-/// Anzahl der dargestellten Schalter.
+/// Number of switches shown.
 pub const SWITCHES: usize = 10;
 
-/// `true` = Schalter AN. Index 0 ist Schalter 1 (Wert 1).
+/// `true` = switch ON. Index 0 is switch 1 (value 1).
 pub fn switches(address: u16) -> [bool; SWITCHES] {
     let mut s = [false; SWITCHES];
     for (i, on) in s.iter_mut().enumerate().take(9) {
@@ -15,7 +15,7 @@ pub fn switches(address: u16) -> [bool; SWITCHES] {
     s
 }
 
-/// Nummern der eingeschalteten Schalter, z. B. Adresse 101 → [1, 3, 6, 7].
+/// Numbers of the switches that are on, e.g. address 101 → [1, 3, 6, 7].
 pub fn on_switches(address: u16) -> Vec<usize> {
     switches(address)
         .iter()
@@ -25,7 +25,7 @@ pub fn on_switches(address: u16) -> Vec<usize> {
         .collect()
 }
 
-/// Wert eines Schalters (Schalter 1 = 1, Schalter 9 = 256).
+/// Value of a switch (switch 1 = 1, switch 9 = 256).
 pub fn switch_value(switch: usize) -> u16 {
     1 << (switch.clamp(1, 9) - 1)
 }
@@ -38,7 +38,7 @@ mod tests {
     fn known_addresses() {
         assert_eq!(on_switches(1), vec![1]);
         assert_eq!(on_switches(101), vec![1, 3, 6, 7]); // 1+4+32+64
-        assert_eq!(on_switches(512), Vec::<usize>::new()); // 512 passt nicht in 9 Bit
+        assert_eq!(on_switches(512), Vec::<usize>::new()); // 512 does not fit into 9 bits
         assert_eq!(on_switches(511), (1..=9).collect::<Vec<_>>());
         assert!(!switches(511)[9]);
         assert_eq!(switch_value(9), 256);

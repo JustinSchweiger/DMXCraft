@@ -1,6 +1,5 @@
-//! Zeitleiste einer SUPER SCENE: Spuren mit Blöcken (Szenen oder Audio),
-//! wie in einem Schnittprogramm. Die Engine spielt die Blöcke der Szenen
-//! ab; Audio gibt die Oberfläche wieder.
+//! Timeline of a SUPER SCENE: tracks with blocks (scenes or audio), as in a
+//! video editor. The engine plays the scene blocks; the UI plays the audio.
 
 use std::collections::BTreeSet;
 
@@ -10,7 +9,7 @@ use crate::audio::AudioGrid;
 use crate::mapping::Control;
 use crate::show::{ChannelRef, SceneId};
 
-/// Raster der Zeitleiste.
+/// Grid of the timeline.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GridMode {
@@ -23,18 +22,19 @@ pub enum GridMode {
 #[serde(default)]
 pub struct Timeline {
     pub tracks: Vec<Track>,
-    /// Laufende Nummer für Spur- und Block-IDs.
+    /// Running number for track and block IDs.
     pub next_id: u32,
-    /// Längenänderung wiederholt die Szene (Schleife) …
+    /// A length change repeats the scene (loop) …
     pub loop_resize: bool,
-    /// … oder dehnt/staucht sie (Geschwindigkeit).
+    /// … or stretches/compresses it (speed).
     pub stretch_resize: bool,
-    /// Blöcke dürfen sich auf einer Spur überlappen.
+    /// Blocks may overlap on a track.
     pub allow_overlap: bool,
     pub auto_scroll: bool,
     pub snap: bool,
     pub grid: GridMode,
-    /// Beat-Raster folgt den Audio-Blöcken (Tempo je Stück) statt BPM/Offset.
+    /// The beat grid follows the audio blocks (tempo per piece) instead of
+    /// BPM/offset.
     pub follow_audio: bool,
     pub bpm: f32,
     pub offset_ms: u32,
@@ -65,19 +65,19 @@ impl Default for Timeline {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Track {
     pub id: u32,
-    /// Stumm (Auge aus).
+    /// Muted (eye off).
     #[serde(default)]
     pub muted: bool,
-    /// Gesperrt (Schloss).
+    /// Locked (lock).
     #[serde(default)]
     pub locked: bool,
-    /// Unterspuren (Dimmer/Lautstärke) sichtbar.
+    /// Sub-tracks (dimmer/volume) visible.
     #[serde(default)]
     pub expanded: bool,
-    /// Eigener Name (leer = „Spur n“).
+    /// Own name (empty = “Track n”).
     #[serde(default)]
     pub name: String,
-    /// Farbe der Spur (Kopfleiste).
+    /// Color of the track (header bar).
     #[serde(default)]
     pub color: Option<[u8; 3]>,
     #[serde(default)]
@@ -87,46 +87,46 @@ pub struct Track {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ClipContent {
     Scene(SceneId),
-    /// Audiodatei; `offset_ms` = Beginn innerhalb der Datei, `length_ms` =
-    /// Länge der Datei (0 = unbekannt).
+    /// Audio file; `offset_ms` = start within the file, `length_ms` = length of
+    /// the file (0 = unknown).
     Audio {
         path: String,
         #[serde(default)]
         offset_ms: u64,
         #[serde(default)]
         length_ms: u64,
-        /// Korrigiertes Beat-Raster der ganzen Datei (ältere Shows; neue
-        /// Korrekturen stehen je Stück in `segment_grids`).
+        /// Corrected beat grid of the whole file (older shows; new corrections are
+        /// stored per piece in `segment_grids`).
         #[serde(default)]
         grid: Option<AudioGrid>,
-        /// Korrigierte Raster je Stück (Beginn des Stücks in ms, Raster).
+        /// Corrected grids per piece (start of the piece in ms, grid).
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         segment_grids: Vec<(u64, AudioGrid)>,
-        /// Trigger: Ereignisse eines Frequenzbands lösen Ziele aus.
+        /// Triggers: events of a frequency band trigger targets.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         triggers: Vec<AudioTrigger>,
     },
-    /// Video, das OBS in einer Medienquelle abspielt (`offset_ms`/`length_ms`
-    /// wie bei Audio).
+    /// Video that OBS plays in a media source (`offset_ms`/`length_ms` as for
+    /// audio).
     Video {
         path: String,
         #[serde(default)]
         offset_ms: u64,
         #[serde(default)]
         length_ms: u64,
-        /// OBS-Szene, zu der beim Start gewechselt wird (leer = keine).
+        /// OBS scene to switch to at the start (empty = none).
         #[serde(default, skip_serializing_if = "String::is_empty")]
         obs_scene: String,
-        /// Medienquelle in OBS (leer = die aus den OBS-Einstellungen).
+        /// Media source in OBS (empty = the one from the OBS settings).
         #[serde(default, skip_serializing_if = "String::is_empty")]
         source: String,
     },
-    /// Aktion in OBS beim Erreichen des Blocks.
+    /// Action in OBS when the block is reached.
     Obs(crate::obs::ObsAction),
 }
 
 impl ClipContent {
-    /// Beginn innerhalb der Datei (Audio/Video).
+    /// Start within the file (audio/video).
     pub fn offset_mut(&mut self) -> Option<&mut u64> {
         match self {
             Self::Audio { offset_ms, .. } | Self::Video { offset_ms, .. } => Some(offset_ms),
@@ -134,7 +134,7 @@ impl ClipContent {
         }
     }
 
-    /// Länge der Datei (Audio/Video; 0 = unbekannt).
+    /// Length of the file (audio/video; 0 = unknown).
     pub fn media_len(&self) -> Option<(u64, u64)> {
         match self {
             Self::Audio {
@@ -152,30 +152,30 @@ impl ClipContent {
     }
 }
 
-/// Trigger eines Audio-Blocks: ein gefiltertes Band der Datei; überschreitet
-/// sein Pegel den Schwellwert, wird das Ziel ausgelöst (wie eine Taste).
+/// Trigger of an audio block: a filtered band of the file; when its level
+/// exceeds the threshold the target is triggered (like a key).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AudioTrigger {
     pub id: u32,
     pub name: String,
-    /// Durchlassbereich in Hz (`low_hz` ≤ 20: Tiefpass, `high_hz` ≥ 16 000:
-    /// Hochpass).
+    /// Pass band in Hz (`low_hz` ≤ 20: low pass, `high_hz` ≥ 16 000: high
+    /// pass).
     pub low_hz: f32,
     pub high_hz: f32,
-    /// Schwellwert und Hysterese (0..=1 des Bandpegels).
+    /// Threshold and hysteresis (0..=1 of the band level).
     pub threshold: f32,
     pub hysteresis: f32,
-    /// Mindestabstand zwischen zwei Ereignissen.
+    /// Minimum gap between two events.
     pub min_gap_ms: u32,
-    /// Mindestdauer eines Ereignisses.
+    /// Minimum duration of an event.
     pub hold_ms: u32,
-    /// Vorlauf: Ereignis so viel früher auslösen (Trägheit der Geräte).
+    /// Lead time: trigger the event this much earlier (inertia of the fixtures).
     pub lead_ms: u32,
-    /// Ziel (wie bei Tastatur/MIDI) und ggf. feste Kanäle.
+    /// Target (as for keyboard/MIDI) and fixed channels if any.
     pub control: Option<Control>,
     pub channels: Vec<ChannelRef>,
-    /// Ziel nur während des Ereignisses (sonst umschalten).
+    /// Target only during the event (otherwise toggle).
     pub flash: bool,
     pub muted: bool,
 }
@@ -186,7 +186,7 @@ impl Default for AudioTrigger {
     }
 }
 
-/// Voreingestellte Bänder für neue Trigger.
+/// Preset bands for new triggers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TriggerBand {
     Low,
@@ -239,7 +239,7 @@ impl AudioTrigger {
         }
     }
 
-    /// Voreingestelltes Band, falls der Bereich einem entspricht.
+    /// Preset band, if the range matches one.
     pub fn band(&self) -> Option<TriggerBand> {
         TriggerBand::ALL
             .into_iter()
@@ -256,16 +256,16 @@ pub struct Clip {
     pub fade_in_ms: u32,
     #[serde(default)]
     pub fade_out_ms: u32,
-    /// Szene wiederholt sich im Block (sonst bleibt der letzte Stand).
+    /// The scene repeats within the block (otherwise the last state stays).
     #[serde(default = "yes")]
     pub looped: bool,
-    /// Länge an das Tempo (ganze Schläge) anpassen.
+    /// Fit the length to the tempo (whole beats).
     #[serde(default)]
     pub tempo_sync: bool,
-    /// Abspielgeschwindigkeit der Szene (Dehnen).
+    /// Playback speed of the scene (stretching).
     #[serde(default = "one")]
     pub speed: f32,
-    /// Dimmer (Szene) bzw. Lautstärke (Audio), 0..=1.
+    /// Dimmer (scene) or volume (audio), 0..=1.
     #[serde(default = "one")]
     pub level: f32,
     pub content: ClipContent,
@@ -291,7 +291,7 @@ impl Clip {
         }
     }
 
-    /// Pegel durch Ein-/Ausblenden zum Zeitpunkt `t` (0..=1, ohne `level`).
+    /// Level from fade in/out at time `t` (0..=1, without `level`).
     pub fn fade_at(&self, t: u64) -> f32 {
         let since = t.saturating_sub(self.start_ms) as f32;
         let until = self.end_ms().saturating_sub(t) as f32;
@@ -316,7 +316,7 @@ impl Timeline {
         id
     }
 
-    /// Spur einfügen (vor `at`, sonst am Ende); gibt ihre ID zurück.
+    /// Insert a track (before `at`, otherwise at the end); returns its ID.
     pub fn add_track(&mut self, at: Option<usize>) -> u32 {
         let id = self.next();
         let t = Track {
@@ -335,7 +335,7 @@ impl Timeline {
         id
     }
 
-    /// Ende des letzten Blocks.
+    /// End of the last block.
     pub fn length_ms(&self) -> u64 {
         self.tracks
             .iter()
@@ -359,9 +359,9 @@ impl Timeline {
             .find(|c| c.id == id)
     }
 
-    /// Block anlegen; gibt seine ID zurück.
-    /// Szenenblock einfügen: Länge = ein Durchlauf der Szene, Ein-/Ausblendzeit
-    /// aus den Szeneneinstellungen.
+    /// Create a block; returns its ID.
+    /// Insert a scene block: length = one cycle of the scene, fade in/out time
+    /// from the scene settings.
     pub fn add_scene_clip(
         &mut self,
         track: usize,
@@ -413,7 +413,7 @@ impl Timeline {
         None
     }
 
-    /// Block auf eine andere Spur legen.
+    /// Put a block on another track.
     pub fn move_clip_to_track(&mut self, id: u32, track: usize) {
         if track >= self.tracks.len() {
             return;
@@ -423,7 +423,7 @@ impl Timeline {
         }
     }
 
-    /// Block an der Stelle `at` teilen; gibt die ID des zweiten Teils zurück.
+    /// Split a block at `at`; returns the ID of the second part.
     pub fn split_clip(&mut self, id: u32, at: u64) -> Option<u32> {
         let (track, c) = self.clip(id).map(|(t, c)| (t, c.clone()))?;
         if at <= c.start_ms + 40 || at + 40 >= c.end_ms() {
@@ -447,11 +447,11 @@ impl Timeline {
         Some(new_id)
     }
 
-    /// Würde der Block (Spur, Bereich) einen anderen überlappen?
-    /// Mehrere Blöcke gemeinsam um `dt` ms und `dtrack` Spuren verschieben.
-    /// Nicht vor 0 und nicht über die vorhandenen Spuren hinaus; ohne
-    /// erlaubte Überlappung nur, wenn kein fremder Block überdeckt wird.
-    /// Liefert, ob verschoben wurde.
+    /// Would the block (track, range) overlap another one?
+    /// Move several blocks together by `dt` ms and `dtrack` tracks.
+    /// Not before 0 and not beyond the existing tracks; without allowed overlap
+    /// only if no other block is covered.
+    /// Returns whether they were moved.
     pub fn move_group(&mut self, ids: &BTreeSet<u32>, dt: i64, dtrack: isize) -> bool {
         let group: Vec<(usize, Clip)> = ids
             .iter()
@@ -516,9 +516,9 @@ impl Timeline {
         })
     }
 
-    /// Blöcke einfügen (Spur und Zeit relativ zueinander wie in `clips`):
-    /// die Gruppe beginnt auf Spur `track` an der ersten freien Stelle ab
-    /// `at`, ohne andere Blöcke zu überdecken. Liefert die neuen IDs.
+    /// Insert blocks (track and time relative to each other as in `clips`): the
+    /// group starts on track `track` at the first free position from `at`,
+    /// without covering other blocks. Returns the new IDs.
     pub fn paste_group(&mut self, clips: &[(usize, Clip)], track: usize, at: u64) -> Vec<u32> {
         let (Some(first), Some(base)) = (
             clips.iter().map(|(_, c)| c.start_ms).min(),
@@ -530,7 +530,7 @@ impl Timeline {
             .iter()
             .map(|(t, c)| (track + (t - base), c.start_ms - first, c))
             .collect();
-        // so lange nach hinten schieben, bis nichts mehr kollidiert
+        // push back until nothing collides any more
         let mut shift = at;
         'search: for _ in 0..10_000 {
             for &(ti, rel, c) in &parts {
@@ -565,9 +565,9 @@ impl Timeline {
             .collect()
     }
 
-    /// Raster der Zeitleiste an ein Audio-Raster anpassen: Tempo übernehmen,
-    /// Offset auf einen Downbeat des Blocks (`start_ms`, Beginn `offset_ms`
-    /// in der Datei) legen.
+    /// Fit the timeline grid to an audio grid: take over the tempo, put the
+    /// offset on a downbeat of the block (`start_ms`, start `offset_ms` in the
+    /// file).
     pub fn apply_audio_grid(&mut self, start_ms: u64, offset_ms: u64, grid: AudioGrid) {
         self.bpm = grid.bpm;
         self.grid = GridMode::Beat;
@@ -576,19 +576,19 @@ impl Timeline {
         self.offset_ms = t.rem_euclid(bar).round() as u32;
     }
 
-    /// Länge eines Schlags in ms.
+    /// Length of a beat in ms.
     pub fn beat_ms(&self) -> f64 {
         60_000.0 / f64::from(self.bpm.clamp(20.0, 400.0))
     }
 
-    /// Blöcke, die eine Szene enthalten (für Aufräumen beim Löschen).
+    /// Blocks that contain a scene (for cleaning up when deleting).
     pub fn forget_scene(&mut self, id: SceneId) {
         for t in &mut self.tracks {
             t.clips.retain(|c| c.scene() != Some(id));
         }
     }
 
-    /// Aktive Szenenblöcke zum Zeitpunkt `t` in Spurreihenfolge.
+    /// Active scene blocks at time `t` in track order.
     pub fn active_at(&self, t: u64) -> impl Iterator<Item = (usize, &Clip)> {
         self.tracks
             .iter()
@@ -620,13 +620,13 @@ mod tests {
         assert!(tl.move_group(&ids, 500, 0));
         assert_eq!(tl.clip(a).unwrap().1.start_ms, 1500);
         assert_eq!(tl.clip(b).unwrap().1.start_ms, 3500);
-        // nicht vor 0
+        // not before 0
         assert!(tl.move_group(&ids, -5000, 0));
         assert_eq!(tl.clip(a).unwrap().1.start_ms, 0);
         assert_eq!(tl.clip(b).unwrap().1.start_ms, 2000);
-        // fremder Block blockiert
+        // another block is in the way
         assert!(!tl.move_group(&ids, 5500, 0));
-        // Spurwechsel gemeinsam, nicht über die letzte Spur hinaus
+        // Track change together, not beyond the last track
         while tl.tracks.len() < 3 {
             tl.add_track(None);
         }
@@ -645,7 +645,7 @@ mod tests {
             bpm: 120.0,
             downbeat_ms: 300.0,
         };
-        // Block ab 10 s, Datei ab 1 s: Downbeat bei 10 s + 0,3 s - 1 s = 9,3 s
+        // Block from 10 s, file from 1 s: downbeat at 10 s + 0.3 s - 1 s = 9.3 s
         tl.apply_audio_grid(10_000, 1_000, g);
         assert_eq!(tl.bpm, 120.0);
         assert_eq!(tl.grid, GridMode::Beat);
@@ -684,21 +684,21 @@ mod tests {
                 (tr, c.clone())
             })
             .collect();
-        // dreimal an derselben Stelle auf Spur 3 einfügen: hintereinander
+        // insert three times at the same position on track 3: one after another
         let mut starts = Vec::new();
         for _ in 0..3 {
             let ids = t.paste_group(&group[..1], 3, 200);
             starts.push(t.clip(ids[0]).unwrap().1.start_ms);
         }
         assert_eq!(starts, vec![200, 1200, 2200]);
-        // Gruppe über zwei Spuren: Abstand und Spurversatz bleiben
+        // Group across two tracks: spacing and track offset stay
         let ids = t.paste_group(&group, 0, 0);
         let (ta, ca) = t.clip(ids[0]).map(|(x, c)| (x, c.clone())).unwrap();
         let (tb, cb) = t.clip(ids[1]).map(|(x, c)| (x, c.clone())).unwrap();
         assert_eq!((ta, tb), (0, 1));
         assert_eq!(cb.start_ms - ca.start_ms, 1500);
-        // Spur 1 war bei 0..1000 belegt -> Gruppe muss so weit nach hinten,
-        // dass der zweite Block (Spur 1, +1500) frei liegt: erster Start 0 geht
+        // Track 1 was occupied at 0..1000 -> the group has to move back far enough
+        // that the second block (track 1, +1500) is free: first start 0 works
         assert_eq!(ca.start_ms, 0);
     }
 

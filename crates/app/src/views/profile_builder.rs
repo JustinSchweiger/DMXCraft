@@ -1,10 +1,10 @@
-//! Tools → Profile Builder: eigene Geräte anlegen (nach dem Vorbild des
-//! Fixture-Editors der Open Fixture Library).
+//! Tools → Profile Builder: create your own fixtures (modeled on the fixture
+//! editor of the Open Fixture Library).
 //!
-//! Reiter: Allgemein, Physisch, Kanäle (mit DMX-Bereichen), Modi, Prüfen.
-//! Gespeichert wird im Konfigurationsordner ([`crate::profiles`]); die
-//! Geräte erscheinen danach in der Bibliothek unter „Eigene Geräte“.
-//! Export als OFL-Datei (zum Teilen oder Einreichen bei der OFL).
+//! Tabs: General, Physical, Channels (with DMX ranges), Modes, Check.
+//! Saved in the config folder ([`crate::profiles`]); the fixtures then
+//! appear in the library under “My fixtures”.
+//! Export as an OFL file (to share or submit to the OFL).
 
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
@@ -29,21 +29,21 @@ use crate::ui::widgets::{form, text_field, Dialog, Icon, IconButton, Segmented};
 const SIDEBAR_W: f32 = 170.0;
 const TAB_H: f32 = 34.0;
 const FOOT_H: f32 = 52.0;
-/// Formulare (Allgemein, Physisch) nicht über die ganze Fensterbreite ziehen.
+/// Do not stretch forms (General, Physical) across the whole window width.
 const MAX_FORM_W: f32 = 900.0;
 const LIST_W: f32 = 220.0;
 const ROW_H: f32 = 28.0;
 
-/// Was der Profile Builder öffnen soll.
+/// What the Profile Builder should open.
 #[derive(Clone, Debug)]
 pub enum BuilderRequest {
-    /// Fenster öffnen, aktuellen Entwurf behalten (Tools-Menü).
+    /// Open the window, keep the current draft (Tools menu).
     Open,
-    /// Leeres Gerät.
+    /// Empty fixture.
     New,
-    /// Gespeichertes Profil bearbeiten.
+    /// Edit a saved profile.
     Edit(Box<Profile>),
-    /// Neues Gerät nach Vorlage (Bibliothek, Duplikat).
+    /// New fixture from a template (library, duplicate).
     Template(Box<Profile>),
 }
 
@@ -98,20 +98,20 @@ pub struct ProfileBuilder {
     open: bool,
     tab: Tab,
     draft: Profile,
-    /// Stand beim Laden/Speichern (für „ungespeichert“).
+    /// State at load/save (for “unsaved”).
     saved: Profile,
     sel_channel: usize,
-    /// Ausgewählter Bereich im ausgewählten Kanal.
+    /// Selected range in the selected channel.
     sel_range: usize,
-    /// Ziehen an einer Bereichsgrenze: noch nicht verbrauchte Pixel.
+    /// Dragging a range border: pixels not consumed yet.
     drag_acc: f32,
     sel_mode: usize,
-    /// Wartet auf Bestätigung: ungespeicherte Änderungen verwerfen?
+    /// Waiting for confirmation: discard unsaved changes?
     pending: Option<Profile>,
     file: Option<(FileJob, Receiver<Option<PathBuf>>)>,
-    /// Nach dem Anlegen eines Kanals/Modus: Namensfeld fokussieren.
+    /// After creating a channel/mode: focus the name field.
     focus_name: bool,
-    /// Fenster nach vorn holen (beim nächsten Zeichnen).
+    /// Bring the window to the front (at the next draw).
     raise: bool,
 }
 
@@ -120,8 +120,8 @@ impl ProfileBuilder {
         self.draft != self.saved
     }
 
-    /// Anfrage aus Menü oder Bibliothek. `window`: im eigenen Fenster öffnen
-    /// (sonst nur den Entwurf laden – für den Reiter).
+    /// Request from the menu or the library. `window`: open in its own window
+    /// (otherwise only load the draft – for the tab).
     pub fn request(&mut self, req: BuilderRequest, window: bool) {
         self.raise = window;
         let next = match req {
@@ -143,7 +143,7 @@ impl ProfileBuilder {
         }
     }
 
-    /// Neuen Entwurf übernehmen. `fresh` = ungespeichert (Vorlage, neu).
+    /// Take over a new draft. `fresh` = unsaved (template, new).
     fn load(&mut self, p: Profile, fresh: bool) {
         self.saved = if fresh && p.key.is_empty() {
             new_profile()
@@ -165,7 +165,7 @@ impl ProfileBuilder {
         self.open = false;
     }
 
-    /// Im eigenen Fenster öffnen (aus dem Reiter heraus).
+    /// Open in its own window (from the tab).
     pub fn open_window(&mut self) {
         if self.draft == Profile::default() {
             self.load(new_profile(), true);
@@ -174,7 +174,7 @@ impl ProfileBuilder {
         self.raise = true;
     }
 
-    /// Fenstertitel (mit * bei ungespeicherten Änderungen).
+    /// Window title (with * for unsaved changes).
     pub fn title(&self) -> String {
         let name = self.draft.display_name();
         let base = if name.is_empty() {
@@ -189,12 +189,12 @@ impl ProfileBuilder {
         }
     }
 
-    /// Inhalt des eigenen Fensters: Reiter links, Inhalt, Fußzeile.
+    /// Content of the separate window: tabs on the left, content, footer.
     pub fn window(&mut self, root: &mut Ui, engine: &mut Engine, st: &mut AppState) {
         self.body(root, engine, st, false);
     }
 
-    /// Inhalt im Reiter der Titelleiste (statt „Schließen“: „Im Fenster öffnen“).
+    /// Content in the title bar tab (instead of “Close”: “Open in window”).
     pub fn embedded(&mut self, root: &mut Ui, engine: &mut Engine, st: &mut AppState) {
         if self.draft == Profile::default() {
             self.load(new_profile(), true);
@@ -223,7 +223,7 @@ impl ProfileBuilder {
                     pos2(side.right() + theme::SP_L, area.top() + theme::SP_M),
                     pos2(area.right() - theme::SP_L, foot.top() - theme::SP_M),
                 );
-                // Fußzeile
+                // Footer
                 ui.painter().rect_filled(foot, 0.0, theme::bg());
                 ui.painter().hline(
                     foot.x_range(),
@@ -284,7 +284,7 @@ impl ProfileBuilder {
                     }
                 }
             });
-        // Strg+S speichert
+        // Ctrl+S saves
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
             clicked = Some(3);
         }
@@ -306,7 +306,7 @@ impl ProfileBuilder {
         }
     }
 
-    /// Rückfrage, bevor ein ungespeicherter Entwurf ersetzt wird.
+    /// Ask before an unsaved draft is replaced.
     fn confirm(&mut self, ctx: &egui::Context) {
         let mut open = true;
         let res = Dialog::new(t("Unsaved changes"))
@@ -357,7 +357,7 @@ impl ProfileBuilder {
             st.error(tr!("Not saved: {e}", e = e));
             return;
         }
-        // Schlüssel steht erst jetzt fest
+        // The key is only fixed now
         let types = if self.draft.key.is_empty() {
             draft.fixture_types().unwrap_or(types)
         } else {
@@ -365,7 +365,7 @@ impl ProfileBuilder {
         };
         self.draft = draft;
         self.saved = self.draft.clone();
-        // Bereits gepatchte Geräte dieses Profils in der Show aktualisieren
+        // Update already patched fixtures of this profile in the show
         let mut updated = 0;
         for ty in &types {
             if engine.show().fixture_type(&ty.key).is_some() {
@@ -436,10 +436,10 @@ impl ProfileBuilder {
         }
     }
 
-    // ------------------------------------------------------------ Kanäle
+    // ------------------------------------------------------------ Channels
 
     fn channels_tab(&mut self, ui: &mut Ui, rect: Rect) {
-        // drei Spalten: Kanäle | Bereiche | Eigenschaften
+        // three columns: channels | ranges | properties
         let gap = theme::SP_L;
         let list_w = (rect.width() * 0.3).clamp(240.0, 380.0);
         let props_w = (rect.width() * 0.34).clamp(320.0, 480.0);
@@ -459,7 +459,7 @@ impl ProfileBuilder {
         self.channel_props(ui, props);
     }
 
-    /// Linke Spalte: Kanäle als Karten mit Symbol, Name und Art.
+    /// Left column: channels as cards with icon, name and kind.
     fn channel_list(&mut self, ui: &mut Ui, rect: Rect) {
         let p = &mut self.draft;
         let mut lui = ui.new_child(egui::UiBuilder::new().max_rect(rect));
@@ -541,8 +541,8 @@ impl ProfileBuilder {
         }
     }
 
-    /// Mittlere Spalte: Bereiche als Stapel von 0 (oben) bis 255 (unten).
-    /// Die Grenzen lassen sich ziehen oder mit den Pfeilen um 1 verschieben.
+    /// Middle column: ranges as a stack from 0 (top) to 255 (bottom).
+    /// The borders can be dragged or moved by 1 with the arrows.
     fn range_stack(&mut self, ui: &mut Ui, rect: Rect) {
         let i = self.sel_channel;
         let mut rui = ui.new_child(
@@ -595,7 +595,7 @@ impl ProfileBuilder {
                         select = Some(ci);
                     }
                     paint_range_block(ui, block, cap, ci == self.sel_range, resp.hovered());
-                    // Wertgrenzen links
+                    // Value borders on the left
                     let p = ui.painter();
                     p.text(
                         pos2(row.left() + label_w - 6.0, row.top() + 2.0),
@@ -615,7 +615,7 @@ impl ProfileBuilder {
                     }
                     blocks.push(block);
                 }
-                // Griffe an den Grenzen (nicht nach dem letzten Bereich)
+                // Handles at the borders (not after the last range)
                 for (ci, block) in blocks
                     .iter()
                     .enumerate()
@@ -659,7 +659,7 @@ impl ProfileBuilder {
         }
     }
 
-    /// Rechte Spalte: Kanal- und Bereichseigenschaften, Aktionen.
+    /// Right column: channel and range properties, actions.
     fn channel_props(&mut self, ui: &mut Ui, rect: Rect) {
         let i = self.sel_channel;
         let focus = std::mem::take(&mut self.focus_name);
@@ -781,7 +781,7 @@ impl ProfileBuilder {
         self.apply_channel_action(channel_action);
     }
 
-    // ------------------------------------------------------------ Modi
+    // ------------------------------------------------------------ Modes
 
     fn modes_tab(&mut self, ui: &mut Ui, rect: Rect) {
         let (list_rect, detail_rect) = split(rect);
@@ -816,7 +816,7 @@ impl ProfileBuilder {
         match action {
             Some(ListAction::Add) => {
                 let id = p.next_mode_id();
-                // Neuer Modus enthält alle Kanäle (häufigster Fall)
+                // A new mode contains all channels (the most common case)
                 let channels = p.available_names();
                 let names: Vec<String> = p.modes.iter().map(|m| m.name.clone()).collect();
                 p.modes.push(ProfileMode {
@@ -873,7 +873,7 @@ impl ProfileBuilder {
             });
         });
         dui.add_space(theme::SP_M);
-        // Zwei Spalten: Kanäle im Modus | verfügbare Kanäle
+        // Two columns: channels in the mode | available channels
         let top = dui.cursor().top();
         let cols = Rect::from_min_max(pos2(detail_rect.left(), top), detail_rect.max);
         let gap = theme::SP_L;
@@ -1013,7 +1013,7 @@ enum ModeOp {
     Add(String),
 }
 
-/// Neues, leeres Gerät mit einem Dimmer-Kanal und einem Modus.
+/// New, empty fixture with a dimmer channel and one mode.
 fn new_profile() -> Profile {
     let dimmer = ProfileChannel::new("Dimmer", Capability::new(CapabilityKind::Intensity));
     Profile {
@@ -1029,14 +1029,14 @@ fn new_profile() -> Profile {
     }
 }
 
-/// Vorlage aus einem Bibliotheksgerät bzw. einer Geräteliste.
+/// Template from a library fixture or a fixture list.
 pub fn template(manufacturer: &str, name: &str, types: &[FixtureType]) -> Profile {
     let mut p = Profile::from_types(manufacturer, name, types);
     p.name = tr!("{v} (copy)", v = name);
     p
 }
 
-/// Freien Namen finden: „Kanal“, „Kanal 2“, …
+/// Find a free name: “Channel”, “Channel 2”, …
 fn unique(taken: &[String], base: &str) -> String {
     if !taken.iter().any(|n| n == base) {
         return base.to_string();
@@ -1074,7 +1074,7 @@ fn list_header(ui: &mut Ui, add_tip: &str, mut on_add: impl FnMut()) {
     ui.add_space(theme::SP_XS);
 }
 
-/// Zeile einer Liste: Name links, Zusatz rechts gedämpft.
+/// Row of a list: name on the left, extra info muted on the right.
 fn list_row(ui: &mut Ui, selected: bool, name: &str, extra: &str) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
     let p = ui.painter();
@@ -1114,7 +1114,8 @@ fn list_row(ui: &mut Ui, selected: bool, name: &str, extra: &str) -> egui::Respo
     resp
 }
 
-/// Reiterleiste links (wie im Einstellungsfenster), Fehlerzahl am Reiter „Prüfen“.
+/// Tab bar on the left (as in the settings window), error count on the
+/// “Check” tab.
 fn sidebar(ui: &mut Ui, rect: Rect, tab: &mut Tab, problems: usize) {
     let p = ui.painter();
     p.rect_filled(rect, 0.0, theme::bg());
@@ -1205,7 +1206,7 @@ fn full_combo(
         .show_ui(ui, add);
 }
 
-// ------------------------------------------------------------ Allgemein
+// ------------------------------------------------------------ General
 
 fn general(ui: &mut Ui, p: &mut Profile) {
     section(ui, t("Device"));
@@ -1260,7 +1261,7 @@ fn general(ui: &mut Ui, p: &mut Profile) {
                     p.categories.retain(|x| x != c);
                 } else {
                     p.categories.push(c.to_string());
-                    // Reihenfolge wie in der OFL-Liste
+                    // Order as in the OFL list
                     p.categories
                         .sort_by_key(|x| CATEGORIES.iter().position(|k| k == x));
                 }
@@ -1283,7 +1284,7 @@ fn general(ui: &mut Ui, p: &mut Profile) {
     }
 }
 
-/// Auswahl aus den Herstellern der Bibliothek (Schreibweise übernehmen).
+/// Selection from the manufacturers of the library (take over the spelling).
 fn manufacturer_picker(ui: &mut Ui, value: &mut String) {
     let r = ui
         .add(IconButton::new(Icon::ChevronDown))
@@ -1344,7 +1345,7 @@ fn pill(ui: &mut Ui, label: &str, on: bool) -> egui::Response {
     resp
 }
 
-// ------------------------------------------------------------ Physisch
+// ------------------------------------------------------------ Physical
 
 fn physical(ui: &mut Ui, p: &mut Profile) {
     let ph = &mut p.physical;
@@ -1451,12 +1452,12 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
     );
 }
 
-// ------------------------------------------------------------ Funktionen
+// ------------------------------------------------------------ Functions
 
-/// Mindesthöhe eines Bereichs im Stapel.
+/// Minimum height of a range in the stack.
 const RANGE_MIN_H: f32 = 46.0;
 
-/// Kanal-Karte: Nummer, Symbol der Kanalart, Name und Art darunter.
+/// Channel card: number, icon of the channel kind, name and kind below.
 fn card_row(
     ui: &mut Ui,
     selected: bool,
@@ -1514,7 +1515,7 @@ fn card_row(
     resp
 }
 
-/// Ein Bereich im Stapel: Symbol, Typ und Details.
+/// A range in the stack: icon, type and details.
 fn paint_range_block(ui: &Ui, r: Rect, cap: &Capability, selected: bool, hovered: bool) {
     let p = ui.painter();
     let (fill, stroke) = if selected {
@@ -1583,7 +1584,7 @@ fn paint_range_block(ui: &Ui, r: Rect, cap: &Capability, selected: bool, hovered
     }
 }
 
-/// Griff an einer Bereichsgrenze: Pfeil hoch/runter.
+/// Handle at a range border: arrow up/down.
 fn paint_handle(ui: &Ui, r: Rect, active: bool) {
     let p = ui.painter();
     let (fill, stroke) = if active {
@@ -1615,7 +1616,7 @@ fn paint_handle(ui: &Ui, r: Rect, active: bool) {
     Icon::ChevronDown.paint(p, half(false), color);
 }
 
-/// Breiter Knopf (Aktionen in der Eigenschaftsspalte).
+/// Wide button (actions in the properties column).
 fn wide_button(ui: &mut Ui, label: &str, danger: bool, enabled: bool) -> egui::Response {
     let sense = if enabled {
         Sense::click()
@@ -1652,7 +1653,7 @@ fn wide_button(ui: &mut Ui, label: &str, danger: bool, enabled: bool) -> egui::R
     resp
 }
 
-/// Felder, die vom Typ abhängen (Farbe, Effekt, Slot, Start-/Endwert).
+/// Fields that depend on the type (color, effect, slot, start/end value).
 fn capability_fields(ui: &mut Ui, salt: (usize, usize), cap: &mut Capability) {
     use CapabilityKind as C;
     let small = |ui: &mut Ui, w: f32, add: &mut dyn FnMut(&mut Ui)| {
@@ -1752,7 +1753,7 @@ fn capability_fields(ui: &mut Ui, salt: (usize, usize), cap: &mut Capability) {
     }
 }
 
-/// Farbfeld (#rrggbb) mit Farbwähler.
+/// Color field (#rrggbb) with color picker.
 fn hex_field(ui: &mut Ui, hex: &mut String) {
     let mut c = egui::Color32::from_hex(hex).unwrap_or(egui::Color32::WHITE);
     let before = c;
@@ -1771,7 +1772,7 @@ fn hex_field(ui: &mut Ui, hex: &mut String) {
     }
 }
 
-// ------------------------------------------------------------ Prüfen
+// ------------------------------------------------------------ Check
 
 fn check(ui: &mut Ui, p: &Profile) {
     let problems = p.problems();
@@ -1882,7 +1883,7 @@ fn problem_text(p: &Problem) -> String {
     }
 }
 
-// ------------------------------------------------------------ Dateien
+// ------------------------------------------------------------ Files
 
 fn pick_import(ctx: &egui::Context) -> Receiver<Option<PathBuf>> {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -1914,7 +1915,7 @@ fn pick_export(ctx: &egui::Context, p: &Profile) -> Receiver<Option<PathBuf>> {
     rx
 }
 
-/// Lädt eine Gerätedatei als (ungespeicherten) Entwurf.
+/// Loads a fixture file as an (unsaved) draft.
 fn import(path: &std::path::Path) -> Result<Profile, String> {
     let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let ext = path
@@ -1927,7 +1928,8 @@ fn import(path: &std::path::Path) -> Result<Profile, String> {
         let f = dmxcraft_ofl::convert_qxf(&text).map_err(|e| e.to_string())?;
         Profile::from_types(&f.manufacturer, &f.name, &f.modes)
     } else {
-        // OFL-Ordnerstruktur: <hersteller>/<gerät>.json – Namen aus der Bibliothek
+        // OFL folder structure: <manufacturer>/<fixture>.json – names from the
+        // library
         let man_key = path
             .parent()
             .and_then(|p| p.file_name())
@@ -1940,12 +1942,12 @@ fn import(path: &std::path::Path) -> Result<Profile, String> {
             .map_or(String::new(), |f| f.manufacturer.clone());
         Profile::from_ofl(&man, &text).map_err(|e| e.to_string())?
     };
-    // Importierte Geräte werden immer neu angelegt
+    // Imported fixtures are always created anew
     p.key.clear();
     Ok(p)
 }
 
-// ------------------------------------------------------------ Texte
+// ------------------------------------------------------------ Texts
 
 fn kind_label(k: CapabilityKind) -> &'static str {
     use CapabilityKind as C;

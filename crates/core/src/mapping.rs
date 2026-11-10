@@ -1,19 +1,19 @@
-//! Tastatur- und MIDI-Zuordnungen: Tasten bzw. MIDI-Noten/-Regler lösen
-//! Bedienelemente aus (Szene starten, Bank anzeigen, Blackout …). Gespeichert
-//! in der Show; als Voreinstellung im- und exportierbar.
+//! Keyboard and MIDI mappings: keys or MIDI notes/controllers trigger
+//! controls (start a scene, show a bank, blackout …). Stored in the show;
+//! can be imported and exported as presets.
 
 use serde::{Deserialize, Serialize};
 
 use crate::show::{ChannelRef, GroupId, SceneId, ZoneId};
 use crate::FixtureId;
 
-/// Alle Zuordnungen einer Show.
+/// All mappings of a show.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Mappings {
     pub keyboard: Vec<Mapping>,
     pub midi: Vec<Mapping>,
-    /// Nächste freie ID.
+    /// Next free ID.
     pub next_id: u32,
 }
 
@@ -36,7 +36,7 @@ impl Mappings {
         }
     }
 
-    /// Neue Zuordnung (ohne Eingabe – wird beim Lernen gesetzt).
+    /// New mapping (without input – set while learning).
     pub fn add(&mut self, kind: MapKind, control: Control) -> u32 {
         self.next_id = self.next_id.max(1);
         let id = self.next_id;
@@ -59,7 +59,7 @@ impl Mappings {
         self.list_mut(kind).iter_mut().find(|m| m.id == id)
     }
 
-    /// Zuordnungen, deren Szenen nicht mehr existieren, entfernen.
+    /// Remove mappings whose scenes no longer exist.
     pub fn retain_scenes(&mut self, exists: impl Fn(SceneId) -> bool) {
         for list in [&mut self.keyboard, &mut self.midi] {
             list.retain(|m| match m.element() {
@@ -72,7 +72,7 @@ impl Mappings {
     }
 }
 
-/// Tastatur oder MIDI.
+/// Keyboard or MIDI.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MapKind {
@@ -80,130 +80,129 @@ pub enum MapKind {
     Midi,
 }
 
-/// Eine Zuordnung Eingabe → Bedienelement.
+/// A mapping input → control.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mapping {
     pub id: u32,
     pub control: Control,
-    /// Angeklicktes Element, wenn das Ziel davon abweicht (z. B. Szene →
-    /// „Index in der Bank“). Daran erkennt die Überlagerung die Zuordnung.
+    /// Clicked element if the target differs from it (e.g. scene → “index in
+    /// the bank”). The overlay recognizes the mapping by it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub element: Option<Control>,
-    /// `None`: noch nicht gelernt.
+    /// `None`: not learned yet.
     #[serde(default)]
     pub input: Option<Input>,
     #[serde(default)]
     pub mode: ButtonMode,
-    /// Nur solange gedrückt (Szene läuft, bis die Taste losgelassen wird).
+    /// Only while pressed (the scene runs until the key is released).
     #[serde(default)]
     pub flash: bool,
-    /// MIDI-Rückmeldung (LEDs am Controller).
+    /// MIDI feedback (LEDs on the controller).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feedback: Option<Feedback>,
-    /// Anzeigename (Kategorie, Ziel) bei Bedienelementen der Oberfläche
-    /// ([`Control::Ui`]); andere Ziele werden aus der Show beschriftet.
+    /// Display name (category, target) for interface controls
+    /// ([`Control::Ui`]); other targets are labeled from the show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<(String, String)>,
-    /// Feste Kanäle (Programmer-Fader, zugeordnet mit einer Geräteauswahl):
-    /// Ziel bei [`Control::Channels`].
+    /// Fixed channels (programmer fader, mapped with a fixture selection):
+    /// target for [`Control::Channels`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub channels: Vec<ChannelRef>,
 }
 
 impl Mapping {
-    /// Element in der Oberfläche, zu dem die Zuordnung gehört.
+    /// Element in the UI the mapping belongs to.
     pub fn element(&self) -> Control {
         self.element.unwrap_or(self.control)
     }
 }
 
-/// Was ausgelöst wird.
+/// What is triggered.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Control {
-    /// Szene starten/stoppen.
+    /// Start/stop a scene.
     Scene {
         target: SceneTarget,
     },
-    /// Bank anzeigen (`None` = alle).
+    /// Show a bank (`None` = all).
     ShowBank {
         zone: Option<ZoneId>,
     },
-    /// Nächste/vorige Bank anzeigen.
+    /// Show the next/previous bank.
     BankStep {
         delta: i32,
     },
-    /// Laufende Szene einer Bank pausieren.
+    /// Pause the running scene of a bank.
     ZonePause {
         zone: ZoneId,
     },
-    /// Laufende Szene einer Bank einen Schritt weiter/zurück.
+    /// Running scene of a bank one step forward/back.
     ZoneStep {
         zone: ZoneId,
         delta: i32,
     },
     Blackout,
-    /// Gruppe auswählen (`None` = alle Geräte); nochmal: Auswahl leeren.
+    /// Select a group (`None` = all fixtures); again: clear the selection.
     Group {
         id: Option<GroupId>,
     },
-    /// Gerät im Plan: Auswahl umschalten.
+    /// Fixture in the plan: toggle the selection.
     Fixture {
         id: FixtureId,
     },
-    /// Einzelner Kanal eines Geräts (Live-Wert), unabhängig von der Auswahl.
+    /// Single channel of a fixture (live value), independent of the selection.
     Channel {
         channel: ChannelRef,
     },
-    /// Feste Kanäle der Zuordnung ([`Mapping::channels`]) als Live-Werte –
-    /// wirkt unabhängig von der Auswahl.
+    /// Fixed channels of the mapping ([`Mapping::channels`]) as live values –
+    /// works independently of the selection.
     Channels,
-    /// Bedienelement der Oberfläche (Knopf, Regler, Farbfeld …), erkannt
-    /// über einen festen Schlüssel ([`ui_key`]). Das Element reagiert selbst,
-    /// solange es angezeigt wird.
+    /// Interface control (button, slider, color field …), identified by a fixed
+    /// key ([`ui_key`]). The element reacts itself while it is shown.
     Ui {
         key: u64,
-        /// Regler (Wert) statt Knopf (Drücken).
+        /// Slider (value) instead of button (press).
         fader: bool,
     },
-    /// Gesamthelligkeit (Wert der Eingabe).
+    /// Overall brightness (value of the input).
     Master,
-    /// Alle Szenen stoppen.
+    /// Stop all scenes.
     StopAll,
-    /// Ton-Master: Lautstärke der Audioblöcke (Wert der Eingabe).
+    /// Sound master: volume of the audio blocks (value of the input).
     AudioMaster,
-    /// Ton stumm schalten.
+    /// Mute the sound.
     AudioMute,
-    /// Ton gleichmäßig ausblenden (Dauer in den Einstellungen).
+    /// Fade out the sound evenly (duration in the settings).
     AudioFade,
 }
 
-/// Welche Szene: diese, die ausgewählte, oder nach Position in einer Bank.
+/// Which scene: this one, the selected one, or by position in a bank.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SceneTarget {
     Scene {
         id: SceneId,
     },
-    /// Die in der Oberfläche ausgewählte(n) Szene(n).
+    /// The scene(s) selected in the UI.
     Selected,
-    /// n-te Szene (ab 0) einer Bank.
+    /// n-th scene (from 0) of a bank.
     Index {
         zone: ZoneId,
         index: usize,
     },
-    /// n-te Szene der gerade angezeigten Bank.
+    /// n-th scene of the bank currently shown.
     IndexInShownBank {
         index: usize,
     },
 }
 
-/// Taste oder MIDI-Nachricht.
+/// Key or MIDI message.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Input {
     Key {
-        /// Name der Taste (egui `Key::name`, z. B. „A“, „F1“, „Space“).
+        /// Name of the key (egui `Key::name`, e.g. “A”, “F1”, “Space”).
         key: String,
         #[serde(default)]
         ctrl: bool,
@@ -213,19 +212,19 @@ pub enum Input {
         alt: bool,
     },
     Midi {
-        /// Gerätename (leer = jedes Gerät).
+        /// Device name (empty = any device).
         #[serde(default)]
         device: String,
-        /// Kanal 1–16.
+        /// Channel 1–16.
         channel: u8,
         #[serde(default)]
         message: MidiMessage,
-        /// Noten- bzw. Reglernummer 0–127.
+        /// Note or controller number 0–127.
         number: u8,
     },
 }
 
-/// Art der MIDI-Nachricht.
+/// Kind of the MIDI message.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MidiMessage {
@@ -234,18 +233,19 @@ pub enum MidiMessage {
     Cc,
 }
 
-/// Wie die Eingabe wirkt.
+/// How the input works.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ButtonMode {
-    /// Drücken schaltet um.
+    /// Pressing toggles.
     #[default]
     Toggle,
-    /// Wert der Eingabe (Anschlag/Regler): über 0 an, 0 aus; Master: Helligkeit.
+    /// Value of the input (velocity/controller): above 0 on, 0 off; master:
+    /// brightness.
     Value,
 }
 
-/// LED-Rückmeldung: Nachricht je Zustand an ein MIDI-Ausgabegerät.
+/// LED feedback: message per state to a MIDI output device.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Feedback {
     pub device: String,
@@ -253,8 +253,8 @@ pub struct Feedback {
     pub on: FeedbackState,
 }
 
-/// Kanal (1–16) und Anschlagstärke (0–127) für einen Zustand. Bei manchen
-/// Controllern wählt der Kanal das Leuchtverhalten und die Stärke die Farbe.
+/// Channel (1–16) and velocity (0–127) for a state. On some controllers the
+/// channel chooses the light behavior and the velocity the color.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FeedbackState {
     pub channel: u8,
@@ -277,15 +277,15 @@ impl Default for Feedback {
     }
 }
 
-/// Fester Schlüssel eines Bedienelements aus einem Namen wie
-/// „programmer/fader/dimmer/1“ (FNV-1a, unabhängig von Version und Plattform).
+/// Fixed key of a control from a name such as “programmer/fader/dimmer/1”
+/// (FNV-1a, independent of version and platform).
 pub fn ui_key(name: &str) -> u64 {
     name.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
         (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
     })
 }
 
-/// Prüfsumme einer Kanalliste (für den Schlüssel „Fader mit diesen Geräten“).
+/// Checksum of a channel list (for the key “fader with these fixtures”).
 pub fn channels_key(channels: &[ChannelRef]) -> u64 {
     let mut s = String::new();
     for c in channels {
@@ -294,7 +294,7 @@ pub fn channels_key(channels: &[ChannelRef]) -> u64 {
     ui_key(&s)
 }
 
-/// Notenname wie in vielen DAWs und Daslight-Listen: 60 = C3, 0 = C-2.
+/// Note name as in many DAWs and Daslight lists: 60 = C3, 0 = C-2.
 pub fn note_name(n: u8) -> String {
     const NAMES: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
@@ -303,7 +303,7 @@ pub fn note_name(n: u8) -> String {
 }
 
 impl Input {
-    /// Kurzform für Listen: „Strg+A“, „1/G#3 (Gerät)“, „1/CC 7“.
+    /// Short form for lists: “Ctrl+A”, “1/G#3 (device)”, “1/CC 7”.
     pub fn label(&self) -> String {
         match self {
             Input::Key {
@@ -344,7 +344,7 @@ impl Input {
         }
     }
 
-    /// Passt eine eingehende MIDI-Nachricht (Gerät, Kanal, Art, Nummer)?
+    /// Does an incoming MIDI message match (device, channel, kind, number)?
     pub fn matches_midi(&self, dev: &str, ch: u8, msg: MidiMessage, num: u8) -> bool {
         match self {
             Input::Midi {

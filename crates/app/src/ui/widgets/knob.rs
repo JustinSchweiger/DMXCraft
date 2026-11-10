@@ -1,25 +1,25 @@
-//! Drehregler: Ziehen nach oben/unten ändert den Wert, Doppelklick setzt
-//! ihn auf den Standard zurück. Darunter steht die Bezeichnung; der Wert
-//! erscheint nur beim Drehen als Hinweis am Mauszeiger.
+//! Rotary knob: dragging up/down changes the value, double-click resets it
+//! to the default. The label sits below; the value only appears as a hint at
+//! the mouse pointer while turning.
 
 use eframe::egui::{self, pos2, Color32, Sense, Shape, Stroke, Ui, Vec2};
 
 use crate::ui::theme;
 
-/// Durchmesser des Reglers.
+/// Diameter of the knob.
 const SIZE: f32 = 44.0;
-/// Drehbereich (ab „7 Uhr“ bis „5 Uhr“).
+/// Rotation range (from “7 o'clock” to “5 o'clock”).
 const SWEEP: f32 = std::f32::consts::PI * 1.5;
 
 pub struct Knob<'a> {
-    /// Wert 0..=1.
+    /// Value 0..=1.
     value: &'a mut f32,
     label: &'a str,
     text: String,
     default: f32,
     color: Color32,
     enabled: bool,
-    /// Zuordenbar über Tastatur/MIDI: (Schlüssel, Kategorie).
+    /// Mappable via keyboard/MIDI: (key, category).
     map: Option<(String, String)>,
 }
 
@@ -36,13 +36,13 @@ impl<'a> Knob<'a> {
         }
     }
 
-    /// Wert für den Doppelklick.
+    /// Value for the double-click.
     pub fn default_value(mut self, v: f32) -> Self {
         self.default = v;
         self
     }
 
-    /// Akzentfarbe (z. B. Farbe der Szene).
+    /// Accent color (e.g. color of the scene).
     pub fn color(mut self, c: Color32) -> Self {
         self.color = c;
         self
@@ -53,14 +53,14 @@ impl<'a> Knob<'a> {
         self
     }
 
-    /// Über Tastatur/MIDI zuordenbar machen (fester Schlüssel, Kategorie für
-    /// die Liste; das Ziel ist die Beschriftung).
+    /// Make it mappable via keyboard/MIDI (fixed key, category for the list;
+    /// the target is the label).
     pub fn map(mut self, key: impl Into<String>, category: impl Into<String>) -> Self {
         self.map = Some((key.into(), category.into()));
         self
     }
 
-    /// Zeichnet den Regler; `true`, wenn sich der Wert geändert hat.
+    /// Draws the knob; `true` if the value changed.
     pub fn show(self, ui: &mut Ui) -> bool {
         let w = 64.0;
         let (rect, _) = ui.allocate_exact_size(Vec2::new(w, SIZE + 20.0), Sense::hover());
@@ -107,7 +107,7 @@ impl<'a> Knob<'a> {
         let p = ui.painter();
         let c = knob.center();
         let r = SIZE * 0.5;
-        let start = std::f32::consts::PI * 0.75; // 7 Uhr
+        let start = std::f32::consts::PI * 0.75; // 7 o'clock
         let arc = |from: f32, to: f32, radius: f32| -> Vec<egui::Pos2> {
             let n = 32;
             (0..=n)

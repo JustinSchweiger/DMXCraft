@@ -1,5 +1,5 @@
-//! Ansichten. Jede Ansicht ist ein Typ mit eigenem Zustand, der [`View`]
-//! implementiert; gemeinsame Daten kommen über [`ViewCtx`].
+//! Views. Every view is a type with its own state that implements [`View`];
+//! shared data comes via [`ViewCtx`].
 
 pub mod control;
 pub mod fixture_menu;
@@ -15,11 +15,11 @@ use eframe::egui::Ui;
 
 use crate::state::AppState;
 
-/// Alles, was eine Ansicht zum Zeichnen braucht.
+/// Everything a view needs for drawing.
 pub struct ViewCtx<'a> {
     pub engine: &'a mut Engine,
     pub state: &'a mut AppState,
-    /// Zuletzt ausgegebener DMX-Frame (für Live-Anzeigen).
+    /// Last output DMX frame (for live displays).
     pub frame: &'a DmxFrame,
 }
 

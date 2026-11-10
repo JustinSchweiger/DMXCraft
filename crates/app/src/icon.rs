@@ -1,4 +1,4 @@
-//! App-Logo: Fenster-Icon und Textur für die Kopfzeile.
+//! App logo: window icon and texture for the header.
 
 use std::sync::Arc;
 

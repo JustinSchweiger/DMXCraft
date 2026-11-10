@@ -1,8 +1,8 @@
-//! EINRICHTEN → Patch-Raster: Adressbelegung eines Universums.
+//! SETUP → patch grid: address usage of a universe.
 //!
-//! * Modus **Patch**: Geräte als Balken über ihren Adressbereich; per Ziehen
-//!   auf eine neue Startadresse verschieben, freie Adressen sind sofort sichtbar.
-//! * Modus **Ausgang**: die aktuell gesendeten DMX-Werte.
+//! * **Patch** mode: fixtures as bars across their address range; drag them
+//!   to a new start address, free addresses are visible at once.
+//! * **Output** mode: the DMX values currently being sent.
 
 use crate::i18n::t;
 use dmxcraft_core::{FixtureId, UNIVERSE_SIZE};
@@ -16,7 +16,7 @@ use crate::views::{View, ViewCtx};
 
 const COLUMNS: usize = 32;
 const ROWS: usize = UNIVERSE_SIZE / COLUMNS;
-/// Zellhöhe passt sich der verfügbaren Höhe an (zwischen diesen Grenzen).
+/// The cell height adapts to the available height (between these limits).
 const CELL_H_MIN: f32 = 18.0;
 const CELL_H_MAX: f32 = 30.0;
 
@@ -29,7 +29,7 @@ enum GridMode {
 
 struct Drag {
     fixture: FixtureId,
-    /// Zelle innerhalb des Geräts, an der gegriffen wurde.
+    /// Cell within the fixture where it was grabbed.
     offset: usize,
 }
 
@@ -39,10 +39,10 @@ pub struct PatchGrid {
     mode: GridMode,
     drag: Option<Drag>,
     context_target: Option<FixtureId>,
-    /// Laufende Umbenennung: Gerät und bearbeiteter Name.
+    /// Ongoing rename: fixture and edited name.
     rename: Option<(FixtureId, String)>,
-    /// Name noch markieren, bis die Maus nach dem Doppelklick losgelassen ist
-    /// (sonst setzt der zweite Klick den Cursor ins Feld).
+    /// Keep the name selected until the mouse is released after the
+    /// double-click (otherwise the second click puts the cursor into the field).
     rename_fresh: bool,
 }
 
@@ -182,7 +182,7 @@ impl PatchGrid {
         let hovered_fixture = hovered_cell.and_then(|c| map[c]);
         let additive = ui.input(|i| i.modifiers.shift || i.modifiers.command);
 
-        // ----- Interaktion (nur Patch-Modus verschiebt) -----
+        // ----- Interaction (only patch mode moves) -----
         if self.mode == GridMode::Patch && resp.drag_started() {
             let origin = ui
                 .input(|i| i.pointer.press_origin())
@@ -199,7 +199,7 @@ impl PatchGrid {
                 }
             }
         }
-        // Zielposition des gezogenen Geräts
+        // Target position of the dragged fixture
         let mut ghost: Option<(usize, usize, bool, String)> = None;
         if let Some(d) = &self.drag {
             if let (Some(p), Some((_, _, len, _))) =
@@ -243,7 +243,7 @@ impl PatchGrid {
                 self.rename_fresh = true;
             }
         }
-        // angeklickte Zelle = Ziel für Einfügen
+        // clicked cell = target for pasting
         if resp.clicked() || resp.secondary_clicked() {
             if let Some(c) = hovered_cell {
                 cx.state.patch_cursor = Some((universe, c as u16 + 1));
@@ -290,7 +290,7 @@ impl PatchGrid {
             );
         });
 
-        // ----- Zeichnen -----
+        // ----- Drawing -----
         let p = ui.painter_at(rect);
         let data = cx.frame.universe(self.universe);
         for (i, owner) in map.iter().enumerate() {
@@ -340,7 +340,7 @@ impl PatchGrid {
             }
         }
 
-        // Geräte als Balken (pro Zeile ein Segment)
+        // Fixtures as bars (one segment per row)
         let segments = |start: usize, len: usize| -> Vec<(usize, usize)> {
             let mut out = Vec::new();
             let end = (start + len).min(UNIVERSE_SIZE);
@@ -421,7 +421,7 @@ impl PatchGrid {
                 }
             }
         }
-        // Vorschau beim Ziehen
+        // Preview while dragging
         if let Some((start, len, ok, msg)) = &ghost {
             let color = if *ok { theme::OK } else { theme::DANGER };
             for (a, b) in segments(*start, *len) {
@@ -439,7 +439,7 @@ impl PatchGrid {
                 );
             }
         }
-        // Umbenennen direkt im Raster
+        // Rename directly in the grid
         let mut rename_commit: Option<(FixtureId, String)> = None;
         if let Some((id, text)) = &mut self.rename {
             if let Some((_, start, len, _)) = fixtures.iter().find(|f| f.0 == *id) {
@@ -473,7 +473,7 @@ impl PatchGrid {
                     rename_commit = Some((*id, text.as_str().trim().to_string()));
                 }
             } else {
-                // Gerät liegt in einem anderen Universum
+                // Fixture lies in another universe
                 self.rename = None;
             }
         }
@@ -504,7 +504,7 @@ impl PatchGrid {
             resp.on_hover_text_at_pointer(text);
         }
 
-        // Gerät aus der Bibliothek ablegen
+        // Drop a fixture from the library
         let mut lib_drop = None;
         if let Some(d) = egui::DragAndDrop::payload::<LibraryDrag>(ui.ctx()) {
             if let Some(cell) = pointer.and_then(cell_at) {

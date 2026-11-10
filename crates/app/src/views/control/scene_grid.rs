@@ -1,15 +1,15 @@
-//! STEUERN → Szenen-Raster: Bänke als Spalten, Szenen als Karten.
+//! CONTROL → scene grid: banks as columns, scenes as cards.
 //!
-//! Oben die Bankleiste: „Alle“, eine Chip je Bank und **+** für eine neue
-//! Bank. Jede Szene gehört zu einer Bank. Rechtsklick auf eine Bank (Chip oder Spaltenkopf) öffnet das
-//! Bank-Menü (Umbenennen, Farbe, Duplizieren, Ausblenden, Löschen …).
-//! Szenenkarten: Klick auf den Hauptbereich startet/stoppt, Klick auf den
-//! farbigen Streifen rechts wählt die Szene aus (Strg/Umschalt: mehrere).
-//! Eine gestartete Szene wird automatisch (allein) ausgewählt.
-//! Entf löscht ausgewählte Szenen. Am Streifen zieht man Szenen per Drag &
-//! Drop in eine andere Bank oder an eine andere Stelle (ausgewählte Szenen
-//! wandern gemeinsam). **+** im Spaltenkopf legt eine Szene an und startet
-//! gleich das Umbenennen.
+//! At the top the bank bar: “All”, one chip per bank and **+** for a new
+//! bank. Every scene belongs to a bank. Right-clicking a bank (chip or column
+//! header) opens the bank menu (rename, color, duplicate, hide, delete …).
+//! Scene cards: a click on the main area starts/stops, a click on the
+//! colored strip on the right selects the scene (Ctrl/Shift: several).
+//! A started scene is selected automatically (on its own).
+//! Delete removes selected scenes. Using the strip you drag scenes into
+//! another bank or to another position (selected scenes move together).
+//! **+** in the column header creates a scene and starts renaming it right
+//! away.
 
 use std::collections::BTreeSet;
 
@@ -31,7 +31,7 @@ use crate::views::{View, ViewCtx};
 
 const COLUMN_W: f32 = 176.0;
 
-/// Welche Bank-Spalten angezeigt werden.
+/// Which bank columns are shown.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 enum PageFilter {
     #[default]
@@ -40,42 +40,43 @@ enum PageFilter {
 }
 
 enum Action {
-    /// Bank angeklickt (Ziel der Entf-Taste).
+    /// Bank clicked (target of the Delete key).
     FocusBank(ZoneId),
-    /// Flash-Szene gedrückt (`true`) bzw. losgelassen.
+    /// Flash scene pressed (`true`) or released.
     Flash(SceneId, bool),
     Toggle(SceneId),
     Pause(SceneId),
     Jump(SceneId, i32),
     NewScene(ZoneId),
     Delete(SceneId),
-    /// Nur diese Szene auswählen (Klick auf den Streifen).
+    /// Select only this scene (click on the strip).
     Select(SceneId),
-    /// Szene zur Auswahl hinzufügen/entfernen (Strg+Streifen).
+    /// Add the scene to the selection/remove it (Ctrl+strip).
     Mark(SceneId),
-    /// Alle Szenen von der zuletzt angeklickten bis hierher (Umschalt+Streifen).
+    /// All scenes from the last clicked one up to here (Shift+strip).
     Range(SceneId),
-    /// Umbenennen einer Szene starten.
+    /// Start renaming a scene.
     RenameScene(SceneId),
-    /// Umbenennung einer Szene abgeschlossen.
+    /// Renaming a scene finished.
     SetSceneName(SceneId, String),
     DuplicateScene(SceneId),
-    /// Szenen in der Übersicht ausblenden.
+    /// Hide scenes in the overview.
     HideScenes(Vec<SceneId>),
-    /// SUPER SCENE aus den Szenen erstellen (nacheinander auf Spur 1).
+    /// Create a SUPER SCENE from the scenes (one after the other on track 1).
     CreateSuper(Vec<SceneId>),
-    /// Gezogene Szene (samt Auswahl) in Bank `.1` vor Szene `.2` ablegen.
+    /// Drop the dragged scene (with the selection) into bank `.1` before scene
+    /// `.2`.
     MoveScenes(SceneId, ZoneId, Option<SceneId>),
-    /// Farbe für Szenen setzen (`None` = Bankfarbe).
+    /// Set the color of scenes (`None` = bank color).
     SceneColor(Vec<SceneId>, Option<[u8; 3]>),
     Bank(BankAction),
-    /// Umbenennung im Chip abgeschlossen.
+    /// Renaming in the chip finished.
     RenameBank(ZoneId, String),
-    /// Kompaktansicht der Bank umschalten.
+    /// Toggle the compact view of the bank.
     Compact(ZoneId),
 }
 
-/// Aktionen aus dem Bank-Menü.
+/// Actions from the bank menu.
 #[derive(Clone, Copy)]
 enum BankAction {
     New,
@@ -83,37 +84,37 @@ enum BankAction {
     Duplicate(ZoneId),
     Hide(ZoneId),
     Show(ZoneId),
-    /// Eine ausgeblendete Szene wieder einblenden.
+    /// Show a hidden scene again.
     ShowScene(SceneId),
-    /// Alle ausgeblendeten Szenen der Bank einblenden.
+    /// Show all hidden scenes of the bank.
     ShowAllScenes(ZoneId),
     SetColor(ZoneId, Option<[u8; 3]>),
     ColorToScenes(ZoneId),
     SelectScenes(ZoneId),
-    /// Bank samt Szenen löschen.
+    /// Delete the bank together with its scenes.
     Delete(ZoneId),
 }
 
 #[derive(Default)]
 pub struct SceneGridView {
     page: PageFilter,
-    /// Laufende Umbenennung einer Bank (direkt im Chip).
+    /// Ongoing rename of a bank (directly in the chip).
     rename: Option<(ZoneId, String)>,
-    /// Feld beim nächsten Frame fokussieren (nur einmal, sonst lässt es
-    /// sich nicht per Klick verlassen).
+    /// Focus the field in the next frame (only once, otherwise it cannot be left
+    /// with a click).
     rename_focus: bool,
-    /// Laufende Umbenennung einer Szene (direkt in der Karte).
+    /// Ongoing rename of a scene (directly in the card).
     scene_rename: Option<(SceneId, String)>,
     scene_rename_focus: bool,
-    /// Ziel-Verschiebung der Bankleiste (Pfeile/Mausrad), wird animiert.
+    /// Target offset of the bank bar (arrows/mouse wheel), animated.
     bar_scroll: f32,
-    /// Leiste ans Ende blättern, solange eine neue Bank benannt wird.
+    /// Scroll the bar to the end while a new bank is being named.
     bar_to_end: bool,
 }
 
 impl View for SceneGridView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        // Szenen ohne Bank (ältere Shows, Import) in eine Bank übernehmen
+        // Move scenes without a bank (older shows, import) into a bank
         if cx.engine.show().scenes.iter().any(|s| s.zone.is_none()) {
             let n = cx.engine.show().zones.len() + 1;
             cx.engine
@@ -124,13 +125,13 @@ impl View for SceneGridView {
         self.bank_bar(ui, cx.engine, cx.state.locked, &mut actions);
         ui.add_space(theme::SP_S);
 
-        // ausgeblendete Bank als Filter ist nicht mehr wählbar
+        // a hidden bank can no longer be selected as a filter
         if let PageFilter::Zone(z) = self.page {
             if cx.engine.show().zone(z).is_none_or(|z| z.hidden) {
                 self.page = PageFilter::All;
             }
         }
-        // Bankwechsel über Tastatur/MIDI; angezeigte Bank für Zuordnungen
+        // Bank change via keyboard/MIDI; displayed bank for mappings
         if let Some(req) = cx.state.request_bank.take() {
             self.page = match req {
                 Some(z) if cx.engine.show().zone(z).is_some_and(|z| !z.hidden) => {
@@ -182,8 +183,8 @@ impl View for SceneGridView {
 
         drag_ghost(ui.ctx(), cx.engine.show(), &cx.state.selected_scenes);
 
-        // Tastatur: Entf löscht die zuletzt angeklickte Bank bzw. die markierten
-        // Szenen, Esc hebt die Markierung auf
+        // Keyboard: Delete removes the last clicked bank or the selected scenes,
+        // Esc clears the selection
         let typing = ui.ctx().memory(|m| m.focused().is_some());
         if let (false, false, crate::state::Focus::Bank(z)) = (typing, locked, cx.state.focus) {
             if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete))
@@ -226,7 +227,7 @@ impl View for SceneGridView {
         );
         if !renaming && self.rename.is_some() {
             self.rename_focus = true;
-            // neue Bank steht hinten: Leiste dorthin blättern
+            // the new bank is at the end: scroll the bar there
             let last = cx.engine.show().zones.last().map(|z| z.id);
             self.bar_to_end = self.rename.as_ref().map(|(id, _)| *id) == last;
         }
@@ -241,8 +242,8 @@ impl View for SceneGridView {
 }
 
 impl SceneGridView {
-    /// Bankleiste als eigener Streifen; ist sie zu lang, blättern Pfeile ganz
-    /// außen (und das Mausrad) sie seitlich weiter.
+    /// Bank bar as its own strip; if it is too long, arrows at the far ends (and
+    /// the mouse wheel) scroll it sideways.
     fn bank_bar(&mut self, ui: &mut egui::Ui, e: &Engine, locked: bool, actions: &mut Vec<Action>) {
         const ARROW_W: f32 = 26.0;
         let full = ui.available_rect_before_wrap();
@@ -258,7 +259,7 @@ impl SceneGridView {
             StrokeKind::Inside,
         );
 
-        // Breite des Inhalts aus dem letzten Frame
+        // Width of the content from the last frame
         let content_id = ui.make_persistent_id("bank_bar_content");
         let content_w: f32 = ui.ctx().data(|d| d.get_temp(content_id)).unwrap_or(0.0);
         let inner_full = rect.shrink2(Vec2::new(theme::SP_S, 0.0));
@@ -270,7 +271,7 @@ impl SceneGridView {
         };
         let max = (content_w - view.width()).max(0.0);
 
-        // Mausrad über der Leiste blättert seitlich
+        // Mouse wheel over the bar scrolls sideways
         if overflow && ui.rect_contains_pointer(rect) {
             let d = ui.input(|i| i.smooth_scroll_delta);
             let d = if d.x.abs() > d.y.abs() { d.x } else { d.y };
@@ -313,7 +314,7 @@ impl SceneGridView {
         self.page_bar(&mut child, show, e, locked, actions);
         let used = child.min_rect().width();
         if (used - content_w).abs() > 0.5 {
-            // Breite hat sich geändert: Pfeile/Verschiebung im nächsten Frame anpassen
+            // The width changed: adjust arrows/offset in the next frame
             ui.ctx().data_mut(|d| d.insert_temp(content_id, used));
             ui.ctx().request_repaint();
         }
@@ -345,7 +346,7 @@ impl SceneGridView {
             }
             for z in show.zones.iter().filter(|z| !z.hidden) {
                 let c = theme::zone_color(show, Some(z.id));
-                // Umbenennen direkt im Chip
+                // Rename directly in the chip
                 if let Some((id, text)) = self.rename.as_mut().filter(|(id, _)| *id == z.id) {
                     let r = ui.add(text_field(text).desired_width(120.0));
                     if std::mem::take(&mut self.rename_focus) {
@@ -407,7 +408,7 @@ impl SceneGridView {
     }
 }
 
-/// Untermenü „Ausgeblendete Bänke“ mit je einem Eintrag zum Einblenden.
+/// Submenu “Hidden banks” with one entry each to show it again.
 fn hidden_banks_menu(ui: &mut egui::Ui, show: &Show, actions: &mut Vec<Action>) {
     let hidden: Vec<_> = show.zones.iter().filter(|z| z.hidden).collect();
     menu::sub(
@@ -435,10 +436,10 @@ fn hidden_banks_menu(ui: &mut egui::Ui, show: &Show, actions: &mut Vec<Action>) 
     );
 }
 
-/// Bank-Menü (Rechtsklick auf Chip oder Spaltenkopf).
+/// Bank menu (right-click on chip or column header).
 fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction> {
     let mut out = None;
-    // Auswahl außerhalb von `act` (das `out` dauerhaft ausleiht)
+    // Selection outside `act` (which borrows `out` for its lifetime)
     let mut other = None;
     let mut act = |ui: &mut egui::Ui, item: MenuItem<'_>, a: BankAction| {
         if menu::item(ui, item) {
@@ -463,7 +464,7 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
         MenuItem::new(t("Hide")).icon(Icon::LightOff),
         BankAction::Hide(zone),
     );
-    // ausgeblendete Szenen einzeln oder alle wieder einblenden
+    // show hidden scenes again one by one or all at once
     let hidden: Vec<(SceneId, String)> = show
         .scenes
         .iter()
@@ -490,7 +491,7 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
     );
     menu::separator(ui);
 
-    // Bankfarbe: Vorgaben als Quadrate, „Auto“ und eigene Farbe (+)
+    // Bank color: presets as squares, “Auto” and a custom color (+)
     ui.horizontal(|ui| {
         ui.add_space(theme::SP_S);
         ui.label(
@@ -530,7 +531,7 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
     out.or(other)
 }
 
-/// Blätterpfeil am Rand der Bankleiste.
+/// Scroll arrow at the edge of the bank bar.
 fn arrow(ui: &mut egui::Ui, rect: egui::Rect, icon: Icon, enabled: bool) -> bool {
     let resp = ui.interact(
         rect,
@@ -553,7 +554,7 @@ fn arrow(ui: &mut egui::Ui, rect: egui::Rect, icon: Icon, enabled: bool) -> bool
     enabled && resp.clicked()
 }
 
-/// Bank-Reiter; ein Punkt zeigt an, dass in der Bank etwas läuft.
+/// Bank tab; a dot shows that something is running in the bank.
 fn chip(
     ui: &mut egui::Ui,
     page: &mut PageFilter,
@@ -580,7 +581,7 @@ fn chip(
             },
         );
     }
-    // farbige Unterstreichung: dünn, ausgewählt kräftig
+    // colored underline: thin, bold when selected
     let line_h = if selected { 3.0 } else { 1.5 };
     let line = egui::Rect::from_min_max(
         egui::pos2(rect.left() + 4.0, rect.bottom() - line_h),
@@ -636,7 +637,7 @@ fn column(
         .filter(|s| s.zone == Some(zone) && !s.hidden)
         .map(|s| s.id)
         .collect();
-    // Ziel der Transport-Tasten: aktive Szene der Bank
+    // Target of the transport keys: active scene of the bank
     let target = e.active_in_zone(zone);
     let paused = target.and_then(|t| e.progress(t)).is_some_and(|p| p.paused);
 
@@ -646,8 +647,8 @@ fn column(
         } else {
             ui.set_width(COLUMN_W);
         }
-        // Klick-Fläche liegt unter den Knöpfen (UiBuilder::sense), damit „+“ & Co.
-        // ihre Klicks behalten und nur der Rest des Kopfs das Bank-Menü öffnet.
+        // The click area lies below the buttons (UiBuilder::sense) so “+” and co.
+        // keep their clicks and only the rest of the header opens the bank menu.
         let header = ui.scope_builder(egui::UiBuilder::new().sense(Sense::click()), |ui| {
             egui::Frame::new()
                 .fill(theme::raised())
@@ -714,7 +715,7 @@ fn column(
                     });
                 });
         });
-        // Rechtsklick auf den Spaltenkopf: Bank-Menü
+        // Right-click on the column header: bank menu
         if !locked {
             let z = zone;
             let resp = header.response;
@@ -725,14 +726,14 @@ fn column(
             });
         }
         ui.add_space(theme::SP_XS);
-        // Umbrechen: so viele Karten untereinander, wie bis zum unteren Rand
-        // passen, dann in der nächsten Spalte weiter
-        // Zeilenhöhe wie tatsächlich belegt: Karte + Abstand + egui-Abstände
-        // zwischen den Elementen (sonst passt eine Karte zu viel und es scrollt)
+        // Wrapping: as many cards stacked as fit down to the bottom edge, then
+        // continue in the next column
+        // Row height as actually used: card + spacing + egui spacing between the
+        // elements (otherwise one card too many fits and it scrolls)
         let gap_y = ui.spacing().item_spacing.y;
         let row_h = card_h + theme::SP_XS + 2.0 * gap_y;
         let per_col = if wrap {
-            // n Karten brauchen n · Zeile − (Zeile − Karte), kleiner Rand unten
+            // n cards need n · row − (row − card), small margin at the bottom
             let room = ui.clip_rect().bottom() - ui.cursor().top() - 4.0;
             (((room + row_h - card_h) / row_h).floor() as usize).max(1)
         } else {
@@ -770,7 +771,7 @@ fn column(
     });
 }
 
-/// Beschriftung neben dem Mauszeiger, solange eine Szene gezogen wird.
+/// Label next to the mouse pointer while a scene is being dragged.
 fn drag_ghost(ctx: &egui::Context, show: &Show, selected: &BTreeSet<SceneId>) {
     let Some(id) = egui::DragAndDrop::payload::<SceneId>(ctx) else {
         return;
@@ -806,8 +807,8 @@ fn drag_ghost(ctx: &egui::Context, show: &Show, selected: &BTreeSet<SceneId>) {
         });
 }
 
-/// Ablegen einer gezogenen Szene in dieser Bank-Spalte: Einfügemarke zeigen
-/// und beim Loslassen verschieben.
+/// Dropping a dragged scene into this bank column: show the insertion mark
+/// and move it on release.
 fn drop_target(
     ui: &mut egui::Ui,
     zone: ZoneId,
@@ -820,7 +821,7 @@ fn drop_target(
         return;
     };
     let col = ui.min_rect();
-    // Bank (alle ihre Spalten) bis zum unteren Rand des sichtbaren Bereichs
+    // Bank (all of its columns) down to the bottom edge of the visible area
     let area = egui::Rect::from_min_max(
         col.min,
         egui::pos2(
@@ -836,7 +837,7 @@ fn drop_target(
         return;
     };
     let gap = theme::SP_XS * 0.5;
-    // Spalte unter dem Zeiger (beim Umbrechen gibt es mehrere)
+    // Column under the pointer (when wrapping there are several)
     let mut xs: Vec<f32> = cards.iter().map(|(_, c)| c.x).collect();
     xs.dedup_by(|a, b| (*a - *b).abs() < 1.0);
     let col_x = xs
@@ -849,8 +850,8 @@ fn drop_target(
         .filter(|(_, c)| (c.x - col_x).abs() < 1.0)
         .collect();
     let hit = in_col.iter().find(|(_, c)| pos.y < c.y);
-    // vor der getroffenen Karte; unter der letzten Karte einer Spalte: vor der
-    // ersten Karte der nächsten Spalte
+    // before the card hit; below the last card of a column: before the first
+    // card of the next column
     let (before, y) = match hit {
         Some((id, c)) => (Some(*id), c.y - card_h * 0.5 - gap),
         None => {
@@ -865,7 +866,8 @@ fn drop_target(
             (next, y)
         }
     };
-    // nur die Einfügelinie zeigt die Zielposition (kein Rahmen um die Bank)
+    // only the insertion line shows the target position (no frame around the
+    // bank)
     let p = ui.painter();
     p.line_segment(
         [egui::pos2(col_x, y), egui::pos2(col_x + COLUMN_W, y)],
@@ -939,7 +941,7 @@ fn scene_card(
         resp.select.dnd_set_drag_payload(id);
     }
 
-    // Umbenennen direkt in der Karte (über dem Namen)
+    // Rename directly in the card (above the name)
     if let Some((_, text)) = rename.as_mut().filter(|(r, _)| *r == id) {
         let field = egui::Rect::from_min_size(
             resp.main_rect.min + Vec2::new(4.0, 4.0),
@@ -968,7 +970,7 @@ fn scene_card(
         return;
     }
 
-    // Streifen: auswählen (Strg/Umschalt: mehrere), Hauptbereich: starten/stoppen
+    // Strip: select (Ctrl/Shift: several), main area: start/stop
     if resp.select.clicked() && !locked {
         let mods = ui.input(|i| i.modifiers);
         actions.push(if mods.shift {
@@ -980,7 +982,7 @@ fn scene_card(
         });
     }
     if scene.settings.flash {
-        // Flash: läuft nur, solange die Karte gedrückt ist
+        // Flash: only runs while the card is pressed
         let flag = egui::Id::unique(("flash_down", id.0));
         let was: bool = ui.data(|d| d.get_temp(flag)).unwrap_or(false);
         let down = resp.play.is_pointer_button_down_on();
@@ -996,8 +998,8 @@ fn scene_card(
         }
     } else if resp.play.clicked() {
         actions.push(Action::Toggle(id));
-        // eine gestartete Szene wird zugleich (allein) ausgewählt;
-        // Mehrfachauswahl gibt es nur über den Streifen
+        // a started scene is selected at the same time (on its own); multi-selection
+        // is only possible via the strip
         if progress.is_none() && !locked {
             actions.push(Action::Select(id));
         }
@@ -1005,7 +1007,7 @@ fn scene_card(
     if locked {
         return;
     }
-    // Menü wirkt auf alle markierten Szenen, wenn diese dazugehört
+    // The menu acts on all selected scenes if this one belongs to them
     let targets: Vec<SceneId> = if is_marked {
         marked.iter().copied().collect()
     } else {
@@ -1103,14 +1105,14 @@ fn apply(
             Action::Pause(id) => e.toggle_pause(id),
             Action::Jump(id, d) => e.jump_step(id, d),
             Action::NewScene(zone) => {
-                // Werte aus dem Programmer übernehmen, sonst leere Szene
+                // Take values from the programmer, otherwise an empty scene
                 let values = programmer_values(e);
                 let name = tr!("Scene {n}", n = e.show().scenes.len() + 1);
-                // neue Szenen dauern 5 s
+                // new scenes last 5 s
                 let mut step = Step::new(values);
                 step.hold_ms = 5000;
                 let id = e.show_mut().add_scene(name.clone(), Some(zone), vec![step]);
-                // neue Szene gleich markieren
+                // select the new scene right away
                 st.selected_scenes.clear();
                 st.selected_scenes.insert(id);
                 st.focus = crate::state::Focus::Scenes;
@@ -1146,7 +1148,7 @@ fn apply(
                 ));
             }
             Action::CreateSuper(ids) => {
-                // in Anzeigereihenfolge
+                // in display order
                 let ordered: Vec<SceneId> = e
                     .show()
                     .scenes
@@ -1169,7 +1171,7 @@ fn apply(
                 }
             }
             Action::MoveScenes(dragged, zone, before) => {
-                // ausgewählte Szenen wandern mit, wenn die gezogene dazugehört
+                // selected scenes move along if the dragged one belongs to them
                 let ids: Vec<SceneId> = if st.selected_scenes.contains(&dragged) {
                     e.show()
                         .scenes
@@ -1180,7 +1182,7 @@ fn apply(
                 } else {
                     vec![dragged]
                 };
-                // bisherige (Bank-)Farbe behalten statt die neue Bankfarbe zu erben
+                // keep the previous (bank) color instead of inheriting the new bank color
                 for id in &ids {
                     let Some(old) = e.show().scene(*id).map(|s| s.zone) else {
                         continue;
@@ -1223,8 +1225,8 @@ fn apply(
             }
             Action::Range(id) => {
                 st.focus = crate::state::Focus::Scenes;
-                // Reihenfolge wie angezeigt: Bänke von links nach rechts, darin
-                // die Szenen von oben nach unten (ausgeblendete zählen nicht)
+                // Order as displayed: banks from left to right, within them the scenes from
+                // top to bottom (hidden ones do not count)
                 let show = e.show();
                 let order: Vec<SceneId> = show
                     .zones
@@ -1271,7 +1273,7 @@ fn apply_bank(
         BankAction::New => {
             let n = e.show().zones.len() + 1;
             let id = e.show_mut().add_zone(tr!("Bank {n}", n = n));
-            // gleich umbenennen lassen
+            // let the user rename it right away
             *rename = Some((id, tr!("Bank {n}", n = n)));
         }
         BankAction::Rename(id) => {

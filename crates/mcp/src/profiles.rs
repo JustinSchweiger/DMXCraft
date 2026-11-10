@@ -1,6 +1,6 @@
-//! Profile Builder per MCP: eigene Geräteprofile auflisten, lesen, anlegen,
-//! ändern und entfernen. Gespeichert wird über den [`ProfileStore`] der App
-//! (dieselben Dateien wie im Profile Builder).
+//! Profile Builder via MCP: list, read, create, change and remove custom
+//! fixture profiles. Saving goes through the app's [`ProfileStore`] (the
+//! same files as in the Profile Builder).
 
 use dmxcraft_core::{Engine, FixtureType};
 use dmxcraft_ofl::profile::{
@@ -12,7 +12,7 @@ use crate::ProfileStore;
 
 type R = Result<Value, String>;
 
-/// Gerätetypen aller eigenen Profile (für Bibliothekssuche und Patch).
+/// Fixture types of all custom profiles (for library search and patch).
 pub fn user_types(store: &dyn ProfileStore) -> Vec<FixtureType> {
     store
         .load()
@@ -47,16 +47,14 @@ pub fn get(store: &dyn ProfileStore, key: &str) -> R {
         .load()
         .into_iter()
         .find(|p| p.key == key)
-        .ok_or_else(|| {
-            format!("Eigenes Profil „{key}“ nicht gefunden – list_profiles zeigt alle")
-        })?;
+        .ok_or_else(|| format!("Custom profile “{key}” not found – list_profiles shows all"))?;
     Ok(json!({
         "profile": serde_json::to_value(&p).map_err(|e| e.to_string())?,
         "summary": summary(&p),
     }))
 }
 
-/// Vorlage und erlaubte Werte für `save_profile`.
+/// Template and allowed values for `save_profile`.
 pub fn format() -> R {
     let mut example = Profile {
         manufacturer: "Beispiel".into(),
@@ -86,20 +84,20 @@ pub fn format() -> R {
     ];
     example.modes = vec![ProfileMode {
         id: 1,
-        name: "6-Kanal".into(),
+        name: "6 channel".into(),
         short_name: "6ch".into(),
         channels: example.channels.iter().map(|c| c.name.clone()).collect(),
     }];
     Ok(json!({
         "example": serde_json::to_value(&example).map_err(|e| e.to_string())?,
         "notes": [
-            "channels: jeder Kanal mit Namen und Bereichen (capabilities) von start bis end (0–255). Die Bereiche werden beim Speichern lückenlos gemacht (in der Reihenfolge, der erste ab 0, der letzte bis 255).",
-            "fine: 1 = 16 Bit; der Feinkanal heißt dann „<Name> fine“ und wird im Modus eigens aufgeführt (z. B. \"Pan\", \"Pan fine\").",
-            "modes: Reihenfolge der Kanäle je DMX-Modus (Kanalnamen, \"\" = unbenutzt). id fest je Modus, bestimmt den Gerätetyp-Schlüssel.",
-            "kind ColorIntensity braucht color (Red, Green, Blue, White, Amber, UV, Cyan, Magenta, Yellow, Lime, Indigo, Warm White, Cold White).",
-            "kind WheelSlot: slot (1-basiert), slot_kind (Color, Gobo, Open, …), label und hex (#rrggbb) für Farbfelder.",
-            "Pan/Tilt brauchen from/to als Winkel, z. B. \"0deg\"/\"540deg\"; Geschwindigkeiten \"slow\"/\"fast\"; Prozent \"0%\"/\"100%\".",
-            "key leer lassen beim Anlegen; zum Ändern den key des bestehenden Profils angeben (gepatchte Geräte werden mit aktualisiert).",
+            "channels: each channel with name and ranges (capabilities) from start to end (0–255). The ranges are made gapless when saving (in order, the first from 0, the last up to 255).",
+            "fine: 1 = 16 bit; the fine channel is then called “<name> fine” and is listed separately in the mode (e.g. \"Pan\", \"Pan fine\").",
+            "modes: order of the channels per DMX mode (channel names, \"\" = unused). id is fixed per mode and determines the fixture type key.",
+            "kind ColorIntensity needs color (Red, Green, Blue, White, Amber, UV, Cyan, Magenta, Yellow, Lime, Indigo, Warm White, Cold White).",
+            "kind WheelSlot: slot (1-based), slot_kind (Color, Gobo, Open, …), label and hex (#rrggbb) for color slots.",
+            "Pan/Tilt need from/to as angles, e.g. \"0deg\"/\"540deg\"; speeds \"slow\"/\"fast\"; percent \"0%\"/\"100%\".",
+            "leave key empty when creating; to change, give the key of the existing profile (patched fixtures are updated too).",
         ],
         "capability_kinds": CapabilityKind::ALL.iter().map(|k| json!({
             "kind": k,
@@ -111,22 +109,22 @@ pub fn format() -> R {
     }))
 }
 
-/// Profil anlegen oder ändern. Bereiche werden lückenlos gemacht, Modi ohne
-/// eindeutige ID bekommen eine. Gepatchte Geräte mit diesem Profil werden in
-/// der Show aktualisiert.
+/// Create or change a profile. Ranges are made gapless, modes without a
+/// unique ID get one. Patched fixtures with this profile are updated in the
+/// show.
 pub fn save(store: &dyn ProfileStore, e: &mut Engine, a: &Value) -> R {
     let raw = a
         .get("profile")
-        .ok_or("„profile“ fehlt – Vorlage siehe describe_profile_format")?;
+        .ok_or("“profile” missing – see describe_profile_format for a template")?;
     let mut p: Profile =
-        serde_json::from_value(raw.clone()).map_err(|e| format!("Profil ungültig: {e}"))?;
+        serde_json::from_value(raw.clone()).map_err(|e| format!("Invalid profile: {e}"))?;
     let existing = store.load();
     let old = existing
         .iter()
         .find(|x| !p.key.is_empty() && x.key == p.key);
     if !p.key.is_empty() && old.is_none() {
         return Err(format!(
-            "Eigenes Profil „{}“ nicht gefunden – zum Anlegen key weglassen",
+            "Custom profile “{}” not found – leave out key to create one",
             p.key
         ));
     }
@@ -134,7 +132,7 @@ pub fn save(store: &dyn ProfileStore, e: &mut Engine, a: &Value) -> R {
         c.capabilities.sort_by_key(|k| k.start);
         c.normalize_ranges();
     }
-    // Modus-IDs eindeutig (bestehende behalten)
+    // Mode IDs unique (keep existing ones)
     let mut used = std::collections::HashSet::new();
     let mut next = p.modes.iter().map(|m| m.id).max().unwrap_or(0) + 1;
     for m in &mut p.modes {
@@ -152,7 +150,7 @@ pub fn save(store: &dyn ProfileStore, e: &mut Engine, a: &Value) -> R {
     let problems = p.problems();
     if !problems.is_empty() {
         return Err(format!(
-            "Nicht gespeichert – {} Problem(e):\n- {}",
+            "Not saved – {} problem(s):\n- {}",
             problems.len(),
             problems
                 .iter()
@@ -182,7 +180,7 @@ pub fn save(store: &dyn ProfileStore, e: &mut Engine, a: &Value) -> R {
     Ok(json!({
         "saved": summary(&p),
         "patched_fixtures_updated": updated,
-        "hint": "Mit add_fixtures und dem type_key eines Modus patchen.",
+        "hint": "Patch with add_fixtures and the type_key of a mode.",
     }))
 }
 
@@ -191,7 +189,7 @@ pub fn delete(store: &dyn ProfileStore, e: &Engine, key: &str) -> R {
         .load()
         .into_iter()
         .find(|p| p.key == key)
-        .ok_or_else(|| format!("Eigenes Profil „{key}“ nicht gefunden"))?;
+        .ok_or_else(|| format!("Custom profile “{key}” not found"))?;
     let keys: Vec<String> = p
         .fixture_types()
         .unwrap_or_default()
@@ -199,7 +197,7 @@ pub fn delete(store: &dyn ProfileStore, e: &Engine, key: &str) -> R {
         .map(|t| t.key)
         .collect();
     store.delete(key)?;
-    // gepatchte Geräte behalten ihren Gerätetyp in der Show
+    // patched fixtures keep their fixture type in the show
     let still = e
         .show()
         .fixtures
@@ -211,25 +209,25 @@ pub fn delete(store: &dyn ProfileStore, e: &Engine, key: &str) -> R {
 
 fn problem_text(p: &Problem) -> String {
     match p {
-        Problem::NoManufacturer => "Hersteller fehlt".into(),
-        Problem::NoName => "Name fehlt".into(),
-        Problem::NoCategory => "Kategorie fehlt".into(),
-        Problem::NoChannels => "keine Kanäle".into(),
-        Problem::NoModes => "kein Modus".into(),
-        Problem::EmptyChannelName => "Kanal ohne Namen".into(),
-        Problem::DuplicateChannel(c) => format!("Kanalname doppelt: {c}"),
-        Problem::NoCapabilities(c) => format!("Kanal {c}: keine Bereiche"),
-        Problem::Gap(c, v) => format!("Kanal {c}: Wert {v} nicht abgedeckt"),
-        Problem::Overlap(c, v) => format!("Kanal {c}: Bereiche überschneiden sich bei {v}"),
+        Problem::NoManufacturer => "Manufacturer missing".into(),
+        Problem::NoName => "Name missing".into(),
+        Problem::NoCategory => "Category missing".into(),
+        Problem::NoChannels => "no channels".into(),
+        Problem::NoModes => "no mode".into(),
+        Problem::EmptyChannelName => "Channel without a name".into(),
+        Problem::DuplicateChannel(c) => format!("Duplicate channel name: {c}"),
+        Problem::NoCapabilities(c) => format!("Channel {c}: no ranges"),
+        Problem::Gap(c, v) => format!("Channel {c}: value {v} not covered"),
+        Problem::Overlap(c, v) => format!("Channel {c}: ranges overlap at {v}"),
         Problem::MissingValue(c, v) => {
-            format!("Kanal {c}: Bereich ab {v} braucht from/to (z. B. Winkel)")
+            format!("Channel {c}: range from {v} needs from/to (e.g. angle)")
         }
-        Problem::EmptyModeName => "Modus ohne Namen".into(),
-        Problem::DuplicateMode(m) => format!("Modusname doppelt: {m}"),
-        Problem::EmptyMode(m) => format!("Modus {m}: keine Kanäle"),
-        Problem::TooManyChannels(m) => format!("Modus {m}: mehr als 512 Kanäle"),
-        Problem::UnknownChannel(m, c) => format!("Modus {m}: unbekannter Kanal {c}"),
-        Problem::DuplicateInMode(m, c) => format!("Modus {m}: Kanal {c} doppelt"),
+        Problem::EmptyModeName => "Mode without a name".into(),
+        Problem::DuplicateMode(m) => format!("Duplicate mode name: {m}"),
+        Problem::EmptyMode(m) => format!("Mode {m}: no channels"),
+        Problem::TooManyChannels(m) => format!("Mode {m}: more than 512 channels"),
+        Problem::UnknownChannel(m, c) => format!("Mode {m}: unknown channel {c}"),
+        Problem::DuplicateInMode(m, c) => format!("Mode {m}: channel {c} duplicated"),
     }
 }
 
@@ -248,11 +246,11 @@ mod tests {
         assert!(!key.is_empty());
         let l = list(&store).unwrap();
         assert_eq!(l["profiles"].as_array().unwrap().len(), 1);
-        // Gerätetyp ist über die Bibliothek erreichbar
+        // The fixture type is reachable through the library
         let types = user_types(&store);
         assert_eq!(types.len(), 1);
         assert_eq!(types[0].channels.len(), 6);
-        // ändern: Bereiche mit Lücke werden lückenlos
+        // change: ranges with a gap become gapless
         let mut p = get(&store, &key).unwrap()["profile"].clone();
         p["name"] = json!("LED Par RGBW 2");
         p["channels"][5]["capabilities"][1]["start"] = json!(20);
@@ -260,12 +258,12 @@ mod tests {
         let p = get(&store, &key).unwrap()["profile"].clone();
         assert_eq!(p["name"], "LED Par RGBW 2");
         assert_eq!(p["channels"][5]["capabilities"][1]["start"], 10);
-        // fehlerhaft: kein Modus
+        // invalid: no mode
         let mut bad = p.clone();
         bad["modes"] = json!([]);
         assert!(save(&store, &mut e, &json!({ "profile": bad }))
             .unwrap_err()
-            .contains("kein Modus"));
+            .contains("no mode"));
         delete(&store, &e, &key).unwrap();
         assert!(store.load().is_empty());
     }

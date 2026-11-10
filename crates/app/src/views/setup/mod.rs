@@ -1,6 +1,6 @@
-//! EINRICHTEN: eine Seite mit Patch-Raster (oben), Bühnenplan mit
-//! Geräteeinstellungen (unten) und Bibliothek (links). Alle Bereiche sind
-//! an ihren Trennlinien in der Größe veränderbar.
+//! SETUP: one page with the patch grid (top), stage plan with fixture
+//! settings (bottom) and library (left). All areas can be resized at their
+//! dividers.
 
 pub mod fixture_settings;
 pub mod library_panel;
@@ -24,7 +24,8 @@ pub struct SetupView {
 
 impl View for SetupView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        // Entf löscht die ausgewählten Geräte (ohne Rückfrage, Strg+Z holt sie zurück)
+        // Delete removes the selected fixtures (without asking, Ctrl+Z brings them
+        // back)
         let typing = ui.ctx().memory(|m| m.focused().is_some());
         if !typing
             && !cx.state.selected.is_empty()
@@ -32,7 +33,7 @@ impl View for SetupView {
         {
             crate::views::fixture_menu::apply(cx.engine, cx.state, FixtureAction::Delete);
         }
-        // Zwischenablage (Strg+X/C/V kommen von egui als Ereignisse), Strg+D, Strg+A
+        // Clipboard (Ctrl+X/C/V come from egui as events), Ctrl+D, Ctrl+A
         if !typing && !cx.state.locked {
             let (cut, copy, paste, dup, all) = ui.input(|i| {
                 let ev = |f: fn(&egui::Event) -> bool| i.events.iter().any(f);
@@ -61,7 +62,7 @@ impl View for SetupView {
             };
             if let Some(a) = action {
                 if matches!(a, FixtureAction::Cut | FixtureAction::Copy) {
-                    // egui meldet Strg+V nur, wenn die System-Zwischenablage Text enthält
+                    // egui only reports Ctrl+V when the system clipboard contains text
                     ui.ctx().copy_text("DMXCraft".into());
                 }
                 crate::views::fixture_menu::apply(cx.engine, cx.state, a);

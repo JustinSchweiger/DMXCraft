@@ -1,23 +1,23 @@
-//! Hilfsfunktionen für den Bühnenplan.
+//! Helper functions for the stage plan.
 //!
-//! Der Plan ist unbegrenzt. Eine Einheit entspricht der Breite des Bereichs,
-//! in dem neue Geräte automatisch angeordnet werden (0.0..=1.0); Geräte
-//! dürfen beliebig außerhalb liegen.
+//! The plan is unbounded. One unit corresponds to the width of the area in
+//! which new fixtures are arranged automatically (0.0..=1.0); fixtures may
+//! lie anywhere outside of it.
 
-/// Rand, den automatisch angeordnete Geräte zum Planrand halten.
+/// Margin automatically arranged fixtures keep from the plan edge.
 pub const MARGIN: f32 = 0.06;
 
 pub fn clamp(p: [f32; 2]) -> [f32; 2] {
     [p[0].clamp(0.0, 1.0), p[1].clamp(0.0, 1.0)]
 }
 
-/// Rastet eine Position auf ein Raster mit `cells` Feldern pro Einheit ein.
+/// Snaps a position to a grid with `cells` cells per unit.
 pub fn snap(p: [f32; 2], cells: u32) -> [f32; 2] {
     let n = cells.max(1) as f32;
     [(p[0] * n).round() / n, (p[1] * n).round() / n]
 }
 
-/// `n` Positionen gleichmäßig in einer Reihe auf Höhe `y`.
+/// `n` positions evenly in a row at height `y`.
 pub fn row(n: usize, y: f32) -> Vec<[f32; 2]> {
     match n {
         0 => Vec::new(),
@@ -31,7 +31,7 @@ pub fn row(n: usize, y: f32) -> Vec<[f32; 2]> {
     }
 }
 
-/// `n` Positionen als Raster mit möglichst quadratischer Aufteilung.
+/// `n` positions as a grid with an arrangement as square as possible.
 pub fn grid(n: usize) -> Vec<[f32; 2]> {
     if n == 0 {
         return Vec::new();
@@ -58,7 +58,8 @@ pub fn grid(n: usize) -> Vec<[f32; 2]> {
         .collect()
 }
 
-/// Standardposition für Geräte ohne gespeicherte Position (Index in der Patchliste).
+/// Default position for fixtures without a stored position (index in the
+/// patch list).
 pub fn default_position(index: usize) -> [f32; 2] {
     const PER_ROW: usize = 12;
     let col = (index % PER_ROW) as f32;
@@ -73,7 +74,7 @@ mod tests {
     #[test]
     fn snapping() {
         assert_eq!(snap([0.26, 0.74], 4), [0.25, 0.75]);
-        // unbegrenzt: auch außerhalb von 0..1
+        // unbounded: also outside 0..1
         assert_eq!(snap([1.26, -0.34], 10), [1.3, -0.3]);
     }
 

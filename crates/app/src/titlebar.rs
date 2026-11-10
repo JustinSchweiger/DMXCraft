@@ -1,7 +1,7 @@
-//! Eigene Titelleiste (das Fenster hat keine Betriebssystem-Leiste):
-//! Menü und Modus links, Programm- und Showname in der Mitte, Statistik und
-//! Fensterknöpfe rechts. Leere Fläche: Ziehen = Fenster bewegen,
-//! Doppelklick = maximieren.
+//! Custom title bar (the window has no operating system bar): menu and mode
+//! on the left, program and show name in the middle, statistics and window
+//! buttons on the right. Empty area: drag = move window, double-click =
+//! maximize.
 
 use crate::i18n::t;
 use eframe::egui::{self, Color32, Sense, ViewportCommand};
@@ -13,50 +13,50 @@ use crate::ui::widgets::{Icon, IconButton, Segmented};
 
 pub const HEIGHT: f32 = 36.0;
 
-/// Was die Titelleiste zum Zeichnen braucht.
+/// What the title bar needs for drawing.
 pub struct TitleInfo<'a> {
     pub show_name: &'a str,
-    /// Ausgangsstatus als Text und Farbe (für den Punkt und den Tooltip).
+    /// Output status as text and color (for the dot and the tooltip).
     pub status: (String, Color32),
-    /// Auslastung des Ausgabe-Takts 0..1.
+    /// Load of the output clock 0..1.
     pub load: f32,
     pub fps: f32,
     pub locked: bool,
     pub output: dmxcraft_output::OutputKind,
     pub blackout: bool,
-    /// Zuletzt geöffnete Shows (neueste zuerst).
+    /// Recently opened shows (newest first).
     pub recent: &'a [String],
     pub can_undo: bool,
     pub can_redo: bool,
-    /// Kurzzeitige Meldung (Text, ist Fehler).
+    /// Short-lived message (text, is error).
     pub message: Option<(&'a str, bool)>,
     pub update: UpdateBadge,
-    /// Aktiver Zuordnungsmodus.
+    /// Active mapping mode.
     pub mapping: Option<dmxcraft_core::mapping::MapKind>,
-    /// Ton-Master (Lautstärke der Audioblöcke).
+    /// Sound master (volume of the audio blocks).
     pub audio: AudioInfo,
-    /// Anzahl fehlender Audiodateien (rotes Ausrufezeichen).
+    /// Number of missing audio files (red exclamation mark).
     pub missing_audio: usize,
-    /// OBS-Verbindung (nur wenn eingeschaltet): verbunden?
+    /// OBS connection (only when enabled): connected?
     pub obs: Option<bool>,
-    /// 3D-Visualisierer und Profile Builder als Reiter.
+    /// 3D visualizer and Profile Builder as tabs.
     pub tools_as_tabs: bool,
 }
 
-/// Zustand des Ton-Masters für die Titelleiste.
+/// State of the sound master for the title bar.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AudioInfo {
     pub master: f32,
     pub mute: bool,
-    /// MIDI-Fader wartet auf Übernahme.
+    /// MIDI fader waiting to catch up.
     pub pickup: bool,
     pub fading: bool,
     pub fade_ms: u32,
-    /// Höchstlautstärke 0–1 (Ton-Master 100 % entspricht diesem Wert).
+    /// Maximum volume 0–1 (sound master 100 % corresponds to this value).
     pub limit: f32,
 }
 
-/// Update-Hinweis in der Titelleiste.
+/// Update notice in the title bar.
 #[derive(Clone, Debug, PartialEq)]
 pub enum UpdateBadge {
     None,
@@ -67,7 +67,7 @@ pub enum UpdateBadge {
     Error(String),
 }
 
-/// Menübefehle, die der App-Rahmen ausführt.
+/// Menu commands executed by the app frame.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuAction {
     NewShow,
@@ -82,22 +82,22 @@ pub enum MenuAction {
     Zoom(f32),
     ToggleBlackout,
     DmxLevels,
-    /// 3D-Visualisierer im eigenen Fenster öffnen/schließen.
+    /// Open/close the 3D visualizer in its own window.
     Visualizer,
     ProfileBuilder,
     Settings,
     CheckUpdates,
     InstallUpdate,
     ToggleLock,
-    /// Ton-Master setzen.
+    /// Set the sound master.
     AudioMaster(f32),
     AudioMute,
     AudioFade,
-    /// Fenster „Fehlende Audiodateien“.
+    /// “Missing audio files” window.
     MissingAudio,
-    /// Einstellungen, Reiter „OBS“.
+    /// Settings, “OBS” tab.
     Obs,
-    /// Tastatur- bzw. MIDI-Zuordnung ein/aus.
+    /// Keyboard or MIDI mapping on/off.
     Mapping(dmxcraft_core::mapping::MapKind),
     About,
 }
@@ -108,7 +108,7 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
     }
     let mut actions = Vec::new();
     let full = ui.max_rect();
-    // Hintergrundfläche zum Ziehen (zuerst anlegen, damit Knöpfe darüber liegen)
+    // Background area for dragging (created first so buttons lie on top)
     let drag = ui.interact(
         full,
         ui.scope_id().with("titlebar_drag"),
@@ -123,7 +123,7 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
             .send_viewport_cmd(ViewportCommand::Maximized(!maximized));
     }
 
-    // Mitte: Programm- und Showname
+    // Middle: program and show name
     let painter = ui.painter();
     let center = full.center();
     let name = egui::text::LayoutJob::simple_singleline(
@@ -139,8 +139,8 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
     );
     let w = g1.size().x + g2.size().x;
     let x0 = center.x - w / 2.0;
-    // Eine Statusmeldung rechts kann bis zur Mitte reichen – solange sie
-    // steht, tritt der Titel zurück, statt sich mit ihr zu überlagern.
+    // A status message on the right can reach the middle – while it is shown,
+    // the title steps back instead of overlapping it.
     if info.message.is_none() {
         painter.galley(
             egui::pos2(x0, center.y - g1.size().y / 2.0),
@@ -314,7 +314,7 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
     actions
 }
 
-/// Rot blinkendes Ausrufezeichen: Audiodateien fehlen; Klick öffnet die Liste.
+/// Red blinking exclamation mark: audio files missing; click opens the list.
 fn missing_alert(ui: &mut egui::Ui, n: usize, actions: &mut Vec<MenuAction>) {
     ui.add_space(theme::SP_S);
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(24.0, 24.0), Sense::click());
@@ -342,11 +342,11 @@ fn missing_alert(ui: &mut egui::Ui, n: usize, actions: &mut Vec<MenuAction>) {
     }
 }
 
-/// Ton-Master: Lautsprecher (stumm), Schieber, Prozent. Nur die Wiedergabe
-/// von DMXCraft, nicht die Systemlautstärke.
+/// Sound master: speaker (mute), slider, percent. Only DMXCraft's playback,
+/// not the system volume.
 fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>) {
     use dmxcraft_core::mapping::Control;
-    // Rechts nach links: Prozent, Schieber, Symbol
+    // Right to left: percent, slider, icon
     let pct = if a.mute {
         t("muted").to_string()
     } else {
@@ -368,7 +368,7 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
         color,
     );
 
-    // Schieber
+    // Slider
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(90.0, 18.0), Sense::click_and_drag());
     let overlay = crate::mapping::target(ui, rect, Control::AudioMaster);
     let track = egui::Rect::from_center_size(rect.center(), egui::vec2(rect.width() - 10.0, 4.0));
@@ -432,7 +432,7 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
     }
     resp.on_hover_text(tip);
 
-    // Lautsprecher: Klick schaltet stumm, Rechtsklick: Ausfaden / 100 %
+    // Speaker: click mutes, right-click: fade out / 100 %
     let icon = if a.mute {
         Icon::SpeakerMute
     } else if a.master <= 0.0 {
@@ -474,7 +474,7 @@ fn audio_control(ui: &mut egui::Ui, a: AudioInfo, actions: &mut Vec<MenuAction>)
     });
 }
 
-/// Auslastungsanzeige: Statuspunkt des Ausgangs und Balken.
+/// Load display: status dot of the output and bar.
 fn load_meter(ui: &mut egui::Ui, info: &TitleInfo<'_>) {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(96.0, 18.0), Sense::hover());
     let p = ui.painter();
@@ -704,7 +704,7 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
     });
 }
 
-/// Beschriftung der Tastenkürzel (Strg unter Windows/Linux, Cmd unter macOS).
+/// Labels of the keyboard shortcuts (Ctrl on Windows/Linux, Cmd on macOS).
 pub mod keys {
     use crate::i18n::t;
 
@@ -732,7 +732,7 @@ pub mod keys {
     pub fn save_as() -> String {
         format!("{}+{}+S", modifier(), t("Shift"))
     }
-    /// Zwischenablage-Kürzel: „Strg+X“ usw.
+    /// Clipboard shortcuts: “Ctrl+X” etc.
     pub fn clip(key: &str) -> String {
         k(key)
     }
@@ -765,7 +765,7 @@ pub mod keys {
     }
 }
 
-/// Fenstergröße an den Rändern ändern (randloses Fenster).
+/// Resize the window at the edges (borderless window).
 pub fn resize_handles(ctx: &egui::Context, fullscreen: bool) {
     let maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
     if maximized || fullscreen {

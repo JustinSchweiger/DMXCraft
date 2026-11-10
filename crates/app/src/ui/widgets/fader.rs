@@ -1,13 +1,13 @@
-//! Kanal-Fader des Programmers.
+//! Channel fader of the programmer.
 //!
-//! Aufbau von oben nach unten: Statuspunkt (leuchtet in der Farbe des
-//! Betriebsmodus, wenn der Kanal einen Programmer-Wert ausgibt), Kanalnummer,
-//! Symbol der Kanalart, Wert (Klick = eintippen, „OFF“ = nicht gesetzt) und
-//! die Schiene mit Griff.
+//! Layout from top to bottom: status dot (lights up in the color of the
+//! operating mode when the channel outputs a programmer value), channel
+//! number, icon of the channel kind, value (click = type in, “OFF” = not
+//! set) and the track with the handle.
 //!
-//! Bedienung: Punkt anklicken = Kanal speichern/freigeben (auch mit Wert 0),
-//! Ziehen/Klicken = setzen, Mausrad = ±2 (Umschalt ±10),
-//! Doppelklick = 0 ↔ voll, Rechtsklick = Menü (Freigeben, 0, Voll).
+//! Usage: click the dot = store/release the channel (also with value 0),
+//! drag/click = set, mouse wheel = ±2 (Shift ±10), double-click = 0 ↔ full,
+//! right-click = menu (release, 0, full).
 
 use crate::i18n::t;
 use dmxcraft_core::ChannelKind;
@@ -15,14 +15,14 @@ use eframe::egui::{self, pos2, Color32, Rect, Sense, Shape, Stroke, StrokeKind, 
 
 use crate::ui::theme;
 
-/// Standardbreite einer Fader-Spalte (schmal, z. B. für „Alle Kanäle“).
+/// Default width of a fader column (narrow, e.g. for “All channels”).
 pub const FADER_W: f32 = 44.0;
 const DOT_H: f32 = 20.0;
 const NUM_H: f32 = 18.0;
 const SYMBOL_H: f32 = 30.0;
 const VALUE_H: f32 = 24.0;
 const HANDLE: Vec2 = Vec2::new(24.0, 34.0);
-/// Schritt je Mausrad-Raste.
+/// Step per mouse wheel notch.
 const WHEEL_STEP: u8 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,7 +30,7 @@ pub enum FaderEvent {
     None,
     Changed(u8),
     Release,
-    /// FX-Symbol am Fader angeklickt (Kanal dem Effekt zuordnen/entfernen).
+    /// FX icon on the fader clicked (assign the channel to the effect/remove it).
     ToggleFx,
 }
 
@@ -40,20 +40,20 @@ pub struct Fader {
     kind: ChannelKind,
     hint: Option<String>,
     active: bool,
-    /// Farbe des Statuspunkts (Betriebsmodus).
+    /// Color of the status dot (operating mode).
     dot: Color32,
     color: Color32,
     height: Option<f32>,
     width: f32,
-    /// FX-Symbol zeigen: `Some(zugeordnet)`.
+    /// Show the FX icon: `Some(assigned)`.
     fx: Option<bool>,
-    /// Wertebereiche aus der Gerätedatei.
+    /// Value ranges from the fixture file.
     ranges: Vec<FaderRange>,
-    /// Bereiche auf der Schiene zeichnen (sonst nur Hinweis und Menü).
+    /// Draw the ranges on the track (otherwise only hint and menu).
     range_track: bool,
 }
 
-/// Wertebereich am Fader: Anfang, Ende, Bezeichnung, Farbe (Farbrad).
+/// Value range on the fader: start, end, label, color (color wheel).
 #[derive(Clone, Debug)]
 pub struct FaderRange {
     pub from: u8,
@@ -80,44 +80,44 @@ impl Fader {
         }
     }
 
-    /// Wertebereiche zeigen (Leiste am Fader, Bezeichnung, Menü zum Anspringen).
+    /// Show value ranges (bar on the fader, label, menu to jump to them).
     pub fn ranges(mut self, r: Vec<FaderRange>, on_track: bool) -> Self {
         self.ranges = r;
         self.range_track = on_track;
         self
     }
 
-    /// Wert liegt im Programmer (Punkt leuchtet, Griff hell).
+    /// Value lives in the programmer (dot lights up, handle bright).
     pub fn active(mut self, on: bool) -> Self {
         self.active = on;
         self
     }
 
-    /// Farbe des Statuspunkts.
+    /// Color of the status dot.
     pub fn dot(mut self, c: Color32) -> Self {
         self.dot = c;
         self
     }
 
-    /// Farbe des Symbols (Farbkanäle).
+    /// Color of the icon (color channels).
     pub fn color(mut self, c: Color32) -> Self {
         self.color = c;
         self
     }
 
-    /// Gesamthöhe; Standard: die gesamte verfügbare Höhe.
+    /// Total height; default: all available height.
     pub fn height(mut self, h: f32) -> Self {
         self.height = Some(h);
         self
     }
 
-    /// Spaltenbreite.
+    /// Column width.
     pub fn width(mut self, w: f32) -> Self {
         self.width = w.max(FADER_W);
         self
     }
 
-    /// Kleines FX-Symbol am Kanalsymbol (rot = vom Effekt bewegt).
+    /// Small FX icon on the channel icon (red = moved by the effect).
     pub fn fx(mut self, assigned: Option<bool>) -> Self {
         self.fx = assigned;
         self
@@ -140,14 +140,15 @@ impl Fader {
         let mut value = self.value;
 
         let p = ui.painter().clone();
-        // Spalte
+        // Column
         p.rect_filled(outer, 0.0, theme::raised());
         p.line_segment(
             [outer.right_top(), outer.right_bottom()],
             Stroke::new(1.0, theme::bg()),
         );
 
-        // Statuspunkt – Klick: Kanal speichern (mit aktuellem Wert) bzw. freigeben
+        // Status dot – click: store the channel (with the current value) or
+        // release it
         let dot_c = pos2(outer.center().x, outer.top() + DOT_H * 0.55);
         let dot_rect = Rect::from_center_size(dot_c, Vec2::new(self.width.min(28.0), DOT_H));
         let dot_resp = ui.interact(dot_rect, id.with("dot"), Sense::click());
@@ -168,12 +169,12 @@ impl Fader {
             p.circle_filled(dot_c, 5.0, theme::bg());
             p.circle_stroke(dot_c, 5.0, Stroke::new(1.0, theme::border()));
         }
-        // Kanalnummer
+        // Channel number
         let mut y = outer.top() + DOT_H;
         p.text(
             pos2(outer.center().x, y + NUM_H * 0.5),
             egui::Align2::CENTER_CENTER,
-            // 0: virtueller Kanal (z. B. Dimmer eines Farbgeräts ohne Dimmer)
+            // 0: virtual channel (e.g. dimmer of a color fixture without a dimmer)
             if self.number == 0 {
                 "V".to_string()
             } else {
@@ -183,13 +184,13 @@ impl Fader {
             theme::text(),
         );
         y += NUM_H;
-        // Symbol
+        // Icon
         let sym = Rect::from_center_size(
             pos2(outer.center().x, y + SYMBOL_H * 0.5),
             Vec2::splat(24.0),
         );
         paint_symbol(&p, sym, self.kind, self.color);
-        // Kanalname nur beim Überfahren des Symbols
+        // Channel name only when hovering the icon
         if let Some(h) = &self.hint {
             ui.interact(sym, id.with("symbol"), Sense::hover())
                 .on_hover_text(h);
@@ -237,7 +238,7 @@ impl Fader {
         }
         y += SYMBOL_H;
 
-        // Wert – Klick zum Eintippen
+        // Value – click to type in
         let value_rect = Rect::from_min_size(
             pos2(outer.left() + 3.0, y + 2.0),
             Vec2::new(self.width - 6.0, VALUE_H - 4.0),
@@ -274,7 +275,7 @@ impl Fader {
                 ui.data_mut(|d| d.insert_temp(edit_id, text));
             }
         } else {
-            // Klick = eintippen, Ziehen nach oben/unten = Wert ändern
+            // Click = type in, drag up/down = change the value
             let r = ui.interact(value_rect, id.with("value"), Sense::click_and_drag());
             if r.hovered() || r.dragged() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
@@ -286,7 +287,7 @@ impl Fader {
             let delta = crate::ui::widgets::drag::endless_delta(ui, &r);
             if r.dragged() {
                 let mut acc: f32 = ui.data(|d| d.get_temp(acc_id)).unwrap_or(0.0);
-                acc -= delta.y / 2.0; // 1 Schritt je 2 Punkte
+                acc -= delta.y / 2.0; // 1 step per 2 points
                 let steps = acc.trunc();
                 if steps != 0.0 {
                     acc -= steps;
@@ -316,7 +317,7 @@ impl Fader {
         }
         y += VALUE_H;
 
-        // Schiene
+        // Track
         let track_area = Rect::from_min_max(pos2(outer.left(), y), outer.max - Vec2::new(0.0, 6.0));
         let travel = Rect::from_min_max(
             pos2(track_area.left(), track_area.top() + HANDLE.y * 0.5),
@@ -337,13 +338,13 @@ impl Fader {
             }
         }
         if ui.rect_contains_pointer(outer) {
-            // je Raste ein Schritt; Touchpad-Pixel werden gesammelt
+            // one step per notch; touchpad pixels are accumulated
             let acc_id = id.with("wheel");
             let mut acc: f32 = ui.data(|d| d.get_temp(acc_id)).unwrap_or(0.0);
             let shift = ui.input(|i| i.modifiers.shift);
             let mut notches = 0i32;
-            // Ereignisse nur einmal je Frame auswerten (egui kann einen Frame
-            // in mehreren Durchläufen zeichnen)
+            // Evaluate events only once per frame (egui can draw a frame in several
+            // passes)
             let frame_id = id.with("wheel_frame");
             let nr = ui.ctx().cumulative_frame_nr();
             let fresh = ui.data(|d| d.get_temp::<u64>(frame_id)) != Some(nr);
@@ -369,10 +370,10 @@ impl Fader {
                 value = (i32::from(value) + notches * step).clamp(0, 255) as u8;
                 event = FaderEvent::Changed(value);
             }
-            // nicht zusätzlich die Fader-Leiste scrollen
+            // do not also scroll the fader bar
             ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
         }
-        // Bereich unter dem Zeiger bzw. am aktuellen Wert
+        // Range under the pointer or at the current value
         let range_at = |v: u8| self.ranges.iter().find(|r| (r.from..=r.to).contains(&v));
         crate::ui::widgets::menu::context(&resp, |ui| {
             use crate::ui::widgets::menu::{self, MenuItem};
@@ -382,7 +383,7 @@ impl Fader {
             }
             menu::separator(ui);
             if !self.ranges.is_empty() {
-                // Bereiche der Gerätedatei anspringen (Anfang des Bereichs)
+                // Jump to the ranges of the fixture file (start of the range)
                 egui::ScrollArea::vertical()
                     .max_height(320.0)
                     .show(ui, |ui| {
@@ -415,15 +416,15 @@ impl Fader {
             }
         });
 
-        // Schlitz
+        // Slot
         let slot = Rect::from_center_size(
             pos2(travel.center().x, track_area.center().y),
             Vec2::new(6.0, track_area.height() - 6.0),
         );
         p.rect_filled(slot, 3.0, theme::bg());
         if self.range_track && !self.ranges.is_empty() {
-            // Bereiche direkt auf der Schiene: abwechselnd hell/dunkel,
-            // Farbfelder in ihrer Farbe
+            // Ranges directly on the track: alternating light/dark, color slots in
+            // their color
             let y_of = |v: f32| travel.bottom() - travel.height() * (v / 255.0);
             for (k, r) in self.ranges.iter().enumerate() {
                 let seg = Rect::from_min_max(
@@ -444,7 +445,7 @@ impl Fader {
                 p.rect_filled(seg.shrink2(Vec2::new(0.0, 0.5)), 1.0, c);
             }
         }
-        // Griff
+        // Handle
         let tv = f32::from(value) / 255.0;
         let hy = travel.bottom() - travel.height() * tv;
         let handle = Rect::from_center_size(pos2(travel.center().x, hy), HANDLE);
@@ -484,8 +485,8 @@ impl Fader {
             ],
             Stroke::new(2.5, line),
         );
-        // Bezeichnung des Bereichs neben dem Griff, solange der Fader bewegt
-        // wird oder der Zeiger darüber ist
+        // Label of the range next to the handle while the fader is moved or the
+        // pointer is over it
         if hot || matches!(event, FaderEvent::Changed(_)) {
             if let Some(r) = range_at(value).filter(|r| !r.label.is_empty()) {
                 let painter = ui.ctx().layer_painter(egui::LayerId::new(
@@ -496,7 +497,7 @@ impl Fader {
                 let pad = Vec2::new(6.0, 3.0);
                 let size = g.size() + pad * 2.0;
                 let screen = ui.ctx().content_rect();
-                // rechts neben dem Fader, am Rand nach links ausweichen
+                // to the right of the fader, at the edge move to the left
                 let mut min = pos2(outer.right() + 4.0, handle.center().y - size.y * 0.5);
                 if min.x + size.x > screen.right() {
                     min.x = outer.left() - 4.0 - size.x;
@@ -516,7 +517,7 @@ impl Fader {
     }
 }
 
-/// Farbe einer Kanalart (Pegel im Fader, Farbpunkt im Symbol).
+/// Color of a channel kind (level in the fader, color dot in the icon).
 pub fn kind_color(k: ChannelKind) -> Color32 {
     match k {
         ChannelKind::Red => Color32::from_rgb(0xff, 0x45, 0x45),
@@ -529,7 +530,7 @@ pub fn kind_color(k: ChannelKind) -> Color32 {
     }
 }
 
-/// Symbol der Kanalart (eigene, schlichte Zeichnungen).
+/// Icon of the channel kind (own, simple drawings).
 pub fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Color32) {
     use ChannelKind as K;
     let c = rect.center();
@@ -558,7 +559,7 @@ pub fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Col
             }
         }
         _ => {
-            // Kachel mit Zeichen
+            // Tile with a glyph
             p.rect_filled(rect, theme::R_S, theme::bg());
             p.rect_stroke(
                 rect,
@@ -629,7 +630,7 @@ pub fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Col
                     );
                 }
                 K::Laser => {
-                    // Quelle links, Strahlen fächern nach rechts auf
+                    // Source on the left, beams fan out to the right
                     let src = c + Vec2::new(-r * 0.6, r * 0.35);
                     let cols = [
                         Color32::from_rgb(0xff, 0x40, 0x40),
@@ -644,7 +645,7 @@ pub fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Col
                     p.circle_filled(src, 2.2, fg);
                 }
                 K::Fog => {
-                    // Wolke aus drei Kreisen
+                    // Cloud of three circles
                     let base = c + Vec2::new(0.0, r * 0.15);
                     for (dx, dy, rr) in [(-0.35, 0.05, 0.3), (0.0, -0.2, 0.36), (0.35, 0.05, 0.28)]
                     {
@@ -663,7 +664,7 @@ pub fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Col
                     );
                 }
                 K::Fan => {
-                    // drei Flügel
+                    // three blades
                     for k in 0..3 {
                         let a = std::f32::consts::TAU * k as f32 / 3.0 - 1.2;
                         let tip = c + Vec2::angled(a) * r * 0.7;
@@ -673,7 +674,7 @@ pub fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Col
                     p.circle_filled(c, 2.0, theme::bg());
                 }
                 K::Zoom => {
-                    // Lichtkegel mit Pfeilen nach außen
+                    // Light cone with arrows pointing outwards
                     let src = c + Vec2::new(-r * 0.6, 0.0);
                     for d in [-1.0, 1.0] {
                         let end = c + Vec2::new(r * 0.6, d * r * 0.6);
@@ -690,7 +691,7 @@ pub fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Col
                     p.circle_filled(c, 1.8, fg);
                 }
                 K::Program => {
-                    // Abspielen-Dreieck mit Funken
+                    // Play triangle with sparks
                     let w = r * 0.5;
                     p.add(Shape::convex_polygon(
                         vec![
@@ -705,7 +706,7 @@ pub fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Col
                     p.circle_filled(c + Vec2::new(r * 0.68, r * 0.45), 1.2, fg);
                 }
                 K::Control => {
-                    // drei Regler
+                    // three sliders
                     for k in 0..3 {
                         let x = c.x + (k as f32 - 1.0) * r * 0.5;
                         p.line_segment(
@@ -731,7 +732,7 @@ pub fn paint_symbol(p: &egui::Painter, rect: Rect, kind: ChannelKind, color: Col
                     );
                 }
                 _ => {
-                    // Generisch: Wertebalken
+                    // Generic: value bar
                     let w = r * 1.2;
                     let bar = Rect::from_center_size(c, Vec2::new(w, 6.0));
                     p.rect_stroke(bar, 2.0, Stroke::new(1.2, fg), StrokeKind::Inside);

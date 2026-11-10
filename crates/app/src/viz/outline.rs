@@ -1,5 +1,5 @@
-//! Linke Leiste: Objektbaum (Gruppen als Ordner) und Geräteliste mit
-//! Ordnern – auswählen, umbenennen, per Ziehen einsortieren, sortieren.
+//! Left bar: object tree (groups as folders) and fixture list with folders –
+//! select, rename, sort in by dragging, sort.
 
 use std::collections::BTreeSet;
 
@@ -14,21 +14,21 @@ use crate::ui::theme;
 use crate::ui::widgets::{Icon, IconButton};
 use crate::views::ViewCtx;
 
-/// Was gerade umbenannt wird.
+/// What is currently being renamed.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Renaming {
     Object(u32, String),
     Folder(u32, String),
 }
 
-/// Gezogene Objekte bzw. Geräte.
+/// Dragged objects or fixtures.
 struct DragObjects(Vec<u32>);
 struct DragFixtures(Vec<FixtureId>);
 
-/// Abschnitt der Geräteliste: Ordner (ID, Name) bzw. „ohne Ordner“, Zeilen.
+/// Section of the fixture list: folder (ID, name) or “no folder”, rows.
 type Section = (Option<(u32, String)>, Vec<usize>);
 
-/// Sortierung der Geräteliste.
+/// Sorting of the fixture list.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum FixtureSort {
     #[default]
@@ -40,7 +40,7 @@ enum TreeAction {
     Select(u32),
     ToggleHidden(u32),
     ToggleLock(u32),
-    /// Objekte in eine Gruppe (bzw. oberste Ebene) legen, optional vor ein Objekt.
+    /// Put objects into a group (or the top level), optionally before an object.
     Drop {
         ids: Vec<u32>,
         parent: Option<u32>,
@@ -58,14 +58,14 @@ struct Tree<'a> {
     sel: &'a BTreeSet<u32>,
     reveal: Option<&'a (u32, Vec<u32>)>,
     renaming: &'a mut Option<Renaming>,
-    /// Feld nur beim Start fokussieren
+    /// Focus the field only at the start
     focus: &'a mut bool,
     acts: Vec<TreeAction>,
-    /// Umbenennen abgeschlossen: (ID, neuer Name)
+    /// Renaming finished: (ID, new name)
     renamed: Option<(u32, String)>,
 }
 
-/// Auswählbare Zeile, die sich ziehen lässt (Inhalt `payload` beim Ziehen).
+/// Selectable row that can be dragged (content `payload` while dragging).
 fn drag_row<P: std::any::Any + Send + Sync>(
     ui: &mut egui::Ui,
     active: bool,
@@ -92,7 +92,7 @@ fn drag_row<P: std::any::Any + Send + Sync>(
     r
 }
 
-/// Breite Markierung, wo beim Loslassen eingefügt wird.
+/// Wide marker where it will be inserted on release.
 fn drop_marker(ui: &egui::Ui, rect: egui::Rect, into: bool) {
     let p = ui.painter();
     if into {
@@ -164,7 +164,7 @@ impl Tree<'_> {
                     return None;
                 }
             }
-            // Ziehen: alle ausgewählten, wenn dieses dazugehört
+            // Dragging: all selected ones if this one belongs to them
             let payload = if active {
                 DragObjects(self.sel.iter().copied().collect())
             } else {
@@ -237,7 +237,7 @@ impl Tree<'_> {
                 }
             });
         }
-        // Ablegen: auf eine Gruppe → hinein, sonst davor
+        // Dropping: onto a group → into it, otherwise before it
         let target = ui.interact(rect, id.with("drop"), egui::Sense::hover());
         if target.dnd_hover_payload::<DragObjects>().is_some() {
             drop_marker(ui, rect, is_group);
@@ -268,10 +268,10 @@ impl Tree<'_> {
     }
 }
 
-/// Objekte in eine andere Gruppe legen; die Lage im Raum bleibt erhalten.
+/// Put objects into another group; their placement in the room is kept.
 pub fn move_objects(v: &mut Venue, ids: &[u32], parent: Option<u32>, before: Option<u32>) {
     for &id in ids {
-        // nicht in sich selbst oder eigene Untergruppen
+        // not into itself or its own subgroups
         if Some(id) == parent || parent.is_some_and(|p| v.ancestors(p).contains(&id)) {
             continue;
         }
@@ -316,7 +316,7 @@ pub fn move_objects(v: &mut Venue, ids: &[u32], parent: Option<u32>, before: Opt
 }
 
 impl VizView {
-    /// Objektbaum mit Ordnern (Gruppen).
+    /// Object tree with folders (groups).
     pub(super) fn object_tree(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         ui.horizontal(|ui| {
             if ui
@@ -367,7 +367,7 @@ impl VizView {
         let objects = std::mem::take(&mut cx.engine.show_mut().venue.objects);
         tree.list(ui, &objects, 0, None);
         cx.engine.show_mut().venue.objects = objects;
-        // freie Fläche darunter: auf oberste Ebene ablegen
+        // free area below: drop onto the top level
         let (rect, resp) =
             ui.allocate_exact_size(egui::vec2(ui.available_width(), 40.0), egui::Sense::hover());
         if resp.dnd_hover_payload::<DragObjects>().is_some() {
@@ -474,7 +474,7 @@ impl VizView {
         }
     }
 
-    /// Geräteliste mit Ordnern.
+    /// Fixture list with folders.
     pub(super) fn fixture_list(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let show = cx.engine.show();
         let filter = self.fixture_filter.to_lowercase();
@@ -502,7 +502,7 @@ impl VizView {
             .iter()
             .map(|d| (d.id, d.name.clone(), d.fixtures.clone()))
             .collect();
-        // Reihenfolge der Anzeige (für Umschalt-Bereich): Ordner, dann ohne Ordner
+        // Display order (for Shift ranges): folders, then without folder
         let mut order: Vec<FixtureId> = Vec::new();
         let mut sections: Vec<Section> = Vec::new();
         for (fid, name, ids) in &folders {
@@ -526,7 +526,7 @@ impl VizView {
         for (folder, rows) in &sections {
             let fid = folder.as_ref().map(|f| f.0);
             let ids_here: Vec<FixtureId> = rows.iter().map(|i| all[*i].0).collect();
-            // Kopf des Ordners (Ablageziel)
+            // Header of the folder (drop target)
             let head_id = ui.make_persistent_id(("viz_fx_folder", fid));
             let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
                 ui.ctx(),
@@ -667,7 +667,7 @@ impl VizView {
                         }
                     });
                 });
-                // Ablegen auf ein Gerät: in dessen Ordner
+                // Dropping onto a fixture: into its folder
                 let target = ui.interact(
                     row.response.rect,
                     ui.make_persistent_id(("viz_fx_drop", id.0)),
@@ -689,7 +689,7 @@ impl VizView {
         if all.is_empty() {
             ui.label(egui::RichText::new(t("No fixtures")).color(theme::text_faint()));
         }
-        // ----- anwenden -----
+        // ----- apply -----
         let v = &mut cx.engine.show_mut().venue;
         for (ids, folder) in moves {
             v.move_fixtures(&ids, folder);
@@ -745,7 +745,7 @@ impl VizView {
         }
     }
 
-    /// Kopfzeile der Geräteliste: neuer Ordner, Sortierung.
+    /// Header of the fixture list: new folder, sorting.
     pub(super) fn fixture_list_header(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         ui.horizontal(|ui| {
             if ui
@@ -785,7 +785,7 @@ impl VizView {
     }
 }
 
-/// Namen mit Zahlen natürlich vergleichen („Par 2“ vor „Par 10“).
+/// Compare names with numbers naturally (“Par 2” before “Par 10”).
 fn natural(a: &str, b: &str) -> std::cmp::Ordering {
     let key = |s: &str| -> Vec<(String, u64)> {
         let mut out = Vec::new();
@@ -850,10 +850,10 @@ mod tests {
         let (_, m) = v.flatten().into_iter().find(|(o, _)| o.id == bid).unwrap();
         let p = Vec3::new(m[3][0], m[3][1], m[3][2]);
         assert!(p.distance(Vec3::new(3.0, 1.0, 0.0)) < 1e-3, "{p:?}");
-        // nicht in sich selbst
+        // not into itself
         move_objects(&mut v, &[gid], Some(bid), None);
         assert_eq!(v.parent_of(gid), None);
-        // zurück auf die oberste Ebene
+        // back to the top level
         move_objects(&mut v, &[bid], None, None);
         assert_eq!(v.parent_of(bid), None);
     }

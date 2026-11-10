@@ -1,12 +1,12 @@
-//! Symbolbibliothek für die Touch-Oberfläche: eine Auswahl aus der
-//! Phosphor-Schrift (MIT, siehe assets/fonts/Phosphor-LICENSE.txt), die schon
-//! für die Knöpfe der Oberfläche eingebunden ist.
+//! Icon library for the touch surface: a selection from the Phosphor font
+//! (MIT, see assets/fonts/Phosphor-LICENSE.txt), which is already embedded
+//! for the buttons of the interface.
 
 use eframe::egui::{self, Align2, Color32, FontFamily, FontId, Pos2};
 
 use super::icons::ICON_FAMILY;
 
-/// (Name, Zeichen) – der Name wird in der Show gespeichert.
+/// (name, glyph) – the name is stored in the show.
 pub const LIBRARY: [(&str, char); 105] = [
     ("lightbulb", '\u{E2DC}'),
     ("lightbulb-filament", '\u{E63C}'),
@@ -115,12 +115,12 @@ pub const LIBRARY: [(&str, char); 105] = [
     ("eyedropper", '\u{E568}'),
 ];
 
-/// Zeichen eines Symbols nach Namen.
+/// Glyph of an icon by name.
 pub fn glyph(name: &str) -> Option<char> {
     LIBRARY.iter().find(|(n, _)| *n == name).map(|(_, c)| *c)
 }
 
-/// Symbol zeichnen (mittig, Höhe `size`).
+/// Draw an icon (centered, height `size`).
 pub fn paint(p: &egui::Painter, center: Pos2, name: &str, size: f32, color: Color32) {
     if let Some(c) = glyph(name) {
         p.text(

@@ -1,16 +1,15 @@
-//! Veranstaltungsort für den 3D-Visualisierer: Raum, Bauten, Traversen.
+//! Venue for the 3D visualizer: room, structures, trusses.
 //!
-//! Einheiten: Meter, rechtshändig, y zeigt nach oben. Drehungen in Grad
-//! (Euler, angewendet in der Reihenfolge X, dann Y, dann Z). Gespeichert wird
-//! der Ort in der Show und lässt sich als eigene Datei (`.dmxvenue`, JSON)
-//! für andere Shows weitergeben.
+//! Units: meters, right-handed, y points up. Rotations in degrees (Euler,
+//! applied in the order X, then Y, then Z). The venue is saved in the show
+//! and can be passed on to other shows as its own file (`.dmxvenue`, JSON).
 
 pub mod ev2;
 pub mod model;
 
 use serde::{Deserialize, Serialize};
 
-/// Aktuelle Version des `.dmxvenue`-Formats.
+/// Current version of the `.dmxvenue` format.
 pub const VENUE_FORMAT_VERSION: u32 = 1;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -18,7 +17,8 @@ pub struct Venue {
     #[serde(default = "format_version")]
     pub format_version: u32,
     pub name: String,
-    /// Grundmaße des Raums (Breite x, Höhe y, Tiefe z) – für Kamera und Raster.
+    /// Base dimensions of the room (width x, height y, depth z) – for camera and
+    /// grid.
     pub size: [f32; 3],
     #[serde(default)]
     pub environment: Environment,
@@ -28,13 +28,14 @@ pub struct Venue {
     pub cameras: Vec<CameraPreset>,
     #[serde(default)]
     pub next_id: u32,
-    /// Bilder für Materialien (ID → Bild), benutzt von `Material::texture`.
+    /// Images for materials (ID → image), used by `Material::texture`.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub textures: std::collections::BTreeMap<u32, model::Texture>,
-    /// Ordner für Geräte (nur zum Sortieren der Geräteliste im Visualisierer).
+    /// Folders for fixtures (only for sorting the fixture list in the
+    /// visualizer).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fixture_folders: Vec<FixtureFolder>,
-    /// Eingebettete 3D-Modelle (Schlüssel → Modell), benutzt von `Shape::Model`.
+    /// Embedded 3D models (key → model), used by `Shape::Model`.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub models: std::collections::BTreeMap<String, model::Model>,
 }
@@ -43,7 +44,7 @@ fn format_version() -> u32 {
     VENUE_FORMAT_VERSION
 }
 
-/// Ordner der Geräteliste. Ein Gerät steht in höchstens einem Ordner.
+/// Folder of the fixture list. A fixture is in at most one folder.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FixtureFolder {
     pub id: u32,
@@ -52,15 +53,15 @@ pub struct FixtureFolder {
     pub fixtures: Vec<crate::FixtureId>,
 }
 
-/// Licht und Luft im Raum.
+/// Light and air in the room.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Environment {
-    /// Raumlicht 0–1.
+    /// Ambient light 0–1.
     pub ambient: f32,
-    /// Sichtbarkeit der Lichtstrahlen 0–1.
+    /// Visibility of the light beams 0–1.
     pub beams: f32,
-    /// Dunst/Nebel 0–1.
+    /// Haze/fog 0–1.
     pub fog: f32,
 }
 
@@ -74,18 +75,18 @@ impl Default for Environment {
     }
 }
 
-/// Kamerapunkt des 3D-Visualisierers (in der Titelleiste des Visualisierers
-/// mit einem Klick bzw. Taste 1–9 erreichbar).
+/// Camera point of the 3D visualizer (reachable in the visualizer's title
+/// bar with a click or keys 1–9).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CameraPreset {
     pub name: String,
     pub target: [f32; 3],
-    /// Drehung um die Hochachse (Grad).
+    /// Rotation around the vertical axis (degrees).
     pub yaw: f32,
-    /// Neigung (Grad, positiv = von oben).
+    /// Tilt (degrees, positive = from above).
     pub pitch: f32,
     pub distance: f32,
-    /// Öffnungswinkel senkrecht (Grad).
+    /// Vertical field of view (degrees).
     #[serde(default = "default_fov")]
     pub fov: f32,
 }
@@ -94,7 +95,7 @@ fn default_fov() -> f32 {
     45.0
 }
 
-/// Ein Objekt im Raum; Gruppen enthalten weitere Objekte.
+/// An object in the room; groups contain further objects.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Object {
     pub id: u32,
@@ -112,26 +113,26 @@ pub struct Object {
     pub hidden: bool,
 }
 
-/// Form eines Objekts. Maße in Metern (vor der Skalierung).
+/// Shape of an object. Dimensions in meters (before scaling).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Shape {
-    /// Nur Container für `children`.
+    /// Only a container for `children`.
     Group,
-    /// Quader, Mittelpunkt im Ursprung.
+    /// Box, center at the origin.
     Box { size: [f32; 3] },
-    /// Fläche in der x/z-Ebene (Normale nach +y), Mittelpunkt im Ursprung.
+    /// Plane in the x/z plane (normal towards +y), center at the origin.
     Plane { size: [f32; 2] },
-    /// Zylinder entlang y, Mittelpunkt im Ursprung.
+    /// Cylinder along y, center at the origin.
     Cylinder { radius: f32, height: f32 },
-    /// Eigenes Modell aus `Venue::models`; Mitte in x/z, Unterkante bei y = 0.
+    /// Custom model from `Venue::models`; centered in x/z, bottom edge at y = 0.
     Model { model: String },
-    /// Traverse entlang x, Mittelpunkt im Ursprung.
+    /// Truss along x, center at the origin.
     Truss {
         length: f32,
         #[serde(default)]
         profile: TrussProfile,
-        /// Abstand der Gurtrohre (Kantenlänge des Profils).
+        /// Spacing of the chord tubes (edge length of the profile).
         #[serde(default = "truss_width")]
         width: f32,
     },
@@ -144,10 +145,10 @@ fn truss_width() -> f32 {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrussProfile {
-    /// Dreipunkt.
+    /// Three-point.
     #[default]
     Triangle,
-    /// Vierpunkt.
+    /// Four-point.
     Square,
 }
 
@@ -155,7 +156,7 @@ pub enum TrussProfile {
 #[serde(default)]
 pub struct Transform {
     pub position: [f32; 3],
-    /// Euler-Winkel in Grad (X, dann Y, dann Z).
+    /// Euler angles in degrees (X, then Y, then Z).
     pub rotation: [f32; 3],
     pub scale: [f32; 3],
 }
@@ -173,18 +174,18 @@ impl Default for Transform {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Material {
-    /// sRGB-Farbe.
+    /// sRGB color.
     pub color: [u8; 3],
-    /// Deckkraft 0–1.
+    /// Opacity 0–1.
     pub opacity: f32,
-    /// Glanz 0 (matt) – 1 (spiegelnd).
+    /// Gloss 0 (matte) – 1 (mirror).
     pub gloss: f32,
-    /// Selbstleuchten 0–1.
+    /// Self-illumination 0–1.
     pub emissive: f32,
-    /// Bild aus `Venue::textures` (0 = keins); die Farbe tönt es.
+    /// Image from `Venue::textures` (0 = none); the color tints it.
     #[serde(skip_serializing_if = "is_zero")]
     pub texture: u32,
-    /// Größe einer Kachel des Bilds in Metern.
+    /// Size of one tile of the image in meters.
     pub tile: f32,
 }
 
@@ -214,12 +215,12 @@ impl Material {
     }
 }
 
-/// Lage eines Geräts im 3D-Raum (gespeichert am Gerät der Show).
+/// Placement of a fixture in 3D space (stored on the show's fixture).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Placement {
     pub position: [f32; 3],
-    /// Euler-Winkel in Grad. Ohne Drehung strahlt ein Gerät nach unten (−y).
+    /// Euler angles in degrees. Without rotation a fixture points down (−y).
     pub rotation: [f32; 3],
 }
 
@@ -233,8 +234,8 @@ impl Default for Placement {
 }
 
 impl Placement {
-    /// Richtet das Gerät so aus, dass es auf `target` strahlt
-    /// (Drehung um X, dann Z; Y bleibt 0).
+    /// Aims the fixture so it points at `target` (rotation around X, then Z;
+    /// Y stays 0).
     pub fn aim_at(&mut self, target: [f32; 3]) {
         let d = [
             target[0] - self.position[0],
@@ -246,38 +247,38 @@ impl Placement {
             return;
         }
         let d = d.map(|v| v / len);
-        // Richtung = Rz·Rx·(0,−1,0) = (cos a·sin c, −cos a·cos c, −sin a)
+        // direction = Rz·Rx·(0,−1,0) = (cos a·sin c, −cos a·cos c, −sin a)
         let a = (-d[2]).clamp(-1.0, 1.0).asin();
         let c = d[0].atan2(-d[1]);
         let r = |v: f32| (v.to_degrees() * 100.0).round() / 100.0;
         self.rotation = [r(a), 0.0, r(c)];
     }
 
-    /// Richtung, in die das Gerät strahlt (Einheitsvektor).
+    /// Direction the fixture points in (unit vector).
     pub fn direction(&self) -> [f32; 3] {
         let m = rotation(self.rotation);
         [-m[1][0], -m[1][1], -m[1][2]]
     }
 }
 
-/// Aufhängepunkt an einer Traverse.
+/// Hanging point on a truss.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrussHang {
     pub object: u32,
-    /// Punkt unter der Traverse (Welt, m)
+    /// Point below the truss (world, m)
     pub point: [f32; 3],
-    /// Abstand des gesuchten Punkts zur Traversenachse (m)
+    /// Distance of the point searched for to the truss axis (m)
     pub distance: f32,
 }
 
 impl Default for Venue {
     fn default() -> Self {
-        Self::room("Raum", [12.0, 5.0, 16.0])
+        Self::room("Room", [12.0, 5.0, 16.0])
     }
 }
 
 impl Venue {
-    /// Leerer Raum mit Boden und vier Wänden.
+    /// Empty room with floor and four walls.
     pub fn room(name: impl Into<String>, size: [f32; 3]) -> Self {
         let mut v = Self {
             format_version: VENUE_FORMAT_VERSION,
@@ -293,7 +294,7 @@ impl Venue {
         };
         let [w, h, d] = size;
         let floor = v.object(
-            "Boden",
+            "Floor",
             Shape::Plane { size: [w, d] },
             Transform::default(),
             Material {
@@ -303,7 +304,7 @@ impl Venue {
             },
         );
         let wall = Material::color([150, 140, 125]);
-        let mut walls = v.object("Wände", Shape::Group, Transform::default(), wall);
+        let mut walls = v.object("Walls", Shape::Group, Transform::default(), wall);
         let mk = |v: &mut Venue, name: &str, pos: [f32; 3], rot: [f32; 3], s: [f32; 2]| {
             v.object(
                 name,
@@ -319,7 +320,7 @@ impl Venue {
         walls.children = vec![
             mk(
                 &mut v,
-                "Hinten",
+                "Back",
                 [0.0, h / 2.0, d / 2.0],
                 [-90.0, 0.0, 0.0],
                 [w, h],
@@ -340,7 +341,7 @@ impl Venue {
             ),
             mk(
                 &mut v,
-                "Rechts",
+                "Right",
                 [w / 2.0, h / 2.0, 0.0],
                 [0.0, 0.0, 90.0],
                 [h, d],
@@ -350,7 +351,7 @@ impl Venue {
         v
     }
 
-    /// Neues Objekt mit frischer ID (noch nicht eingefügt).
+    /// New object with a fresh ID (not inserted yet).
     pub fn object(
         &mut self,
         name: &str,
@@ -388,7 +389,7 @@ impl Venue {
         walk(&self.objects)
     }
 
-    /// Objekt suchen (auch in Gruppen).
+    /// Find an object (also in groups).
     pub fn find(&self, id: u32) -> Option<&Object> {
         fn walk(o: &[Object], id: u32) -> Option<&Object> {
             o.iter()
@@ -412,7 +413,7 @@ impl Venue {
         walk(&mut self.objects, id)
     }
 
-    /// Liste der Kinder einer Gruppe (`None` = oberste Ebene).
+    /// List of the children of a group (`None` = top level).
     pub fn list_mut(&mut self, parent: Option<u32>) -> Option<&mut Vec<Object>> {
         match parent {
             None => Some(&mut self.objects),
@@ -420,19 +421,19 @@ impl Venue {
         }
     }
 
-    /// Gruppe, in der ein Objekt liegt (`None` = oberste Ebene).
+    /// Group an object lies in (`None` = top level).
     pub fn parent_of(&self, id: u32) -> Option<u32> {
         self.ancestors(id).last().copied()
     }
 
-    /// Kinder einer Gruppe (bzw. oberste Ebene) nach Namen sortieren.
+    /// Sort the children of a group (or the top level) by name.
     pub fn sort_by_name(&mut self, parent: Option<u32>) {
         if let Some(list) = self.list_mut(parent) {
             list.sort_by_key(|o| o.name.to_lowercase());
         }
     }
 
-    /// Ordner, in dem ein Gerät steht.
+    /// Folder a fixture is in.
     pub fn folder_of(&self, f: crate::FixtureId) -> Option<u32> {
         self.fixture_folders
             .iter()
@@ -440,7 +441,7 @@ impl Venue {
             .map(|d| d.id)
     }
 
-    /// Geräte in einen Ordner verschieben (`None` = aus allen Ordnern nehmen).
+    /// Move fixtures into a folder (`None` = take them out of all folders).
     pub fn move_fixtures(&mut self, ids: &[crate::FixtureId], folder: Option<u32>) {
         for d in &mut self.fixture_folders {
             d.fixtures.retain(|f| !ids.contains(f));
@@ -451,7 +452,7 @@ impl Venue {
         }
     }
 
-    /// Neuer Geräteordner, gibt seine ID zurück.
+    /// New fixture folder, returns its ID.
     pub fn add_fixture_folder(&mut self, name: impl Into<String>) -> u32 {
         let id = self.new_id();
         self.fixture_folders.push(FixtureFolder {
@@ -462,7 +463,7 @@ impl Venue {
         id
     }
 
-    /// Objekt entfernen (auch aus Gruppen).
+    /// Remove an object (also from groups).
     pub fn remove(&mut self, id: u32) -> Option<Object> {
         fn walk(o: &mut Vec<Object>, id: u32) -> Option<Object> {
             if let Some(i) = o.iter().position(|x| x.id == id) {
@@ -473,8 +474,8 @@ impl Venue {
         walk(&mut self.objects, id)
     }
 
-    /// Alle sichtbaren Objekte mit ihrer Weltmatrix (Spalten, 4×4).
-    /// Nächste Traverse zu `p` und der Punkt darunter, an dem ein Gerät hängt.
+    /// All visible objects with their world matrix (columns, 4×4).
+    /// Nearest truss to `p` and the point below it where a fixture hangs.
     pub fn nearest_truss(&self, p: [f32; 3]) -> Option<TrussHang> {
         let mut best: Option<TrussHang> = None;
         for (ob, m) in self.flatten() {
@@ -501,7 +502,7 @@ impl Venue {
                 .sum::<f32>()
                 .sqrt();
             if best.is_none_or(|b| distance < b.distance) {
-                // Bügel unter dem unteren Gurt
+                // Clamp under the bottom chord
                 let scale = (m[1][0] * m[1][0] + m[1][1] * m[1][1] + m[1][2] * m[1][2]).sqrt();
                 let drop = width * 0.5 * scale + 0.12;
                 best = Some(TrussHang {
@@ -514,7 +515,7 @@ impl Venue {
         best
     }
 
-    /// Modelle entfernen, die kein Objekt mehr benutzt.
+    /// Remove models no object uses any more.
     pub fn prune_models(&mut self) {
         let used: std::collections::BTreeSet<String> = self
             .flatten()
@@ -533,7 +534,7 @@ impl Venue {
         self.textures.retain(|k, _| tex.contains(k));
     }
 
-    /// Bild hinzufügen; ein gleiches Bild wird wiederverwendet.
+    /// Add an image; an identical image is reused.
     pub fn add_texture(&mut self, t: model::Texture) -> u32 {
         if let Some((id, _)) = self.textures.iter().find(|(_, x)| x.data == t.data) {
             return *id;
@@ -543,7 +544,7 @@ impl Venue {
         id
     }
 
-    /// Kette der Gruppen über einem Objekt (äußerste zuerst, ohne das Objekt).
+    /// Chain of groups above an object (outermost first, without the object).
     pub fn ancestors(&self, id: u32) -> Vec<u32> {
         fn walk(list: &[Object], id: u32, path: &mut Vec<u32>) -> bool {
             for o in list {
@@ -566,7 +567,7 @@ impl Venue {
         }
     }
 
-    /// Weltmatrix des Elternteils eines Objekts (Einheitsmatrix auf oberster Ebene).
+    /// World matrix of an object's parent (identity matrix at the top level).
     pub fn parent_matrix(&self, id: u32) -> [[f32; 4]; 4] {
         let mut m = IDENTITY;
         let mut list = &self.objects;
@@ -606,7 +607,7 @@ impl Venue {
     }
 }
 
-// ---------- kleine Matrixhilfen (Spaltenmatrizen wie in WGSL) ----------
+// ---------- small matrix helpers (column matrices as in WGSL) ----------
 
 pub const IDENTITY: [[f32; 4]; 4] = [
     [1.0, 0.0, 0.0, 0.0],
@@ -626,7 +627,8 @@ pub fn mul(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     r
 }
 
-/// Drehmatrix (3×3, Spalten) aus Euler-Winkeln in Grad: erst X, dann Y, dann Z.
+/// Rotation matrix (3×3, columns) from Euler angles in degrees: first X,
+/// then Y, then Z.
 pub fn rotation(deg: [f32; 3]) -> [[f32; 3]; 3] {
     let [x, y, z] = deg.map(f32::to_radians);
     let (sx, cx) = x.sin_cos();
@@ -710,7 +712,7 @@ mod tests {
     fn hang_below_nearest_truss() {
         let mut v = Venue::room("t", [10.0, 6.0, 10.0]);
         let o = v.object(
-            "Traverse",
+            "Truss",
             Shape::Truss {
                 length: 4.0,
                 profile: TrussProfile::Square,
@@ -731,7 +733,7 @@ mod tests {
 
     #[test]
     fn rotation_order_x_then_y_then_z() {
-        // erst 90° um X (y → z), dann 90° um Y (z → x)
+        // first 90° around X (y → z), then 90° around Y (z → x)
         let t = Transform {
             rotation: [90.0, 90.0, 0.0],
             ..Transform::default()

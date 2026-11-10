@@ -1,20 +1,19 @@
-//! USB-DMX über FTDI-Kabel im „Open DMX“-Stil (z. B. Enttec Open DMX USB,
-//! DSD TECH SH-RS09B und viele Nachbauten mit FT232R).
+//! USB DMX via FTDI cables in “Open DMX” style (e.g. Enttec Open DMX USB,
+//! DSD TECH SH-RS09B and many clones with FT232R).
 //!
-//! Diese Kabel haben keinen eigenen Prozessor: Der PC erzeugt das DMX-Signal
-//! selbst über die serielle Schnittstelle des FTDI-Chips.
+//! These cables have no processor of their own: the PC generates the DMX
+//! signal itself through the serial interface of the FTDI chip.
 //!
-//! Ein DMX-Frame besteht aus
-//! 1. Break (Leitung ≥ 88 µs auf 0),
-//! 2. Mark after Break (≥ 8 µs auf 1),
-//! 3. Startcode `0x00` und bis zu 512 Kanalbytes, je 250 kBaud, 8N2.
+//! A DMX frame consists of
+//! 1. break (line ≥ 88 µs at 0),
+//! 2. mark after break (≥ 8 µs at 1),
+//! 3. start code `0x00` and up to 512 channel bytes, each 250 kBaud, 8N2.
 //!
-//! Jedes Kabel bedient genau ein Universum und läuft in einem eigenen Thread
-//! (ein Frame dauert ~23 ms – zwei Kabel nacheinander schafften die 40 Hz
-//! nicht). Der Thread verbindet sich selbst neu, wenn das Kabel abgezogen
-//! und wieder eingesteckt wird. Die Zuordnung Kabel → Universum läuft über
-//! die Seriennummer des FTDI-Chips, damit sie nach einem Neustart oder
-//! Umstecken gleich bleibt.
+//! Every cable serves exactly one universe and runs in its own thread (a
+//! frame takes ~23 ms – two cables one after the other could not reach
+//! 40 Hz). The thread reconnects by itself when the cable is unplugged and
+//! plugged in again. The cable → universe assignment uses the serial number
+//! of the FTDI chip so it stays the same after a restart or replugging.
 
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,41 +25,41 @@ use dmxcraft_core::{DmxFrame, UNIVERSE_SIZE};
 
 use crate::{DmxOutput, OutputError};
 
-/// Vendor-ID von FTDI.
+/// Vendor ID of FTDI.
 pub const FTDI_VENDOR_ID: u16 = 0x0403;
-/// DMX-Baudrate.
+/// DMX baud rate.
 pub const DMX_BAUD: u32 = 250_000;
-/// Break-Dauer (Norm: ≥ 88 µs; großzügig, weil der Schlaf auf manchen
-/// Systemen ohnehin länger dauert).
+/// Break duration (standard: ≥ 88 µs; generous because sleeping takes longer
+/// on some systems anyway).
 const BREAK: Duration = Duration::from_micros(150);
-/// Mark after Break (Norm: ≥ 8 µs).
+/// Mark after break (standard: ≥ 8 µs).
 const MAB: Duration = Duration::from_micros(20);
-/// Übertragungsdauer eines vollen Frames: 513 Bytes × 11 Bit / 250 kBaud.
+/// Transfer time of a full frame: 513 bytes × 11 bits / 250 kBaud.
 const FRAME_TIME: Duration = Duration::from_micros(513 * 11 * 4);
-/// Wartezeit zwischen Verbindungsversuchen.
+/// Wait time between connection attempts.
 const RETRY: Duration = Duration::from_secs(1);
 
-/// Ein erkanntes USB-Seriell-Gerät, das als DMX-Ausgang in Frage kommt.
+/// A detected USB serial device that qualifies as a DMX output.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UsbDmxPort {
-    /// Stabiler Schlüssel für die Zuordnung: Seriennummer, sonst Portname.
+    /// Stable key for the assignment: serial number, otherwise port name.
     pub key: String,
-    /// Name des Ports (`COM3`, `/dev/ttyUSB0`, `/dev/cu.usbserial-…`).
+    /// Name of the port (`COM3`, `/dev/ttyUSB0`, `/dev/cu.usbserial-…`).
     pub port_name: String,
-    /// Anzeige in der Oberfläche.
+    /// Display in the UI.
     pub label: String,
-    /// Ist ein FTDI-Chip (die übliche Bauart für Open-DMX-Kabel).
+    /// Is an FTDI chip (the usual design for Open DMX cables).
     pub ftdi: bool,
 }
 
-/// Listet die angeschlossenen USB-Seriell-Geräte, FTDI-Geräte zuerst.
+/// Lists the connected USB serial devices, FTDI devices first.
 pub fn list_ports() -> Vec<UsbDmxPort> {
     let Ok(ports) = serialport::available_ports() else {
         return Vec::new();
     };
     let mut out: Vec<UsbDmxPort> = ports
         .into_iter()
-        // macOS meldet jedes Gerät als tty.* und cu.* – zum Senden nur cu.*
+        // macOS reports every device as tty.* and cu.* – only cu.* for sending
         .filter(|p| !cfg!(target_os = "macos") || p.port_name.starts_with("/dev/cu."))
         .filter_map(|p| match p.port_type {
             serialport::SerialPortType::UsbPort(usb) => {
@@ -88,7 +87,7 @@ pub fn list_ports() -> Vec<UsbDmxPort> {
     out
 }
 
-/// Sucht den aktuellen Portnamen zu einem gespeicherten Schlüssel.
+/// Finds the current port name for a stored key.
 fn resolve(key: &str) -> Option<String> {
     list_ports()
         .into_iter()
@@ -96,7 +95,7 @@ fn resolve(key: &str) -> Option<String> {
         .map(|p| p.port_name)
 }
 
-/// Leitung, auf die ein DMX-Frame geschrieben wird (für Tests austauschbar).
+/// Line a DMX frame is written to (replaceable for tests).
 pub trait DmxLine {
     fn set_break(&mut self) -> io::Result<()>;
     fn clear_break(&mut self) -> io::Result<()>;
@@ -116,14 +115,14 @@ impl DmxLine for Box<dyn serialport::SerialPort> {
     }
 }
 
-/// Startcode + Kanaldaten eines Universums.
+/// Start code + channel data of a universe.
 pub fn packet(channels: &[u8; UNIVERSE_SIZE]) -> [u8; UNIVERSE_SIZE + 1] {
     let mut buf = [0u8; UNIVERSE_SIZE + 1];
     buf[1..].copy_from_slice(channels);
     buf
 }
 
-/// Schreibt einen vollständigen DMX-Frame (Break, MAB, Startcode, Daten).
+/// Writes a complete DMX frame (break, MAB, start code, data).
 pub fn send_frame(line: &mut dyn DmxLine, channels: &[u8; UNIVERSE_SIZE]) -> io::Result<()> {
     line.set_break()?;
     std::thread::sleep(BREAK);
@@ -131,9 +130,9 @@ pub fn send_frame(line: &mut dyn DmxLine, channels: &[u8; UNIVERSE_SIZE]) -> io:
     std::thread::sleep(MAB);
     let start = Instant::now();
     line.write_frame(&packet(channels))?;
-    // Manche Treiber melden „geschrieben“, bevor das letzte Byte auf der
-    // Leitung ist. Der nächste Break würde es abschneiden – also warten,
-    // bis der Frame sicher übertragen ist.
+    // Some drivers report “written” before the last byte is on the line. The
+    // next break would cut it off – so wait until the frame has surely been
+    // transmitted.
     let elapsed = start.elapsed();
     if elapsed < FRAME_TIME {
         std::thread::sleep(FRAME_TIME - elapsed);
@@ -141,7 +140,7 @@ pub fn send_frame(line: &mut dyn DmxLine, channels: &[u8; UNIVERSE_SIZE]) -> io:
     Ok(())
 }
 
-/// Gemeinsamer Zustand zwischen Ausgang und Sende-Thread eines Kabels.
+/// Shared state between the output and the send thread of a cable.
 struct Shared {
     data: Mutex<[u8; UNIVERSE_SIZE]>,
     stop: AtomicBool,
@@ -155,9 +154,9 @@ struct Worker {
     handle: Option<JoinHandle<()>>,
 }
 
-/// Ausgang über ein oder mehrere Open-DMX-Kabel.
+/// Output via one or more Open DMX cables.
 pub struct OpenDmx {
-    /// Je Universum (Index) der Schlüssel des zugeordneten Kabels.
+    /// Per universe (index) the key of the assigned cable.
     assign: Vec<Option<String>>,
     workers: Vec<Worker>,
 }
@@ -198,10 +197,7 @@ fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
     };
     while !shared.stop.load(Ordering::Relaxed) {
         let Some(port_name) = resolve(&key) else {
-            set_error(format!(
-                "Universum {}: Kabel {key} nicht gefunden",
-                universe + 1
-            ));
+            set_error(format!("Universe {}: cable {key} not found", universe + 1));
             std::thread::sleep(RETRY);
             continue;
         };
@@ -215,7 +211,7 @@ fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
         let mut port = match port {
             Ok(p) => p,
             Err(e) => {
-                set_error(format!("Universum {}: {port_name}: {e}", universe + 1));
+                set_error(format!("Universe {}: {port_name}: {e}", universe + 1));
                 std::thread::sleep(RETRY);
                 continue;
             }
@@ -227,7 +223,7 @@ fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
         while !shared.stop.load(Ordering::Relaxed) {
             let channels = shared.data.lock().map(|d| *d).unwrap_or([0; UNIVERSE_SIZE]);
             if let Err(e) = send_frame(&mut port, &channels) {
-                set_error(format!("Universum {}: {port_name}: {e}", universe + 1));
+                set_error(format!("Universe {}: {port_name}: {e}", universe + 1));
                 std::thread::sleep(RETRY);
                 break;
             }
@@ -251,8 +247,7 @@ impl DmxOutput for OpenDmx {
             .collect();
         if assigned.is_empty() {
             return Err(OutputError::NotFound(
-                "keinem Universum ist ein USB-DMX-Kabel zugeordnet (Einstellungen → Ausgang)"
-                    .into(),
+                "no USB DMX cable is assigned to any universe (Settings → Output)".into(),
             ));
         }
         for (universe, key) in assigned {
@@ -304,7 +299,7 @@ impl DmxOutput for OpenDmx {
                     .lock()
                     .ok()
                     .and_then(|e| e.clone())
-                    .unwrap_or_else(|| format!("Universum {}: verbinde …", w.universe + 1))
+                    .unwrap_or_else(|| format!("Universe {}: connecting …", w.universe + 1))
             })
             .collect();
         (!problems.is_empty()).then(|| problems.join(" · "))
@@ -347,14 +342,14 @@ mod tests {
         send_frame(&mut r, &ch).unwrap();
         assert_eq!(r.events, ["break", "mark", "data 513"]);
         assert_eq!(r.written[0], 0, "Startcode");
-        assert_eq!(r.written[1], 255, "Kanal 1");
-        assert_eq!(r.written[512], 7, "Kanal 512");
-        // Der Frame wartet mindestens die Übertragungszeit ab
+        assert_eq!(r.written[1], 255, "Channel 1");
+        assert_eq!(r.written[512], 7, "Channel 512");
+        // The frame waits at least for the transfer time
         assert!(t.elapsed() >= FRAME_TIME);
     }
 
-    /// Ende-zu-Ende über ein echtes Terminal-Paar: Konfiguration wie im
-    /// Betrieb, Bytes kommen auf der Gegenseite vollständig an.
+    /// End to end over a real terminal pair: configuration as in operation,
+    /// the bytes arrive completely on the other side.
     #[cfg(target_os = "linux")]
     #[test]
     fn frame_over_pseudo_terminal() {
@@ -368,7 +363,8 @@ mod tests {
         let mut ch = [0u8; UNIVERSE_SIZE];
         ch[0] = 255;
         ch[1] = 128;
-        // Break gibt es auf Pseudo-Terminals nicht immer – dann nur Daten prüfen
+        // Break is not always available on pseudo terminals – then only check the
+        // data
         let ok = match send_frame(&mut port, &ch) {
             Ok(()) => true,
             Err(_) => {
@@ -385,9 +381,9 @@ mod tests {
                 Ok(n) => got.extend_from_slice(&buf[..n]),
             }
         }
-        // Ein Break kann auf der Gegenseite als 0-Byte ankommen
+        // A break can arrive as a 0 byte on the other side
         let frame = &got[got.len() - (UNIVERSE_SIZE + 1)..];
-        assert_eq!(frame[0], 0, "Startcode (break geprüft: {ok})");
+        assert_eq!(frame[0], 0, "Start code (break checked: {ok})");
         assert_eq!(frame[1], 255);
         assert_eq!(frame[2], 128);
     }
@@ -400,23 +396,20 @@ mod tests {
 
     #[test]
     fn missing_cable_is_reported_not_fatal() {
-        let mut o = OpenDmx::new(vec![Some("GIBTS-NICHT".into())]);
+        let mut o = OpenDmx::new(vec![Some("DOES-NOT-EXIST".into())]);
         o.open().unwrap();
-        // Senden geht weiter, der Thread meldet das fehlende Kabel
+        // Sending continues, the thread reports the missing cable
         o.send(&DmxFrame::new(1)).unwrap();
         let deadline = Instant::now() + Duration::from_secs(3);
         let mut health = None;
         while Instant::now() < deadline {
             health = o.health();
-            if health
-                .as_deref()
-                .is_some_and(|h| h.contains("nicht gefunden"))
-            {
+            if health.as_deref().is_some_and(|h| h.contains("not found")) {
                 break;
             }
             std::thread::sleep(Duration::from_millis(50));
         }
-        assert!(health.unwrap().contains("Universum 1"));
+        assert!(health.unwrap().contains("Universe 1"));
         o.close();
     }
 }

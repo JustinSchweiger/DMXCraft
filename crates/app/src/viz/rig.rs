@@ -1,12 +1,12 @@
-//! Geräte im 3D-Raum: Gehäuse, Lichtstrahlen und Lichtquellen aus den
-//! aktuellen DMX-Werten.
+//! Fixtures in 3D space: housing, light beams and light sources from the
+//! current DMX values.
 
 use dmxcraft_core::fixture::ChannelKind as K;
 use dmxcraft_core::venue::{rotation, Placement};
 use dmxcraft_core::{ChannelRef, DmxFrame, Engine, FixtureId, Show};
 use glam::{Mat3, Mat4, Quat, Vec3};
 
-/// Grundform eines Gehäuseteils.
+/// Basic shape of a housing part.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Prim {
     Cube,
@@ -20,7 +20,7 @@ pub struct Part {
     /// linear rgb
     pub color: Vec3,
     pub gloss: f32,
-    /// Selbstleuchten (HDR, Linse)
+    /// Self-illumination (HDR, lens)
     pub emissive: f32,
 }
 
@@ -28,21 +28,22 @@ pub struct Part {
 pub struct Beam {
     pub origin: Vec3,
     pub dir: Vec3,
-    /// halber Öffnungswinkel in Grad
+    /// half the beam angle in degrees
     pub half_angle: f32,
-    /// linear rgb · Helligkeit
+    /// linear rgb · brightness
     pub color: Vec3,
-    /// Radius der Linse (Breite des Strahls am Anfang)
+    /// Radius of the lens (width of the beam at the start)
     pub lens: f32,
-    /// Gobo-Muster (0 = offen, 1–6 angenähert)
+    /// Gobo pattern (0 = open, 1–6 approximated)
     pub gobo: f32,
-    /// Fokuskanal 0–1 (nah → fern), falls vorhanden
+    /// Focus channel 0–1 (near → far), if present
     pub focus: Option<f32>,
 }
 
 impl Beam {
-    /// Schärfe des Lichtflecks in `dist` Metern (1 = scharf). Ohne Fokuskanal
-    /// mittlere Schärfe; sonst scharf, wo die Fokusweite (1,5–20 m) trifft.
+    /// Sharpness of the light spot at `dist` meters (1 = sharp). Without a focus
+    /// channel medium sharpness; otherwise sharp where the focus distance
+    /// (1.5–20 m) hits.
     pub fn sharpness(&self, dist: f32) -> f32 {
         match self.focus {
             None => 0.55,
@@ -54,8 +55,8 @@ impl Beam {
     }
 }
 
-/// Farbe eines Farbrads (angenähert, ohne Herstellerangaben):
-/// unten offen (weiß), dann acht typische Farbfelder.
+/// Color of a color wheel (approximated, without manufacturer data): open
+/// (white) at the bottom, then eight typical color slots.
 pub fn color_wheel(v: f32) -> Vec3 {
     const SLOTS: [[f32; 3]; 8] = [
         [1.0, 0.05, 0.03],
@@ -74,8 +75,8 @@ pub fn color_wheel(v: f32) -> Vec3 {
     Vec3::from(SLOTS[k.min(SLOTS.len() - 1)])
 }
 
-/// Farbe eines Farbrad-Kanals: aus den Wertebereichen der Gerätedatei,
-/// sonst angenähert.
+/// Color of a color wheel channel: from the value ranges of the fixture
+/// file, otherwise approximated.
 pub fn wheel_color(def: &dmxcraft_core::ChannelDef, v: u8) -> Vec3 {
     use dmxcraft_core::RangeEffect as E;
     match def.range_at(v).map(|r| r.effect) {
@@ -86,7 +87,8 @@ pub fn wheel_color(def: &dmxcraft_core::ChannelDef, v: u8) -> Vec3 {
     }
 }
 
-/// Gobo-Muster eines Gobo-Kanals: aus den Wertebereichen, sonst angenähert.
+/// Gobo pattern of a gobo channel: from the value ranges, otherwise
+/// approximated.
 pub fn gobo_of(def: &dmxcraft_core::ChannelDef, v: u8) -> f32 {
     use dmxcraft_core::RangeEffect as E;
     match def.range_at(v).map(|r| r.effect) {
@@ -97,7 +99,8 @@ pub fn gobo_of(def: &dmxcraft_core::ChannelDef, v: u8) -> f32 {
     }
 }
 
-/// Gobo-Nummer aus dem Kanalwert (angenähert: unten offen, dann sechs Muster).
+/// Gobo number from the channel value (approximated: open at the bottom,
+/// then six patterns).
 pub fn gobo(v: f32) -> f32 {
     if v < 0.05 {
         0.0
@@ -122,7 +125,7 @@ pub enum Kind {
     Laser,
 }
 
-/// Lage im Raum: gespeicherte oder automatisch aus dem Bühnenplan.
+/// Placement in the room: saved or automatically from the stage plan.
 pub fn placement(show: &Show, id: FixtureId) -> Placement {
     show.placement3d(id)
 }
@@ -164,7 +167,7 @@ fn srgb_to_linear(c: [u8; 3]) -> Vec3 {
     Vec3::new(f(c[0]), f(c[1]), f(c[2]))
 }
 
-/// Farbe und Helligkeit einer Zelle aus den Kanalwerten (0–1).
+/// Color and brightness of a cell from the channel values (0–1).
 fn cell_light(
     get: &dyn Fn(K, usize) -> Option<f32>,
     wheel: Option<Vec3>,
@@ -187,10 +190,10 @@ fn cell_light(
     } else if let Some(w) = wheel {
         w
     } else {
-        // Halogen/Dimmer: warmweiß
+        // Halogen/dimmer: warm white
         Vec3::new(1.0, 0.78, 0.5)
     };
-    // Dimmer: je Zelle, sonst einer für alle; ohne Dimmerkanal voll
+    // Dimmer: per cell, otherwise one for all; without a dimmer channel full
     let dim = get(K::Dimmer, cell)
         .or_else(|| (cells > 1).then(|| get(K::Dimmer, 0)).flatten())
         .unwrap_or(1.0);
@@ -200,7 +203,8 @@ fn cell_light(
     c * dim
 }
 
-/// Baut alle Geräte aus Show und DMX-Ausgang. `t` = Zeit (s, für Strobe).
+/// Builds all fixtures from the show and the DMX output. `t` = time (s, for
+/// strobe).
 pub fn build(
     engine: &Engine,
     frame: &DmxFrame,
@@ -219,7 +223,7 @@ pub fn build(
         let rot = Mat3::from_cols_array_2d(&rotation(p.rotation));
         let base = Mat4::from_mat3(rot) * Mat4::IDENTITY;
         let base = Mat4::from_translation(Vec3::from(p.position)) * base;
-        // Kanalwerte nach Art, in Reihenfolge (für Zellen)
+        // Channel values by kind, in order (for cells)
         let value = |i: usize| {
             engine
                 .output_value(
@@ -254,7 +258,7 @@ pub fn build(
             Some(value(list[cell % list.len()]))
         };
         let raw = |i: usize| (value(i) * 255.0).round() as u8;
-        // Shutter/Strobe nach den Wertebereichen der Gerätedatei
+        // Shutter/strobe by the value ranges of the fixture file
         let shutter_on = match by_kind(K::Strobe)
             .first()
             .and_then(|i| ty.channels[*i].strobe(raw(*i)))
@@ -263,12 +267,13 @@ pub fn build(
             Some(hz) if hz <= 0.0 => false,
             Some(hz) => (t * hz).fract() < 0.25,
         };
-        // Farbrad, Gobo und Fokus
+        // Color wheel, gobo and focus
         let wheel_c = by_kind(K::ColorWheel)
             .first()
             .map(|i| wheel_color(&ty.channels[*i], raw(*i)));
         let focus = by_kind(K::Focus).first().map(|i| value(*i));
-        // Abstrahlwinkel aus den Gerätedaten (mit Zoomkanal zwischen min und max)
+        // Beam angle from the fixture data (with a zoom channel between min and
+        // max)
         let zoom = ty
             .channels
             .iter()
@@ -341,7 +346,7 @@ pub fn build(
                     gloss: 0.5,
                     emissive: 0.0,
                 });
-                // Bügel
+                // Yoke
                 cube(
                     &mut parts,
                     base * trs(
@@ -400,7 +405,7 @@ pub fn build(
                 }
             }
             Kind::Moving => {
-                // Pan/Tilt (mit Feinkanal), Mitte = 50 %
+                // Pan/tilt (with fine channel), center = 50 %
                 let fine = |coarse: K, fine: K| {
                     let c = by_kind(coarse).first().map(|i| value(*i))?;
                     let f = by_kind(fine).first().map(|i| value(*i)).unwrap_or(0.0);
@@ -470,7 +475,7 @@ pub fn build(
                     ),
                     body,
                 );
-                // Nebelkanal (generisch/Dimmer): erhöht den Dunst im Raum
+                // Fog channel (generic/dimmer): increases the haze in the room
                 let amount = by_kind(K::Generic)
                     .first()
                     .map(|i| value(*i))
@@ -490,7 +495,7 @@ pub fn build(
                 );
                 let light = cell_light(&get, wheel_c, 0, 1);
                 let light = if light.max_element() < 0.01 {
-                    // Laser ohne Farbkanal: grün, wenn irgendein Kanal aktiv ist
+                    // Laser without a color channel: green when any channel is active
                     let any = (0..ty.channels.len()).any(|i| value(i) > 0.05);
                     if any {
                         Vec3::new(0.05, 1.0, 0.1)
@@ -540,7 +545,7 @@ fn cube(parts: &mut Vec<Part>, m: Mat4, c: Vec3) {
     });
 }
 
-/// Linearfarbe aus sRGB-Bytes (für Materialien).
+/// Linear color from sRGB bytes (for materials).
 pub fn linear(c: [u8; 3]) -> Vec3 {
     srgb_to_linear(c)
 }

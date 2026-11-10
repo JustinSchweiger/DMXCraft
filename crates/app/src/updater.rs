@@ -1,14 +1,14 @@
-//! Update-Prüfung und -Installation über GitHub-Releases.
+//! Update check and installation via GitHub releases.
 //!
-//! Die Prüfung fragt immer direkt die GitHub-API nach dem neuesten Release
-//! und vergleicht mit der eigenen Version – unabhängig davon, wie DMXCraft
-//! installiert wurde. Installiert wird je nach Installationsart:
+//! The check always asks the GitHub API directly for the latest release and
+//! compares it with the own version – regardless of how DMXCraft was
+//! installed. Installation depends on the kind of install:
 //!
-//! * Shell-/PowerShell-Installer: axoupdater (die Installer hinterlegen eine
-//!   „Install-Receipt“, aus der Ort und Quelle bekannt sind).
-//! * MSI (Windows): neues MSI herunterladen und `msiexec` starten; es
-//!   aktualisiert die bestehende Installation.
-//! * sonst (z. B. Entwickler-Build): Release-Seite im Browser öffnen.
+//! * Shell/PowerShell installer: axoupdater (the installers leave an
+//!   “install receipt” that tells location and source).
+//! * MSI (Windows): download the new MSI and start `msiexec`; it updates
+//!   the existing installation.
+//! * otherwise (e.g. developer build): open the release page in the browser.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -20,15 +20,15 @@ const REPO: &str = "JustinSchweiger/DMXCraft";
 #[cfg(windows)]
 const MSI_ASSET: &str = "dmxcraft-x86_64-pc-windows-msvc.msi";
 
-/// Wie ein verfügbares Update installiert wird.
+/// How an available update is installed.
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstallKind {
     /// axoupdater (Installation per Shell-/PowerShell-Installer)
     Updater,
-    /// MSI herunterladen und starten
+    /// Download and start the MSI
     #[cfg_attr(not(windows), allow(dead_code))]
     Msi(String),
-    /// Release-Seite öffnen
+    /// Open the release page
     Browser,
 }
 
@@ -46,9 +46,9 @@ pub enum UpdateState {
     UpToDate,
     Available(Release),
     Installing,
-    /// Neue Version installiert – Neustart nötig.
+    /// New version installed – restart needed.
     Installed(String),
-    /// MSI-Installer gestartet – DMXCraft schließen.
+    /// MSI installer started – close DMXCraft.
     InstallerStarted(String),
     Error(String),
 }
@@ -62,8 +62,8 @@ impl UpdateState {
 #[derive(Clone)]
 pub struct Updater {
     state: Arc<Mutex<UpdateState>>,
-    /// Ergebnis einer von Hand gestarteten Prüfung (Text, Fehler?) für die
-    /// Statusmeldung.
+    /// Result of a manually started check (text, error?) for the status
+    /// message.
     notice: Arc<Mutex<Option<(String, bool)>>>,
 }
 
@@ -96,7 +96,7 @@ impl Updater {
         }
     }
 
-    /// Meldung einer von Hand gestarteten Prüfung abholen.
+    /// Collect the message of a manually started check.
     pub fn take_notice(&self) -> Option<(String, bool)> {
         self.notice.lock().ok()?.take()
     }
@@ -105,8 +105,8 @@ impl Updater {
         env!("CARGO_PKG_VERSION")
     }
 
-    /// Prüft im Hintergrund, ob eine neuere Version auf GitHub liegt.
-    /// `manual`: Ergebnis auch melden, wenn es nichts Neues gibt.
+    /// Checks in the background whether a newer version is on GitHub.
+    /// `manual`: also report the result when there is nothing new.
     pub fn check(&self, ctx: eframe::egui::Context, manual: bool) {
         if self.state().busy() {
             return;
@@ -154,7 +154,7 @@ impl Updater {
         });
     }
 
-    /// Installiert das gefundene Update (oder öffnet die Release-Seite).
+    /// Installs the update found (or opens the release page).
     pub fn install(&self, ctx: eframe::egui::Context) {
         let UpdateState::Available(rel) = self.state() else {
             return;
@@ -190,7 +190,7 @@ fn client() -> Result<reqwest::blocking::Client, String> {
         .map_err(|e| e.to_string())
 }
 
-/// Neuestes Release: (Tag, Seite, Namen und Download-Links der Dateien).
+/// Latest release: (tag, page, names and download links of the files).
 type ReleaseInfo = (String, String, Vec<(String, String)>);
 
 fn latest_release() -> Result<ReleaseInfo, String> {
@@ -206,7 +206,7 @@ fn latest_release() -> Result<ReleaseInfo, String> {
     let v: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
     let tag = v["tag_name"]
         .as_str()
-        .ok_or("GitHub: kein tag_name")?
+        .ok_or("GitHub: no tag_name")?
         .to_string();
     let page = v["html_url"]
         .as_str()
@@ -228,7 +228,7 @@ fn latest_release() -> Result<ReleaseInfo, String> {
     Ok((tag, page, assets))
 }
 
-/// Liegt `tag` (z. B. „v0.4.0“) über `current` (z. B. „0.3.0“)?
+/// Is `tag` (e.g. “v0.4.0”) above `current` (e.g. “0.3.0”)?
 fn is_newer(tag: &str, current: &str) -> bool {
     fn parse(s: &str) -> Option<(u64, u64, u64, bool)> {
         let s = s.trim().trim_start_matches('v');
@@ -248,7 +248,7 @@ fn is_newer(tag: &str, current: &str) -> bool {
     }
 }
 
-/// Installationsart dieser Programmdatei bestimmen.
+/// Determine how this executable was installed.
 fn install_kind(_assets: &[(String, String)]) -> InstallKind {
     let mut up = AxoUpdater::new_for(APP_NAME);
     if up.load_receipt().is_ok() && up.check_receipt_is_for_this_executable().unwrap_or(false) {
@@ -263,7 +263,7 @@ fn install_kind(_assets: &[(String, String)]) -> InstallKind {
     InstallKind::Browser
 }
 
-/// Liegt die Programmdatei unter „Programme“ (dort installiert das MSI)?
+/// Is the executable under “Program Files” (where the MSI installs)?
 #[cfg(windows)]
 fn installed_by_msi() -> bool {
     let Ok(exe) = std::env::current_exe() else {
@@ -296,7 +296,7 @@ fn run_msi(url: &str) -> Result<(), String> {
 
 #[cfg(not(windows))]
 fn run_msi(_url: &str) -> Result<(), String> {
-    Err("MSI nur unter Windows".into())
+    Err("MSI only on Windows".into())
 }
 
 fn run_updater() -> UpdateState {
@@ -329,7 +329,7 @@ mod tests {
         assert!(!is_newer("kaputt", "0.4.0"));
     }
 
-    /// Echte Abfrage bei GitHub (Netz nötig): `cargo test -- --ignored`
+    /// Real query to GitHub (network needed): `cargo test -- --ignored`
     #[test]
     #[ignore]
     fn github_latest() {

@@ -2,7 +2,7 @@ use eframe::egui::{self, Ui};
 
 use crate::ui::theme;
 
-/// Sektionskopf: Titel in Großbuchstaben links, Aktionen rechts.
+/// Section header: title in upper case on the left, actions on the right.
 pub fn section_header(ui: &mut Ui, title: &str, right: impl FnOnce(&mut Ui)) {
     ui.horizontal(|ui| {
         ui.set_min_height(24.0);
@@ -13,7 +13,8 @@ pub fn section_header(ui: &mut Ui, title: &str, right: impl FnOnce(&mut Ui)) {
     });
 }
 
-/// Aufklappbare Sektion: Pfeil und Titel (GROSS) als Kopf, Zustand bleibt gemerkt.
+/// Collapsible section: arrow and title (UPPER CASE) as header, the state is
+/// remembered.
 pub fn fold_section<R>(
     ui: &mut Ui,
     id: impl std::hash::Hash + std::fmt::Debug,

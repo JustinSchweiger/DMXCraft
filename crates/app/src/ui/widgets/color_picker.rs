@@ -1,8 +1,8 @@
-//! Eigener Farbwähler im App-Stil: Feld für Sättigung/Helligkeit, Leiste für
-//! den Farbton und ein Hex-Feld (#RRGGBB).
+//! Custom color picker in app style: field for saturation/value, bar for
+//! the hue and a hex field (#RRGGBB).
 //!
-//! Der Farbton wird pro Wähler gemerkt, damit er bei Grau/Schwarz (dort ist
-//! er aus RGB nicht ablesbar) nicht verloren geht.
+//! The hue is remembered per picker so it is not lost for gray/black (where
+//! it cannot be read from RGB).
 
 use eframe::egui::{
     self, ecolor::Hsva, epaint::Mesh, pos2, vec2, Color32, Rect, Sense, Shape, Stroke, StrokeKind,
@@ -22,19 +22,19 @@ fn hsv_color(h: f32, s: f32, v: f32) -> Color32 {
     Hsva::new(h, s, v, 1.0).into()
 }
 
-/// Zeigt den Farbwähler; `true`, wenn `rgb` geändert wurde.
+/// Shows the color picker; `true` if `rgb` was changed.
 pub fn color_picker(ui: &mut Ui, id: egui::Id, rgb: &mut [u8; 3]) -> bool {
     let mut changed = false;
     let stored: Option<[f32; 3]> = ui.data(|d| d.get_temp(id));
     let from_rgb = Hsva::from_srgb(*rgb);
-    // gemerkten Farbton behalten, solange die Farbe dazu passt
+    // keep the remembered hue as long as the color matches it
     let mut hsv = match stored {
         Some([h, s, v]) if Hsva::new(h, s, v, 1.0).to_srgb() == *rgb => [h, s, v],
         Some([h, _, _]) if from_rgb.s < 0.01 || from_rgb.v < 0.01 => [h, from_rgb.s, from_rgb.v],
         _ => [from_rgb.h, from_rgb.s, from_rgb.v],
     };
 
-    // ----- Sättigung (x) / Helligkeit (y) -----
+    // ----- Saturation (x) / value (y) -----
     let (sv_rect, sv) = ui.allocate_exact_size(vec2(W, SV_H), Sense::click_and_drag());
     let mut mesh = Mesh::default();
     const N: u32 = 12;
@@ -82,7 +82,7 @@ pub fn color_picker(ui: &mut Ui, id: egui::Id, rgb: &mut [u8; 3]) -> bool {
 
     ui.add_space(theme::SP_XS);
 
-    // ----- Farbton -----
+    // ----- Hue -----
     let (hue_rect, hue) = ui.allocate_exact_size(vec2(W, HUE_H), Sense::click_and_drag());
     let mut mesh = Mesh::default();
     const HN: u32 = 24;
@@ -124,7 +124,7 @@ pub fn color_picker(ui: &mut Ui, id: egui::Id, rgb: &mut [u8; 3]) -> bool {
 
     ui.add_space(theme::SP_XS);
 
-    // ----- Vorschau + Hex -----
+    // ----- Preview + hex -----
     ui.horizontal(|ui| {
         let (prev, _) = ui.allocate_exact_size(vec2(28.0, 24.0), Sense::hover());
         ui.painter()
@@ -152,7 +152,7 @@ pub fn color_picker(ui: &mut Ui, id: egui::Id, rgb: &mut [u8; 3]) -> bool {
                 changed = true;
             }
         }
-        // Während der Eingabe den Text behalten, sonst die aktuelle Farbe zeigen
+        // Keep the text while typing, otherwise show the current color
         if r.has_focus() {
             ui.data_mut(|d| d.insert_temp(hex_id, text));
         } else {
@@ -167,7 +167,7 @@ pub fn color_picker(ui: &mut Ui, id: egui::Id, rgb: &mut [u8; 3]) -> bool {
     changed
 }
 
-/// „#RRGGBB“, „RRGGBB“ oder „#RGB“.
+/// “#RRGGBB”, “RRGGBB” or “#RGB”.
 fn parse_hex(s: &str) -> Option<[u8; 3]> {
     let h = s.trim().trim_start_matches('#');
     let full: String = match h.len() {
@@ -179,7 +179,7 @@ fn parse_hex(s: &str) -> Option<[u8; 3]> {
     Some([(v >> 16) as u8, (v >> 8) as u8, v as u8])
 }
 
-/// Farbvorgaben (Quadrate in Bank- und Szenenmenü).
+/// Color presets (squares in the bank and scene menus).
 pub const PRESET_COLORS: [[u8; 3]; 12] = [
     [0x19, 0xe3, 0xf0],
     [0x55, 0xa8, 0xff],
@@ -195,18 +195,18 @@ pub const PRESET_COLORS: [[u8; 3]; 12] = [
     [0x8a, 0x93, 0x9e],
 ];
 
-/// Ein Feld der Farbauswahl.
+/// One field of the color selection.
 #[derive(Clone, Copy, PartialEq)]
 enum Swatch {
-    /// Farbe nach Position (keine eigene Farbe).
+    /// Color by position (no own color).
     Auto,
     Color([u8; 3]),
-    /// Eigene Farbe über den Farbwähler.
+    /// Own color via the color picker.
     Custom,
 }
 
-/// Farbfelder in zwei Reihen für Menüs; `Some(neu)` bei Auswahl, `Some(None)`
-/// = Automatisch. „+“ klappt den Farbwähler auf.
+/// Color swatches in two rows for menus; `Some(new)` on selection,
+/// `Some(None)` = automatic. “+” expands the color picker.
 pub fn color_swatches(
     ui: &mut Ui,
     id: egui::Id,
@@ -240,7 +240,7 @@ pub fn color_swatches(
                         p.rect_filled(rect.shrink(2.0), 3.0, theme::rgb(*c));
                     }
                     Swatch::Auto => {
-                        // durchgestrichenes Feld
+                        // crossed-out swatch
                         p.rect_stroke(
                             rect.shrink(2.5),
                             3.0,

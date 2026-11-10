@@ -1,5 +1,5 @@
-//! Seitenleisten im Bau-Modus: links Raum, Objektbaum und Geräte, rechts
-//! die Eigenschaften der Auswahl (angedockt).
+//! Sidebars in build mode: room, object tree and fixtures on the left, the
+//! properties of the selection on the right (docked).
 
 use dmxcraft_core::venue::{Material, Placement, Shape, Transform, TrussProfile, Venue};
 use dmxcraft_core::FixtureId;
@@ -15,22 +15,22 @@ use crate::ui::theme;
 use crate::ui::widgets::{fold_section, Segmented};
 use crate::views::ViewCtx;
 
-/// Wahl im Bild-Menü.
+/// Choice in the image menu.
 enum TexAction {
-    /// Bild (0 = keins), optional Kachelgröße
+    /// Image (0 = none), optional tile size
     Set(u32, Option<f32>),
     Builtin(usize, f32),
     Load,
 }
 
-/// Bild auf Objekte legen (Farbe dabei auf Weiß, damit das Bild wirkt).
+/// Put an image on objects (the color is set to white so the image shows).
 pub(super) fn apply_texture(
     v: &mut Venue,
     ids: impl IntoIterator<Item = u32>,
     tex: u32,
     tile: Option<f32>,
 ) {
-    // Ordner: auf alles darin
+    // Folder: on everything inside
     fn set(o: &mut dmxcraft_core::venue::Object, tex: u32, tile: Option<f32>) {
         if !matches!(
             o.shape,
@@ -56,7 +56,7 @@ pub(super) fn apply_texture(
     v.prune_models();
 }
 
-/// Reiter der linken Leiste.
+/// Tabs of the left bar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum OutlineTab {
     #[default]
@@ -397,7 +397,7 @@ impl VizView {
         });
     }
 
-    /// Rechte Leiste: Eigenschaften der Auswahl.
+    /// Right bar: properties of the selection.
     pub(super) fn props_panel(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         egui::ScrollArea::vertical()
             .id_salt("viz_props")

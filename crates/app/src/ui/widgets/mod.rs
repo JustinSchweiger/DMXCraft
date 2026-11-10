@@ -1,5 +1,5 @@
-//! Wiederverwendbare Bedienelemente. Sie kennen weder Engine noch App-Zustand,
-//! nur ihre Eingabewerte (siehe docs/UI-GUIDELINES.md, Abschnitt 4).
+//! Reusable controls. They know neither the engine nor the app state, only
+//! their input values (see docs/UI-GUIDELINES.md, section 4).
 
 pub mod color_picker;
 pub mod dialog;

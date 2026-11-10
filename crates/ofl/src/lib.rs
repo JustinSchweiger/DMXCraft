@@ -1,13 +1,13 @@
-//! Gerätebibliotheken: Open Fixture Library (<https://open-fixture-library.org>)
-//! und QLC+ (<https://www.qlcplus.org>).
+//! Fixture libraries: Open Fixture Library (<https://open-fixture-library.org>)
+//! and QLC+ (<https://www.qlcplus.org>).
 //!
-//! * [`convert`] wandelt eine OFL-Gerätedatei (JSON) um, [`qxf`] eine
-//!   QLC+-Gerätedatei (XML) – jeweils ein [`FixtureType`] pro DMX-Modus.
-//! * [`Library`] ist die eingebettete, vorkonvertierte Gesamtbibliothek aus
-//!   `data/ofl-library.json.gz` (Tool `ofl-bundle`) und
-//!   `data/qlc-library.json.gz` (Tool `qlc-bundle`).
+//! * [`convert`] converts an OFL fixture file (JSON), [`qxf`] a QLC+ fixture
+//!   file (XML) – one [`FixtureType`] per DMX mode each.
+//! * [`Library`] is the embedded, pre-converted complete library from
+//!   `data/ofl-library.json.gz` (tool `ofl-bundle`) and
+//!   `data/qlc-library.json.gz` (tool `qlc-bundle`).
 //!
-//! Lizenzen: OFL-Daten MIT (`data/OFL-LICENSE`), QLC+-Daten Apache 2.0
+//! Licenses: OFL data MIT (`data/OFL-LICENSE`), QLC+ data Apache 2.0
 //! (`data/QLC-LICENSE`, `data/QLC-NOTICE`).
 
 pub mod convert;
@@ -24,7 +24,7 @@ pub use convert::{convert_fixture, OflError};
 pub use profile::{Capability, CapabilityKind, Problem, Profile, ProfileChannel, ProfileMode};
 pub use qxf::convert_qxf;
 
-/// Herkunft eines Bibliotheksgeräts.
+/// Origin of a library fixture.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Source {
@@ -34,7 +34,7 @@ pub enum Source {
 }
 
 impl Source {
-    /// Kurzname für die Anzeige.
+    /// Short name for display.
     pub fn label(self) -> &'static str {
         match self {
             Source::Ofl => "OFL",
@@ -43,7 +43,7 @@ impl Source {
     }
 }
 
-/// Ein Gerät der Bibliothek mit allen Modi.
+/// A fixture of the library with all modes.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LibraryFixture {
     pub manufacturer_key: String,
@@ -59,7 +59,7 @@ pub struct LibraryFixture {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Library {
-    /// Git-Commit der OFL, aus dem die Bibliothek erzeugt wurde.
+    /// Git commit of the OFL the library was generated from.
     pub source_commit: String,
     pub source_date: String,
     pub fixtures: Vec<LibraryFixture>,
@@ -68,16 +68,16 @@ pub struct Library {
 static EMBEDDED_OFL: &[u8] = include_bytes!("../data/ofl-library.json.gz");
 static EMBEDDED_QLC: &[u8] = include_bytes!("../data/qlc-library.json.gz");
 
-/// Ergänzt bei Gerätetypen einer Show die physischen Angaben (Abstrahlwinkel,
-/// Pan/Tilt-Bereich) aus der eingebauten Bibliothek, falls sie fehlen
-/// (ältere Shows wurden ohne diese Angaben gepatcht).
+/// Adds the physical data (beam angle, pan/tilt range) from the built-in
+/// library to the fixture types of a show if it is missing (older shows were
+/// patched without this data).
 pub fn fill_physical(show: &mut dmxcraft_core::Show) {
     fill_details(show, &[]);
 }
 
-/// Ergänzt in einer Show fehlende Angaben der Gerätetypen aus der
-/// Bibliothek bzw. `extra` (eigene Profile), gefunden über den Schlüssel:
-/// physische Daten und Wertebereiche der Kanäle (ältere Shows haben sie nicht).
+/// Fills in missing data of the fixture types in a show from the library or
+/// `extra` (custom profiles), found by key: physical data and value ranges
+/// of the channels (older shows do not have them).
 pub fn fill_details(show: &mut dmxcraft_core::Show, extra: &[FixtureType]) {
     let needs =
         |t: &FixtureType| t.physical.is_none() || t.channels.iter().all(|c| c.ranges.is_empty());
@@ -103,7 +103,7 @@ pub fn fill_details(show: &mut dmxcraft_core::Show, extra: &[FixtureType]) {
         if t.physical.is_none() {
             t.physical = src.physical;
         }
-        // Bereiche nur übernehmen, wenn die Kanäle zusammenpassen
+        // Only take over ranges if the channels match
         if t.channels.iter().all(|c| c.ranges.is_empty())
             && t.channels.len() == src.channels.len()
             && t.channels
@@ -119,8 +119,8 @@ pub fn fill_details(show: &mut dmxcraft_core::Show, extra: &[FixtureType]) {
 }
 
 impl Library {
-    /// Die mit dem Programm ausgelieferte Bibliothek: OFL und QLC+ zusammen,
-    /// nach Hersteller und Name sortiert (wird beim ersten Zugriff entpackt).
+    /// The library shipped with the program: OFL and QLC+ together, sorted by
+    /// manufacturer and name (unpacked on first access).
     pub fn embedded() -> &'static Library {
         static LIB: OnceLock<Library> = OnceLock::new();
         LIB.get_or_init(|| {
@@ -164,12 +164,12 @@ impl Library {
         enc.finish().map_err(|e| OflError::Invalid(e.to_string()))
     }
 
-    /// Volltextsuche über Hersteller, Name und Kategorien. Alle Wörter der
-    /// Suche müssen vorkommen (ohne Groß-/Kleinschreibung).
-    /// Bester Gerätetyp zu einem Namen aus einer fremden Bibliothek, z. B.
-    /// „Stairville/LED PAR 64 CX_3 RGBW.ssl2“ (Hersteller/Modell). Enthält der
-    /// Name eine Kanalzahl („7CH“), wird der passende Modus bevorzugt.
-    /// `None`, wenn Hersteller oder Modell nicht ausreichend übereinstimmen.
+    /// Full-text search over manufacturer, name and categories. All words of the
+    /// search must occur (case-insensitive).
+    /// Best fixture type for a name from a foreign library, e.g.
+    /// “Stairville/LED PAR 64 CX_3 RGBW.ssl2” (manufacturer/model). If the name
+    /// contains a channel count (“7CH”), the matching mode is preferred.
+    /// `None` if manufacturer or model do not match well enough.
     pub fn best_match(&self, library_name: &str) -> Option<(&LibraryFixture, &FixtureType)> {
         let name = library_name
             .rsplit_once('.')
@@ -183,7 +183,8 @@ impl Library {
                 .map(str::to_string)
                 .collect()
         };
-        // „_Generic“, „_imported“: kein echter Hersteller, er steckt dann im Modellnamen
+        // “_Generic”, “_imported”: not a real manufacturer, it is then part of the
+        // model name
         let maker = match maker.to_lowercase().as_str() {
             "_generic" => vec!["generic".to_string()],
             m if m.starts_with('_') => Vec::new(),
@@ -211,7 +212,7 @@ impl Library {
                 tokens(&f.name)
             };
             let hits = model_t.iter().filter(|w| fn_t.contains(w)).count() as f32;
-            // Anteil getroffener Wörter beider Seiten
+            // Share of matched words on both sides
             let score = hits / model_t.len() as f32 * 0.6 + hits / fn_t.len().max(1) as f32 * 0.4;
             if best.is_none_or(|b| score > b.0) {
                 best = Some((score, f));
@@ -262,9 +263,7 @@ mod tests {
             .expect("Stairville");
         assert!(f.manufacturer.contains("Stairville"), "{}", f.manufacturer);
         assert!(!m.channels.is_empty());
-        assert!(lib
-            .best_match("Unbekannt/Gibt es nicht 9000.ssl2")
-            .is_none());
+        assert!(lib.best_match("Unknown/Does not exist 9000.ssl2").is_none());
     }
 
     use super::*;
@@ -282,13 +281,13 @@ mod tests {
             .iter()
             .filter(|f| f.source == Source::Ofl)
             .count();
-        assert!(qlc > 1000, "nur {qlc} QLC+-Geräte");
-        assert!(ofl > 500, "nur {ofl} OFL-Geräte");
-        // Schlüssel der Modi sind eindeutig (Shows finden ihren Typ wieder)
+        assert!(qlc > 1000, "only {qlc} QLC+ fixtures");
+        assert!(ofl > 500, "only {ofl} OFL fixtures");
+        // Mode keys are unique (shows find their type again)
         let mut keys = std::collections::HashSet::new();
         for f in &lib.fixtures {
             for m in &f.modes {
-                assert!(keys.insert(m.key.as_str()), "doppelter Schlüssel {}", m.key);
+                assert!(keys.insert(m.key.as_str()), "duplicate key {}", m.key);
             }
         }
     }
@@ -298,7 +297,7 @@ mod tests {
         let lib = Library::embedded();
         assert!(
             lib.fixtures.len() > 500,
-            "nur {} Geräte",
+            "only {} fixtures",
             lib.fixtures.len()
         );
         assert!(lib.fixtures.iter().all(|f| !f.modes.is_empty()));

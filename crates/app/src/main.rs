@@ -32,7 +32,7 @@ mod views;
 mod viz;
 
 fn main() -> eframe::Result {
-    // `dmxcraft mcp`: stdio-Brücke für KI-Assistenten (ohne Fenster)
+    // `dmxcraft mcp`: stdio bridge for AI assistants (without a window)
     if std::env::args().nth(1).as_deref() == Some("mcp") {
         dmxcraft_mcp::bridge::run(settings::Settings::load().mcp_port);
         return Ok(());
@@ -53,11 +53,11 @@ fn main() -> eframe::Result {
             .with_inner_size([1440.0, 900.0])
             .with_min_inner_size([900.0, 600.0])
             .with_icon(icon::window_icon())
-            // eigene Titelleiste statt der des Betriebssystems
+            // own title bar instead of the operating system's
             .with_decorations(false)
             .with_resizable(true),
-        // Fenstergröße/-position und Größen der Bereiche (Panels) beim
-        // nächsten Start wiederherstellen
+        // restore window size/position and the sizes of the areas (panels) at the
+        // next start
         persist_window: true,
         ..Default::default()
     };
@@ -66,8 +66,8 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |_cc| Ok(Box::new(app::DmxCraftApp::new(show_path, settings)))),
     );
-    // Fenster ist zu und alles gespeichert: Prozess sicher beenden, auch wenn
-    // noch Hintergrund-Fäden (MCP-Verbindungen, Audio, Ausgabe) laufen
+    // Window is closed and everything is saved: end the process safely, even
+    // if background threads (MCP connections, audio, output) are still running
     if let Err(e) = &result {
         eprintln!("{e}");
         std::process::exit(1);

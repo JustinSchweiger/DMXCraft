@@ -1,4 +1,4 @@
-//! Erzeugt `crates/ofl/data/ofl-library.json.gz` aus einem Checkout der
+//! Generates `crates/ofl/data/ofl-library.json.gz` from a checkout of the
 //! Open Fixture Library.
 //!
 //! ```sh
@@ -22,7 +22,7 @@ fn main() {
     match run(&root, &out) {
         Ok(()) => {}
         Err(e) => {
-            eprintln!("Fehler: {e}");
+            eprintln!("Error: {e}");
             std::process::exit(1);
         }
     }
@@ -86,7 +86,7 @@ fn run(root: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(out, &bytes)?;
     let modes: usize = lib.fixtures.iter().map(|f| f.modes.len()).sum();
     println!(
-        "{} Geräte, {} Modi ({} übersprungen, {} fehlerhaft) → {} ({} kB), OFL {} vom {}",
+        "{} fixtures, {} modes ({} skipped, {} failed) → {} ({} kB), OFL {} from {}",
         lib.fixtures.len(),
         modes,
         skipped,

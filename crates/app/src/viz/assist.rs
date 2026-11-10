@@ -1,6 +1,6 @@
-//! Aufträge des KI-Assistenten (MCP) an den 3D-Visualisierer: Zustand
-//! abfragen, Fenster/Qualität/Kamera setzen und Bilder rendern. Die Bilder
-//! entstehen ohne offenes Fenster direkt auf der Grafikkarte.
+//! Requests of the AI assistant (MCP) to the 3D visualizer: query the state,
+//! set window/quality/camera and render images. The images are created
+//! directly on the graphics card without an open window.
 
 use eframe::egui_wgpu;
 use glam::Vec3;
@@ -13,7 +13,7 @@ use crate::views::ViewCtx;
 use dmxcraft_core::venue::CameraPreset;
 
 impl VizView {
-    /// Auftrag ausführen: `get`, `set` oder `screenshot`.
+    /// Execute a request: `get`, `set` or `screenshot`.
     pub fn mcp(
         &mut self,
         action: &str,
@@ -34,13 +34,13 @@ impl VizView {
                 }
                 if let Some(q) = args.get("quality").and_then(Value::as_str) {
                     cx.state.viz_quality = quality(q).ok_or_else(|| {
-                        format!("Qualität „{q}“ unbekannt – low, medium, high oder ultra")
+                        format!("Unknown quality “{q}” – low, medium, high or ultra")
                     })?;
                 }
                 let points = cx.engine.show().venue.cameras.clone();
                 if let Some(c) = args.get("camera") {
-                    let cam = apply_camera(self.camera.expect("Kamera"), room, &points, c)?;
-                    // sichtbar hinfahren, wenn das Fenster offen ist
+                    let cam = apply_camera(self.camera.expect("camera"), room, &points, c)?;
+                    // move there visibly when the window is open
                     self.fly_to(cam);
                     if !cx.state.viz_window {
                         self.camera = Some(cam);
@@ -50,11 +50,11 @@ impl VizView {
                 if let Some(name) = args.get("save_point").and_then(Value::as_str) {
                     let name = name.trim();
                     if name.is_empty() {
-                        return Err("save_point braucht einen Namen".into());
+                        return Err("save_point needs a name".into());
                     }
                     let cam = match args.get("camera") {
-                        Some(c) => apply_camera(self.camera.expect("Kamera"), room, &points, c)?,
-                        None => self.camera.expect("Kamera"),
+                        Some(c) => apply_camera(self.camera.expect("camera"), room, &points, c)?,
+                        None => self.camera.expect("camera"),
                     };
                     let list = &mut cx.engine.show_mut().venue.cameras;
                     match list.iter_mut().find(|p| p.name.eq_ignore_ascii_case(name)) {
@@ -65,7 +65,7 @@ impl VizView {
                 if let Some(name) = args.get("delete_point").and_then(Value::as_str) {
                     let list = &mut cx.engine.show_mut().venue.cameras;
                     let i = find_point(list, &Value::String(name.to_string()))
-                        .ok_or_else(|| format!("Kamerapunkt „{name}“ nicht gefunden"))?;
+                        .ok_or_else(|| format!("Camera point “{name}” not found"))?;
                     list.remove(i);
                 }
                 Ok((self.info(cx), None))
@@ -73,8 +73,8 @@ impl VizView {
             "screenshot" => {
                 let rs = rs
                     .filter(|rs| Gpu::supported(rs))
-                    .ok_or("Keine geeignete Grafikkarte für den Visualisierer verfügbar")?;
-                let mut cam = self.camera.expect("Kamera");
+                    .ok_or("No suitable graphics card available for the visualizer")?;
+                let mut cam = self.camera.expect("camera");
                 if let Some(c) = args.get("camera") {
                     let points = cx.engine.show().venue.cameras.clone();
                     cam = apply_camera(cam, room, &points, c)?;
@@ -92,9 +92,7 @@ impl VizView {
                 let gpu = self.gpu.get_or_insert_with(|| Gpu::new(rs));
                 upload_assets(gpu, rs, cx.engine.show());
                 gpu.render(rs, [w, h], q.msaa, &frame);
-                let img = gpu
-                    .read_image(rs)
-                    .ok_or("Bild konnte nicht gelesen werden")?;
+                let img = gpu.read_image(rs).ok_or("Could not read image")?;
                 let mut png = Vec::new();
                 img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
                     .map_err(|e| e.to_string())?;
@@ -102,20 +100,20 @@ impl VizView {
                     "width": w,
                     "height": h,
                     "camera": camera_json(&cam),
-                    "note": "Bild mit dem aktuellen DMX-Ausgang. Koordinaten: x nach rechts, y nach oben, z zum Publikum (Meter).",
+                    "note": "Image with the current DMX output. Coordinates: x to the right, y up, z towards the audience (meters).",
                 });
                 if cx.engine.blackout() {
                     info["blackout"] = json!(true);
                 }
                 Ok((info, Some(png)))
             }
-            _ => Err(format!("Unbekannte Aktion {action}")),
+            _ => Err(format!("Unknown action {action}")),
         }
     }
 
     fn info(&self, cx: &ViewCtx<'_>) -> Value {
-        // während einer Kamerafahrt deren Ziel
-        let cam = self.fly.map(|f| f.1).or(self.camera).expect("Kamera");
+        // during a camera move its target
+        let cam = self.fly.map(|f| f.1).or(self.camera).expect("camera");
         json!({
             "window_open": cx.state.viz_window,
             "quality": quality_key(cx.state.viz_quality),
@@ -165,7 +163,7 @@ fn camera_json(c: &OrbitCamera) -> Value {
     })
 }
 
-/// Kamerapunkt nach Name (ohne Groß/Klein) oder Nummer (ab 1).
+/// Camera point by name (case-insensitive) or number (from 1).
 fn find_point(list: &[CameraPreset], v: &Value) -> Option<usize> {
     if let Some(n) = v.as_u64() {
         return (n >= 1 && (n as usize) <= list.len()).then(|| n as usize - 1);
@@ -179,9 +177,9 @@ fn find_point(list: &[CameraPreset], v: &Value) -> Option<usize> {
     list.iter().position(|p| p.name.eq_ignore_ascii_case(s))
 }
 
-/// Kameraangaben anwenden: erst ein Kamerapunkt (`point`) oder eine Ansicht
-/// (`view`), dann einzelne Werte. Wie im Ort: z zeigt zum Publikum, „front“
-/// blickt also von +z.
+/// Apply camera data: first a camera point (`point`) or a view (`view`),
+/// then individual values. As in the venue: z points towards the audience,
+/// so “front” looks from +z.
 fn apply_camera(
     mut cam: OrbitCamera,
     room: [f32; 3],
@@ -191,7 +189,7 @@ fn apply_camera(
     if let Some(v) = c.get("point") {
         let i = find_point(points, v).ok_or_else(|| {
             format!(
-                "Kamerapunkt {v} nicht gefunden – vorhanden: {}",
+                "Camera point {v} not found – available: {}",
                 points
                     .iter()
                     .map(|p| p.name.as_str())
@@ -236,7 +234,7 @@ fn apply_camera(
             }
             other => {
                 return Err(format!(
-                    "Ansicht „{other}“ unbekannt – front, back, left, right, top oder overview"
+                    "Unknown view “{other}” – front, back, left, right, top or overview"
                 ))
             }
         }
@@ -261,7 +259,7 @@ fn apply_camera(
             .map(|v| v as f32)
             .collect();
         if t.len() != 3 {
-            return Err("target braucht [x, y, z]".into());
+            return Err("target needs [x, y, z]".into());
         }
         cam.target = Vec3::new(t[0], t[1], t[2]);
     }
@@ -288,7 +286,7 @@ mod tests {
         assert_eq!(f.yaw, 0.0);
         assert_eq!(f.pitch, 30.0);
         assert_eq!(f.target, Vec3::new(1.0, 2.0, 3.0));
-        // von vorn: Auge auf der Publikumsseite (+z)
+        // from the front: eye on the audience side (+z)
         assert!(
             apply_camera(c, room, &[], &json!({ "view": "front" }))
                 .unwrap()
@@ -298,9 +296,9 @@ mod tests {
         );
         assert!(apply_camera(c, room, &[], &json!({ "view": "sideways" })).is_err());
         assert_eq!(quality("Hoch"), Some(Quality::High));
-        // Kamerapunkt nach Name oder Nummer
-        let pts = vec![top.to_preset("Bühne")];
-        let p = apply_camera(c, room, &pts, &json!({ "point": "bühne" })).unwrap();
+        // Camera point by name or number
+        let pts = vec![top.to_preset("Stage")];
+        let p = apply_camera(c, room, &pts, &json!({ "point": "stage" })).unwrap();
         assert!(p.near(&top));
         assert!(apply_camera(c, room, &pts, &json!({ "point": 1 }))
             .unwrap()

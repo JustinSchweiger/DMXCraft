@@ -1,11 +1,11 @@
-//! Dateien aus Explorer/Finder ins Fenster ziehen: Wo befindet sich der
-//! Mauszeiger? Unter Windows meldet das Fenster während des Ziehens keine
-//! Zeigerbewegungen, daher wird dort die Position beim System erfragt.
+//! Dragging files from Explorer/Finder into the window: where is the mouse
+//! pointer? On Windows the window reports no pointer movement during the
+//! drag, so the position is asked from the system there.
 
 use eframe::egui::{self, Pos2};
 
-/// Zeigerposition (Fensterkoordinaten), solange Dateien über dem Fenster
-/// schweben oder gerade abgelegt werden.
+/// Pointer position (window coordinates) while files hover over the window
+/// or are being dropped.
 pub fn pointer(ctx: &egui::Context) -> Option<Pos2> {
     #[cfg(windows)]
     if let Some(p) = os_cursor(ctx) {
@@ -14,7 +14,7 @@ pub fn pointer(ctx: &egui::Context) -> Option<Pos2> {
     ctx.input(|i| i.pointer.hover_pos().or(i.pointer.latest_pos()))
 }
 
-/// Schweben gerade Dateien über dem Fenster?
+/// Are files currently hovering over the window?
 pub fn hovering(ctx: &egui::Context) -> bool {
     ctx.input(|i| !i.raw.hovered_files.is_empty())
 }
@@ -24,7 +24,7 @@ fn os_cursor(ctx: &egui::Context) -> Option<Pos2> {
     use windows_sys::Win32::Foundation::POINT;
     use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
     let mut p = POINT { x: 0, y: 0 };
-    // SAFETY: GetCursorPos schreibt nur in den übergebenen Punkt.
+    // SAFETY: GetCursorPos only writes to the given point.
     if unsafe { GetCursorPos(&mut p) } == 0 {
         return None;
     }

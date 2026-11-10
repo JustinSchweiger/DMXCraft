@@ -1,5 +1,5 @@
-//! EINRICHTEN → Geräteeinstellungen der Auswahl: Schnelltest (Licht aus/an,
-//! Moving Head zentrieren), Darstellung und Ausgangsgrenzen.
+//! SETUP → fixture settings of the selection: quick test (light off/on,
+//! center moving head), display and output limits.
 
 use crate::i18n::t;
 use dmxcraft_core::{ChannelKind, FixtureId, FixtureLimits};
@@ -13,11 +13,11 @@ use crate::views::{View, ViewCtx};
 #[derive(Default)]
 pub struct FixtureSettings;
 
-/// Schnelltest über den Programmer.
+/// Quick test via the programmer.
 impl View for FixtureSettings {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        // Der Inhalt darf die Panelgröße nicht erzwingen: ist der Bereich
-        // kleiner als der Inhalt, wird gescrollt statt das Panel zu sperren
+        // The content must not force the panel size: if the area is smaller than
+        // the content, scroll instead of locking the panel
         egui::ScrollArea::both()
             .id_salt("fixture_settings_scroll")
             .auto_shrink([false, false])
@@ -30,7 +30,7 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let ids: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
         let mut quick = None;
         let some = !ids.is_empty();
-        // Schnelltest oben, wie im Programmer: Licht aus/an, zentrieren
+        // Quick test at the top, as in the programmer: light off/on, center
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = theme::SP_XS;
             for (q, icon, tip) in [
@@ -79,12 +79,12 @@ fn body(ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut lim = show.fixture(first).map(|f| f.limits).unwrap_or_default();
         let before = lim;
 
-        // Grenzen: Dimmer | Bewegung (XY) | Werte & Schalter
+        // Limits: dimmer | movement (XY) | values & switches
         let h = (ui.available_height() - 4.0).clamp(120.0, 420.0);
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
                 let cw = caption(ui, t("Dimmer limit")).rect.width();
-                // Regler unter der (breiteren) Überschrift mittig ausrichten
+                // Center the slider below the (wider) heading
                 ui.horizontal(|ui| {
                     ui.add_space(((cw - crate::ui::widgets::fader::FADER_W) * 0.5).max(0.0));
                     RangeSlider {
@@ -162,7 +162,7 @@ fn caption(ui: &mut egui::Ui, text: &str) -> egui::Response {
     )
 }
 
-/// Eine Zeile „Pan  von … bis …“ in Prozent.
+/// A row “Pan from … to …” in percent.
 fn range_row(ui: &mut egui::Ui, label: &str, min: &mut u8, max: &mut u8, enabled: bool) {
     ui.label(egui::RichText::new(label).color(if enabled {
         theme::text_dim()

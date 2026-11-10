@@ -1,5 +1,5 @@
-//! Fenster für Bereiche, die (noch) keine eigene Seite haben:
-//! Bänke & Gruppen.
+//! Windows for areas that do not have their own page (yet):
+//! banks & groups.
 
 use crate::i18n::t;
 use eframe::egui;

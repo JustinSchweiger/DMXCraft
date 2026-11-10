@@ -1,14 +1,14 @@
-//! Eingerichtete MIDI-Controller (Einstellungen → MIDI): Gerätetyp, Ausgang
-//! für die LED-Rückmeldung und „alle LEDs löschen“ beim Verbinden.
+//! Configured MIDI controllers (Settings → MIDI): device type, output for
+//! LED feedback and “clear all LEDs” on connect.
 //!
-//! Für den Akai APC mini mk2 kennt DMXCraft die Farbtabelle aus Akais
-//! veröffentlichtem Kommunikationsprotokoll (Velocity → RGB, gleiche Tabelle
-//! wie bei den anderen APC-mk2-Geräten) und die Bedeutung der MIDI-Kanäle
-//! (Helligkeit, Pulsieren, Blinken).
+//! For the Akai APC mini mk2 DMXCraft knows the color table from Akai's
+//! published communication protocol (velocity → RGB, same table as the
+//! other APC mk2 devices) and the meaning of the MIDI channels (brightness,
+//! pulsing, blinking).
 
 use serde::{Deserialize, Serialize};
 
-/// Bekannte Controller.
+/// Known controllers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeviceModel {
@@ -27,7 +27,7 @@ impl DeviceModel {
         }
     }
 
-    /// Typ am Gerätenamen erkennen.
+    /// Detect the type from the device name.
     pub fn detect(name: &str) -> Self {
         let n = name.to_lowercase();
         if n.contains("apc") && n.contains("mini") && n.contains("mk2") {
@@ -37,7 +37,7 @@ impl DeviceModel {
         }
     }
 
-    /// Farbe je Anschlagstärke, falls das Gerät eine feste Palette hat.
+    /// Color per velocity, if the device has a fixed palette.
     pub fn palette(self) -> Option<&'static [u32; 128]> {
         match self {
             DeviceModel::ApcMiniMk2 => Some(&APC_MK2_PALETTE),
@@ -45,10 +45,10 @@ impl DeviceModel {
         }
     }
 
-    /// Nachrichten, die alle LEDs ausschalten.
+    /// Messages that switch off all LEDs.
     pub fn clear_messages(self) -> Vec<[u8; 3]> {
         let notes: Vec<u8> = match self {
-            // 8×8-Pads, Spur- und Szenentasten
+            // 8×8 pads, track and scene buttons
             DeviceModel::ApcMiniMk2 => (0x00..=0x3f)
                 .chain(0x64..=0x6b)
                 .chain(0x70..=0x77)
@@ -58,7 +58,7 @@ impl DeviceModel {
         notes.into_iter().map(|n| [0x90, n, 0]).collect()
     }
 
-    /// Bedeutung eines Rückmelde-Kanals (1–16), falls bekannt.
+    /// Meaning of a feedback channel (1–16), if known.
     pub fn channel_meaning(self, c: u8) -> Option<String> {
         if self != DeviceModel::ApcMiniMk2 {
             return None;
@@ -76,16 +76,16 @@ impl DeviceModel {
     }
 }
 
-/// Ein eingerichteter Controller.
+/// A configured controller.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MidiDevice {
-    /// Name des Eingangs.
+    /// Name of the input.
     pub input: String,
-    /// Ausgang für die LEDs (leer = keiner).
+    /// Output for the LEDs (empty = none).
     pub output: String,
     pub model: DeviceModel,
-    /// Beim Verbinden (Programmstart, Einstecken) alle LEDs ausschalten.
+    /// Switch off all LEDs on connect (program start, plugging in).
     pub clear_on_connect: bool,
 }
 
@@ -101,7 +101,7 @@ impl Default for MidiDevice {
 }
 
 impl MidiDevice {
-    /// Neues Gerät zum Eingang; Ausgang und Typ werden am Namen erkannt.
+    /// New device for the input; output and type are detected from the name.
     pub fn new(input: &str, outputs: &[String]) -> Self {
         Self {
             input: input.to_string(),
@@ -112,8 +112,8 @@ impl MidiDevice {
     }
 }
 
-/// Ausgang mit gleichem Namen wie der Eingang (Windows/macOS) oder gleichem
-/// Gerätenamen vor dem Port (ALSA: „APC mini mk2:APC mini mk2 Control 24:0“).
+/// Output with the same name as the input (Windows/macOS) or the same device
+/// name before the port (ALSA: “APC mini mk2:APC mini mk2 Control 24:0”).
 pub fn matching_output(input: &str, outputs: &[String]) -> Option<String> {
     if let Some(o) = outputs.iter().find(|o| *o == input) {
         return Some(o.clone());
@@ -129,7 +129,7 @@ pub fn matching_output(input: &str, outputs: &[String]) -> Option<String> {
     outputs.iter().find(|o| stem(o) == key).cloned()
 }
 
-/// Nächstliegende Palettenfarbe (für den Vorschlag „An“-Farbe = Szenenfarbe).
+/// Nearest palette color (for the suggestion “on” color = scene color).
 pub fn nearest(palette: &[u32; 128], rgb: [u8; 3]) -> u8 {
     let d = |c: u32| {
         let r = ((c >> 16) & 0xff) as i32 - i32::from(rgb[0]);
@@ -137,13 +137,13 @@ pub fn nearest(palette: &[u32; 128], rgb: [u8; 3]) -> u8 {
         let b = (c & 0xff) as i32 - i32::from(rgb[2]);
         r * r + g * g + b * b
     };
-    // 1–127; 0 ist „aus“
+    // 1–127; 0 is “off”
     (1..128u8)
         .min_by_key(|&v| d(palette[usize::from(v)]))
         .unwrap_or(3)
 }
 
-/// Velocity → RGB laut „APC mk2 Communication Protocol“ von Akai.
+/// Velocity → RGB according to Akai's “APC mk2 Communication Protocol”.
 pub const APC_MK2_PALETTE: [u32; 128] = [
     0x000000, 0x1E1E1E, 0x7F7F7F, 0xFFFFFF, 0xFF4C4C, 0xFF0000, 0x590000, 0x190000, //
     0xFFBD6C, 0xFF5400, 0x591D00, 0x271B00, 0xFFFF4C, 0xFFFF00, 0x595900, 0x191900, //
@@ -163,7 +163,7 @@ pub const APC_MK2_PALETTE: [u32; 128] = [
     0xA00000, 0x350000, 0x1AD000, 0x074200, 0xB9B000, 0x3F3100, 0xB35F00, 0x4B1502, //
 ];
 
-/// Palettenfarbe als egui-Farbe.
+/// Palette color as an egui color.
 pub fn color32(c: u32) -> eframe::egui::Color32 {
     eframe::egui::Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
 }

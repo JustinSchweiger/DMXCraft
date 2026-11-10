@@ -1,4 +1,4 @@
-//! STEUERN: Szenen-Raster, Bühnenplan (Auswahl) und Programmer.
+//! CONTROL: scene grid, stage plan (selection) and programmer.
 
 pub mod audio_trigger_ui;
 pub mod fx_color;

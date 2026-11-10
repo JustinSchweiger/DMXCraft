@@ -1,17 +1,18 @@
-//! MCP-Server (Model Context Protocol) für DMXCraft.
+//! MCP server (Model Context Protocol) for DMXCraft.
 //!
-//! Ein KI-Assistent (z. B. Claude) kann darüber die laufende Show lesen und
-//! bearbeiten: Geräte patchen, Bänke und Szenen anlegen, Effekte und
-//! SUPER SCENES bauen, Szenen starten/stoppen, Live-Werte setzen …
+//! An AI assistant (e.g. Claude) can use it to read and edit the running
+//! show: patch fixtures, create banks and scenes, build effects and SUPER
+//! SCENES, start/stop scenes, set live values …
 //!
-//! Aufbau:
-//! * [`tools`] – die Werkzeuge (reine Logik auf der [`Engine`]),
-//! * [`profiles`] – Profile Builder (eigene Geräteprofile),
+//! Structure:
+//! * [`tools`] – the tools (pure logic on the [`Engine`]),
+//! * [`profiles`] – Profile Builder (custom fixture profiles),
 //! * [`protocol`] – JSON-RPC/MCP (initialize, tools/list, tools/call),
-//! * [`server`] – HTTP-Endpunkt `http://127.0.0.1:<port>/mcp`
-//!   („Streamable HTTP“, nur lokal erreichbar),
-//! * [`bridge`] – stdio-Brücke (`dmxcraft mcp`) für Clients, die Server als
-//!   Prozess starten (z. B. Claude Desktop); leitet an den HTTP-Endpunkt weiter.
+//! * [`server`] – HTTP endpoint `http://127.0.0.1:<port>/mcp`
+//!   (“Streamable HTTP”, reachable locally only),
+//! * [`bridge`] – stdio bridge (`dmxcraft mcp`) for clients that start
+//!   servers as a process (e.g. Claude Desktop); forwards to the HTTP
+//!   endpoint.
 
 pub mod bridge;
 mod profiles;
@@ -27,37 +28,37 @@ use dmxcraft_core::{Engine, SceneId};
 use dmxcraft_ofl::Profile;
 use serde_json::Value;
 
-/// Standard-Port des HTTP-Endpunkts.
+/// Default port of the HTTP endpoint.
 pub const DEFAULT_PORT: u16 = 7373;
 
-/// Liefert die Länge einer Audiodatei in ms.
+/// Returns the length of an audio file in ms.
 pub type AudioDuration = dyn Fn(&str) -> Option<u64> + Send + Sync;
 
-/// Meldungen an die Oberfläche.
+/// Messages to the UI.
 #[derive(Clone, Debug, PartialEq)]
 pub enum AppEvent {
-    /// Ein Werkzeug wurde ausgeführt (Name, Kurzbeschreibung des Ergebnisses).
+    /// A tool was executed (name, short description of the result).
     ToolCalled(String),
-    /// Die Show wurde unter diesem Pfad gespeichert.
+    /// The show was saved under this path.
     Saved(String),
-    /// Diese Szene in der Oberfläche auswählen.
+    /// Select this scene in the UI.
     SelectScene(SceneId),
-    /// Eigene Geräteprofile wurden geändert (Bibliothek neu laden).
+    /// Custom fixture profiles were changed (reload the library).
     ProfilesChanged,
 }
 
-/// Ablage der eigenen Geräteprofile (Profile Builder). Die App speichert im
-/// Konfigurationsordner, Tests im Speicher.
+/// Storage of the custom fixture profiles (Profile Builder). The app stores
+/// them in the config folder, tests in memory.
 pub trait ProfileStore: Send + Sync {
-    /// Alle eigenen Profile.
+    /// All custom profiles.
     fn load(&self) -> Vec<Profile>;
-    /// Speichern; vergibt beim ersten Speichern den Schlüssel.
+    /// Save; assigns the key on the first save.
     fn save(&self, profile: &mut Profile) -> Result<(), String>;
-    /// Entfernen (die App verschiebt die Datei in einen Papierkorb-Ordner).
+    /// Remove (the app moves the file into a trash folder).
     fn delete(&self, key: &str) -> Result<(), String>;
 }
 
-/// Profile nur im Speicher (Tests, ohne Oberfläche).
+/// Profiles in memory only (tests, without a UI).
 #[derive(Default)]
 pub struct MemoryProfiles(pub Mutex<Vec<Profile>>);
 
@@ -66,7 +67,7 @@ impl ProfileStore for MemoryProfiles {
         self.0.lock().map(|l| l.clone()).unwrap_or_default()
     }
     fn save(&self, p: &mut Profile) -> Result<(), String> {
-        let mut list = self.0.lock().map_err(|_| "gesperrt")?;
+        let mut list = self.0.lock().map_err(|_| "locked")?;
         if p.key.is_empty() {
             let base = p.suggested_key();
             let mut key = base.clone();
@@ -82,39 +83,39 @@ impl ProfileStore for MemoryProfiles {
         Ok(())
     }
     fn delete(&self, key: &str) -> Result<(), String> {
-        let mut list = self.0.lock().map_err(|_| "gesperrt")?;
+        let mut list = self.0.lock().map_err(|_| "locked")?;
         list.retain(|x| x.key != key);
         Ok(())
     }
 }
 
-/// Antwort des 3D-Visualisierers: Angaben und optional ein PNG-Bild.
+/// Answer of the 3D visualizer: data and optionally a PNG image.
 pub type VizReply = (Value, Option<Vec<u8>>);
 
-/// Anfrage an den 3D-Visualisierer (Aktion, Argumente). Läuft in der
-/// Oberfläche; der Aufruf wartet auf die Antwort.
+/// Request to the 3D visualizer (action, arguments). Runs in the UI; the
+/// call waits for the answer.
 pub type VizFn = dyn Fn(&str, &Value) -> Result<VizReply, String> + Send + Sync;
 
-/// Verbindung zur Anwendung: gemeinsame Engine und Rückmeldungen.
+/// Connection to the application: shared engine and feedback.
 #[derive(Clone)]
 pub struct Host {
     pub engine: Arc<Mutex<Engine>>,
-    /// Pfad der geöffneten Show (leer = noch nicht gespeichert).
+    /// Path of the open show (empty = not saved yet).
     pub show_path: Arc<Mutex<String>>,
-    /// Meldung an die Oberfläche (danach neu zeichnen).
+    /// Message to the UI (redraw afterwards).
     pub notify: Arc<dyn Fn(AppEvent) + Send + Sync>,
-    /// Länge einer Audiodatei in ms (für Audioblöcke in SUPER SCENES).
+    /// Length of an audio file in ms (for audio blocks in SUPER SCENES).
     pub audio_duration_ms: Arc<AudioDuration>,
-    /// Oberfläche gesperrt: nur lesende Werkzeuge erlaubt.
+    /// UI locked: only read-only tools allowed.
     pub locked: Arc<AtomicBool>,
-    /// Eigene Geräteprofile (Profile Builder).
+    /// Custom fixture profiles (Profile Builder).
     pub profiles: Arc<dyn ProfileStore>,
-    /// 3D-Visualisierer (Kamera, Qualität, Bild).
+    /// 3D visualizer (camera, quality, image).
     pub viz: Arc<VizFn>,
 }
 
 impl Host {
-    /// Nur für Tests: Engine ohne Oberfläche.
+    /// For tests only: engine without a UI.
     pub fn headless(engine: Engine) -> Self {
         Self {
             engine: Arc::new(Mutex::new(engine)),
@@ -123,7 +124,7 @@ impl Host {
             audio_duration_ms: Arc::new(|_| None),
             locked: Arc::new(AtomicBool::new(false)),
             profiles: Arc::new(MemoryProfiles::default()),
-            viz: Arc::new(|_, _| Err("Kein 3D-Visualisierer verfügbar".into())),
+            viz: Arc::new(|_, _| Err("No 3D visualizer available".into())),
         }
     }
 }

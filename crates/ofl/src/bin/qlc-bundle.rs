@@ -1,4 +1,4 @@
-//! Erzeugt `crates/ofl/data/qlc-library.json.gz` aus einem Checkout von QLC+.
+//! Generates `crates/ofl/data/qlc-library.json.gz` from a checkout of QLC+.
 //!
 //! ```sh
 //! git clone --depth 1 --filter=blob:none --sparse https://github.com/mcallegari/qlcplus qlcplus
@@ -18,7 +18,7 @@ fn main() {
         std::process::exit(2);
     }
     if let Err(e) = run(Path::new(&args[1]), Path::new(&args[2])) {
-        eprintln!("Fehler: {e}");
+        eprintln!("Error: {e}");
         std::process::exit(1);
     }
 }
@@ -61,7 +61,7 @@ fn run(root: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(out, &bytes)?;
     let modes: usize = lib.fixtures.iter().map(|f| f.modes.len()).sum();
     println!(
-        "{} Geräte, {modes} Modi, {failed} fehlerhaft → {} ({} KB)",
+        "{} fixtures, {modes} modes, {failed} failed → {} ({} KB)",
         lib.fixtures.len(),
         out.display(),
         bytes.len() / 1024
@@ -69,8 +69,8 @@ fn run(root: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Gleiche Hersteller/Modell-Namen in mehreren Dateien bekommen eindeutige
-/// Schlüssel (`…-2`), damit Shows den Typ wiederfinden.
+/// The same manufacturer/model names in several files get unique keys
+/// (`…-2`) so shows find their type again.
 fn dedupe_keys(fixtures: &mut [LibraryFixture]) {
     let mut seen = std::collections::HashMap::<String, usize>::new();
     for f in fixtures {

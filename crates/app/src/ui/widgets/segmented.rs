@@ -1,4 +1,4 @@
-//! Segment-Umschalter (horizontal oder vertikal).
+//! Segmented switch (horizontal or vertical).
 
 use eframe::egui::{self, Color32, Sense, Stroke, StrokeKind, Ui, Vec2};
 
@@ -26,19 +26,19 @@ impl<'a, T: PartialEq + Copy> Segmented<'a, T> {
         self.item_width = Some(w);
         self
     }
-    /// Feste Breite je Eintrag (horizontal).
+    /// Fixed width per entry (horizontal).
     pub fn item_width(mut self, w: f32) -> Self {
         self.item_width = Some(w);
         self
     }
-    /// Einträge, die gedämpft angezeigt werden (z. B. leere Kategorien).
+    /// Entries shown muted (e.g. empty categories).
     #[allow(dead_code)]
     pub fn dimmed(mut self, f: &'a dyn Fn(T) -> bool) -> Self {
         self.dimmed = f;
         self
     }
 
-    /// Zeichnet den Umschalter; gibt `true` zurück, wenn sich `value` geändert hat.
+    /// Draws the switch; returns `true` if `value` changed.
     pub fn show(self, ui: &mut Ui, value: &mut T) -> bool {
         let mut changed = false;
         let mut body = |ui: &mut Ui| {

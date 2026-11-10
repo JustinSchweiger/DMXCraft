@@ -1,8 +1,8 @@
-//! Einstellungsfenster: Reiter links, Inhalt rechts.
+//! Settings window: tabs on the left, content on the right.
 //!
-//! Das Fenster ändert die [`Settings`] direkt und meldet über
-//! [`SettingsChanges`], was die App danach tun muss (speichern, Ausgang
-//! neu starten, Zoom setzen).
+//! The window changes the [`Settings`] directly and reports via
+//! [`SettingsChanges`] what the app has to do afterwards (save, restart the
+//! output, set the zoom).
 
 use crate::i18n::t;
 use crate::midi_device::{DeviceModel, MidiDevice};
@@ -21,7 +21,7 @@ const TAB_H: f32 = 34.0;
 const WIDTH: f32 = 760.0;
 const HEIGHT: f32 = 470.0;
 
-/// Stufen der Darstellungsgröße in Prozent.
+/// Steps of the display size in percent.
 pub const SCALES: [u32; 9] = [60, 75, 90, 100, 110, 125, 150, 175, 200];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -84,19 +84,19 @@ impl Tab {
     }
 }
 
-/// Was nach einem Frame des Fensters zu tun ist.
+/// What to do after a frame of the window.
 #[derive(Default)]
 pub struct SettingsChanges {
     pub save: bool,
     pub restart_output: bool,
     pub zoom: Option<f32>,
-    /// Theme gewechselt – egui-Stil neu setzen.
+    /// Theme changed – set the egui style again.
     pub theme: bool,
-    /// MCP-Server neu starten.
+    /// Restart the MCP server.
     pub mcp_retry: bool,
-    /// Fernbedienung neu starten.
+    /// Restart the remote.
     pub remote_retry: bool,
-    /// LEDs dieses Ausgangs jetzt löschen.
+    /// Clear the LEDs of this output now.
     pub midi_clear: Option<(String, DeviceModel)>,
 }
 
@@ -105,7 +105,7 @@ pub struct SettingsWindow {
     pub tab: Tab,
 }
 
-/// Was das Fenster aus der App braucht.
+/// What the window needs from the app.
 pub struct SettingsCx<'a> {
     pub settings: &'a mut Settings,
     pub engine: &'a mut Engine,
@@ -113,7 +113,7 @@ pub struct SettingsCx<'a> {
     pub show_path: &'a str,
     pub mcp: &'a crate::mcp::McpStatus,
     pub remote: &'a crate::remote::RemoteLink,
-    /// Gefundene MIDI-Ein- und -Ausgänge.
+    /// Detected MIDI inputs and outputs.
     pub midi_inputs: &'a [String],
     pub midi_outputs: &'a [String],
     pub obs: &'a crate::obs::Obs,
@@ -135,7 +135,7 @@ impl SettingsWindow {
             .flush()
             .cancel(t("Close"))
             .show(ctx, open, |ui, _| {
-                // Feste Aufteilung: Reiterleiste links, Inhalt rechts
+                // Fixed layout: tab bar on the left, content on the right
                 let area = egui::Rect::from_min_size(ui.cursor().min, vec2(WIDTH, HEIGHT));
                 ui.allocate_rect(area, Sense::hover());
                 let side = egui::Rect::from_min_size(area.min, vec2(SIDEBAR_W, HEIGHT));
@@ -177,7 +177,7 @@ impl SettingsWindow {
     }
 }
 
-/// Reiterleiste links.
+/// Tab bar on the left.
 fn sidebar(ui: &mut Ui, rect: egui::Rect, tab: &mut Tab) {
     let p = ui.painter();
     p.rect_filled(rect, 0.0, theme::bg());
@@ -233,7 +233,7 @@ fn section(ui: &mut Ui, title: &str) {
     ui.add_space(theme::SP_XS);
 }
 
-/// KI-Assistent: MCP-Server ein/aus, Port und Anleitungen zum Verbinden.
+/// AI assistant: MCP server on/off, port and instructions for connecting.
 fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut SettingsChanges) {
     use crate::mcp::McpStatus;
     section(ui, t("MCP"));
@@ -287,7 +287,7 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
         section(ui, title);
         ui.horizontal(|ui| {
             let w = ui.available_width() - 40.0;
-            // nur lesen, aber markierbar und kopierbar
+            // read-only, but selectable and copyable
             let mut text: &str = &code;
             ui.add(
                 egui::TextEdit::multiline(&mut text)
@@ -311,7 +311,7 @@ fn ai(ui: &mut Ui, s: &mut Settings, status: &crate::mcp::McpStatus, ch: &mut Se
     );
 }
 
-/// Ton: Höchstlautstärke, Zurücksetzen beim Start, Ausfaden.
+/// Sound: maximum volume, reset at startup, fade-out.
 fn audio(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     section(ui, t("Audio"));
     form(ui, "settings_audio_limit", |f| {
@@ -372,7 +372,7 @@ fn audio(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     );
 }
 
-/// Touch-Fernbedienung: Server ein/aus, Port, PIN, Adressen und QR-Code.
+/// Touch remote: server on/off, port, PIN, addresses and QR code.
 fn remote(
     ui: &mut Ui,
     s: &mut Settings,
@@ -471,7 +471,7 @@ fn remote(
     );
 }
 
-/// QR-Code einer Adresse zeichnen (schwarz auf weiß, mit Ruhezone).
+/// Draw the QR code of an address (black on white, with quiet zone).
 fn qr_code(ui: &mut Ui, text: &str, size: f32) {
     let (rect, _) = ui.allocate_exact_size(vec2(size, size), Sense::hover());
     let Ok(code) = qrcode::QrCode::new(text.as_bytes()) else {
@@ -521,7 +521,7 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
         f.row(t("Language"), |ui| {
             let current = Lang::from_key(&s.language);
             let mut picked = current;
-            // Sprachnamen in der jeweiligen Sprache, damit man sie immer findet
+            // Language names in the respective language so they can always be found
             full_combo(ui, "settings_lang", current.native_name(), |ui| {
                 for l in Lang::ALL {
                     ui.selectable_value(&mut picked, l, l.native_name());
@@ -550,7 +550,7 @@ fn general(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     }
 }
 
-/// Anpassen: Aussehen und Darstellung.
+/// Customize: appearance and display.
 fn customize(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     section(ui, t("Appearance"));
     form(ui, "settings_customize", |f| {
@@ -611,7 +611,7 @@ fn customize(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
         .changed();
 }
 
-/// Start: was beim Programmstart passiert.
+/// Startup: what happens when the program starts.
 fn startup(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     section(ui, t("On startup"));
     ch.save |= ui
@@ -641,8 +641,7 @@ fn outputs(
 ) {
     ui.horizontal(|ui| {
         ui.label(theme::heading_text(t("Universes"))).on_hover_text(
-            "Ein USB-DMX-Kabel (Open DMX / FTDI) je Universum. Die Zuordnung hängt an der \
-             Seriennummer des Kabels und bleibt beim Umstecken erhalten.",
+            t("One USB DMX cable (Open DMX / FTDI) per universe. The assignment follows the cable's serial number and survives replugging."),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
@@ -665,7 +664,7 @@ fn outputs(
     });
     ui.add_space(theme::SP_XS);
 
-    // Pro Universum: Gerät, Zustand, Anzahl gepatchter Geräte
+    // Per universe: device, state, number of patched fixtures
     let show = e.show();
     egui::Grid::new("settings_universes")
         .num_columns(4)
@@ -678,7 +677,7 @@ fn outputs(
                 let port = current
                     .as_ref()
                     .and_then(|k| ports.iter().find(|p| &p.key == k));
-                // Zustandspunkt
+                // Status dot
                 let (dot, tip) = match (&current, port) {
                     (None, _) => (theme::text_faint(), t("No device – not output").to_string()),
                     (Some(_), Some(_)) => (theme::OK, t("Device connected").to_string()),
@@ -864,7 +863,7 @@ fn midi(
     }
 }
 
-/// OBS-Verbindung (gehört zur Show, wird mit ihr gespeichert).
+/// OBS connection (belongs to the show, saved with it).
 fn obs(ui: &mut Ui, e: &mut Engine, link: &crate::obs::Obs) {
     use crate::obs::Status;
     let mut cfg = e.show().obs.clone();

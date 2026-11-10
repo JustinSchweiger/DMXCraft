@@ -1,145 +1,145 @@
-//! Gemeinsamer UI-Zustand, den mehrere Ansichten brauchen. Ansichtsspezifischer
-//! Zustand liegt in den jeweiligen View-Typen.
+//! Shared UI state needed by several views. View-specific state lives in
+//! the respective view types.
 
 use std::collections::BTreeSet;
 
 use dmxcraft_core::{FixtureId, FixtureType, SceneId};
 
-/// Hauptbereich der Oberfläche.
+/// Main area of the interface.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
     Setup,
     Control,
-    /// Touch-Oberfläche (frei angeordnete Bedienelemente).
+    /// Touch surface (freely arranged controls).
     Touch,
-    /// 3D-Visualisierer als Reiter (Einstellung „Tools als Reiter“).
+    /// 3D visualizer as a tab (setting “Tools as tabs”).
     Visualizer,
-    /// Profile Builder als Reiter (Einstellung „Tools als Reiter“).
+    /// Profile Builder as a tab (setting “Tools as tabs”).
     Builder,
-    /// Sound-Player mit Playlisten und Jingle-Pads.
+    /// Sound player with playlists and jingle pads.
     Sound,
 }
 
-/// Formular „Geräte hinzufügen“ (geteilt zwischen Patch und Gerätebibliothek).
+/// “Add fixtures” form (shared between patch and fixture library).
 pub struct PatchForm {
     pub name: String,
     pub count: u16,
-    /// 1-basiert in der Oberfläche.
+    /// 1-based in the interface.
     pub universe: u8,
     pub address: u16,
 }
 
 pub struct AppState {
     pub mode: Mode,
-    /// Oberfläche gesperrt: nur Steuern, keine Änderungen an Patch und Szenen.
+    /// Interface locked: control only, no changes to patch and scenes.
     pub locked: bool,
     pub show_path: String,
     pub message: Option<(String, bool)>,
-    /// Zeitpunkt der letzten Meldung (Meldungen blenden nach einigen Sekunden aus).
+    /// Time of the last message (messages fade out after a few seconds).
     pub message_time: Option<std::time::Instant>,
     pub selected: BTreeSet<FixtureId>,
-    /// Reihenfolge der Auswahl (zuerst gewählte zuerst) – bestimmt die
-    /// Nummerierung auf der Bühne und die Beam-Reihenfolge neuer Effekte.
+    /// Order of selection (first selected first) – determines the numbering on
+    /// the stage and the beam order of new effects.
     pub selection_order: Vec<FixtureId>,
-    /// Markierte Szenen in STEUERN (für Löschen u. a.).
+    /// Selected scenes in CONTROL (for deleting etc.).
     pub selected_scenes: BTreeSet<SceneId>,
-    /// Zuordnungsmodus (Überlagerung und Fenster) – Tastatur oder MIDI.
+    /// Mapping mode (overlay and window) – keyboard or MIDI.
     pub mapping: Option<dmxcraft_core::mapping::MapKind>,
-    /// Gewählte Zuordnung im Zuordnungsfenster.
+    /// Selected mapping in the mapping window.
     pub map_sel: Option<u32>,
-    /// Wartet auf die nächste Taste bzw. MIDI-Nachricht.
+    /// Waiting for the next key or MIDI message.
     pub map_learn: bool,
-    /// Im Szenenraster angezeigte Bank (`None` = alle).
+    /// Bank shown in the scene grid (`None` = all).
     pub shown_bank: Option<dmxcraft_core::ZoneId>,
-    /// Anfrage an das Szenenraster, eine Bank anzuzeigen.
+    /// Request to the scene grid to show a bank.
     pub request_bank: Option<Option<dmxcraft_core::ZoneId>>,
-    /// Touch: angezeigte Seite, Bearbeiten-Modus, gewähltes Element.
+    /// Touch: displayed page, edit mode, selected element.
     pub touch_page: Option<u32>,
     pub touch_edit: bool,
     pub touch_sel: Option<u32>,
-    /// Alle gewählten Elemente (Mehrfachauswahl, enthält `touch_sel`).
+    /// All selected elements (multi-selection, contains `touch_sel`).
     pub touch_multi: Vec<u32>,
-    /// Touch: ausgelöste Schaltflächen/Fader (Zuordnung, gedrückt, Wert,
-    /// Regler) – verarbeitet der Zuordnungs-Rahmen am Ende des Bilds.
+    /// Touch: triggered buttons/faders (mapping, pressed, value, knob) –
+    /// processed by the mapping frame at the end of the frame.
     pub touch_fire: Vec<(dmxcraft_core::mapping::Mapping, bool, u8, bool)>,
-    /// Zuletzt gesetzte Werte von Touch-Fadern/-Reglern ohne lesbaren
-    /// Zustand (Touch-Modus und Fernbedienung teilen sie).
+    /// Last set values of touch faders/knobs without a readable state (touch
+    /// mode and remote share them).
     pub touch_values: std::collections::HashMap<u32, f32>,
-    /// Zuletzt verarbeitete Szenen-Markierung (Edit-Modus: Geräte mitwählen).
+    /// Last processed scene selection (edit mode: select fixtures too).
     pub scene_selection_seen: BTreeSet<SceneId>,
-    /// Zuletzt verarbeiteter Programmer-Modus.
+    /// Last processed programmer mode.
     pub programmer_mode_seen: ProgrammerMode,
-    /// Edit-Werte neu aus der Szene laden (nach Rückgängig/Wiederholen).
+    /// Reload the edit values from the scene (after undo/redo).
     pub edit_reload: bool,
-    /// Bearbeiteter Schritt der markierten Szene (Edit-Modus).
+    /// Edited step of the selected scene (edit mode).
     pub edit_step: usize,
     pub edit_step_seen: usize,
-    /// Zuletzt angeklickter Effekt (Szene, Effekt): Ziel des FX-Knopfs der Bühne.
+    /// Last clicked effect (scene, effect): target of the stage's FX button.
     pub fx_target: Option<(SceneId, u32)>,
-    /// Zeitleiste (SUPER SCENE): ausgewählte Blöcke und Abspielposition (ms).
+    /// Timeline (SUPER SCENE): selected blocks and play position (ms).
     pub timeline_sel: BTreeSet<u32>,
-    /// Zuletzt angeklickte Szene: Anfang einer Umschalt-Auswahl.
+    /// Last clicked scene: start of a Shift selection.
     pub scene_anchor: Option<SceneId>,
-    /// Szenen am unteren Rand in weitere Spalten umbrechen (Einstellung).
+    /// Wrap scenes at the bottom into more columns (setting).
     pub wrap_scenes: bool,
-    /// Wertebereiche auf den Fader-Schienen (Einstellung).
+    /// Value ranges on the fader tracks (setting).
     pub fader_ranges: bool,
-    /// Qualität des 3D-Visualisierers (Einstellung).
+    /// Quality of the 3D visualizer (setting).
     pub viz_quality: crate::viz::Quality,
-    /// 3D-Visualisierer im eigenen Fenster.
+    /// 3D visualizer in its own window.
     pub viz_window: bool,
-    /// Verlauf: gibt es Schritte zurück/vor? (vom App-Rahmen je Bild gesetzt)
+    /// History: are there steps back/forward? (set by the app frame every frame)
     pub can_undo: bool,
     pub can_redo: bool,
-    /// Ansicht bittet um Rückgängig (`true`) bzw. Wiederholen (`false`).
+    /// A view asks for undo (`true`) or redo (`false`).
     pub history_request: Option<bool>,
-    /// In einem eigenen Fenster (3D, Profile Builder) wird gerade gezogen
-    /// oder getippt – Rückgängig übernimmt erst danach einen Schritt.
+    /// Something is being dragged or typed in a separate window (3D, Profile
+    /// Builder) – undo only takes a step afterwards.
     pub viewport_busy: bool,
     pub timeline_cursor: f64,
-    /// Audiowiedergabe und Wellenformen.
+    /// Audio playback and waveforms.
     pub audio: crate::audio::AudioPlayer,
-    /// Verbindung zu OBS (Videoblöcke, OBS-Aktionen).
+    /// Connection to OBS (video blocks, OBS actions).
     pub obs: crate::obs::Obs,
-    /// Wiedergabe des Reiters SOUND.
+    /// Playback of the SOUND tab.
     pub sound: crate::sound::SoundPlayer,
-    /// Audio-Trigger der SUPER SCENES (Hüllkurven, Ereignisse, gedrückte Ziele).
+    /// Audio triggers of the SUPER SCENES (envelopes, events, pressed targets).
     pub triggers: crate::audio_triggers::TriggerEngine,
-    /// Ziel eines Audio-Triggers wird gewählt (Szene, Block, Trigger):
-    /// das nächste Alt + Klick geht an ihn statt an die Touch-Oberfläche.
+    /// The target of an audio trigger is being chosen (scene, block, trigger):
+    /// the next Alt + click goes to it instead of to the touch surface.
     pub trigger_pick: Option<(dmxcraft_core::SceneId, u32, u32)>,
-    /// Fehlende Audiodateien der SUPER SCENES (Prüfung und Fenster).
+    /// Missing audio files of the SUPER SCENES (check and window).
     pub missing: crate::missing_audio::MissingAudio,
-    /// Worauf die Entf-Taste unter STEUERN wirkt (zuletzt angeklickt).
+    /// What the Delete key acts on in CONTROL (last clicked).
     pub focus: Focus,
-    /// Betriebsmodus des Programmers.
+    /// Operating mode of the programmer.
     pub programmer_mode: ProgrammerMode,
     pub patch: PatchForm,
-    /// Per Datei importierte Gerätetypen (noch nicht gepatcht).
+    /// Fixture types imported from a file (not patched yet).
     pub imported_types: Vec<FixtureType>,
-    /// Fenster „Zonen & Gruppen“ geöffnet.
+    /// “Zones & groups” window open.
     pub zones_open: bool,
-    /// Eigene Geräteprofile (Profile Builder) mit ihren Gerätetypen.
+    /// Custom fixture profiles (Profile Builder) with their fixture types.
     pub user_profiles: Vec<crate::profiles::UserProfile>,
-    /// Profile Builder öffnen (Menü, Bibliothek).
+    /// Open the Profile Builder (menu, library).
     pub builder: Option<crate::views::profile_builder::BuilderRequest>,
-    /// Gerät, das im Patch-Raster umbenannt werden soll.
+    /// Fixture to be renamed in the patch grid.
     pub rename_request: Option<FixtureId>,
-    /// Kopiertes Bühnenplan-Layout (Positionen relativ zum ersten Gerät).
+    /// Copied stage plan layout (positions relative to the first fixture).
     pub layout_clipboard: Option<Vec<[f32; 2]>>,
-    /// Ausgeschnittene/kopierte Geräte (Patch: Strg+X/C/V).
+    /// Cut/copied fixtures (patch: Ctrl+X/C/V).
     pub fixture_clipboard: Vec<dmxcraft_core::Fixture>,
-    /// Zuletzt angeklickte Zelle im Patch (Universum, Adresse): Ziel für Einfügen.
+    /// Last clicked cell in the patch (universe, address): target for pasting.
     pub patch_cursor: Option<(u8, u16)>,
-    /// Gerät, das der DMX-Patch beim nächsten Öffnen zeigen soll.
+    /// Fixture the DMX patch should show the next time it opens.
     pub monitor_focus: Option<FixtureId>,
-    /// Patch-Raster auf „Ausgang“ umschalten (Tools → DMX-Werte).
+    /// Switch the patch grid to “Output” (Tools → DMX values).
     pub show_dmx_levels: bool,
 }
 
 impl AppState {
-    /// Auswahlreihenfolge an die Auswahl anpassen: Abgewählte fallen heraus,
-    /// neu Gewählte kommen hinten dazu (mehrere auf einmal in Patch-Reihenfolge).
+    /// Adapt the selection order to the selection: deselected ones drop out,
+    /// newly selected ones are appended (several at once in patch order).
     pub fn sync_selection_order(&mut self, show: &dmxcraft_core::Show) {
         let sel = &self.selected;
         self.selection_order.retain(|f| sel.contains(f));
@@ -158,7 +158,7 @@ impl AppState {
         self.selection_order.extend(new);
     }
 
-    /// Auswahl in fester Reihenfolge setzen.
+    /// Set the selection in a fixed order.
     pub fn select_ordered(&mut self, ids: &[FixtureId]) {
         self.selected = ids.iter().copied().collect();
         self.selection_order = ids.to_vec();
@@ -239,54 +239,54 @@ impl AppState {
         self.message_time = Some(std::time::Instant::now());
     }
 
-    /// Aktuell anzuzeigende Meldung (Hinweise 5 s, Fehler 10 s).
+    /// Message to show right now (hints 5 s, errors 10 s).
     pub fn current_message(&self) -> Option<(&str, bool)> {
         let (msg, err) = self.message.as_ref()?;
         let age = self.message_time?.elapsed().as_secs_f32();
         (age < if *err { 10.0 } else { 5.0 }).then_some((msg.as_str(), *err))
     }
 
-    /// Nach dem Laden/Ersetzen einer Show.
+    /// After loading/replacing a show.
     pub fn reset_for_new_show(&mut self) {
         self.selected.clear();
         self.sound.stop_all();
     }
 }
 
-/// Betriebsmodus des Programmers (wie sich Änderungen an Geräten auswirken).
+/// Operating mode of the programmer (how changes to fixtures take effect).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ProgrammerMode {
-    /// Werte bearbeiten und sofort ausgeben.
+    /// Edit values and output them immediately.
     Edit,
-    /// Wie Edit, aber der Ausgang bleibt auf dem Stand beim Umschalten;
-    /// Bühne und Fader zeigen die Bearbeitung.
+    /// Like Edit, but the output stays as it was when switching; stage and
+    /// faders show the edit.
     Blind,
-    /// Live-Betrieb (Start-Modus).
+    /// Live operation (start mode).
     #[default]
     Live,
 }
 
 impl ProgrammerMode {
-    /// Edit und Blind Edit bearbeiten die markierte Szene.
+    /// Edit and Blind Edit edit the selected scene.
     pub fn is_edit(self) -> bool {
         matches!(self, ProgrammerMode::Edit | ProgrammerMode::Blind)
     }
 }
 
-/// Drag-&-Drop-Inhalt: Gerätetyp aus der Bibliothek, der ins Patch gezogen wird.
+/// Drag & drop payload: fixture type from the library dragged into the patch.
 #[derive(Clone)]
 pub struct LibraryDrag(pub FixtureType);
 
-/// Zuletzt angeklicktes Element unter STEUERN (Ziel der Entf-Taste).
+/// Last clicked element in CONTROL (target of the Delete key).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Focus {
-    /// Markierte Szenen.
+    /// Selected scenes.
     #[default]
     Scenes,
-    /// Eine Bank (Reiter der Bankleiste).
+    /// A bank (tab of the bank bar).
     Bank(dmxcraft_core::ZoneId),
-    /// Ein Effekt einer Szene (Seitenleiste).
+    /// An effect of a scene (sidebar).
     Effect(SceneId, u32),
-    /// Zeitleiste einer SUPER SCENE (Blöcke).
+    /// Timeline of a SUPER SCENE (blocks).
     Timeline,
 }

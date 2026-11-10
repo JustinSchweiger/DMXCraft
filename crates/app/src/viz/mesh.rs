@@ -1,4 +1,4 @@
-//! Einfache Netze (Dreiecke mit Normalen) für den Visualisierer.
+//! Simple meshes (triangles with normals) for the visualizer.
 
 use glam::{Mat4, Vec3};
 
@@ -7,7 +7,8 @@ use glam::{Mat4, Vec3};
 pub struct Vertex {
     pub pos: [f32; 3],
     pub normal: [f32; 3],
-    /// Bildkoordinaten (nur Modelle mit Bild; Grundformen projizieren auf)
+    /// Image coordinates (only models with an image; basic shapes project onto
+    /// them)
     pub uv: [f32; 2],
 }
 
@@ -32,7 +33,7 @@ impl Mesh {
         self.indices.extend([i[0], i[1], i[2], i[0], i[2], i[3]]);
     }
 
-    /// Anderes Netz mit Matrix anhängen.
+    /// Append another mesh with a matrix.
     pub fn append(&mut self, other: &Mesh, m: Mat4) {
         let base = self.vertices.len() as u32;
         let nm = m.inverse().transpose();
@@ -51,7 +52,7 @@ impl Mesh {
     }
 }
 
-/// Würfel mit Kantenlänge 1, Mittelpunkt im Ursprung.
+/// Cube with edge length 1, center at the origin.
 pub fn cube() -> Mesh {
     let mut m = Mesh::default();
     let h = 0.5;
@@ -66,13 +67,13 @@ pub fn cube() -> Mesh {
     for (n, u, v) in faces {
         let c = n * h;
         let (u, v) = (u * h, v * h);
-        // gegen den Uhrzeigersinn von außen gesehen
+        // counter-clockwise seen from outside
         m.quad(c - u - v, c + u - v, c + u + v, c - u + v, n);
     }
     m
 }
 
-/// Fläche 1 × 1 in der x/z-Ebene, Normale +y.
+/// Plane 1 × 1 in the x/z plane, normal +y.
 pub fn plane() -> Mesh {
     let mut m = Mesh::default();
     let h = 0.5;
@@ -86,7 +87,7 @@ pub fn plane() -> Mesh {
     m
 }
 
-/// Zylinder: Radius 1, Höhe 1 entlang y, Mittelpunkt im Ursprung, mit Deckeln.
+/// Cylinder: radius 1, height 1 along y, center at the origin, with caps.
 pub fn cylinder(segments: u32) -> Mesh {
     let mut m = Mesh::default();
     let ring = |k: u32| {
@@ -103,7 +104,7 @@ pub fn cylinder(segments: u32) -> Mesh {
             m.push(a - Vec3::Y * 0.5, na),
         ];
         m.indices.extend([i[0], i[1], i[2], i[0], i[2], i[3]]);
-        // Deckel
+        // Caps
         let top = [Vec3::Y * 0.5, b + Vec3::Y * 0.5, a + Vec3::Y * 0.5].map(|p| m.push(p, Vec3::Y));
         m.indices.extend(top);
         let bot = [Vec3::NEG_Y * 0.5, a - Vec3::Y * 0.5, b - Vec3::Y * 0.5]
@@ -113,7 +114,8 @@ pub fn cylinder(segments: u32) -> Mesh {
     m
 }
 
-/// Lichtkegel: Spitze im Ursprung, Achse −y, Länge 1, Radius 1 am Ende (offen).
+/// Light cone: tip at the origin, axis −y, length 1, radius 1 at the end
+/// (open).
 pub fn cone(segments: u32) -> Mesh {
     let mut m = Mesh::default();
     for k in 0..segments {
@@ -121,7 +123,7 @@ pub fn cone(segments: u32) -> Mesh {
         let a1 = (k + 1) as f32 / segments as f32 * std::f32::consts::TAU;
         let p0 = Vec3::new(a0.cos(), -1.0, a0.sin());
         let p1 = Vec3::new(a1.cos(), -1.0, a1.sin());
-        // Normale senkrecht zur Mantelfläche
+        // Normal perpendicular to the lateral surface
         let n0 = Vec3::new(a0.cos(), 1.0, a0.sin()).normalize();
         let n1 = Vec3::new(a1.cos(), 1.0, a1.sin()).normalize();
         let i = [
@@ -134,7 +136,7 @@ pub fn cone(segments: u32) -> Mesh {
     m
 }
 
-/// Rohr von `a` nach `b` mit Radius `r` (aus einem Zylinder).
+/// Tube from `a` to `b` with radius `r` (from a cylinder).
 fn tube(out: &mut Mesh, cyl: &Mesh, a: Vec3, b: Vec3, r: f32) {
     let d = b - a;
     let len = d.length();
@@ -146,12 +148,12 @@ fn tube(out: &mut Mesh, cyl: &Mesh, a: Vec3, b: Vec3, r: f32) {
     out.append(cyl, m);
 }
 
-/// Traverse entlang x (Mittelpunkt im Ursprung): Gurtrohre plus Diagonalen.
+/// Truss along x (center at the origin): chord tubes plus diagonals.
 pub fn truss(length: f32, width: f32, square: bool) -> Mesh {
     let cyl = cylinder(8);
     let mut m = Mesh::default();
     let h = width * 0.5;
-    // Lage der Gurtrohre im Querschnitt (y/z)
+    // Position of the chord tubes in the cross-section (y/z)
     let corners: Vec<(f32, f32)> = if square {
         vec![(-h, -h), (h, -h), (h, h), (-h, h)]
     } else {
@@ -174,7 +176,7 @@ pub fn truss(length: f32, width: f32, square: bool) -> Mesh {
             0.024,
         );
     }
-    // Diagonalen zwischen benachbarten Gurten, Zickzack
+    // Diagonals between neighboring chords, zigzag
     let segs = (length / (width * 1.6)).round().max(1.0) as usize;
     let step = length / segs as f32;
     for k in 0..corners.len() {
@@ -212,7 +214,7 @@ mod tests {
             assert_eq!(m.indices.len() % 3, 0);
             assert!(m.indices.iter().all(|i| (*i as usize) < m.vertices.len()));
         }
-        // Würfel: Normalen zeigen nach außen und passen zur Windung
+        // Cube: normals point outwards and match the winding
         let c = cube();
         for t in c.indices.chunks(3) {
             let [a, b, d] = [t[0], t[1], t[2]].map(|i| Vec3::from(c.vertices[i as usize].pos));

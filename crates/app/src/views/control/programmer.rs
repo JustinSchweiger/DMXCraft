@@ -1,5 +1,5 @@
-//! STEUERN → Programmer: ausgewählte Geräte live steuern und als Szene/Schritt
-//! speichern.
+//! CONTROL → programmer: control selected fixtures live and save them as a
+//! scene/step.
 
 use crate::i18n::t;
 use dmxcraft_core::{ChannelKind, ChannelRef, ChannelValue, DmxFrame, Engine, FixtureId};
@@ -12,7 +12,7 @@ use crate::ui::widgets::{Fader, FaderEvent, Icon, IconButton, Swatch, XyPad};
 use crate::views::quick::{quick_action, Layer, Quick};
 use crate::views::{View, ViewCtx};
 
-/// Kanal-Kategorien wie auf einem Lichtpult.
+/// Channel categories as on a lighting desk.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum Category {
     #[default]
@@ -58,20 +58,21 @@ impl Category {
 
 use crate::ui::widgets::fader::kind_color;
 
-/// Ein Fader steuert denselben Kanal aller ausgewählten Geräte eines Typs.
+/// A fader controls the same channel of all selected fixtures of a type.
 pub struct FaderGroup {
     pub name: String,
     pub kind: ChannelKind,
-    /// Kanalnummer im Gerät (1-basiert).
+    /// Channel number in the fixture (1-based).
     pub number: u16,
-    /// Gerätetyp ([`dmxcraft_core::FixtureType::key`]).
+    /// Fixture type ([`dmxcraft_core::FixtureType::key`]).
     pub type_key: String,
     pub channels: Vec<ChannelRef>,
 }
 
-/// Fader eines Gerätetyps samt Namen der ausgewählten Geräte dieses Typs.
+/// Faders of a fixture type together with the names of the selected
+/// fixtures of this type.
 struct FixtureBlock<'a> {
-    /// Typbezeichnung (Hersteller Modell)
+    /// Type name (manufacturer model)
     type_name: String,
     names: Vec<String>,
     faders: Vec<&'a FaderGroup>,
@@ -86,7 +87,8 @@ pub fn fader_groups(e: &Engine, st: &AppState) -> Vec<FaderGroup> {
         let Some(ty) = e.show().type_of(f) else {
             continue;
         };
-        // Farbgeräte ohne eigenen Dimmer: virtueller Dimmer (skaliert die Farben)
+        // Color fixtures without their own dimmer: virtual dimmer (scales the
+        // colors)
         if ty.needs_virtual_dimmer() {
             let ch = ChannelRef::virtual_dimmer(f.id);
             match groups
@@ -134,14 +136,14 @@ pub struct ProgrammerView {
 
 impl View for ProgrammerView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
-        // SUPER SCENE markiert: Zeitleiste statt Fadern
+        // SUPER SCENE selected: timeline instead of faders
         if let Some(id) = super::timeline::super_scene(cx.engine, cx.state) {
             self.timeline.ui(ui, cx.engine, cx.state, id);
             return;
         }
         let groups = fader_groups(cx.engine, cx.state);
         let layer = Layer::of(cx.state.programmer_mode);
-        // angeklickter Feature-Effekt: Fader zeigen ihr FX-Symbol
+        // clicked feature effect: faders show their FX icon
         let target = cx.state.fx_target.and_then(|(scene, fx)| {
             let f = cx
                 .engine
@@ -176,7 +178,7 @@ impl View for ProgrammerView {
                 category_list(ui, cx.engine, layer, &groups, &mut self.category, dot)
             });
 
-        // Fader-Bereich als eigene, abgesetzte Fläche (wie der Bühnenplan)
+        // Fader area as a separate, set-off surface (like the stage plan)
         egui::CentralPanel::default_margins()
             .frame(
                 egui::Frame::new()
@@ -191,8 +193,8 @@ impl View for ProgrammerView {
                 if cx.state.selected.is_empty() {
                     return;
                 }
-                // „Alle Kanäle“ einzeln je Gerätetyp, alle anderen Kategorien
-                // gemeinsam: ein Fader steuert die Kanäle aller ausgewählten Geräte
+                // “All channels” separately per fixture type, all other categories
+                // together: one fader controls the channels of all selected fixtures
                 let merged;
                 let (visible, blocks): (Vec<&FaderGroup>, Vec<FixtureBlock<'_>>) =
                     if self.category == Category::All {
@@ -211,8 +213,8 @@ impl View for ProgrammerView {
                 if visible.is_empty() {
                     return;
                 }
-                // eigener Platz für die Scrollleiste unter den Fadern – nur wenn
-                // sie gebraucht wird (Stand aus dem letzten Frame)
+                // own space for the scroll bar below the faders – only when it is needed
+                // (state from the last frame)
                 ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
                 let overflow_id = ui.make_persistent_id("faders_overflow");
                 let overflow: bool = ui.data(|d| d.get_temp(overflow_id)).unwrap_or(false);
@@ -238,7 +240,7 @@ impl View for ProgrammerView {
                                 ui.add_space(theme::SP_S);
                             }
                             ui.spacing_mut().item_spacing.x = 2.0;
-                            // außer in „Alle Kanäle“ deutlich breitere Fader
+                            // noticeably wider faders except in “All channels”
                             let fader_w = if self.category == Category::All {
                                 FADER_W
                             } else {
@@ -271,7 +273,7 @@ fn current(e: &Engine, layer: Layer, ch: ChannelRef, frame: &DmxFrame) -> u8 {
         .unwrap_or(0)
 }
 
-/// Farbe des Statuspunkts je Betriebsmodus.
+/// Color of the status dot per operating mode.
 fn mode_color(m: ProgrammerMode) -> Color32 {
     match m {
         ProgrammerMode::Edit => theme::OK,
@@ -280,8 +282,8 @@ fn mode_color(m: ProgrammerMode) -> Color32 {
     }
 }
 
-/// Fader einer Kategorie über alle Gerätetypen zusammenfassen: gleiche
-/// Kanalart (bei „Sonstiges“ gleicher Name) wird zu einem Fader.
+/// Combine the faders of a category across all fixture types: the same
+/// channel kind (for “Other” the same name) becomes one fader.
 fn merge_groups(groups: &[FaderGroup], cat: Category) -> Vec<FaderGroup> {
     let mut out: Vec<FaderGroup> = Vec::new();
     for g in groups.iter().filter(|g| cat.contains(g.kind)) {
@@ -308,7 +310,7 @@ fn merge_groups(groups: &[FaderGroup], cat: Category) -> Vec<FaderGroup> {
     out
 }
 
-/// Gemeinsamer Block für zusammengefasste Fader.
+/// Shared block for combined faders.
 fn merged_block<'a>(e: &Engine, st: &AppState, faders: &[&'a FaderGroup]) -> Vec<FixtureBlock<'a>> {
     if faders.is_empty() {
         return Vec::new();
@@ -334,7 +336,7 @@ fn merged_block<'a>(e: &Engine, st: &AppState, faders: &[&'a FaderGroup]) -> Vec
     }]
 }
 
-/// Besitzende Kopie der sichtbaren Fader (für Farb- und Positionsfeld).
+/// Owned copy of the visible faders (for the color and position fields).
 fn merged_or(v: &[&FaderGroup]) -> Vec<FaderGroup> {
     v.iter()
         .map(|g| FaderGroup {
@@ -347,7 +349,7 @@ fn merged_or(v: &[&FaderGroup]) -> Vec<FaderGroup> {
         .collect()
 }
 
-/// Fader nach Gerätetyp bündeln (Reihenfolge wie in der Auswahl).
+/// Group faders by fixture type (order as in the selection).
 fn fixture_blocks<'a>(
     e: &Engine,
     st: &AppState,
@@ -381,7 +383,7 @@ fn fixture_blocks<'a>(
         .collect()
 }
 
-/// Ein Block: Kopfzeile mit den Gerätenamen, darunter die Fader.
+/// A block: header with the fixture names, the faders below.
 fn fixture_block(
     ui: &mut egui::Ui,
     e: &mut Engine,
@@ -407,7 +409,7 @@ fn fixture_block(
             },
             theme::raised_hover(),
         );
-        // ein Gerät: sein Name; mehrere desselben Typs: die Typbezeichnung
+        // one fixture: its name; several of the same type: the type name
         let title = if block.names.len() == 1 {
             block.names[0].clone()
         } else {
@@ -443,14 +445,14 @@ fn fader(
 ) {
     let first = grp.channels[0];
     let active = layer.map(e).contains_key(&first);
-    // nicht gespeicherte Kanäle stehen auf 0, der virtuelle Dimmer auf voll
+    // unstored channels sit at 0, the virtual dimmer at full
     let value = layer
         .get(e, first)
         .unwrap_or(if first.is_virtual() { 255 } else { 0 });
-    // FX-Symbol, solange ein Feature-Effekt angeklickt ist
+    // FX icon while a feature effect is clicked
     let target: Option<FxTarget> = ui.data(|d| d.get_temp(fx_target_id()));
     let assigned = target.as_ref().map(|t| t.kinds.contains(&grp.kind));
-    // Wertebereiche aus der Gerätedatei des ersten Geräts
+    // Value ranges from the fixture file of the first fixture
     let ranges = e
         .show()
         .fixture(first.fixture)
@@ -501,7 +503,7 @@ fn fader(
     }
 }
 
-/// Bereiche eines Kanals für den Fader; ohne Bezeichnung aus der Wirkung.
+/// Ranges of a channel for the fader; without a label, from the effect.
 pub fn fader_ranges(c: &dmxcraft_core::ChannelDef) -> Vec<crate::ui::widgets::fader::FaderRange> {
     use dmxcraft_core::RangeEffect as E;
     c.ranges
@@ -537,7 +539,7 @@ pub fn fader_ranges(c: &dmxcraft_core::ChannelDef) -> Vec<crate::ui::widgets::fa
         .collect()
 }
 
-/// Feature-Effekt, dem Fader zugeordnet werden können (für diesen Frame).
+/// Feature effect that faders can be assigned to (for this frame).
 #[derive(Clone)]
 struct FxTarget {
     scene: dmxcraft_core::SceneId,
@@ -545,7 +547,7 @@ struct FxTarget {
     kinds: Vec<dmxcraft_core::ChannelKind>,
 }
 
-/// Einstellung „Wertebereiche auf den Fader-Schienen“ (je Bild gesetzt).
+/// Setting “value ranges on the fader tracks” (set every frame).
 fn ranges_on_id() -> egui::Id {
     egui::Id::unique("programmer_fader_ranges")
 }
@@ -554,8 +556,8 @@ fn fx_target_id() -> egui::Id {
     egui::Id::unique("programmer_fx_target")
 }
 
-/// Kanaltyp dem Effekt zuordnen bzw. wieder entfernen.
-/// Name eines Faders für die Zuordnungsliste: Kanal und Geräte.
+/// Assign the channel type to the effect or remove it again.
+/// Name of a fader for the mapping list: channel and fixtures.
 fn fader_label(e: &Engine, grp: &FaderGroup) -> String {
     let fixtures: std::collections::BTreeSet<_> = grp.channels.iter().map(|c| c.fixture).collect();
     let who = match fixtures.iter().next() {
@@ -611,7 +613,7 @@ fn color_bar(
     ];
     let mut changed = false;
     let row = ui.horizontal(|ui| {
-        // aktuelle Farbe; Klick öffnet den Farbwähler (wie bei Szenen/Bänken)
+        // current color; click opens the color picker (as for scenes/banks)
         let current = ui
             .add(Swatch(theme::rgb(rgb)))
             .on_hover_text(t("Choose a custom color"));
@@ -648,7 +650,7 @@ fn color_bar(
             }
         }
     });
-    // Alt + Klick: Farbrad für diese Geräte auf der Touch-Oberfläche
+    // Alt + click: color wheel for these fixtures on the touch surface
     let fixtures = fixtures_of(&r.channels);
     crate::mapping::touch_source(
         ui,
@@ -700,7 +702,7 @@ fn xy_pad(
     }
 }
 
-/// Geräte einer Kanalliste (Reihenfolge bleibt, ohne Doppelte).
+/// Fixtures of a channel list (order kept, without duplicates).
 fn fixtures_of(channels: &[ChannelRef]) -> Vec<dmxcraft_core::FixtureId> {
     let mut out: Vec<dmxcraft_core::FixtureId> = Vec::new();
     for c in channels {
@@ -711,7 +713,7 @@ fn fixtures_of(channels: &[ChannelRef]) -> Vec<dmxcraft_core::FixtureId> {
     out
 }
 
-/// Aktuelle Programmer-Werte (z. B. für eine neue Szene).
+/// Current programmer values (e.g. for a new scene).
 pub fn programmer_values(e: &Engine) -> Vec<ChannelValue> {
     let mut v: Vec<ChannelValue> = e
         .programmer()
@@ -726,7 +728,7 @@ pub fn programmer_values(e: &Engine) -> Vec<ChannelValue> {
     v
 }
 
-/// Werkzeugleiste: Betriebsmodus (Edit/Blind/Live) und Schnellaktionen.
+/// Toolbar: operating mode (Edit/Blind/Live) and quick actions.
 fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
     let ids: Vec<FixtureId> = st.selected.iter().copied().collect();
     let some = !ids.is_empty();
@@ -785,7 +787,7 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
         if resp.clicked() || (mapped && any && !locked) {
             layer.clear_all(e);
         }
-        // nur die Ebene des aktuellen Modus (Live bzw. Edit)
+        // only the layer of the current mode (Live or Edit)
         let sel: Vec<ChannelRef> = layer
             .map(e)
             .keys()
@@ -828,8 +830,8 @@ pub(super) fn tool_separator(ui: &mut egui::Ui) {
     );
 }
 
-/// Drei zusammenhängende Knöpfe EDIT · BLIND · LIVE; der aktive Modus ist in
-/// seiner Farbe gefüllt.
+/// Three joined buttons EDIT · BLIND · LIVE; the active mode is filled in
+/// its color.
 pub(super) fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: bool) {
     let items = [
         (
@@ -880,7 +882,7 @@ pub(super) fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: 
         let resp = ui
             .interact(seg, ui.make_persistent_id(("prog_mode", i)), Sense::click())
             .on_hover_text(tip);
-        // Blind ist ein Zusatz zu Edit: beide Knöpfe leuchten
+        // Blind is an addition to Edit: both buttons light up
         let active = *mode == m || (m == ProgrammerMode::Edit && *mode == ProgrammerMode::Blind);
         let corner = egui::CornerRadius {
             nw: if i == 0 { r } else { 0 },
@@ -895,7 +897,7 @@ pub(super) fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: 
             p.rect_filled(seg, corner, theme::raised_hover());
         }
         if i == 1 && *mode == ProgrammerMode::Blind {
-            // Edit + Blind: feine Fuge zwischen den beiden leuchtenden Knöpfen
+            // Edit + Blind: thin gap between the two lit buttons
             p.line_segment(
                 [seg.left_top(), seg.left_bottom()],
                 Stroke::new(1.0, theme::bg()),
@@ -944,7 +946,7 @@ pub(super) fn mode_switch(ui: &mut egui::Ui, mode: &mut ProgrammerMode, locked: 
             (t("Programmer").to_string(), name.to_string())
         });
         if (resp.clicked() || mapped) && !locked {
-            // Auge schaltet Blind ein/aus (immer zusammen mit Edit)
+            // The eye toggles Blind on/off (always together with Edit)
             *mode = match (m, *mode) {
                 (ProgrammerMode::Blind, ProgrammerMode::Blind) => ProgrammerMode::Edit,
                 (m, _) => m,
@@ -967,8 +969,8 @@ fn items_mode(i: usize) -> ProgrammerMode {
     ][i]
 }
 
-/// Seitenleiste der Kategorien: Liste mit Markierungsbalken links; die Zahl
-/// rechts nennt die Fader der Auswahl in dieser Kategorie.
+/// Sidebar of the categories: list with a marker bar on the left; the number
+/// on the right gives the selection's faders in this category.
 fn category_list(
     ui: &mut egui::Ui,
     e: &Engine,
@@ -979,8 +981,8 @@ fn category_list(
 ) {
     let full = ui.available_rect_before_wrap();
     let p = ui.painter().clone();
-    // schlichte Liste auf der Fläche, rechts eine Trennlinie wie zwischen
-    // den übrigen Bereichen
+    // plain list on the surface, a divider on the right like between the other
+    // areas
     p.line_segment(
         [full.right_top(), full.right_bottom()],
         Stroke::new(1.0, theme::border()),
@@ -989,7 +991,7 @@ fn category_list(
     let mut y = full.top() + theme::SP_XS;
     for (i, (c, label)) in Category::ITEMS.iter().enumerate() {
         if *c == Category::All {
-            // Trennlinie vor „Alle Kanäle“
+            // Divider before “All channels”
             y += theme::SP_XS;
             p.line_segment(
                 [
@@ -1037,7 +1039,7 @@ fn category_list(
             theme::body(),
             fg,
         );
-        // Punkt: in dieser Kategorie gibt der Programmer Werte aus
+        // Dot: the programmer outputs values in this category
         let set = groups
             .iter()
             .filter(|g| c.contains(g.kind))
@@ -1068,7 +1070,7 @@ fn category_list(
     }
 }
 
-/// Text auf `max` Pixel kürzen und mit „...“ abschließen.
+/// Shorten text to `max` pixels and end it with “...”.
 fn elide(p: &egui::Painter, text: &str, font: egui::FontId, max: f32) -> String {
     let width = |s: &str| {
         p.layout_no_wrap(s.to_string(), font.clone(), Color32::WHITE)

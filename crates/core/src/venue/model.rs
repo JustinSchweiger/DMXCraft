@@ -1,15 +1,15 @@
-//! Eigene 3D-Modelle (aus glTF/GLB importiert), in der Show eingebettet.
+//! Custom 3D models (imported from glTF/GLB), embedded in the show.
 //!
-//! Die Geometrie wird beim Import fertig berechnet (Knoten-Lagen
-//! eingerechnet, Normalen vorhanden) und je Materialfarbe zu einem Teil
-//! zusammengefasst. Gespeichert werden die Zahlen als Base64 (kompakt im
-//! JSON); `Blob` teilt den Inhalt beim Kopieren (Rückgängig-Verlauf).
+//! The geometry is fully computed on import (node transforms applied,
+//! normals present) and merged into one part per material color. The
+//! numbers are stored as Base64 (compact in the JSON); `Blob` shares the
+//! content when copying (undo history).
 
 use std::sync::Arc;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// Unveränderliche Bytes, beim Klonen geteilt.
+/// Immutable bytes, shared when cloning.
 #[derive(Clone, Debug, Default)]
 pub struct Blob(pub Arc<[u8]>);
 
@@ -30,43 +30,43 @@ impl<'de> Deserialize<'de> for Blob {
         let s = String::deserialize(d)?;
         b64_decode(&s)
             .map(|b| Blob(b.into()))
-            .ok_or_else(|| serde::de::Error::custom("ungültiges Base64"))
+            .ok_or_else(|| serde::de::Error::custom("invalid Base64"))
     }
 }
 
-/// Ein Bild (PNG oder JPEG, unverändert gespeichert).
+/// An image (PNG or JPEG, stored unchanged).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Texture {
     pub name: String,
     pub data: Blob,
 }
 
-/// Ein importiertes Modell.
+/// An imported model.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Model {
-    /// Dateiname beim Import.
+    /// File name at import.
     pub name: String,
-    /// Ausdehnung (m): Mitte in x/z bei 0, Unterkante bei y = 0.
+    /// Extent (m): centered at 0 in x/z, bottom edge at y = 0.
     pub size: [f32; 3],
     pub parts: Vec<ModelPart>,
-    /// Bilder der Materialien (Index aus `ModelPart::texture`).
+    /// Images of the materials (index from `ModelPart::texture`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<Texture>,
 }
 
-/// Dreiecke mit einer Farbe.
+/// Triangles with one color.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ModelPart {
-    /// sRGB-Farbe
+    /// sRGB color
     pub color: [u8; 3],
-    /// je Ecke x, y, z, nx, ny, nz (f32, little endian)
+    /// per vertex x, y, z, nx, ny, nz (f32, little endian)
     pub vertices: Blob,
-    /// Dreiecke (u32, little endian)
+    /// Triangles (u32, little endian)
     pub indices: Blob,
-    /// Bildkoordinaten je Ecke (u, v als f32), wenn das Teil ein Bild hat
+    /// Image coordinates per vertex (u, v as f32) if the part has an image
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uv: Option<Blob>,
-    /// Bild aus `Model::images`
+    /// Image from `Model::images`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub texture: Option<usize>,
 }
@@ -88,7 +88,7 @@ impl ModelPart {
         }
     }
 
-    /// Bild mit Bildkoordinaten je Ecke setzen.
+    /// Set an image with image coordinates per vertex.
     pub fn with_texture(mut self, texture: usize, uv: &[[f32; 2]]) -> Self {
         let b: Vec<u8> = uv.iter().flatten().flat_map(|f| f.to_le_bytes()).collect();
         self.uv = Some(Blob(b.into()));
@@ -137,7 +137,7 @@ impl Model {
         self.parts.iter().map(ModelPart::triangles).sum()
     }
 
-    /// Schlüssel aus dem Inhalt (gleiche Datei zweimal importiert → ein Modell).
+    /// Key from the content (the same file imported twice → one model).
     pub fn content_key(&self) -> String {
         let mut h: u64 = 0xcbf2_9ce4_8422_2325;
         for p in &self.parts {

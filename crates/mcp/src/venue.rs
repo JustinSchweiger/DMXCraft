@@ -1,4 +1,4 @@
-//! Werkzeuge für den Veranstaltungsort (3D-Visualisierer).
+//! Tools for the venue (3D visualizer).
 
 use dmxcraft_core::venue::{Material, Object, Shape, Transform};
 use dmxcraft_core::{Engine, FixtureId};
@@ -68,7 +68,7 @@ pub fn get_venue(e: &Engine) -> R {
         "top_level": v.objects.iter().map(|o| o.id).collect::<Vec<_>>(),
         "objects": objects,
         "fixtures": fixtures,
-        "units": "Meter; y zeigt nach oben, x nach rechts, z zum Publikum; Drehung in Grad (X, dann Y, dann Z)",
+        "units": "Meters; y points up, x to the right, z towards the audience; rotation in degrees (X, then Y, then Z)",
     }))
 }
 
@@ -130,18 +130,18 @@ fn apply_object(o: &mut Object, a: &Value) -> Result<(), String> {
 }
 
 pub fn add_object(e: &mut Engine, a: &Value) -> R {
-    let shape: Shape = serde_json::from_value(a.get("shape").cloned().ok_or("`shape` fehlt")?)
+    let shape: Shape = serde_json::from_value(a.get("shape").cloned().ok_or("`shape` missing")?)
         .map_err(|e| format!("`shape`: {e}"))?;
     let v = &mut e.show_mut().venue;
-    let name = a.get("name").and_then(Value::as_str).unwrap_or("Objekt");
+    let name = a.get("name").and_then(Value::as_str).unwrap_or("Object");
     let mut o = v.object(name, shape, Transform::default(), Material::default());
     apply_object(&mut o, a)?;
     let id = o.id;
     match a.get("parent").and_then(Value::as_u64) {
         Some(p) => {
-            let parent = v.find_mut(p as u32).ok_or("Elternobjekt nicht gefunden")?;
+            let parent = v.find_mut(p as u32).ok_or("Parent object not found")?;
             if !matches!(parent.shape, Shape::Group) {
-                return Err("Elternobjekt muss eine Gruppe sein".into());
+                return Err("Parent object must be a group".into());
             }
             parent.children.push(o);
         }
@@ -151,9 +151,9 @@ pub fn add_object(e: &mut Engine, a: &Value) -> R {
 }
 
 pub fn update_object(e: &mut Engine, a: &Value) -> R {
-    let id = a.get("id").and_then(Value::as_u64).ok_or("`id` fehlt")? as u32;
+    let id = a.get("id").and_then(Value::as_u64).ok_or("`id` missing")? as u32;
     let v = &mut e.show_mut().venue;
-    let o = v.find_mut(id).ok_or("Objekt nicht gefunden")?;
+    let o = v.find_mut(id).ok_or("Object not found")?;
     apply_object(o, a)?;
     let o = o.clone();
     Ok(object_json(&o, None))
@@ -169,7 +169,7 @@ pub fn place_fixtures(e: &mut Engine, a: &Value) -> R {
     let ids: Vec<FixtureId> = a
         .get("fixtures")
         .and_then(Value::as_array)
-        .ok_or("`fixtures` fehlt")?
+        .ok_or("`fixtures` missing")?
         .iter()
         .filter_map(Value::as_u64)
         .map(|v| FixtureId(v as u32))
@@ -187,7 +187,7 @@ pub fn place_fixtures(e: &mut Engine, a: &Value) -> R {
     for (i, id) in ids.iter().enumerate() {
         let show = e.show();
         if show.fixture(*id).is_none() {
-            return Err(format!("Gerät {} nicht gefunden", id.0));
+            return Err(format!("Fixture {} not found", id.0));
         }
         if auto {
             if let Some(f) = e.show_mut().fixture_mut(*id) {

@@ -1,5 +1,5 @@
-//! Programmeinstellungen (nicht Teil der Show), gespeichert als JSON im
-//! Konfigurationsordner des Benutzers.
+//! Program settings (not part of the show), stored as JSON in the user's
+//! config folder.
 
 use crate::i18n::t;
 use std::path::PathBuf;
@@ -9,58 +9,58 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// Sprache der Oberfläche („de“; weitere folgen).
+    /// Language of the interface (“en” or “de”).
     pub language: String,
-    /// Skalierung der Oberfläche (1.0 = 100 %).
+    /// Scaling of the interface (1.0 = 100 %).
     pub ui_scale: f32,
-    /// Name dieses Rechners, z. B. für Fernsteuerung im Netz.
+    /// Name of this computer, e.g. for remote control over the network.
     pub instance_name: String,
-    /// Beim Start direkt im Touch-Modus öffnen.
+    /// Open directly in touch mode at startup.
     pub start_touch: bool,
-    /// Farbschema („navy“ oder „gray“).
+    /// Color scheme (“navy” or “gray”).
     pub theme: String,
-    /// Beim Start nach Updates suchen.
+    /// Check for updates at startup.
     pub check_updates: bool,
-    /// Zuletzt verwendete Show-Datei.
+    /// Last used show file.
     pub last_show: Option<String>,
-    /// Zuletzt geöffnete Shows, neueste zuerst.
+    /// Recently opened shows, newest first.
     pub recent: Vec<String>,
-    /// Beim Start die zuletzt verwendete Show laden.
+    /// Load the last used show at startup.
     pub open_last_show: bool,
-    /// Gewählter Ausgang: "simulation" oder "open_dmx".
+    /// Selected output: "simulation" or "open_dmx".
     pub output: String,
-    /// USB-DMX: je Universum (Index) die Seriennummer des Kabels, leer = keins.
+    /// USB DMX: per universe (index) the serial number of the cable, empty = none.
     pub open_dmx: Vec<String>,
-    /// Szenen am unteren Rand in weitere Spalten umbrechen (statt Scrollen).
+    /// Wrap scenes at the bottom into more columns (instead of scrolling).
     pub wrap_scenes: bool,
-    /// Wertebereiche der Gerätedatei auf den Fader-Schienen zeigen.
+    /// Show the value ranges of the fixture file on the fader tracks.
     #[serde(default = "yes")]
     pub fader_ranges: bool,
-    /// MCP-Server für KI-Assistenten (nur lokal erreichbar).
+    /// MCP server for AI assistants (reachable locally only).
     pub mcp_enabled: bool,
-    /// Port des MCP-Servers (http://127.0.0.1:<port>/mcp).
+    /// Port of the MCP server (http://127.0.0.1:<port>/mcp).
     pub mcp_port: u16,
-    /// Touch-Fernbedienung im lokalen Netz (Web-App für Smartphone/Tablet).
+    /// Touch remote on the local network (web app for phone/tablet).
     pub remote_enabled: bool,
-    /// 3D-Visualisierer und Profile Builder zusätzlich als Reiter in der
-    /// Titelleiste (statt nur als Fenster).
+    /// 3D visualizer and Profile Builder additionally as tabs in the title bar
+    /// (instead of only as windows).
     pub tools_as_tabs: bool,
-    /// Port der Fernbedienung (http://<rechner>:<port>).
+    /// Port of the remote (http://<computer>:<port>).
     pub remote_port: u16,
-    /// Optionale PIN der Fernbedienung (leer = ohne).
+    /// Optional PIN of the remote (empty = none).
     pub remote_pin: String,
-    /// Start einer SUPER SCENE setzt den Ton-Master auf 100 %.
+    /// Starting a SUPER SCENE sets the sound master to 100 %.
     pub audio_reset_on_start: bool,
-    /// Höchstlautstärke in Prozent: Ton-Master 100 % entspricht diesem Wert
-    /// (z. B. zum Testen leiser, ohne die Systemlautstärke zu ändern).
+    /// Maximum volume in percent: sound master 100 % corresponds to this value
+    /// (e.g. quieter for testing without changing the system volume).
     pub audio_limit_pct: u8,
-    /// Dauer von „Ton ausfaden“ in ms.
+    /// Duration of “Fade out sound” in ms.
     pub audio_fade_ms: u32,
-    /// Nach dem Ausfaden die SUPER SCENES mit Ton stoppen.
+    /// Stop the SUPER SCENES with audio after the fade-out.
     pub audio_fade_stop: bool,
-    /// Qualität des 3D-Visualisierers (0 = niedrig … 3 = ultra).
+    /// Quality of the 3D visualizer (0 = low … 3 = ultra).
     pub viz_quality: u8,
-    /// Eingerichtete MIDI-Controller (Typ, LED-Ausgang).
+    /// Configured MIDI controllers (type, LED output).
     pub midi_devices: Vec<crate::midi_device::MidiDevice>,
 }
 
@@ -96,7 +96,7 @@ impl Default for Settings {
     }
 }
 
-/// Rechnername als Vorschlag für den Instanznamen.
+/// Computer name as a suggestion for the instance name.
 fn default_instance_name() -> String {
     ["COMPUTERNAME", "HOSTNAME"]
         .iter()
@@ -110,11 +110,11 @@ fn default_instance_name() -> String {
         .unwrap_or_else(|| "DMXCraft".into())
 }
 
-/// Wie viele Shows unter „Zuletzt geöffnet“ stehen.
+/// How many shows are listed under “Recently opened”.
 pub const RECENT_MAX: usize = 8;
 
 impl Settings {
-    /// Aktiver Ausgang: USB-DMX, sobald einem Universum ein Kabel gehört.
+    /// Active output: USB DMX as soon as a cable belongs to a universe.
     pub fn output_kind(&self) -> dmxcraft_output::OutputKind {
         if self.open_dmx.iter().any(|k| !k.is_empty()) {
             dmxcraft_output::OutputKind::OpenDmx
@@ -123,7 +123,7 @@ impl Settings {
         }
     }
 
-    /// Ausgangs-Einstellungen für die Ausgabeschicht.
+    /// Output settings for the output layer.
     pub fn output_config(&self) -> dmxcraft_output::OutputConfig {
         dmxcraft_output::OutputConfig {
             open_dmx: (0..usize::from(dmxcraft_core::UNIVERSES))
@@ -132,8 +132,8 @@ impl Settings {
         }
     }
 
-    /// Kabel einem Universum zuordnen (`None` = keins). Ein Kabel kann nur
-    /// einem Universum gehören.
+    /// Assign a cable to a universe (`None` = none). A cable can only belong to
+    /// one universe.
     pub fn assign_open_dmx(&mut self, universe: usize, key: Option<String>) {
         if let Some(k) = &key {
             for slot in &mut self.open_dmx {
@@ -151,7 +151,7 @@ impl Settings {
         }
     }
 
-    /// Merkt sich eine geöffnete oder gespeicherte Show.
+    /// Remembers an opened or saved show.
     pub fn remember(&mut self, path: &str) {
         self.last_show = Some(path.to_string());
         self.recent.retain(|p| p != path);
@@ -159,7 +159,7 @@ impl Settings {
         self.recent.truncate(RECENT_MAX);
     }
 
-    /// Konfigurationsdatei je Betriebssystem.
+    /// Config file per operating system.
     pub fn path() -> Option<PathBuf> {
         let base = if cfg!(target_os = "windows") {
             std::env::var_os("APPDATA").map(PathBuf::from)

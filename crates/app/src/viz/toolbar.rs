@@ -1,5 +1,6 @@
-//! Werkzeugleiste des 3D-Visualisierers: Modus, Umgebung, Qualität, Dateien
-//! und rechts die Kamerapunkte (Klick = hinfahren, Taste 1–9) neben Vollbild.
+//! Toolbar of the 3D visualizer: mode, environment, quality, files and on
+//! the right the camera points (click = move there, keys 1–9) next to
+//! fullscreen.
 
 use std::time::Instant;
 
@@ -14,9 +15,9 @@ use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::{Icon, IconButton, Segmented};
 use crate::views::ViewCtx;
 
-/// Höhe aller Bedienelemente der Leiste.
+/// Height of all controls in the bar.
 const H: f32 = 28.0;
-/// Dauer einer Kamerafahrt.
+/// Duration of a camera move.
 const FLY_SECS: f32 = 0.45;
 
 impl VizView {
@@ -92,7 +93,7 @@ impl VizView {
             level(ui, label, v, !locked).on_hover_text(tip);
         }
         divider(ui);
-        // Qualität als Auswahl im Stil der Leiste
+        // Quality as a dropdown in the style of the bar
         let q = cx.state.viz_quality;
         let r = chip(ui, t("Quality"), q.label(), true);
         menu::dropdown(&r, |ui| {
@@ -166,11 +167,10 @@ impl VizView {
         }
     }
 
-    /// Kamerapunkte (rechts nach links gezeichnet): Hinzufügen, Punkte,
-    /// Grundansicht, Kamera-Symbol.
+    /// Camera points (drawn right to left): add, points, home view, camera icon.
     fn camera_points(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, locked: bool) {
         let current = self.camera;
-        // passt die Reihe nicht, als Auswahlliste
+        // if the row does not fit, as a dropdown
         let needed: f32 = cx
             .engine
             .show()
@@ -197,7 +197,7 @@ impl VizView {
                     })
                     .unwrap_or(1);
                 venue.cameras.push(cam.to_preset(tr!("View {n}", n = n)));
-                // gleich umbenennen (in der breiten Leiste)
+                // rename right away (in the wide bar)
                 if !collapsed {
                     self.cam_rename = Some((venue.cameras.len() - 1, tr!("View {n}", n = n)));
                     self.cam_rename_focus = true;
@@ -217,7 +217,7 @@ impl VizView {
         let mut remove = None;
         let mut overwrite = None;
         let mut rename_done = None;
-        // rechts nach links: die Punkte rückwärts, damit sie links → rechts stehen
+        // right to left: the points in reverse so they stand left → right
         for (i, p) in presets.iter().enumerate().rev() {
             if let Some((ri, text)) = self.cam_rename.as_mut().filter(|(ri, _)| *ri == i) {
                 let r = ui.add_sized(vec2(120.0, H), text_field(text));
@@ -305,8 +305,7 @@ impl VizView {
         }
     }
 
-    /// Schmales Fenster: Kamerapunkte als Auswahlliste (Bearbeiten in der
-    /// breiten Leiste).
+    /// Narrow window: camera points as a dropdown (editing in the wide bar).
     fn points_menu(
         &mut self,
         ui: &mut egui::Ui,
@@ -368,7 +367,7 @@ impl VizView {
         remove
     }
 
-    /// Weich zu einer Kamerastellung fahren.
+    /// Move smoothly to a camera position.
     pub(super) fn fly_to(&mut self, to: OrbitCamera) {
         if let Some(from) = self.camera {
             self.fly = Some((from, to, Instant::now()));
@@ -377,13 +376,13 @@ impl VizView {
         }
     }
 
-    /// Kamerafahrt fortschreiben (einmal pro Bild). `true`, solange sie läuft.
+    /// Advance the camera move (once per frame). `true` while it is running.
     pub(super) fn advance_fly(&mut self) -> bool {
         let Some((from, to, start)) = self.fly else {
             return false;
         };
         let k = (start.elapsed().as_secs_f32() / FLY_SECS).min(1.0);
-        // sanft beschleunigen und abbremsen
+        // accelerate and decelerate smoothly
         let e = k * k * (3.0 - 2.0 * k);
         self.camera = Some(from.lerp(&to, e));
         if k >= 1.0 {
@@ -393,7 +392,7 @@ impl VizView {
         true
     }
 
-    /// Tasten 1–9 rufen Kamerapunkte auf (wenn kein Textfeld aktiv ist).
+    /// Keys 1–9 recall camera points (when no text field is active).
     pub(super) fn camera_keys(&mut self, ui: &egui::Ui, cx: &ViewCtx<'_>) {
         if ui.ctx().egui_wants_keyboard_input() {
             return;
@@ -421,14 +420,14 @@ impl VizView {
     }
 }
 
-/// Dünne senkrechte Trennlinie.
+/// Thin vertical divider.
 fn divider(ui: &mut egui::Ui) {
     let (r, _) = ui.allocate_exact_size(vec2(1.0, H - 6.0), Sense::hover());
     ui.painter().rect_filled(r, 0.0, theme::border());
 }
 
-/// Wert 0–1 als Balken mit Bezeichnung links und Prozent rechts; Ziehen,
-/// Klicken oder Mausrad ändert ihn.
+/// Value 0–1 as a bar with the label on the left and percent on the right;
+/// dragging, clicking or the mouse wheel changes it.
 fn level(ui: &mut egui::Ui, label: &str, v: &mut f32, enabled: bool) -> egui::Response {
     let sense = if enabled {
         Sense::click_and_drag()
@@ -489,7 +488,7 @@ fn level(ui: &mut egui::Ui, label: &str, v: &mut f32, enabled: bool) -> egui::Re
     resp
 }
 
-/// Auswahlfeld im Stil der Leiste: Bezeichnung, Wert, Pfeil.
+/// Dropdown in the style of the bar: label, value, arrow.
 fn chip(ui: &mut egui::Ui, label: &str, value: &str, enabled: bool) -> egui::Response {
     let label_g =
         ui.painter()
@@ -535,7 +534,7 @@ fn chip(ui: &mut egui::Ui, label: &str, value: &str, enabled: bool) -> egui::Res
     resp
 }
 
-/// Breite eines Kamerapunkts in der Leiste.
+/// Width of a camera point in the bar.
 fn point_width(ui: &egui::Ui, n: usize, name: &str) -> f32 {
     let num = ui
         .painter()
@@ -546,12 +545,12 @@ fn point_width(ui: &egui::Ui, n: usize, name: &str) -> f32 {
     8.0 + num.size().x + 6.0 + text.size().x.min(110.0) + 10.0
 }
 
-/// Kamerapunkt: Nummer und Name; aktiv (Kamera steht dort) mit Akzent.
+/// Camera point: number and name; active (camera is there) with accent.
 fn point_chip(ui: &mut egui::Ui, n: usize, name: &str, active: bool) -> egui::Response {
     let num = ui
         .painter()
         .layout_no_wrap(n.to_string(), theme::caption(), theme::text_dim());
-    // nur eine Zeile: lange Namen gekürzt (Hinweis zeigt den ganzen Namen)
+    // only one line: long names shortened (the tooltip shows the full name)
     let w = point_width(ui, n, name);
     let (rect, resp) = ui.allocate_exact_size(vec2(w, H), Sense::click());
     let p = ui.painter();

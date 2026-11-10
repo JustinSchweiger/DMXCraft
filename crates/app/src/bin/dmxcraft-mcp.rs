@@ -1,10 +1,10 @@
-//! `dmxcraft-mcp`: stdio-Brücke für MCP-Clients, die Server als Prozess
-//! starten (z. B. Claude Desktop). Ein eigenes, kleines Programm, damit die
-//! dauerhaft laufende Brücke nicht `dmxcraft(.exe)` sperrt – sonst lässt sich
-//! DMXCraft unter Windows nicht neu bauen oder aktualisieren, solange der
-//! Client läuft.
+//! `dmxcraft-mcp`: stdio bridge for MCP clients that start servers as a
+//! process (e.g. Claude Desktop). A separate small program so the
+//! permanently running bridge does not lock `dmxcraft(.exe)` – otherwise
+//! DMXCraft cannot be rebuilt or updated on Windows while the client is
+//! running.
 //!
-//! Aufruf: `dmxcraft-mcp [--port 7373]`
+//! Usage: `dmxcraft-mcp [--port 7373]`
 
 #[path = "../../../mcp/src/bridge.rs"]
 mod bridge;

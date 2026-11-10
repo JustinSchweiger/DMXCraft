@@ -1,11 +1,10 @@
-//! OBS-Anbindung über obs-websocket 5 (in OBS ab Version 28 eingebaut).
+//! OBS connection via obs-websocket 5 (built into OBS from version 28).
 //!
-//! Ein Hintergrund-Thread hält die Verbindung (mit Anmeldung und
-//! automatischem Neuverbinden) und fragt regelmäßig Szenen und Quellen ab.
-//! [`Obs::update`] gleicht jedes Frame die laufenden SUPER SCENES ab:
-//! Videoblöcke spielt OBS in einer Medienquelle ab (Start, Sprung, Pause,
-//! Geschwindigkeit, Nachstellen bei Abweichung), OBS-Blöcke lösen beim
-//! Erreichen ihre Aktion aus.
+//! A background thread holds the connection (with authentication and
+//! automatic reconnect) and regularly queries scenes and sources.
+//! [`Obs::update`] matches the running SUPER SCENES every frame: OBS plays
+//! video blocks in a media source (start, seek, pause, speed, correction on
+//! drift), OBS blocks trigger their action when reached.
 
 use std::collections::{HashMap, HashSet};
 use std::io::ErrorKind;
@@ -22,7 +21,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tungstenite::Message;
 
-/// Verbindungszustand.
+/// Connection state.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Status {
     #[default]
@@ -32,21 +31,21 @@ pub enum Status {
     Failed(String),
 }
 
-/// Vom Verbindungs-Thread gepflegter Stand von OBS.
+/// State of OBS maintained by the connection thread.
 #[derive(Default)]
 struct Shared {
     status: Status,
-    /// Szenen (oben zuerst, wie in OBS angezeigt).
+    /// Scenes (top first, as shown in OBS).
     scenes: Vec<String>,
     inputs: Vec<String>,
     program: String,
-    /// Medienstatus je Quelle: Position (ms), läuft, Zeitpunkt der Antwort.
+    /// Media state per source: position (ms), playing, time of the answer.
     media: HashMap<String, (f64, bool, Instant)>,
-    /// Letzte Fehlermeldung von OBS zu einer Anfrage.
+    /// Last error message from OBS for a request.
     last_error: Option<String>,
 }
 
-/// Laufende Verbindung (Thread + Kanal).
+/// Running connection (thread + channel).
 struct Link {
     cfg: ObsSettings,
     tx: Sender<(String, Value)>,
@@ -59,15 +58,15 @@ impl Drop for Link {
     }
 }
 
-/// Ein Video, das gerade in OBS läuft.
+/// A video currently playing in OBS.
 struct VideoPlay {
     source: String,
     playing: bool,
     rate: f32,
     volume: f32,
-    /// Erwartete Position (ms) beim letzten Frame.
+    /// Expected position (ms) at the last frame.
     pos: f64,
-    /// Letzte Abfrage des Medienstatus und ob ihre Antwort ausgewertet ist.
+    /// Last query of the media state and whether its answer has been evaluated.
     asked: Instant,
     checked: bool,
 }
@@ -111,8 +110,8 @@ impl Obs {
         }
     }
 
-    /// Verbindung nach den Einstellungen der Show auf- bzw. abbauen und die
-    /// laufenden SUPER SCENES mit OBS abgleichen.
+    /// Connect or disconnect according to the show's settings and match the
+    /// running SUPER SCENES with OBS.
     pub fn update(&mut self, e: &Engine, scrubbing: bool, ctx: &eframe::egui::Context) {
         let cfg = &e.show().obs;
         if !cfg.enabled {
@@ -132,7 +131,7 @@ impl Obs {
         self.last = Some(Instant::now());
         let connected = self.status() == Status::Connected;
 
-        // gewünschter Zustand aus den laufenden SUPER SCENES
+        // desired state from the running SUPER SCENES
         struct Want {
             path: String,
             source: String,
@@ -192,14 +191,14 @@ impl Obs {
         }
 
         if !connected {
-            // nach dem Verbinden nur noch Neues auslösen, Videos neu starten
+            // after connecting only trigger new things, restart videos
             self.videos.clear();
             self.actions = actions.iter().map(|(k, _, _)| *k).collect();
             return;
         }
 
         let mut out: Vec<(&str, Value)> = Vec::new();
-        // OBS-Blöcke: beim Erreichen (nur bei laufender Wiedergabe)
+        // OBS blocks: when reached (only during playback)
         let current: HashSet<(SceneId, u32)> = actions.iter().map(|(k, _, _)| *k).collect();
         for (key, action, playing) in &actions {
             if !self.actions.contains(key) && *playing {
@@ -208,7 +207,7 @@ impl Obs {
         }
         self.actions = current;
 
-        // beendete Videos stoppen
+        // stop finished videos
         let gone: Vec<(SceneId, u32)> = self
             .videos
             .keys()
@@ -244,7 +243,7 @@ impl Obs {
                             json!({ "inputName": w.source, "inputSettings": settings, "overlay": true }),
                         ));
                     } else {
-                        // Medienquelle fehlt: in der Szene des Blocks anlegen
+                        // Media source missing: create it in the block's scene
                         let scene = if w.obs_scene.is_empty() {
                             program.clone()
                         } else {
@@ -319,8 +318,8 @@ impl Obs {
                             json!({ "inputName": v.source, "inputVolumeMul": w.volume }),
                         ));
                     }
-                    // Abweichung prüfen: Status abfragen, Antwort beim
-                    // nächsten Mal mit der erwarteten Stelle vergleichen
+                    // Check for drift: query the state, compare the answer with the expected
+                    // position next time
                     if playing {
                         if let Some((cursor, true, at)) = media.get(&v.source).copied() {
                             if at > v.asked && !v.checked {
@@ -378,7 +377,7 @@ fn fire(out: &mut Vec<(&str, Value)>, action: &ObsAction) {
             source,
             visible,
         } => {
-            // ID des Szenenelements erfragen; der Thread schaltet es dann
+            // Ask for the ID of the scene item; the thread then switches it
             out.push((
                 "GetSceneItemId",
                 json!({ "sceneName": scene, "sourceName": source, "_enable": visible }),
@@ -409,7 +408,7 @@ fn speed_pct(rate: f32) -> u32 {
     (rate * 100.0).round().clamp(1.0, 200.0) as u32
 }
 
-/// Einstellungen der Medienquelle (ffmpeg_source) für ein Video.
+/// Settings of the media source (ffmpeg_source) for a video.
 fn media_settings(path: &str, rate: f32) -> Value {
     json!({
         "is_local_file": true,
@@ -423,7 +422,7 @@ fn media_settings(path: &str, rate: f32) -> Value {
     })
 }
 
-/// Antwort auf die Anmelde-Herausforderung von obs-websocket.
+/// Answer to the authentication challenge of obs-websocket.
 pub fn auth_response(password: &str, salt: &str, challenge: &str) -> String {
     let secret = b64(&Sha256::digest(format!("{password}{salt}").as_bytes()));
     b64(&Sha256::digest(format!("{secret}{challenge}").as_bytes()))
@@ -449,8 +448,8 @@ fn b64(data: &[u8]) -> String {
 
 type Ws = tungstenite::WebSocket<TcpStream>;
 
-/// Verbindungs-Thread: verbinden, anmelden, Anfragen senden, Antworten
-/// auswerten; bei Abbruch nach kurzer Pause neu verbinden.
+/// Connection thread: connect, authenticate, send requests, evaluate
+/// answers; on disconnect reconnect after a short pause.
 fn run(
     cfg: ObsSettings,
     rx: Receiver<(String, Value)>,
@@ -471,7 +470,7 @@ fn run(
             }
             Err(e) => e,
         };
-        // liegengebliebene Anfragen verwerfen (gelten nach dem Neuverbinden nicht mehr)
+        // discard leftover requests (no longer valid after reconnecting)
         while rx.try_recv().is_ok() {}
         if stop.load(Ordering::Relaxed) {
             break;
@@ -486,13 +485,13 @@ fn run(
     }
 }
 
-/// Verbinden und anmelden (Hello → Identify → Identified).
+/// Connect and authenticate (Hello → Identify → Identified).
 fn open(cfg: &ObsSettings) -> Result<Ws, String> {
     let addr = (cfg.host.as_str(), cfg.port)
         .to_socket_addrs()
         .map_err(|e| e.to_string())?
         .next()
-        .ok_or("Adresse nicht gefunden")?;
+        .ok_or("Address not found")?;
     let tcp = TcpStream::connect_timeout(&addr, Duration::from_secs(2))
         .map_err(|_| crate::i18n::t("OBS not reachable").to_string())?;
     tcp.set_read_timeout(Some(Duration::from_secs(3))).ok();
@@ -547,7 +546,7 @@ fn send_json(ws: &mut Ws, v: &Value) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// Angemeldete Verbindung bedienen, bis sie abbricht (liefert den Grund).
+/// Serve an authenticated connection until it drops (returns the reason).
 fn session(
     ws: &mut Ws,
     rx: &Receiver<(String, Value)>,
@@ -556,7 +555,7 @@ fn session(
     ctx: &eframe::egui::Context,
 ) -> String {
     let mut next_id = 0u64;
-    // offene Anfragen: ID → (Typ, Daten)
+    // open requests: ID → (type, data)
     let mut pending: HashMap<String, (String, Value)> = HashMap::new();
     let mut last_poll = Instant::now() - Duration::from_secs(10);
     let lock = || shared.lock().unwrap_or_else(|p| p.into_inner());
@@ -574,7 +573,7 @@ fn session(
         for (kind, mut data) in out {
             next_id += 1;
             let id = next_id.to_string();
-            // interne Felder (mit „_“) nicht an OBS schicken
+            // do not send internal fields (with “_”) to OBS
             let extra = data.as_object_mut().map(|o| {
                 let keys: Vec<String> = o.keys().filter(|k| k.starts_with('_')).cloned().collect();
                 keys.into_iter()
@@ -633,7 +632,7 @@ fn session(
                         lock().media.insert(name, (cursor, playing, Instant::now()));
                     }
                     "GetSceneItemId" => {
-                        // zweiter Schritt von „Quelle ein-/ausblenden“
+                        // second step of “show/hide source”
                         if let Some(item) = r["sceneItemId"].as_i64() {
                             next_id += 1;
                             let msg = json!({ "op": 6, "d": {
@@ -684,8 +683,8 @@ mod tests {
     use dmxcraft_core::{Show, Step};
     use std::net::TcpListener;
 
-    /// Nachgebautes OBS: meldet sich mit Passwort an, beantwortet alle
-    /// Anfragen und merkt sich deren Typen.
+    /// Fake OBS: authenticates with a password, answers all requests and
+    /// remembers their types.
     fn fake_obs(password: &'static str) -> (u16, Arc<Mutex<Vec<String>>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -720,7 +719,7 @@ mod tests {
                     "GetSceneList" => {
                         json!({"currentProgramSceneName":"Live","scenes":[{"sceneName":"Video"},{"sceneName":"Live"}]})
                     }
-                    "GetInputList" => json!({"inputs":[{"inputName":"Kamera"}]}),
+                    "GetInputList" => json!({"inputs":[{"inputName":"camera"}]}),
                     _ => json!({}),
                 };
                 log.lock().unwrap().push(kind.clone());
@@ -768,7 +767,7 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        panic!("Zeitüberschreitung: {:?}", obs.status());
+        panic!("Timeout: {:?}", obs.status());
     }
 
     #[test]
@@ -783,7 +782,7 @@ mod tests {
         e.tick(Duration::from_millis(10));
         let has = |k: &str| seen.lock().unwrap().iter().any(|s| s == k);
         wait(&mut obs, &e, &ctx, |_| has("TriggerMediaInputAction"));
-        // Quelle fehlt in OBS: wird in der Szene des Blocks angelegt
+        // Source missing in OBS: it is created in the block's scene
         assert!(has("SetCurrentProgramScene"));
         assert!(has("CreateInput"));
     }
@@ -805,7 +804,7 @@ mod tests {
 
     #[test]
     fn auth_matches_obs_websocket_example() {
-        // Beispiel aus der Protokollbeschreibung von obs-websocket 5
+        // Example from the obs-websocket 5 protocol description
         let a = auth_response(
             "supersecretpassword",
             "lM1GncleQOaCu9lT1yeUZhFYnqhsLLP1G5lAGo3ixaI=",

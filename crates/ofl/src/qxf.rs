@@ -1,6 +1,7 @@
-//! Umwandlung von QLC+-Gerätedateien (`.qxf`, XML) in DMXCraft-Gerätetypen.
+//! Conversion of QLC+ fixture files (`.qxf`, XML) into DMXCraft fixture
+//! types.
 //!
-//! Aufbau einer QXF-Datei (vereinfacht):
+//! Structure of a QXF file (simplified):
 //!
 //! ```xml
 //! <FixtureDefinition>
@@ -13,9 +14,9 @@
 //! </FixtureDefinition>
 //! ```
 //!
-//! Die Kanalart kommt aus `Preset` (neuere Dateien) oder aus `Group`/`Colour`
-//! (ältere). QLC+-Gerätedaten stehen unter der Apache-2.0-Lizenz
-//! (siehe `data/QLC-LICENSE`).
+//! The channel kind comes from `Preset` (newer files) or from
+//! `Group`/`Colour` (older ones). QLC+ fixture data is licensed under
+//! Apache 2.0 (see `data/QLC-LICENSE`).
 
 use std::collections::HashMap;
 
@@ -44,7 +45,7 @@ fn text<'a>(n: Node<'a, 'a>, name: &str) -> Option<&'a str> {
     child(n, name).and_then(|c| c.text()).map(str::trim)
 }
 
-/// Kanalart aus dem QLC+-Preset des Kanals.
+/// Channel kind from the channel's QLC+ preset.
 fn kind_from_preset(p: &str) -> Option<ChannelKind> {
     use ChannelKind as K;
     Some(match p {
@@ -67,7 +68,7 @@ fn kind_from_preset(p: &str) -> Option<ChannelKind> {
     })
 }
 
-/// Kanalart aus Gruppe (ältere Dateien), Farbangabe und Name.
+/// Channel kind from the group (older files), color attribute and name.
 fn kind_from_group(ch: Node<'_, '_>, name: &str) -> ChannelKind {
     use ChannelKind as K;
     let group = child(ch, "Group");
@@ -122,7 +123,7 @@ fn qlc_hex(s: &str) -> Option<[u8; 3]> {
     Some([p(0)?, p(2)?, p(4)?])
 }
 
-/// Wertebereiche aus den `<Capability>`-Einträgen.
+/// Value ranges from the `<Capability>` entries.
 fn qlc_ranges(ch: Node<'_, '_>) -> Vec<dmxcraft_core::ChannelRange> {
     use dmxcraft_core::{ChannelRange, RangeEffect};
     let mut gobo = 0u8;
@@ -172,7 +173,7 @@ fn qlc_ranges(ch: Node<'_, '_>) -> Vec<dmxcraft_core::ChannelRange> {
                     RangeEffect::Gobo { slot: gobo }
                 }
                 _ => {
-                    // ältere Dateien: Farbe im Attribut, „open“ im Text
+                    // older files: color in the attribute, “open” in the text
                     let l = label.to_lowercase();
                     if let Some(rgb) = c.attribute("Color").and_then(qlc_hex) {
                         RangeEffect::Color { rgb }
@@ -192,8 +193,8 @@ fn qlc_ranges(ch: Node<'_, '_>) -> Vec<dmxcraft_core::ChannelRange> {
         .collect()
 }
 
-/// Feinkanäle von Farben/Dimmer laufen als „Generic“ (die Engine kennt nur
-/// 8 Bit dafür); Presets mit `Fine` am Ende sind also immer Generic.
+/// Fine channels of colors/dimmer run as “Generic” (the engine only knows
+/// 8 bit for those); presets ending in `Fine` are therefore always Generic.
 fn channel_def(ch: Node<'_, '_>) -> Option<(String, ChannelDef)> {
     let name = ch.attribute("Name")?.trim().to_string();
     let kind = match ch.attribute("Preset") {
@@ -218,7 +219,7 @@ fn channel_def(ch: Node<'_, '_>) -> Option<(String, ChannelDef)> {
     ))
 }
 
-/// Wandelt eine QXF-Datei um. Ein [`FixtureType`] pro Modus.
+/// Converts a QXF file. One [`FixtureType`] per mode.
 pub fn convert_qxf(xml: &str) -> Result<LibraryFixture, OflError> {
     let opts = ParsingOptions {
         allow_dtd: true,
@@ -228,15 +229,15 @@ pub fn convert_qxf(xml: &str) -> Result<LibraryFixture, OflError> {
         .map_err(|e| OflError::Invalid(format!("XML: {e}")))?;
     let root = doc.root_element();
     if !root.has_tag_name("FixtureDefinition") {
-        return Err(OflError::Invalid("keine FixtureDefinition".into()));
+        return Err(OflError::Invalid("no FixtureDefinition".into()));
     }
     let manufacturer = text(root, "Manufacturer")
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| OflError::Invalid("kein Hersteller".into()))?
+        .ok_or_else(|| OflError::Invalid("no manufacturer".into()))?
         .to_string();
     let model = text(root, "Model")
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| OflError::Invalid("kein Modell".into()))?
+        .ok_or_else(|| OflError::Invalid("no model".into()))?
         .to_string();
     let kind = text(root, "Type").unwrap_or("Other").to_string();
 
@@ -256,7 +257,7 @@ pub fn convert_qxf(xml: &str) -> Result<LibraryFixture, OflError> {
             .unwrap_or("Standard")
             .trim()
             .to_string();
-        // Kanäle nach Nummer sortiert; fehlende Nummern als unbenutzt
+        // Channels sorted by number; missing numbers as unused
         let mut entries: Vec<(usize, &str)> = mode
             .children()
             .filter(|c| c.has_tag_name("Channel"))
@@ -273,7 +274,7 @@ pub fn convert_qxf(xml: &str) -> Result<LibraryFixture, OflError> {
             continue;
         }
         let mut out: Vec<ChannelDef> = (0..=last)
-            .map(|_| ChannelDef::new("(unbenutzt)", ChannelKind::NoFunction))
+            .map(|_| ChannelDef::new("(unused)", ChannelKind::NoFunction))
             .collect();
         for (n, name) in entries {
             out[n] = channels
@@ -300,7 +301,7 @@ pub fn convert_qxf(xml: &str) -> Result<LibraryFixture, OflError> {
         });
     }
     if modes.is_empty() {
-        return Err(OflError::Invalid("kein verwendbarer Modus".into()));
+        return Err(OflError::Invalid("no usable mode".into()));
     }
     Ok(LibraryFixture {
         manufacturer_key: man_key,
@@ -313,7 +314,7 @@ pub fn convert_qxf(xml: &str) -> Result<LibraryFixture, OflError> {
     })
 }
 
-/// `<Physical>` (Linse, Fokus, Maße) eines Geräts oder Modus.
+/// `<Physical>` (lens, focus, dimensions) of a fixture or mode.
 fn qlc_physical(node: roxmltree::Node) -> Option<dmxcraft_core::fixture::Physics> {
     let p = node.children().find(|c| c.has_tag_name("Physical"))?;
     let num = |tag: &str, attr: &str| {
@@ -408,12 +409,12 @@ mod tests {
                 K::Generic,
                 K::Strobe,
                 K::ColorWheel,
-                K::NoFunction, // Lücke (Kanal 9 fehlt in der Datei)
+                K::NoFunction, // Gap (channel 9 is missing in the file)
                 K::Gobo,
             ]
         );
         assert_eq!(f.modes[1].channels[3].default, 255);
-        assert_eq!(f.modes[1].channels[8].name, "(unbenutzt)");
+        assert_eq!(f.modes[1].channels[8].name, "(unused)");
     }
 
     #[test]

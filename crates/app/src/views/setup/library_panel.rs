@@ -1,5 +1,5 @@
-//! EINRICHTEN → Seitenleiste „Bibliothek“: Gerätetypen suchen (eingebaut,
-//! in der Show, Open Fixture Library) und patchen.
+//! SETUP → “Library” sidebar: search fixture types (built-in, in the show,
+//! Open Fixture Library) and patch them.
 
 use crate::i18n::t;
 use std::collections::BTreeMap;
@@ -16,17 +16,17 @@ use crate::ui::widgets::text_field;
 use crate::views::profile_builder::{template, BuilderRequest};
 use crate::views::{View, ViewCtx};
 
-/// Höchstens so viele Hersteller werden bei leerer Suche aufgeklappt angeboten.
+/// At most this many manufacturers are offered expanded for an empty search.
 const MAX_FIXTURES_PER_SEARCH: usize = 400;
 
 #[derive(Default)]
 pub struct LibraryPanel {
     query: String,
-    /// Gewählter Gerätetyp (noch nicht unbedingt in der Show).
+    /// Selected fixture type (not necessarily in the show yet).
     chosen: Option<FixtureType>,
-    /// Laufender Systemdialog zum Importieren einer Gerätedatei.
+    /// Running system dialog for importing a fixture file.
     import_dialog: Option<std::sync::mpsc::Receiver<Option<std::path::PathBuf>>>,
-    /// Aktion aus einem Kontextmenü (wird nach dem Zeichnen ausgeführt).
+    /// Action from a context menu (executed after drawing).
     action: Option<LibAction>,
 }
 
@@ -38,7 +38,7 @@ enum LibAction {
 impl View for LibraryPanel {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         drag_ghost(ui.ctx());
-        // Ergebnis des Systemdialogs
+        // Result of the system dialog
         if let Some(rx) = &self.import_dialog {
             if let Ok(result) = rx.try_recv() {
                 self.import_dialog = None;
@@ -90,7 +90,7 @@ impl View for LibraryPanel {
         });
         ui.add_space(theme::SP_XS);
 
-        // Patch-Formular unten fest, Liste füllt den Rest
+        // Patch form fixed at the bottom, the list fills the rest
         egui::Panel::bottom("library_patch_form")
             .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 6)))
             .show(ui, |ui| self.patch_form(ui, cx.engine, cx.state));
@@ -159,7 +159,7 @@ impl LibraryPanel {
             .collect();
         let matches = |hay: &str| words.iter().all(|w| hay.to_lowercase().contains(w));
 
-        // Eigene Geräte (Profile Builder)
+        // My fixtures (Profile Builder)
         let own: Vec<&UserProfile> = user
             .iter()
             .filter(|u| !searching || matches(&u.profile.display_name()))
@@ -172,7 +172,7 @@ impl LibraryPanel {
             });
         }
 
-        // Eingebaute und bereits in der Show vorhandene Typen
+        // Built-in types and types already in the show
         let builtin = builtin_fixture_types();
         let in_show: Vec<FixtureType> = e
             .show()
@@ -201,7 +201,7 @@ impl LibraryPanel {
             });
         }
 
-        // Open Fixture Library, nach Hersteller gruppiert
+        // Open Fixture Library, grouped by manufacturer
         let lib = Library::embedded();
         let mut by_man: BTreeMap<String, Vec<&LibraryFixture>> = BTreeMap::new();
         let mut count = 0;
@@ -221,8 +221,8 @@ impl LibraryPanel {
         for (man, fixtures) in by_man {
             self.group(ui, &man, searching, |me, ui| {
                 for f in fixtures {
-                    // Herkunft anhängen, damit gleiche Geräte aus OFL und QLC+
-                    // unterscheidbar sind
+                    // Append the origin so identical fixtures from OFL and QLC+ can be told
+                    // apart
                     let tag = (f.source == Source::Qlc).then(|| f.source.label());
                     if f.modes.len() == 1 {
                         let label = tr!("{v} ({n} ch.)", v = f.name, n = f.modes[0].channels.len());
@@ -237,7 +237,7 @@ impl LibraryPanel {
                             false,
                         )
                         .show_header(ui, |ui| {
-                            // Kopfzeile ziehen = erster Modus
+                            // Dragging the header = first mode
                             let r = ui.add(egui::Label::new(&f.name).sense(egui::Sense::drag()));
                             if let Some(m) = f.modes.first() {
                                 r.dnd_set_drag_payload(LibraryDrag(m.clone()));
@@ -288,7 +288,7 @@ impl LibraryPanel {
         header.show(ui, |ui| body(self, ui));
     }
 
-    /// Kontextmenü „Als Vorlage …“ für Geräte, die nicht selbst gebaut sind.
+    /// Context menu “As template …” for fixtures not built by the user.
     fn template_menu(
         &mut self,
         r: &egui::Response,
@@ -310,7 +310,7 @@ impl LibraryPanel {
         });
     }
 
-    /// Eigenes Gerät: wie ein Bibliotheksgerät, Kontextmenü zum Bearbeiten.
+    /// Own fixture: like a library fixture, context menu for editing.
     fn user_row(&mut self, ui: &mut egui::Ui, u: &UserProfile) {
         let name = u.profile.display_name();
         let menu = |me: &mut Self, r: &egui::Response| {
@@ -376,7 +376,7 @@ impl LibraryPanel {
         }
     }
 
-    /// Eine Zeile pro Gerätetyp; `tag` = Herkunft (z. B. „QLC+“), klein dahinter.
+    /// One row per fixture type; `tag` = origin (e.g. “QLC+”), small after it.
     fn type_row(
         &mut self,
         ui: &mut egui::Ui,
@@ -405,7 +405,7 @@ impl LibraryPanel {
         if r.clicked() {
             self.chosen = Some(ty.clone());
         }
-        // direkt ins Patch ziehen
+        // drag directly into the patch
         let r = r.interact(egui::Sense::click_and_drag());
         r.dnd_set_drag_payload(LibraryDrag(ty.clone()));
         r
@@ -435,7 +435,7 @@ impl LibraryPanel {
                 ui.horizontal(|ui| {
                     ui.add(egui::DragValue::new(&mut st.patch.address).range(1..=512));
                     if ui
-                        .small_button("frei")
+                        .small_button(t("free"))
                         .on_hover_text(t("First matching free address"))
                         .clicked()
                     {
@@ -477,12 +477,12 @@ impl LibraryPanel {
         };
         let key = path
             .file_stem()
-            .map_or("geraet".into(), |s| s.to_string_lossy().to_string());
+            .map_or("fixture".into(), |s| s.to_string_lossy().to_string());
         let man = path
             .parent()
             .and_then(|p| p.file_name())
-            .map_or("eigene".into(), |s| s.to_string_lossy().to_string());
-        // QLC+-Dateien (.qxf) sind XML, alles andere wird als OFL-JSON gelesen
+            .map_or("custom".into(), |s| s.to_string_lossy().to_string());
+        // QLC+ files (.qxf) are XML, everything else is read as OFL JSON
         let is_qxf = path
             .extension()
             .is_some_and(|x| x.eq_ignore_ascii_case("qxf"));
@@ -503,12 +503,12 @@ impl LibraryPanel {
     }
 }
 
-/// Kleiner grauer Hinweis auf die Herkunft eines Geräts.
+/// Small gray hint at the origin of a fixture.
 fn source_tag(ui: &mut egui::Ui, tag: &str) {
     ui.label(egui::RichText::new(tag).small().color(theme::text_faint()));
 }
 
-/// Fügt `count` Geräte des Typs ab der Startadresse hinzu.
+/// Adds `count` fixtures of the type from the start address.
 fn patch(e: &mut Engine, st: &mut AppState, ty: &FixtureType) {
     e.show_mut().upsert_fixture_type(ty.clone());
     let universe = st.patch.universe.saturating_sub(1);
@@ -541,7 +541,7 @@ fn patch(e: &mut Engine, st: &mut AppState, ty: &FixtureType) {
     }
 }
 
-/// Beschriftung am Mauszeiger, solange ein Gerät aus der Bibliothek gezogen wird.
+/// Label at the mouse pointer while a fixture is dragged from the library.
 fn drag_ghost(ctx: &egui::Context) {
     let Some(d) = egui::DragAndDrop::payload::<LibraryDrag>(ctx) else {
         return;

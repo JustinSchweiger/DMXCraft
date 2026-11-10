@@ -1,6 +1,6 @@
-//! Einstellungen der Effekte außer STEPS in der Seitenleiste „Effekte“:
-//! COLOR/VALUE FX (siehe `fx_color`), CHASER FX, CURVE FX, MOVE FX, MAPPINGS
-//! und COLOR MAPPINGS, dazu die Liste der zugeordneten Kanäle („Features“).
+//! Settings of the effects other than STEPS in the “Effects” sidebar:
+//! COLOR/VALUE FX (see `fx_color`), CHASER FX, CURVE FX, MOVE FX, MAPPINGS
+//! and COLOR MAPPINGS, plus the list of assigned channels (“features”).
 
 use crate::i18n::t;
 use dmxcraft_core::fx::feature::{ChaserPreset, CurveFx, CurveShape, Feature};
@@ -16,22 +16,22 @@ use super::fx_color::{
 };
 use crate::ui::theme;
 
-/// Was die Seitenleiste zum Zeichnen eines Effekts braucht.
+/// What the sidebar needs to draw an effect.
 pub struct BodyCtx<'a> {
-    /// Aktuelle Farbe je Beam (Farbeffekte) bzw. Pegel als Grauwert.
+    /// Current color per beam (color effects) or level as a gray value.
     pub preview: &'a [[u8; 3]],
-    /// Lage 0..1 (Pan/Tilt) je Beam (MOVE FX).
+    /// Position 0..1 (pan/tilt) per beam (MOVE FX).
     pub positions: &'a [[f32; 2]],
-    /// Effektzeit in Durchläufen.
+    /// Effect time in cycles.
     pub cycles: f64,
-    /// Kanaltypen der Effekt-Geräte (für „Feature hinzufügen“).
+    /// Channel types of the effect fixtures (for “Add feature”).
     pub kinds: &'a [ChannelKind],
     pub accent: Color32,
     pub enabled: bool,
     pub palettes: &'a mut PaletteStore,
 }
 
-/// Inhalt eines Effekts; `true`, wenn sich etwas geändert hat.
+/// Content of an effect; `true` if something changed.
 pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool {
     let before = fx.clone();
     let salt = fx.id;
@@ -211,7 +211,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
         }
         EffectKind::Steps | EffectKind::SuperScene => {}
     }
-    // Beam-Anzahl rechts unten
+    // Beam count bottom right
     let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 20.0), Sense::hover());
     ui.painter().text(
         r.right_center(),
@@ -243,14 +243,14 @@ fn combo(
     ui.add_space(theme::SP_XS);
 }
 
-/// Vorschau-Streifen wie bei COLOR FX.
+/// Preview strip as for COLOR FX.
 fn strip(ui: &mut egui::Ui, colors: &[[u8; 3]]) {
     let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 22.0), Sense::hover());
     paint_strip(ui.painter(), r, colors);
     ui.add_space(theme::SP_XS);
 }
 
-/// „Funktionsweise“: absolut oder relativ zum Wert aus den Schritten.
+/// “Mode of operation”: absolute or relative to the value from the steps.
 fn mode_row(ui: &mut egui::Ui, id: egui::Id, relative: &mut bool, enabled: bool) {
     label_row(ui, t("Mode"), |ui| {
         ui.add_enabled_ui(enabled, |ui| {
@@ -418,9 +418,9 @@ fn mapping_ui(
     );
 }
 
-/// Kurvenbild: eine Periode, der Punkt zeigt den ersten Beam. Bei „Eigene“
-/// lassen sich Stützpunkte ziehen, per Doppelklick setzen und per
-/// Rechtsklick entfernen.
+/// Curve image: one period, the dot shows the first beam. With “Custom”
+/// control points can be dragged, added by double-click and removed by
+/// right-click.
 fn curve_graph(
     ui: &mut egui::Ui,
     id: egui::Id,
@@ -448,7 +448,7 @@ fn curve_graph(
         })
         .collect();
     p.add(Shape::line(pts, Stroke::new(1.5, theme::canvas_dim())));
-    // aktueller Wert des ersten Beams
+    // current value of the first beam
     let x = (cycles * f64::from(c.repeat) + f64::from(c.phase)).rem_euclid(1.0) as f32;
     p.circle_filled(to(x, c.level(x, 0)), 4.0, theme::handle());
     if c.shape != CurveShape::Custom || !enabled {
@@ -505,7 +505,7 @@ fn grid(p: &egui::Painter, r: Rect, cols: usize, rows: usize) {
     }
 }
 
-/// Ausgewählter Stützpunkt des Formeditors (in egui gemerkt).
+/// Selected control point of the shape editor (remembered in egui).
 fn selected_point(ui: &egui::Ui, id: egui::Id) -> Option<usize> {
     ui.data(|d| d.get_temp::<Option<usize>>(id.with("sel")))
         .flatten()
@@ -515,7 +515,7 @@ fn select_point(ui: &egui::Ui, id: egui::Id, sel: Option<usize>) {
     ui.data_mut(|d| d.insert_temp(id.with("sel"), sel));
 }
 
-/// Unter dem Formeditor: ausgewählter Punkt mit Rundung und Löschen.
+/// Below the shape editor: selected point with rounding and delete.
 fn point_row(ui: &mut egui::Ui, id: egui::Id, m: &mut MoveFx, accent: Color32, enabled: bool) {
     if !m.editable() {
         return;
@@ -539,7 +539,7 @@ fn point_row(ui: &mut egui::Ui, id: egui::Id, m: &mut MoveFx, accent: Color32, e
                 .clicked();
         });
     });
-    // Kurve ist von sich aus rund
+    // The curve is round by itself
     if m.shape != MoveShape::Curve {
         let mut pct = m.smooth_at(i) * 100.0;
         slider_row(
@@ -561,10 +561,10 @@ fn point_row(ui: &mut egui::Ui, id: egui::Id, m: &mut MoveFx, accent: Color32, e
     }
 }
 
-/// Formeditor des MOVE FX: Feld = Pan (x) × Tilt (y). Rahmen ziehen
-/// verschiebt, Ecken skalieren, der Griff oben dreht, Stützpunkte lassen
-/// sich einzeln ziehen. Doppelklick fügt einen Stützpunkt hinzu, Klick auf
-/// einen Punkt wählt ihn aus (Rundung und Löschen darunter, Entf löscht).
+/// Shape editor of the MOVE FX: field = pan (x) × tilt (y). Dragging the
+/// frame moves it, corners scale, the handle at the top rotates, control
+/// points can be dragged individually. Double-click adds a control point,
+/// clicking a point selects it (rounding and delete below, Delete removes).
 fn move_editor(
     ui: &mut egui::Ui,
     id: egui::Id,
@@ -598,12 +598,12 @@ fn move_editor(
             (s.y - rect.top()) / rect.height(),
         ]
     };
-    // Bahn
+    // Path
     let path: Vec<Pos2> = (0..=160)
         .map(|i| to(m.to_field(m.local_at(i as f32 / 160.0))))
         .collect();
     p.add(Shape::line(path, Stroke::new(1.5, theme::canvas_dim())));
-    // Rahmen
+    // Frame
     let corners = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]].map(|c| to(m.to_field(c)));
     for i in 0..4 {
         p.add(Shape::dashed_line(
@@ -633,7 +633,7 @@ fn move_editor(
             },
         )
     };
-    // Mitte/Rahmen verschieben: Fläche des Rahmens
+    // Move center/frame: area of the frame
     let body = Rect::from_points(&corners);
     let r = ui.interact(
         body,
@@ -644,8 +644,8 @@ fn move_editor(
             Sense::hover()
         },
     );
-    // Doppelklick (im Rahmen oder daneben): Stützpunkt hinzufügen,
-    // einfacher Klick ins Leere hebt die Auswahl auf
+    // Double-click (inside the frame or next to it): add a control point,
+    // a single click into empty space clears the selection
     for resp in [&bg, &r] {
         if m.editable() && resp.double_clicked() {
             if let Some(q) = resp.interact_pointer_pos() {
@@ -665,7 +665,7 @@ fn move_editor(
         m.center[0] = (m.center[0] + d.x / rect.width()).clamp(0.0, 1.0);
         m.center[1] = (m.center[1] + d.y / rect.height()).clamp(0.0, 1.0);
     }
-    // Ecken skalieren
+    // Corners scale
     for c in corners {
         let r = handle(ui, c, 12.0);
         if r.dragged() {
@@ -686,7 +686,7 @@ fn move_editor(
             if hot { accent } else { theme::canvas_dim() },
         );
     }
-    // Drehen
+    // Rotate
     let r = handle(ui, rot_handle, 14.0);
     if r.dragged() {
         if let Some(q) = r.interact_pointer_pos() {
@@ -701,10 +701,10 @@ fn move_editor(
         4.0,
         if hot { accent } else { theme::canvas_dim() },
     );
-    // Stützpunkte
+    // Control points
     if m.shape != MoveShape::Circle {
         let pts = m.points.clone();
-        // gerundete Ecken: ursprüngliche Ecken als feine Hilfslinie zeigen
+        // rounded corners: show the original corners as a fine guide line
         if m.shape != MoveShape::Curve && (0..pts.len()).any(|i| m.smooth_at(i) > 0.0) {
             let mut guide: Vec<Pos2> = pts.iter().map(|q| to(m.to_field(*q))).collect();
             if m.closed() && guide.len() > 2 {
@@ -749,7 +749,7 @@ fn move_editor(
                     Stroke::new(1.5, if hot { accent } else { theme::handle() }),
                 );
             }
-            // Nummer neben dem Punkt
+            // Number next to the point
             p.text(
                 at + Vec2::new(7.0, -7.0),
                 egui::Align2::LEFT_BOTTOM,
@@ -758,7 +758,7 @@ fn move_editor(
                 theme::canvas_faint(),
             );
         }
-        // Entf löscht den gewählten Punkt, solange die Maus über dem Feld ist
+        // Delete removes the selected point while the mouse is over the field
         if let Some(i) = sel {
             let hovered = ui.rect_contains_pointer(rect);
             if enabled
@@ -771,13 +771,13 @@ fn move_editor(
         }
     }
     select_point(ui, id, sel);
-    // aktuelle Lage der Beams
+    // current position of the beams
     for (i, q) in positions.iter().enumerate() {
         p.circle_filled(to(*q), if i == 0 { 4.5 } else { 3.0 }, theme::handle());
     }
 }
 
-/// Liste der zugeordneten Kanäle mit Wertebereich; „+“ fügt einen hinzu.
+/// List of the assigned channels with value range; “+” adds one.
 fn features_ui(
     ui: &mut egui::Ui,
     salt: u32,
@@ -864,7 +864,7 @@ fn features_ui(
     });
 }
 
-/// Waagerechter Bereich mit zwei Griffen (Unter-/Obergrenze, 0..255).
+/// Horizontal range with two handles (lower/upper bound, 0..255).
 fn range_bar(
     ui: &mut egui::Ui,
     id: egui::Id,

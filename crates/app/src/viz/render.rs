@@ -1,12 +1,13 @@
-//! GPU-Darstellung mit wgpu (Vulkan, Metal oder DirectX 12 – je nach System).
+//! GPU rendering with wgpu (Vulkan, Metal or DirectX 12 – depending on the
+//! system).
 //!
-//! Ablauf je Bild:
-//! 1. Schattenkarten für die hellsten Scheinwerfer (nur Tiefe, je eine Ebene
-//!    eines Textur-Arrays),
-//! 2. Szene in ein HDR-Ziel (mit Mehrfachabtastung): undurchsichtige Objekte
-//!    mit allen Scheinwerfern, durchsichtige, dann die Lichtstrahlen additiv,
-//! 3. Bloom (helle Stellen verkleinern und weich wieder vergrößern),
-//! 4. Tonemapping in eine Textur, die egui als Bild anzeigt.
+//! Per frame:
+//! 1. shadow maps for the brightest spotlights (depth only, one layer each
+//!    of a texture array),
+//! 2. scene into an HDR target (with multisampling): opaque objects with all
+//!    spotlights, transparent ones, then the light beams additively,
+//! 3. bloom (shrink bright spots and enlarge them again softly),
+//! 4. tonemapping into a texture that egui shows as an image.
 
 use std::collections::HashMap;
 
@@ -24,21 +25,21 @@ pub const MAX_LIGHTS: usize = 256;
 pub const MAX_SHADOWS: usize = 32;
 const BLOOM_LEVELS: usize = 5;
 
-/// Netz-Schlüssel (Traversen je Länge/Profil eigenes Netz).
+/// Mesh key (trusses get their own mesh per length/profile).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MeshKey {
     Cube,
     Plane,
     Cylinder,
     Cone,
-    /// Länge und Breite in mm, Vierpunkt?
+    /// Length and width in mm, four-point?
     Truss(u32, u32, bool),
-    /// Teil eines eigenen Modells (Schlüssel-Hash, Teil)
+    /// Part of a custom model (key hash, part)
     Model(u64, u16),
 }
 
 impl MeshKey {
-    /// Schlüssel eines Modellteils.
+    /// Key of a model part.
     pub fn model(key: &str, part: usize) -> Self {
         let h = key
             .strip_prefix('m')
@@ -76,7 +77,7 @@ pub struct Light {
     pub pos: [f32; 4],
     pub dir: [f32; 4],
     pub color: [f32; 4],
-    /// x = Schattenebene (−1 = ohne)
+    /// x = shadow layer (−1 = none)
     pub extra: [f32; 4],
 }
 
@@ -89,25 +90,25 @@ struct Globals {
     misc: [f32; 4],
 }
 
-/// Was in einem Bild gezeichnet wird.
+/// What is drawn in a frame.
 #[derive(Default)]
 pub struct Frame3d {
-    /// Netz, Bild (0 = keins) und Lage
+    /// Mesh, image (0 = none) and placement
     pub opaque: Vec<(MeshKey, u32, Instance)>,
     pub transparent: Vec<(MeshKey, u32, Instance)>,
-    /// Werfen Schatten (Bauten des Veranstaltungsorts).
+    /// Cast shadows (structures of the venue).
     pub casters: Vec<(MeshKey, u32, Instance)>,
     pub beams: Vec<Instance>,
     pub lights: Vec<Light>,
-    /// Blickmatrix je Schattenebene (Index = `Light::extra.x`).
+    /// View matrix per shadow layer (index = `Light::extra.x`).
     pub shadow_mats: Vec<Mat4>,
-    /// Kantenlänge der Schattenkarten (0 = keine Schatten).
+    /// Edge length of the shadow maps (0 = no shadows).
     pub shadow_size: u32,
-    /// Bloom-Stärke (0 = aus).
+    /// Bloom strength (0 = off).
     pub bloom: f32,
     pub view_proj: Mat4,
     pub eye: Vec3,
-    /// Umgebungslicht, Strahlen, Nebel
+    /// Ambient light, beams, fog
     pub env: Vec3,
     pub time: f32,
     pub clear: Vec3,
@@ -120,9 +121,9 @@ struct GpuMesh {
 }
 
 struct Bloom {
-    /// Ebenen 1/2 … 1/32
+    /// Levels 1/2 … 1/32
     views: Vec<wgpu::TextureView>,
-    /// Abwärts: Quelle → Ebene k; aufwärts: Ebene k+1 → k
+    /// Down: source → level k; up: level k+1 → k
     down: Vec<wgpu::BindGroup>,
     up: Vec<wgpu::BindGroup>,
     _params: Vec<wgpu::Buffer>,
@@ -168,7 +169,7 @@ pub struct Gpu {
     sampler: wgpu::Sampler,
     tex_layout: wgpu::BindGroupLayout,
     tex_sampler: wgpu::Sampler,
-    /// Bild 1 × 1 weiß für Flächen ohne Bild
+    /// 1 × 1 white image for surfaces without an image
     white: wgpu::BindGroup,
     textures: HashMap<u32, wgpu::BindGroup>,
     meshes: HashMap<MeshKey, GpuMesh>,
@@ -176,11 +177,11 @@ pub struct Gpu {
     instance_cap: u64,
     targets: Option<Targets>,
     pub texture: Option<egui::TextureId>,
-    /// Name der Grafikkarte und Schnittstelle (Vulkan …).
+    /// Name of the graphics card and backend (Vulkan …).
     pub adapter: String,
 }
 
-/// Index der Pipeline je Mehrfachabtastung (1 bzw. 4).
+/// Index of the pipeline per multisampling (1 or 4).
 fn msaa_index(msaa: u32) -> usize {
     usize::from(msaa > 1)
 }
@@ -720,7 +721,7 @@ impl Gpu {
         );
     }
 
-    /// Bild mit Mipmaps hochladen und binden.
+    /// Upload an image with mipmaps and bind it.
     fn make_texture(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -796,7 +797,7 @@ impl Gpu {
         self.textures.contains_key(&id)
     }
 
-    /// Bild hochladen (`None`: nicht lesbar – weiß verwenden, nicht erneut versuchen).
+    /// Upload an image (`None`: not readable – use white, do not try again).
     pub fn add_texture(
         &mut self,
         rs: &egui_wgpu::RenderState,
@@ -820,7 +821,7 @@ impl Gpu {
         self.meshes.contains_key(&key)
     }
 
-    /// Netz hochladen (eigene Modelle; eingebaute Formen entstehen von selbst).
+    /// Upload a mesh (custom models; built-in shapes are created by themselves).
     pub fn add_mesh(&mut self, device: &wgpu::Device, key: MeshKey, m: &Mesh) {
         let vb = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("viz vb"),
@@ -847,7 +848,7 @@ impl Gpu {
             return;
         }
         let m: Mesh = match key {
-            // werden vorher mit `add_mesh` geladen; sonst Platzhalter
+            // are loaded with `add_mesh` beforehand; otherwise placeholders
             MeshKey::Model(..) => mesh::cube(),
             MeshKey::Cube => mesh::cube(),
             MeshKey::Plane => mesh::plane(),
@@ -891,7 +892,7 @@ impl Gpu {
         let color = tex("viz color", HDR, msaa, att, w, h);
         let depth = tex("viz depth", DEPTH, msaa, att, w, h);
         let resolve = tex("viz resolve", HDR, 1, att | bind, w, h);
-        // auslesbar für Bilder des KI-Assistenten (MCP)
+        // readable for images of the AI assistant (MCP)
         let out = tex(
             "viz out",
             OUT,
@@ -900,7 +901,7 @@ impl Gpu {
             w,
             h,
         );
-        // Bloom-Ebenen und ihre Bindungen
+        // Bloom levels and their bindings
         let views: Vec<wgpu::TextureView> = (0..BLOOM_LEVELS)
             .map(|k| tex("viz bloom", HDR, 1, att | bind, w >> (k + 1), h >> (k + 1)))
             .collect();
@@ -973,7 +974,7 @@ impl Gpu {
                 },
             ],
         });
-        // Textur für egui anmelden bzw. austauschen
+        // Register or replace the texture for egui
         let mut r = rs.renderer.write();
         match self.texture {
             Some(id) => {
@@ -997,13 +998,13 @@ impl Gpu {
         });
     }
 
-    /// Kann die Grafikkarte den Visualisierer zeichnen? (Ältere bzw.
-    /// OpenGL-Treiber haben keine Speicherpuffer im Fragment-Shader.)
+    /// Can the graphics card draw the visualizer? (Older or OpenGL drivers have
+    /// no storage buffers in the fragment shader.)
     pub fn supported(rs: &egui_wgpu::RenderState) -> bool {
         rs.device.limits().max_storage_buffers_per_shader_stage >= 2
     }
 
-    /// Das zuletzt gezeichnete Bild auslesen (RGBA, sRGB).
+    /// Read back the last drawn image (RGBA, sRGB).
     pub fn read_image(&self, rs: &egui_wgpu::RenderState) -> Option<image::RgbaImage> {
         let t = self.targets.as_ref()?;
         let [w, h] = t.size;
@@ -1058,7 +1059,7 @@ impl Gpu {
         image::RgbaImage::from_raw(w, h, px)
     }
 
-    /// Zeichnet ein Bild in die egui-Textur.
+    /// Draws a frame into the egui texture.
     pub fn render(&mut self, rs: &egui_wgpu::RenderState, size: [u32; 2], msaa: u32, f: &Frame3d) {
         let size = [size[0].clamp(1, 8192), size[1].clamp(1, 8192)];
         self.ensure_targets(rs, size, msaa);
@@ -1068,7 +1069,7 @@ impl Gpu {
         if f.shadow_size > 0 && n_shadows > 0 {
             self.ensure_shadows(device, f.shadow_size, n_shadows as u32);
         }
-        // Instanzen nach Netz, Durchgang und Bild gruppieren (3 = Schattenwerfer)
+        // Group instances by mesh, pass and image (3 = shadow casters)
         let mut groups: Vec<(MeshKey, u8, u32, Vec<Instance>)> = Vec::new();
         let mut push = |key: MeshKey, pass: u8, tex: u32, inst: Instance| {
             if let Some(g) = groups
@@ -1143,12 +1144,12 @@ impl Gpu {
             bytemuck::cast_slice(&[f.bloom, 1.0f32, 0.0, 0.0]),
         );
 
-        let t = self.targets.as_ref().expect("Ziele angelegt");
+        let t = self.targets.as_ref().expect("targets created");
         let mi = msaa_index(msaa);
         let stride = std::mem::size_of::<Instance>() as u64;
         let mut enc =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("viz") });
-        // 1. Schatten
+        // 1. Shadows
         for layer in 0..n_shadows {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("viz shadow"),
@@ -1183,7 +1184,7 @@ impl Gpu {
                 off += count;
             }
         }
-        // 2. Szene
+        // 2. Scene
         {
             let (view, resolve) = if msaa > 1 {
                 (&t.color, Some(&t.resolve))

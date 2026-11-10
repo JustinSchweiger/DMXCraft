@@ -1,27 +1,27 @@
-//! JSON-RPC 2.0 / MCP: Nachrichten auswerten und beantworten.
+//! JSON-RPC 2.0 / MCP: evaluate and answer messages.
 
 use serde_json::{json, Value};
 
 use crate::{tools, AppEvent, Host};
 
-/// Unterstützte Protokollversionen (neueste zuerst).
+/// Supported protocol versions (newest first).
 pub const VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
-const INSTRUCTIONS: &str = "DMXCraft ist eine DMX-Lichtsteuerung im Stil von Daslight. \
-Begriffe: Geräte (fixtures) sind gepatcht (Universum, Startadresse) und haben Kanäle \
-(Index ab 0, Art wie Dimmer/Red/Green/Blue/White/Pan/Tilt …). Szenen liegen in Bänken \
-(banks); Szenen derselben Bank schließen sich gegenseitig aus. Eine Szene hat Schritte \
-(steps) mit Kanalwerten 0–255, Halte- und Überblendzeit; FX-Szenen haben zusätzlich \
-Effekte (ColorFx, ChaserFx, MoveFx, ValueFx, CurveFx, Mappings, ColorMappings). \
-Eine SUPER SCENE ist eine Zeitleiste mit Spuren, auf denen Szenen- und Audioblöcke liegen. \
-Tipp: erst get_overview bzw. list_fixtures aufrufen, um IDs und Kanäle zu kennen. \
-Mit visualizer_screenshot lässt sich das Ergebnis im 3D-Visualisierer ansehen; eigene \
-Geräteprofile (Profile Builder) gehen über list_profiles, get_profile und save_profile. \
-Änderungen sind sofort in der Oberfläche sichtbar und lassen sich dort mit Strg+Z \
-rückgängig machen; gespeichert wird erst mit save_show.";
+const INSTRUCTIONS: &str = "DMXCraft is a DMX lighting control in the style of Daslight. \
+Terms: fixtures are patched (universe, start address) and have channels \
+(index from 0, kind such as Dimmer/Red/Green/Blue/White/Pan/Tilt …). Scenes live in \
+banks; scenes of the same bank exclude each other. A scene has steps with channel \
+values 0–255, hold and fade time; FX scenes additionally have effects (ColorFx, \
+ChaserFx, MoveFx, ValueFx, CurveFx, Mappings, ColorMappings). A SUPER SCENE is a \
+timeline with tracks that hold scene and audio blocks. \
+Tip: call get_overview or list_fixtures first to learn IDs and channels. \
+visualizer_screenshot shows the result in the 3D visualizer; custom fixture \
+profiles (Profile Builder) go through list_profiles, get_profile and save_profile. \
+Changes are visible in the UI immediately and can be undone there with Ctrl+Z; \
+nothing is saved until save_show.";
 
-/// Beantwortet eine JSON-RPC-Nachricht (oder ein Bündel). `None`, wenn keine
-/// Antwort nötig ist (nur Benachrichtigungen).
+/// Answers a JSON-RPC message (or a batch). `None` if no answer is needed
+/// (notifications only).
 pub fn handle(host: &Host, msg: Value) -> Option<Value> {
     match msg {
         Value::Array(batch) => {
@@ -39,10 +39,10 @@ fn handle_one(host: &Host, msg: Value) -> Option<Value> {
     let id = msg.get("id").cloned();
     let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
     let params = msg.get("params").cloned().unwrap_or(Value::Null);
-    // Antworten des Clients oder Benachrichtigungen: nichts zurückgeben
+    // Client answers or notifications: return nothing
     let id = id?;
     if method.is_empty() {
-        return Some(error(id, -32600, "Ungültige Anfrage"));
+        return Some(error(id, -32600, "Invalid request"));
     }
     let result = match method {
         "initialize" => Ok(initialize(&params)),
@@ -51,7 +51,7 @@ fn handle_one(host: &Host, msg: Value) -> Option<Value> {
         "tools/call" => Ok(call_tool(host, &params)),
         "resources/list" => Ok(json!({ "resources": [] })),
         "prompts/list" => Ok(json!({ "prompts": [] })),
-        _ => Err((-32601, format!("Unbekannte Methode: {method}"))),
+        _ => Err((-32601, format!("Unknown method: {method}"))),
     };
     Some(match result {
         Ok(r) => json!({ "jsonrpc": "2.0", "id": id, "result": r }),
@@ -81,8 +81,8 @@ fn initialize(params: &Value) -> Value {
     })
 }
 
-/// `tools/call`: Fehler eines Werkzeugs sind keine Protokollfehler, sondern
-/// Ergebnisse mit `isError`, damit das Modell sie lesen und reagieren kann.
+/// `tools/call`: errors of a tool are not protocol errors but results with
+/// `isError` so the model can read them and react.
 fn call_tool(host: &Host, params: &Value) -> Value {
     let name = params.get("name").and_then(Value::as_str).unwrap_or("");
     let args = params
@@ -90,7 +90,7 @@ fn call_tool(host: &Host, params: &Value) -> Value {
         .cloned()
         .unwrap_or_else(|| json!({}));
     let mut out = tools::call(host, name, &args);
-    // Bild (z. B. visualizer_screenshot) als eigener Inhalt
+    // Image (e.g. visualizer_screenshot) as its own content
     let image = match &mut out {
         Ok(Value::Object(m)) => m.remove("__image_png"),
         _ => None,

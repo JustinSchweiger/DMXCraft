@@ -1,31 +1,31 @@
-//! Analyse von Audiodateien für die SUPER SCENES: Frequenzbänder (Low, Mid,
-//! High), Tempo, Beat-Raster mit Downbeats und Energieverlauf.
+//! Analysis of audio files for the SUPER SCENES: frequency bands (low, mid,
+//! high), tempo, beat grid with downbeats and energy curve.
 //!
-//! Ohne I/O: die Oberfläche dekodiert die Datei und schiebt die Samples
-//! (Mono) in einen [`Analyzer`]. Die Analyse nimmt ein festes Tempo über das
-//! ganze Stück an (typisch für DJ-Musik); Tempo und Downbeat lassen sich je
-//! Block korrigieren.
+//! Without I/O: the UI decodes the file and pushes the samples (mono) into
+//! an [`Analyzer`]. The analysis assumes a fixed tempo across the whole
+//! piece (typical for DJ music); tempo and downbeat can be corrected per
+//! block.
 
 use std::f64::consts::TAU;
 
 use serde::{Deserialize, Serialize};
 
-/// Länge eines Analyse-Rahmens in ms.
+/// Length of an analysis frame in ms.
 pub const FRAME_MS: f64 = 10.0;
-/// Rahmen je Energie-Wert (100 ms).
+/// Frames per energy value (100 ms).
 pub const ENERGY_FRAMES: usize = 10;
-/// Version der Analyse (Zwischenspeicher wird bei Änderung neu erzeugt).
+/// Version of the analysis (the cache is regenerated when it changes).
 pub const VERSION: u32 = 2;
 
-/// Grenzfrequenzen der Bänder in Hz.
+/// Cutoff frequencies of the bands in Hz.
 const LOW_HZ: f64 = 150.0;
 const HIGH_HZ: f64 = 2500.0;
-/// Tempo-Suchbereich in BPM.
+/// Tempo search range in BPM.
 const BPM_MIN: f64 = 70.0;
 const BPM_MAX: f64 = 180.0;
 
-/// Beat-Raster einer Audiodatei: Tempo und Lage eines Downbeats (Schlag 1
-/// eines Takts) in ms ab Dateianfang, normiert auf den ersten Takt.
+/// Beat grid of an audio file: tempo and position of a downbeat (beat 1 of a
+/// bar) in ms from the start of the file, normalized to the first bar.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AudioGrid {
     pub bpm: f32,
@@ -41,13 +41,13 @@ impl AudioGrid {
         self.beat_ms() * 4.0
     }
 
-    /// Downbeat in den ersten Takt (0..Taktlänge) legen.
+    /// Put the downbeat into the first bar (0..bar length).
     fn normalized(mut self) -> Self {
         self.downbeat_ms = self.downbeat_ms.rem_euclid(self.bar_ms());
         self
     }
 
-    /// Schläge im Bereich `from..to` (ms in der Datei): (Zeit, Downbeat?).
+    /// Beats in the range `from..to` (ms in the file): (time, downbeat?).
     pub fn beats(&self, from: f64, to: f64) -> impl Iterator<Item = (f64, bool)> + '_ {
         let beat = self.beat_ms();
         let first = ((from - self.downbeat_ms) / beat).ceil() as i64;
@@ -56,7 +56,7 @@ impl AudioGrid {
             .take_while(move |(t, _)| *t < to)
     }
 
-    /// Tempo verdoppeln (Downbeat bleibt).
+    /// Double the tempo (the downbeat stays).
     pub fn doubled(self) -> Self {
         Self {
             bpm: (self.bpm * 2.0).min(400.0),
@@ -65,7 +65,7 @@ impl AudioGrid {
         .normalized()
     }
 
-    /// Tempo halbieren (Downbeat bleibt).
+    /// Halve the tempo (the downbeat stays).
     pub fn halved(self) -> Self {
         Self {
             bpm: (self.bpm / 2.0).max(20.0),
@@ -74,7 +74,7 @@ impl AudioGrid {
         .normalized()
     }
 
-    /// Downbeat um `beats` Schläge verschieben.
+    /// Shift the downbeat by `beats` beats.
     pub fn shifted(self, beats: i32) -> Self {
         Self {
             downbeat_ms: self.downbeat_ms + f64::from(beats) * self.beat_ms(),
@@ -84,28 +84,28 @@ impl AudioGrid {
     }
 }
 
-/// Ergebnis der Analyse einer Datei.
+/// Result of the analysis of a file.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AudioAnalysis {
     pub version: u32,
     pub duration_ms: u64,
-    /// Höchster Ausschlag je Rahmen (0..=255).
+    /// Highest peak per frame (0..=255).
     pub peaks: Vec<u8>,
-    /// Pegel der Bänder je Rahmen (0..=255, je Band auf das Stück normiert).
+    /// Level of the bands per frame (0..=255, each band normalized to the piece).
     pub low: Vec<u8>,
     pub mid: Vec<u8>,
     pub high: Vec<u8>,
-    /// Geglätteter Gesamtpegel je 100 ms (0..=255).
+    /// Smoothed overall level per 100 ms (0..=255).
     pub energy: Vec<u8>,
-    /// Erkanntes Beat-Raster (`None` ohne erkennbaren Rhythmus); bei
-    /// mehreren Stücken das des längsten.
+    /// Detected beat grid (`None` without a recognizable rhythm); with several
+    /// pieces that of the longest.
     pub grid: Option<AudioGrid>,
-    /// Stücke der Datei (zusammengeschnittene Lieder mit eigenem Tempo).
+    /// Pieces of the file (songs cut together with their own tempo).
     #[serde(default)]
     pub segments: Vec<AudioSegment>,
 }
 
-/// Ein Stück innerhalb der Datei mit eigenem Beat-Raster.
+/// A piece within the file with its own beat grid.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AudioSegment {
     pub start_ms: f64,
@@ -114,10 +114,10 @@ pub struct AudioSegment {
 }
 
 impl AudioAnalysis {
-    /// Stücke mit gültigem Raster: Korrektur je Stück (Schlüssel = Beginn in
-    /// ms), sonst die alte Korrektur für die ganze Datei (`single`, nur bei
-    /// einem Stück), sonst das erkannte Raster. Ältere Analysen ohne Stücke
-    /// gelten als ein Stück.
+    /// Pieces with a valid grid: correction per piece (key = start in ms),
+    /// otherwise the old correction for the whole file (`single`, only with one
+    /// piece), otherwise the detected grid. Older analyses without pieces count
+    /// as one piece.
     pub fn effective_segments(
         &self,
         single: Option<AudioGrid>,
@@ -144,7 +144,7 @@ impl AudioAnalysis {
         segs
     }
 
-    /// Stück an Stelle `ms` (Index), falls es Stücke gibt.
+    /// Piece at position `ms` (index), if there are pieces.
     pub fn segment_at(&self, ms: f64) -> Option<usize> {
         if self.segments.is_empty() {
             return None;
@@ -155,7 +155,7 @@ impl AudioAnalysis {
 }
 
 impl AudioAnalysis {
-    /// Werte (0..=1) eines Bands im Bereich `from..to` (ms): Maximum.
+    /// Values (0..=1) of a band in the range `from..to` (ms): maximum.
     pub fn band_max(band: &[u8], from: f64, to: f64) -> f32 {
         let i = (from / FRAME_MS).max(0.0) as usize;
         let j = ((to / FRAME_MS).ceil() as usize).max(i + 1).min(band.len());
@@ -166,7 +166,7 @@ impl AudioAnalysis {
     }
 }
 
-/// Biquad-Filter (RBJ-Kochbuch).
+/// Biquad filter (RBJ cookbook).
 #[derive(Clone, Copy)]
 struct Biquad {
     b: [f64; 3],
@@ -217,10 +217,10 @@ impl Biquad {
     }
 }
 
-/// Nimmt Samples (Mono) entgegen und sammelt Rahmenwerte.
+/// Takes samples (mono) and collects frame values.
 pub struct Analyzer {
     rate: f64,
-    /// Samples je Rahmen (nicht ganzzahlig).
+    /// Samples per frame (not an integer).
     frame_len: f64,
     filters: [[Biquad; 2]; 3],
     sums: [f64; 4],
@@ -241,7 +241,7 @@ impl Analyzer {
         Self {
             rate,
             frame_len: rate * FRAME_MS / 1000.0,
-            // je zwei Stufen für steilere Flanken
+            // two stages each for steeper slopes
             filters: [[lp(), lp()], [bp(), bp()], [hp(), hp()]],
             sums: [0.0; 4],
             peak: 0.0,
@@ -263,7 +263,7 @@ impl Analyzer {
         self.peak = self.peak.max(s.abs());
         self.n += 1;
         self.samples += 1;
-        // Rahmengrenzen exakt alle 10 ms (auch bei z. B. 44,1 kHz)
+        // Frame boundaries exactly every 10 ms (also at e.g. 44.1 kHz)
         let frames = self.peaks.len() as f64 + 1.0;
         if self.samples as f64 >= frames * self.frame_len {
             self.flush();
@@ -314,8 +314,8 @@ impl Analyzer {
     }
 }
 
-/// Hüllkurve eines frei gefilterten Bands (für Trigger): `low_hz` ≤ 20 =
-/// nur Tiefpass, `high_hz` ≥ 16 kHz = nur Hochpass, sonst Bandpass.
+/// Envelope of a freely filtered band (for triggers): `low_hz` ≤ 20 = low
+/// pass only, `high_hz` ≥ 16 kHz = high pass only, otherwise band pass.
 pub struct Envelope {
     frame_len: f64,
     stages: Vec<Biquad>,
@@ -371,7 +371,7 @@ impl Envelope {
         self.n = 0;
     }
 
-    /// Pegel je 10 ms (0..=255, auf das Stück normiert).
+    /// Level per 10 ms (0..=255, normalized to the piece).
     pub fn finish(mut self) -> Vec<u8> {
         self.flush();
         let top = percentile(&self.frames, 0.995).max(1e-6);
@@ -382,10 +382,9 @@ impl Envelope {
     }
 }
 
-/// Ereignisse (Beginn, Ende in ms) einer Hüllkurve: an, wenn der Pegel den
-/// Schwellwert erreicht (frühestens `min_gap_ms` nach dem letzten Beginn),
-/// aus, wenn er unter Schwellwert − Hysterese fällt; mindestens `hold_ms`
-/// lang.
+/// Events (start, end in ms) of an envelope: on when the level reaches the
+/// threshold (at the earliest `min_gap_ms` after the last start), off when it
+/// falls below threshold − hysteresis; at least `hold_ms` long.
 pub fn trigger_events(
     env: &[u8],
     threshold: f32,
@@ -420,7 +419,7 @@ pub fn trigger_events(
         let end = env.len() as f64 * FRAME_MS;
         out.push((s, end.max(s + hold_ms)));
     }
-    // Haltezeit darf nicht in das nächste Ereignis reichen
+    // The hold time must not reach into the next event
     for i in 1..out.len() {
         let next = out[i].0;
         out[i - 1].1 = out[i - 1].1.min(next - 1.0);
@@ -428,13 +427,13 @@ pub fn trigger_events(
     out
 }
 
-/// Ist zum Zeitpunkt `t` (ms) ein Ereignis aktiv? (`events` sortiert)
+/// Is an event active at time `t` (ms)? (`events` sorted)
 pub fn event_at(events: &[(f64, f64)], t: f64) -> Option<usize> {
     let i = events.partition_point(|e| e.0 <= t);
     (i > 0 && t < events[i - 1].1).then(|| i - 1)
 }
 
-/// Ganze Sample-Folge auf einmal analysieren.
+/// Analyze the whole sample sequence at once.
 pub fn analyze(samples: &[f32], sample_rate: u32) -> AudioAnalysis {
     let mut a = Analyzer::new(sample_rate);
     for s in samples {
@@ -452,7 +451,7 @@ fn percentile(v: &[f32], p: f64) -> f32 {
     s[((s.len() - 1) as f64 * p) as usize]
 }
 
-/// Mittelwert über ±`r` Rahmen.
+/// Average over ±`r` frames.
 fn smooth(v: &[f32], r: usize) -> Vec<f32> {
     let mut prefix = Vec::with_capacity(v.len() + 1);
     prefix.push(0.0f64);
@@ -468,8 +467,8 @@ fn smooth(v: &[f32], r: usize) -> Vec<f32> {
         .collect()
 }
 
-/// Einsatzstärke eines Bands: Anstieg des (logarithmischen) Pegels, ohne
-/// den gleitenden Mittelwert.
+/// Onset strength of a band: rise of the (logarithmic) level, without the
+/// moving average.
 fn onsets(v: &[f32]) -> Vec<f32> {
     let l: Vec<f32> = v.iter().map(|x| (1.0 + 100.0 * x).ln()).collect();
     let d: Vec<f32> = (0..l.len())
@@ -485,7 +484,7 @@ fn onsets(v: &[f32]) -> Vec<f32> {
     d.iter().zip(mean).map(|(a, m)| (a - m).max(0.0)).collect()
 }
 
-/// Fourier-Koeffizient der Einsatzkurve bei `bpm` (Betrag, Winkel).
+/// Fourier coefficient of the onset curve at `bpm` (magnitude, angle).
 fn tempo_coef(o: &[f32], bpm: f64) -> (f64, f64) {
     let w = TAU * bpm / 60.0 * FRAME_MS / 1000.0;
     let (sw, cw) = (-w).sin_cos();
@@ -497,7 +496,7 @@ fn tempo_coef(o: &[f32], bpm: f64) -> (f64, f64) {
         im += x * pi;
         (pr, pi) = (pr * cw - pi * sw, pr * sw + pi * cw);
         if n % 1024 == 1023 {
-            // Rundungsfehler des Drehzeigers ausgleichen
+            // compensate the rounding error of the rotating phasor
             let m = (pr * pr + pi * pi).sqrt();
             (pr, pi) = (pr / m, pi / m);
         }
@@ -509,13 +508,13 @@ fn tempo_score(o: &[f32], bpm: f64) -> f64 {
     tempo_coef(o, bpm).0 + 0.5 * tempo_coef(o, bpm * 2.0).0
 }
 
-/// Länge des Fensters für das örtliche Tempo und Schrittweite (Rahmen).
+/// Length of the window for the local tempo and step size (frames).
 const SEG_WIN: usize = 1000;
 const SEG_HOP: usize = 200;
-/// Kürzestes Stück (Rahmen).
+/// Shortest piece (frames).
 const SEG_MIN: usize = 1200;
 
-/// Tempo eines Ausschnitts grob schätzen (0,5-BPM-Schritte) mit Stärke.
+/// Roughly estimate the tempo of a section (0.5 BPM steps) with strength.
 fn local_tempo(o: &[f32]) -> Option<f64> {
     let total: f64 = o.iter().map(|x| f64::from(*x)).sum();
     if total < 1e-3 {
@@ -533,15 +532,15 @@ fn local_tempo(o: &[f32]) -> Option<f64> {
     (tempo_coef(o, best.0).0 / total >= 0.08).then_some(best.0)
 }
 
-/// Gleiches Tempo (auch doppelt/halb, ±2 %)?
+/// Same tempo (also double/half, ±2 %)?
 fn same_tempo(a: f64, b: f64) -> bool {
     [1.0, 2.0, 0.5]
         .iter()
         .any(|k| (a * k / b - 1.0).abs() < 0.02)
 }
 
-/// Datei in Stücke teilen: an Tempowechseln (Grenze an der stärksten
-/// Klangänderung in der Nähe) und an Pausen; je Stück ein eigenes Raster.
+/// Split the file into pieces: at tempo changes (boundary at the strongest
+/// sound change nearby) and at pauses; each piece gets its own grid.
 fn detect_segments(low: &[f32], mid: &[f32], high: &[f32]) -> Vec<AudioSegment> {
     let n = low.len();
     let whole = |a: usize, b: usize| AudioSegment {
@@ -557,14 +556,14 @@ fn detect_segments(low: &[f32], mid: &[f32], high: &[f32]) -> Vec<AudioSegment> 
     }
     let (ol, om, oh) = (onsets(low), onsets(mid), onsets(high));
     let o: Vec<f32> = (0..n).map(|i| ol[i] + 0.6 * om[i] + 0.6 * oh[i]).collect();
-    // örtliches Tempo je Fenster
+    // local tempo per window
     let mut local: Vec<(usize, Option<f64>)> = Vec::new();
     let mut a = 0;
     while a + SEG_WIN <= n {
         local.push((a + SEG_WIN / 2, local_tempo(&o[a..a + SEG_WIN])));
         a += SEG_HOP;
     }
-    // Klangänderung: Unterschied der Bandpegel 4 s davor/danach
+    // Sound change: difference of the band levels 4 s before/after
     let level: Vec<[f32; 3]> = (0..n).map(|i| [low[i], mid[i], high[i]]).collect();
     let mut prefix = vec![[0.0f64; 3]; n + 1];
     for i in 0..n {
@@ -585,7 +584,7 @@ fn detect_segments(low: &[f32], mid: &[f32], high: &[f32]) -> Vec<AudioSegment> 
         (0..3).map(|k| (x[k] - y[k]).abs()).sum()
     };
     let mut cuts: Vec<usize> = Vec::new();
-    // Tempowechsel: zwei Fenster in Folge mit anderem Tempo als davor
+    // Tempo change: two windows in a row with a different tempo than before
     let mut cur: Option<f64> = None;
     let mut k = 0;
     while k < local.len() {
@@ -598,7 +597,7 @@ fn detect_segments(low: &[f32], mid: &[f32], high: &[f32]) -> Vec<AudioSegment> 
                     .and_then(|l| l.1)
                     .is_some_and(|b2| same_tempo(b, b2));
                 if stable {
-                    // Grenze: stärkste Änderung zwischen den Fenstermitten
+                    // Boundary: strongest change between the window centers
                     let from = local[k.saturating_sub(1)].0.saturating_sub(SEG_WIN / 2);
                     let to = (center + SEG_WIN / 2).min(n - 1);
                     let cut = (from..=to)
@@ -613,7 +612,7 @@ fn detect_segments(low: &[f32], mid: &[f32], high: &[f32]) -> Vec<AudioSegment> 
         }
         k += 1;
     }
-    // Pausen (≥ 0,3 s fast still) trennen ebenfalls
+    // Pauses (≥ 0.3 s almost silent) also split
     let mut quiet = 0;
     for (i, l) in level.iter().enumerate() {
         if l[0] + l[1] + l[2] < 0.03 {
@@ -626,7 +625,7 @@ fn detect_segments(low: &[f32], mid: &[f32], high: &[f32]) -> Vec<AudioSegment> 
         }
     }
     cuts.sort_unstable();
-    // zu kurze Stücke vermeiden
+    // avoid pieces that are too short
     let mut bounds = vec![0];
     for c in cuts {
         if c >= bounds.last().copied().unwrap_or(0) + SEG_MIN && c + SEG_MIN <= n {
@@ -635,8 +634,8 @@ fn detect_segments(low: &[f32], mid: &[f32], high: &[f32]) -> Vec<AudioSegment> 
     }
     bounds.push(n);
     let mut segs: Vec<AudioSegment> = bounds.windows(2).map(|w| whole(w[0], w[1])).collect();
-    // Lieder beginnen meist auf einem Downbeat: Grenze auf den nächsten
-    // Downbeat des neuen Stücks legen (höchstens einen halben Takt weit)
+    // Songs usually start on a downbeat: put the boundary on the next downbeat
+    // of the new piece (at most half a bar away)
     for i in 1..segs.len() {
         let Some(g) = segs[i].grid else {
             continue;
@@ -655,10 +654,10 @@ fn detect_segments(low: &[f32], mid: &[f32], high: &[f32]) -> Vec<AudioSegment> 
     segs
 }
 
-/// Tempo, Beat-Phase und Downbeat schätzen.
+/// Estimate tempo, beat phase and downbeat.
 fn detect_grid(low: &[f32], mid: &[f32], high: &[f32]) -> Option<AudioGrid> {
     let n = low.len();
-    // mindestens 4 s
+    // at least 4 s
     if n < 400 {
         return None;
     }
@@ -670,7 +669,7 @@ fn detect_grid(low: &[f32], mid: &[f32], high: &[f32]) -> Option<AudioGrid> {
     if total < 1e-3 {
         return None;
     }
-    // grob in 0,1-BPM-Schritten, dann fein
+    // coarse in 0.1 BPM steps, then fine
     let mut best = (BPM_MIN, 0.0);
     let mut b = BPM_MIN;
     while b <= BPM_MAX {
@@ -690,15 +689,15 @@ fn detect_grid(low: &[f32], mid: &[f32], high: &[f32]) -> Option<AudioGrid> {
         b += 0.005;
     }
     let bpm = fine.0;
-    // Rhythmus deutlich genug? (Anteil der Energie auf dem Beat)
+    // Is the rhythm clear enough? (share of the energy on the beat)
     let mag = tempo_coef(&o, bpm).0;
     if mag / total < 0.05 {
         return None;
     }
-    let period = 60_000.0 / bpm / FRAME_MS; // Rahmen je Schlag
-                                            // Lage der Schläge: Kicks (Low) und Snares (Mid) liegen auf dem Beat,
-                                            // Hi-Hats und Basslines oft dazwischen – daher Low/Mid stärker, High
-                                            // abgezogen.
+    let period = 60_000.0 / bpm / FRAME_MS; // Frames per beat
+                                            // Position of the beats: kicks (low) and snares (mid) are on the beat,
+                                            // hi-hats and basslines often in between – hence low/mid weighted more,
+                                            // high subtracted.
     let beat_on: Vec<f32> = (0..n).map(|i| ol[i] + 0.5 * om[i] - 0.3 * oh[i]).collect();
     let kernel = |v: &[f32], f: f64| -> f64 {
         let lo = (f - 1.5).ceil().max(0.0) as usize;
@@ -725,9 +724,9 @@ fn detect_grid(low: &[f32], mid: &[f32], high: &[f32]) -> Option<AudioGrid> {
         }
         ph += 0.25;
     }
-    let phase = phase.0; // erster Schlag (Rahmen)
+    let phase = phase.0; // first beat (frame)
 
-    // Downbeat: Schlag mit den stärksten Einsätzen und Pegelanstiegen
+    // Downbeat: the beat with the strongest onsets and level rises
     let at = |v: &[f32], f: f64| -> f32 {
         let i = f.round() as i64;
         (i - 1..=i + 1)
@@ -776,7 +775,7 @@ fn detect_grid(low: &[f32], mid: &[f32], high: &[f32]) -> Option<AudioGrid> {
     )
 }
 
-/// Gesamtpegel geglättet (±1 s) in 100-ms-Schritten, auf das Stück normiert.
+/// Overall level smoothed (±1 s) in 100 ms steps, normalized to the piece.
 fn energy_curve(all: &[f32]) -> Vec<f32> {
     let s = smooth(all, 100);
     let v: Vec<f32> = s.chunks(ENERGY_FRAMES).map(|c| c[0]).collect();
@@ -790,8 +789,8 @@ mod tests {
 
     const RATE: u32 = 11_025;
 
-    /// Synthetischer Takt: Kick (60 Hz, abklingend) auf jedem Schlag, auf
-    /// Schlag 1 zusätzlich ein Becken (Rauschen), Hi-Hat auf den Offbeats.
+    /// Synthetic bar: kick (60 Hz, decaying) on every beat, additionally a
+    /// cymbal (noise) on beat 1, hi-hat on the offbeats.
     fn track(bpm: f64, secs: f64, start_ms: f64) -> Vec<f32> {
         let n = (secs * f64::from(RATE)) as usize;
         let beat = 60.0 / bpm;
@@ -817,7 +816,7 @@ mod tests {
                     *o += 0.3 * (-t * 8.0).exp() as f32 * noise();
                 }
             }
-            // Hi-Hat auf dem Offbeat
+            // Hi-hat on the offbeat
             let ih = ((t0 + beat / 2.0) * f64::from(RATE)) as usize;
             for i in 0..(f64::from(RATE) * 0.03) as usize {
                 if let Some(o) = out.get_mut(ih + i) {
@@ -833,10 +832,10 @@ mod tests {
     fn finds_tempo_and_downbeat() {
         for (bpm, start) in [(128.0, 250.0), (174.0, 900.0), (95.0, 0.0)] {
             let a = analyze(&track(bpm, 30.0, start), RATE);
-            let g = a.grid.expect("Raster");
+            let g = a.grid.expect("grid");
             assert!(
                 (f64::from(g.bpm) - bpm).abs() < 0.3,
-                "{} statt {bpm}",
+                "{} instead of {bpm}",
                 g.bpm
             );
             let bar = g.bar_ms();
@@ -845,7 +844,7 @@ mod tests {
             d = d.min(bar - d);
             assert!(
                 d < 25.0,
-                "Downbeat {} statt {want} ({bpm} BPM)",
+                "Downbeat {} instead of {want} ({bpm} BPM)",
                 g.downbeat_ms
             );
         }
@@ -853,8 +852,8 @@ mod tests {
 
     #[test]
     fn bassline_and_intro_keep_the_grid() {
-        // 16 s Intro nur mit Hi-Hats, dann Kick; dazu eine Bassline auf den
-        // Offbeats (wie bei House), die das Low-Band ebenfalls anregt
+        // 16 s intro with hi-hats only, then kick; plus a bassline on the offbeats
+        // (as in house) that also excites the low band
         let bpm = 124.0;
         let mut s = track(bpm, 60.0, 0.0);
         let beat = 60.0 / bpm;
@@ -862,7 +861,7 @@ mod tests {
         let intro = (16.0 * rate) as usize;
         let hats = track(bpm, 16.0, 0.0);
         for (i, v) in s.iter_mut().enumerate().take(intro) {
-            // im Intro nur der hohe Anteil (grob: Differenz)
+            // in the intro only the high part (roughly: difference)
             let prev = if i > 0 { hats[i - 1] } else { 0.0 };
             *v = (hats[i] - prev) * 0.5;
         }
@@ -873,7 +872,7 @@ mod tests {
                 *v += 0.3 * (TAU * 55.0 * t).sin() as f32;
             }
         }
-        let g = analyze(&s, RATE).grid.expect("Raster");
+        let g = analyze(&s, RATE).grid.expect("grid");
         assert!((f64::from(g.bpm) - bpm).abs() < 0.2, "{}", g.bpm);
         let bar = g.bar_ms();
         let mut d = g.downbeat_ms.rem_euclid(bar);
@@ -887,7 +886,7 @@ mod tests {
         let s = track(128.0, 360.0, 0.0);
         let t = std::time::Instant::now();
         let mut a = Analyzer::new(44_100);
-        // 44,1 kHz simulieren: jedes Sample 4-mal
+        // simulate 44.1 kHz: every sample 4 times
         for x in &s {
             for _ in 0..4 {
                 a.push(*x);
@@ -902,7 +901,7 @@ mod tests {
         let a = analyze(&track(120.0, 8.0, 0.0), RATE);
         assert_eq!(a.low.len(), a.high.len());
         assert!((7990..=8010).contains(&a.duration_ms), "{}", a.duration_ms);
-        // Kick bei 0 ms: Low stark; Hi-Hat bei 250 ms: High stark, Low schwach
+        // Kick at 0 ms: low strong; hi-hat at 250 ms: high strong, low weak
         let low_kick = AudioAnalysis::band_max(&a.low, 500.0, 560.0);
         let low_hat = AudioAnalysis::band_max(&a.low, 750.0, 770.0);
         let high_hat = AudioAnalysis::band_max(&a.high, 750.0, 770.0);
@@ -920,16 +919,16 @@ mod tests {
 
     #[test]
     fn trigger_events_use_threshold_hysteresis_and_gap() {
-        // Pegel: 0, 200 (an), 150 (bleibt an wegen Hysterese), 50 (aus) …
+        // Level: 0, 200 (on), 150 (stays on because of hysteresis), 50 (off) …
         let env = [0u8, 200, 150, 50, 0, 210, 0, 220, 0, 0, 0, 0, 230, 0];
         let ev = trigger_events(&env, 0.6, 0.2, 0.0, 0.0);
         assert_eq!(ev[0], (10.0, 30.0));
         assert_eq!(ev.len(), 4);
-        // Mindestabstand 60 ms: Ereignisse bei 50 und 120 ms entfallen
+        // Minimum gap 60 ms: events at 50 and 120 ms are dropped
         let ev = trigger_events(&env, 0.6, 0.2, 60.0, 0.0);
         let starts: Vec<f64> = ev.iter().map(|e| e.0).collect();
         assert_eq!(starts, vec![10.0, 70.0]);
-        // Haltezeit verlängert, endet aber vor dem nächsten Ereignis
+        // Hold time extended, but ends before the next event
         let ev = trigger_events(&env, 0.6, 0.2, 0.0, 100.0);
         assert_eq!(ev[0], (10.0, 49.0));
         assert_eq!(event_at(&ev, 20.0), Some(0));
@@ -938,7 +937,7 @@ mod tests {
 
     #[test]
     fn envelope_filters_band() {
-        // 60 Hz und 5 kHz gemischt: Tiefpass sieht nur den Bass
+        // 60 Hz and 5 kHz mixed: the low pass only sees the bass
         let n = RATE as usize * 2;
         let s: Vec<f32> = (0..n)
             .map(|i| {
@@ -972,7 +971,7 @@ mod tests {
 
     #[test]
     fn mixed_file_splits_into_tracks() {
-        // drei Lieder hintereinander (126, 140, 100 BPM), je 40 s
+        // three songs one after another (126, 140, 100 BPM), 40 s each
         let mut s = track(126.0, 40.0, 300.0);
         s.extend(track(140.0, 40.0, 0.0));
         s.extend(track(100.0, 40.0, 150.0));
@@ -985,24 +984,24 @@ mod tests {
         {
             assert!(
                 (seg.start_ms - start).abs() < 1500.0,
-                "{} statt {start}",
+                "{} instead of {start}",
                 seg.start_ms
             );
-            let g = seg.grid.expect("Raster");
+            let g = seg.grid.expect("grid");
             assert!(
                 (f64::from(g.bpm) - bpm).abs() < 0.3,
-                "{} statt {bpm}",
+                "{} instead of {bpm}",
                 g.bpm
             );
         }
-        // Downbeat des zweiten Lieds liegt auf seinem Anfang (40 s)
+        // The downbeat of the second song lies on its start (40 s)
         let g = a.segments[1].grid.unwrap();
         let bar = g.bar_ms();
         let mut d = (g.downbeat_ms - 40_000.0).rem_euclid(bar);
         d = d.min(bar - d);
         assert!(d < 30.0, "Downbeat {}", g.downbeat_ms);
         assert_eq!(a.segment_at(50_000.0), Some(1));
-        // Grenzen liegen auf dem ersten Schlag der Lieder
+        // Boundaries lie on the first beat of the songs
         assert!(
             (a.segments[2].start_ms - 80_150.0).abs() < 30.0,
             "{}",

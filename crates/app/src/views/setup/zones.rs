@@ -1,4 +1,4 @@
-//! EINRICHTEN → Zonen & Gruppen.
+//! SETUP → zones & groups.
 
 use crate::i18n::t;
 use dmxcraft_core::{FixtureId, GroupId, ZoneId};
@@ -31,7 +31,7 @@ impl View for ZonesView {
         let selected: Vec<FixtureId> = cx.state.selected.iter().copied().collect();
 
         ui.columns(2, |cols| {
-            // ---------- Zonen ----------
+            // ---------- Zones ----------
             let ui = &mut cols[0];
             section_header(ui, t("Banks"), |_| {});
             ui.label(
@@ -73,7 +73,7 @@ impl View for ZonesView {
                 }
             });
 
-            // ---------- Gruppen ----------
+            // ---------- Groups ----------
             let ui = &mut cols[1];
             section_header(ui, t("Groups"), |_| {});
             ui.label(

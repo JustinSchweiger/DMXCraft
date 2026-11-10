@@ -1,4 +1,4 @@
-//! Echtzeit-Thread: taktet die Engine, rendert Frames und sendet sie.
+//! Real-time thread: clocks the engine, renders frames and sends them.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -9,13 +9,13 @@ use dmxcraft_core::{DmxFrame, Engine};
 
 use crate::DmxOutput;
 
-/// Wie lange nach einem Fehler gewartet wird, bevor neu verbunden wird.
+/// How long to wait after an error before reconnecting.
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OutputStatus {
     Connecting,
-    /// `note`: Teilproblem des Ausgangs, z. B. ein fehlendes Kabel.
+    /// `note`: partial problem of the output, e.g. a missing cable.
     Running {
         output: String,
         fps: f32,
@@ -31,19 +31,20 @@ impl OutputStatus {
     }
 }
 
-/// Besitzt den Ausgabe-Thread. Beim Drop wird er sauber beendet.
+/// Owns the output thread. It is shut down cleanly on drop.
 pub struct Runtime {
     engine: Arc<Mutex<Engine>>,
     last_frame: Arc<Mutex<DmxFrame>>,
     status: Arc<Mutex<OutputStatus>>,
-    /// Auslastung des Ausgabe-Takts in Promille (Rechenzeit / Taktdauer, geglättet).
+    /// Load of the output clock in per mille (compute time / tick duration,
+    /// smoothed).
     load: Arc<AtomicU32>,
     stop: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
 }
 
 impl Runtime {
-    /// Startet den Thread mit `hz` Frames pro Sekunde (DMX üblich: 25–44).
+    /// Starts the thread with `hz` frames per second (DMX usually: 25–44).
     pub fn start(engine: Arc<Mutex<Engine>>, mut output: Box<dyn DmxOutput>, hz: u32) -> Self {
         let hz = hz.clamp(1, 60);
         let period = Duration::from_secs_f64(1.0 / f64::from(hz));
@@ -85,11 +86,11 @@ impl Runtime {
                     }
                     next += period;
                     if next < now {
-                        next = now + period; // nach Hängern nicht nachholen
+                        next = now + period; // do not catch up after stalls
                     }
 
-                    // Engine immer takten, auch ohne Gerät – die Oberfläche
-                    // zeigt die Werte dann im Monitor.
+                    // Always clock the engine, even without a device – the UI then shows the
+                    // values in the monitor.
                     let work_start = Instant::now();
                     let dt = now - last_tick;
                     last_tick = now;
@@ -101,7 +102,7 @@ impl Runtime {
                         lf.clone_from(&frame);
                     }
 
-                    // Rechenzeit der Engine relativ zur Taktdauer
+                    // Compute time of the engine relative to the tick duration
                     record_load(&t_load, work_start.elapsed(), period);
 
                     if !connected {
@@ -152,7 +153,7 @@ impl Runtime {
                 output.close();
                 set_status(OutputStatus::Stopped);
             })
-            .expect("Ausgabe-Thread konnte nicht gestartet werden");
+            .expect("Could not start the output thread");
 
         Self {
             engine,
@@ -168,7 +169,7 @@ impl Runtime {
         &self.engine
     }
 
-    /// Zuletzt berechneter Frame (für den DMX-Monitor).
+    /// Last computed frame (for the DMX monitor).
     pub fn last_frame(&self) -> DmxFrame {
         self.last_frame
             .lock()
@@ -180,10 +181,10 @@ impl Runtime {
         self.status
             .lock()
             .map(|s| s.clone())
-            .unwrap_or(OutputStatus::Error("Status nicht lesbar".into()))
+            .unwrap_or(OutputStatus::Error("Status not readable".into()))
     }
 
-    /// Auslastung des Ausgabe-Takts, 0.0..=1.0 (über 1.0 = Takt wird nicht gehalten).
+    /// Load of the output clock, 0.0..=1.0 (above 1.0 = the clock is not kept).
     pub fn load(&self) -> f32 {
         self.load.load(Ordering::Relaxed) as f32 / 1000.0
     }
@@ -196,7 +197,7 @@ impl Runtime {
     }
 }
 
-/// Gleitender Mittelwert der Auslastung (Promille).
+/// Moving average of the load (per mille).
 fn record_load(load: &AtomicU32, work: Duration, period: Duration) {
     let sample = (work.as_secs_f64() / period.as_secs_f64() * 1000.0).min(5000.0) as u32;
     let old = load.load(Ordering::Relaxed);
@@ -239,21 +240,17 @@ mod tests {
         let rec = RecordingOutput::default();
         let frames = rec.frames.clone();
         let mut rt = Runtime::start(engine, Box::new(rec), 50);
-        // auf langsamen CI-Rechnern (macOS) großzügig warten
+        // wait generously on slow CI machines (macOS)
         let t0 = std::time::Instant::now();
         while frames.lock().unwrap().len() < 3 && t0.elapsed() < Duration::from_secs(3) {
             std::thread::sleep(Duration::from_millis(20));
         }
         rt.stop();
         let frames = frames.lock().unwrap();
-        assert!(frames.len() >= 3, "nur {} Frames", frames.len());
+        assert!(frames.len() >= 3, "only {} frames", frames.len());
         assert_eq!(frames.last().unwrap().get(0, 5), Some(222));
         assert_eq!(rt.status(), OutputStatus::Stopped);
-        assert!(
-            rt.load() < 1.0,
-            "Auslastung {} bei winziger Show",
-            rt.load()
-        );
+        assert!(rt.load() < 1.0, "Load {} with a tiny show", rt.load());
     }
 
     struct Failing;

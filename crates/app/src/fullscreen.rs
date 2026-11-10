@@ -1,22 +1,22 @@
-//! Vollbild umschalten.
+//! Toggle fullscreen.
 //!
-//! Aus einem maximierten, randlosen Fenster heraus übernimmt Windows die
-//! Vollbildgröße nicht ganz: unten bleibt ein schwarzer Streifen in Höhe der
-//! Taskleiste. Daher wird die Maximierung vor dem Vollbild aufgehoben (und
-//! danach wiederhergestellt) – jeweils mit ein paar Frames Abstand, damit das
-//! System den Zwischenzustand übernommen hat.
+//! From a maximized, borderless window Windows does not fully take over the
+//! fullscreen size: a black strip the height of the taskbar stays at the
+//! bottom. So the maximization is undone before going fullscreen (and
+//! restored afterwards) – each with a few frames in between so the system
+//! has taken over the intermediate state.
 
 use eframe::egui::{self, ViewportCommand};
 
-/// Frames zwischen den Schritten.
+/// Frames between the steps.
 const SETTLE: u8 = 3;
 
 #[derive(Default)]
 pub struct Fullscreen {
     on: bool,
-    /// Vor dem Vollbild maximiert (beim Verlassen wieder maximieren).
+    /// Maximized before fullscreen (maximize again when leaving).
     was_maximized: bool,
-    /// Ausstehender Schritt und verbleibende Frames bis dahin.
+    /// Pending step and remaining frames until then.
     pending: Option<(Step, u8)>,
 }
 
@@ -54,11 +54,11 @@ impl Fullscreen {
         ctx.request_repaint();
     }
 
-    /// Jeden Frame aufrufen: führt ausstehende Schritte aus.
+    /// Call every frame: executes pending steps.
     pub fn update(&mut self, ctx: &egui::Context) {
         let Some((step, frames)) = self.pending else {
-            // Zustand übernehmen, wenn das Fenster von außen (z. B. beim Start
-            // aus der gemerkten Fenstergröße) in den Vollbildmodus kam
+            // Take over the state when the window went fullscreen from outside (e.g.
+            // at startup from the remembered window size)
             if let Some(fs) = ctx.input(|i| i.viewport().fullscreen) {
                 self.on = fs;
             }

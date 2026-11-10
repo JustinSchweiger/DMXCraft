@@ -1,5 +1,5 @@
-//! Objekt-Bibliothek: mitgelieferte Objekte (aus Grundformen gebaut) und
-//! eigene, gespeichert im Konfigurationsordner (`objects/*.dmxobj`).
+//! Object library: bundled objects (built from basic shapes) and custom ones
+//! stored in the config folder (`objects/*.dmxobj`).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -12,26 +12,26 @@ use crate::i18n::t;
 
 pub const EXT: &str = "dmxobj";
 
-/// Ein Objekt (meist ein Ordner mit Teilen) samt benutzten Modellen.
+/// An object (usually a folder with parts) together with the models it uses.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Prefab {
     pub name: String,
     pub object: Object,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub models: BTreeMap<String, Model>,
-    /// Benutzte Bilder (IDs wie im Objekt; beim Einsetzen neu vergeben)
+    /// Images used (IDs as in the object; reassigned on insertion)
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub textures: BTreeMap<u32, Texture>,
 }
 
-/// Eigenes Objekt mit Dateipfad.
+/// Custom object with a file path.
 pub struct UserPrefab {
     pub path: PathBuf,
     pub prefab: Prefab,
 }
 
 impl Prefab {
-    /// In den Ort einsetzen (neue IDs, Modelle übernehmen) an `x`/`z`.
+    /// Insert into the venue (new IDs, take over models) at `x`/`z`.
     pub fn insert(&self, v: &mut Venue, x: f32, z: f32) -> u32 {
         let mut o = self.object.clone();
         super::renumber(v, &mut o);
@@ -41,7 +41,7 @@ impl Prefab {
         for (k, m) in &self.models {
             v.models.entry(k.clone()).or_insert_with(|| m.clone());
         }
-        // Bilder übernehmen und IDs umschreiben
+        // Take over images and rewrite IDs
         let map: BTreeMap<u32, u32> = self
             .textures
             .iter()
@@ -61,7 +61,8 @@ impl Prefab {
         id
     }
 
-    /// Objekt aus dem Ort als Vorlage (Lage im Raum, Modelle eingeschlossen).
+    /// Object from the venue as a template (placement in the room, models
+    /// included).
     pub fn from_venue(v: &Venue, id: u32) -> Option<Self> {
         let mut object = v.find(id)?.clone();
         let world = glam::Mat4::from_cols_array_2d(&v.parent_matrix(id))
@@ -102,7 +103,7 @@ impl Prefab {
     }
 }
 
-/// Ordner der eigenen Objekte.
+/// Folder of the custom objects.
 pub fn dir() -> Option<PathBuf> {
     crate::settings::Settings::path().map(|p| p.with_file_name("objects"))
 }
@@ -143,7 +144,7 @@ pub fn save_user(p: &Prefab) -> Result<PathBuf, String> {
         })
         .collect();
     let stem = if stem.is_empty() {
-        "objekt".into()
+        "object".into()
     } else {
         stem
     };
@@ -158,7 +159,7 @@ pub fn save_user(p: &Prefab) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-// ---------- mitgelieferte Objekte ----------
+// ---------- bundled objects ----------
 
 const DARK: [u8; 3] = [42, 42, 46];
 const BLACK: [u8; 3] = [18, 18, 20];
@@ -251,7 +252,7 @@ impl Builder {
     }
 }
 
-/// Mitgelieferte Objekte (Namen übersetzt).
+/// Bundled objects (names translated).
 pub fn builtin() -> Vec<Prefab> {
     let tower = |b: Builder, x: f32, h: f32| {
         b.cube(t("Base plate"), [0.8, 0.02, 0.8], [x, 0.01, 0.0], METAL)

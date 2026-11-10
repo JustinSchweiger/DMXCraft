@@ -1,24 +1,24 @@
-//! Zeitfeld im Format `00h00m00s00` bzw. ohne Stunden `00m00s00`
-//! (Minuten, Sekunden, Hundertstel). Jede Zahl lässt sich per Klicken und
-//! Ziehen nach oben/unten ändern; Überträge (100 Hundertstel = 1 s,
-//! 60 s = 1 min, 60 min = 1 h) ergeben sich von selbst, weil intern in
-//! Millisekunden gerechnet wird.
+//! Time field in the format `00h00m00s00` or without hours `00m00s00`
+//! (minutes, seconds, hundredths). Each number can be changed by clicking
+//! and dragging up/down; carries (100 hundredths = 1 s, 60 s = 1 min,
+//! 60 min = 1 h) happen automatically because everything is calculated in
+//! milliseconds internally.
 
 use eframe::egui::{self, pos2, Color32, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 use crate::ui::theme;
 
-/// Größter Wert: 99:59:59.96.
+/// Largest value: 99:59:59.96.
 pub const MAX_MS: u64 = 99 * 3_600_000 + 59 * 60_000 + 59_960;
-/// Punkte Mausweg je Schritt.
+/// Points of mouse travel per step.
 const PX_PER_STEP: f32 = 3.0;
-/// Hundertstel ändern sich in 4er-Schritten (40 ms).
+/// Hundredths change in steps of 4 (40 ms).
 const FINE_STEP_MS: u64 = 40;
 
-/// Schrittweite je Feld: Stunden, Minuten, Sekunden, Hundertstel.
+/// Step size per field: hours, minutes, seconds, hundredths.
 const STEPS_MS: [u64; 4] = [3_600_000, 60_000, 1_000, FINE_STEP_MS];
 
-/// Zerlegt Millisekunden in Stunden, Minuten, Sekunden und Hundertstel.
+/// Splits milliseconds into hours, minutes, seconds and hundredths.
 pub fn split(ms: u64) -> [u64; 4] {
     [
         ms / 3_600_000,
@@ -28,19 +28,20 @@ pub fn split(ms: u64) -> [u64; 4] {
     ]
 }
 
-/// Text wie im Feld, z. B. `01m01s24`; mit `hours` auch `00h…`.
+/// Text as in the field, e.g. `01m01s24`; with `hours` also `00h…`.
 pub fn format(ms: u64, hours: bool) -> String {
     let [h, m, s, cs] = split(ms);
     if hours {
         format!("{h:02}h{m:02}m{s:02}s{cs:02}")
     } else {
-        // ohne Stundenfeld laufen die Minuten weiter
+        // without an hours field the minutes keep counting
         format!("{:02}m{s:02}s{cs:02}", h * 60 + m)
     }
 }
 
-/// Zeichnet das Feld; `true`, wenn sich der Wert geändert hat.
-/// `hours` = Stundenfeld zeigen, `accent` = Farbe der Zahl unter der Maus.
+/// Draws the field; `true` if the value changed.
+/// `hours` = show the hours field, `accent` = color of the number under the
+/// mouse.
 pub fn time_field(
     ui: &mut Ui,
     id_salt: &str,
@@ -52,7 +53,7 @@ pub fn time_field(
     time_field_ex(ui, id_salt, ms, enabled, hours, accent, false)
 }
 
-/// Kompakte Variante ohne Rahmen (für Tabellen), Breite [`COMPACT_W`].
+/// Compact variant without a frame (for tables), width [`COMPACT_W`].
 pub fn time_field_compact(
     ui: &mut Ui,
     id_salt: &str,
@@ -63,7 +64,7 @@ pub fn time_field_compact(
     time_field_ex(ui, id_salt, ms, enabled, false, accent, true)
 }
 
-/// Breite der kompakten Variante (ohne Stunden).
+/// Width of the compact variant (without hours).
 pub const COMPACT_W: f32 = 3.0 * 17.0 + 2.0 * 9.0;
 
 fn time_field_ex(
@@ -136,7 +137,7 @@ fn time_field_ex(
             if steps != 0.0 {
                 let delta = steps as i64 * STEPS_MS[i] as i64;
                 let mut v = (i64::from(*ms) + delta).clamp(0, MAX_MS as i64) as u64;
-                // Hundertstel bleiben im 4er-Raster
+                // Hundredths stay in the grid of 4
                 v -= v % FINE_STEP_MS;
                 if v as u32 != *ms {
                     *ms = v as u32;

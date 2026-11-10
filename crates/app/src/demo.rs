@@ -1,4 +1,5 @@
-//! Demo-Show, damit man ohne Gerät und ohne eigene Datei loslegen kann.
+//! Demo show, so you can get started without a device and without a file of
+//! your own.
 
 use dmxcraft_core::library::builtin_fixture_types;
 use dmxcraft_core::{ChannelValue, FixtureId, Show, Step};
@@ -11,14 +12,14 @@ fn cv(fixture: FixtureId, channel: u16, value: u8) -> ChannelValue {
     }
 }
 
-/// Leere Show mit den eingebauten Gerätetypen.
+/// Empty show with the built-in fixture types.
 pub fn empty_show() -> Show {
-    let mut s = Show::new("Neue Show", 2);
+    let mut s = Show::new("New show", 2);
     ensure_builtin_types(&mut s);
     s
 }
 
-/// Ergänzt fehlende eingebaute Gerätetypen (vorhandene bleiben unverändert).
+/// Adds missing built-in fixture types (existing ones stay unchanged).
 pub fn ensure_builtin_types(show: &mut Show) {
     for t in builtin_fixture_types() {
         if show.fixture_type(&t.key).is_none() {
@@ -54,7 +55,7 @@ pub fn demo_show() -> Show {
         })
         .collect();
 
-    // Bühnenplan: PARs auf der Traverse, Moving Heads davor
+    // Stage plan: PARs on the truss, moving heads in front
     for (i, id) in pars.iter().enumerate() {
         if let Some(f) = s.fixture_mut(*id) {
             f.plan_pos = Some([0.25 + i as f32 * 0.17, 0.25]);
@@ -68,10 +69,10 @@ pub fn demo_show() -> Show {
     s.add_group("PARs", pars.clone());
     s.add_group("Moving Heads", heads.clone());
 
-    let farben = s.add_zone("Farben");
-    let bewegung = s.add_zone("Bewegung");
+    let farben = s.add_zone("Colors");
+    let bewegung = s.add_zone("Movement");
 
-    // PAR-Kanäle: 0 Dimmer, 1 R, 2 G, 3 B, 4 W, 5 Strobe
+    // PAR channels: 0 dimmer, 1 R, 2 G, 3 B, 4 W, 5 strobe
     let color = |rgbw: [u8; 4]| -> Vec<ChannelValue> {
         pars.iter()
             .flat_map(|&p| {
@@ -87,9 +88,9 @@ pub fn demo_show() -> Show {
     };
 
     s.add_scene("Rot", Some(farben), vec![Step::new(color([255, 0, 0, 0]))]);
-    s.add_scene("Blau", Some(farben), vec![Step::new(color([0, 0, 255, 0]))]);
+    s.add_scene("Blue", Some(farben), vec![Step::new(color([0, 0, 255, 0]))]);
     s.add_scene(
-        "Warmweiß",
+        "Warm white",
         Some(farben),
         vec![Step::new(color([255, 120, 20, 255]))],
     );
@@ -111,7 +112,7 @@ pub fn demo_show() -> Show {
     .collect();
     s.add_scene("Farbwechsel", Some(farben), rainbow);
 
-    // Lauflicht über die PARs (frei kombinierbar, nur Dimmer → HTP)
+    // Chaser across the PARs (freely combinable, dimmer only → HTP)
     let chase: Vec<Step> = pars
         .iter()
         .map(|&p| {
@@ -123,14 +124,14 @@ pub fn demo_show() -> Show {
         .collect();
     s.add_scene("Lauflicht", Some(farben), chase);
 
-    // Moving Heads: 0 Pan, 2 Tilt, 5 Dimmer
+    // Moving heads: 0 pan, 2 tilt, 5 dimmer
     let pos = |pan: u8, tilt: u8| -> Vec<ChannelValue> {
         heads
             .iter()
             .flat_map(|&h| [cv(h, 0, pan), cv(h, 2, tilt), cv(h, 5, 255)])
             .collect()
     };
-    s.add_scene("Mitte", Some(bewegung), vec![Step::new(pos(128, 128))]);
+    s.add_scene("Center", Some(bewegung), vec![Step::new(pos(128, 128))]);
     let sweep: Vec<Step> = [(60, 90), (200, 90), (200, 170), (60, 170)]
         .into_iter()
         .map(|(p, t)| {

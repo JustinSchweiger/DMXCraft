@@ -1,18 +1,19 @@
-//! glTF/GLB laden und in ein eingebettetes Modell umrechnen.
+//! Load glTF/GLB and convert it into an embedded model.
 //!
-//! Übernommen werden Geometrie (mit allen Knoten-Lagen) und die Grundfarbe
-//! der Materialien; Texturen werden nicht gelesen (die Farbe bleibt der
-//! Grundfarbwert). glTF ist wie DMXCraft rechtshändig, y oben, Meter.
+//! Geometry (with all node transforms) and the base color of the materials
+//! are taken over; textures are not read (the color stays the base color
+//! value). Like DMXCraft, glTF is right-handed, y up, meters.
 
 use std::path::Path;
 
 use dmxcraft_core::venue::model::{b64_decode, Blob, Model, ModelPart, Texture};
 use glam::{Mat3, Mat4, Vec3};
 
-/// Mehr Dreiecke werden abgelehnt (Show-Datei und Grafikspeicher).
+/// More triangles are rejected (show file and graphics memory).
 pub const MAX_TRIANGLES: usize = 2_000_000;
 
-/// Teil beim Einlesen: Farbe, Bild (Index in `images`), Ecken, Bildkoordinaten, Dreiecke.
+/// Part while reading: color, image (index into `images`), vertices, image
+/// coordinates, triangles.
 struct RawPart {
     color: [u8; 3],
     image: Option<usize>,
@@ -25,18 +26,20 @@ pub fn load(path: &Path) -> Result<Model, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     let gltf = gltf::Gltf::from_slice(&bytes).map_err(|e| e.to_string())?;
     let dir = path.parent().unwrap_or(Path::new("."));
-    // Puffer: im GLB, als data:-URI oder als Datei daneben
+    // Buffers: in the GLB, as a data: URI or as a file next to it
     let mut buffers: Vec<Vec<u8>> = Vec::new();
     for b in gltf.buffers() {
         let data = match b.source() {
             gltf::buffer::Source::Bin => gltf
                 .blob
                 .clone()
-                .ok_or_else(|| "GLB ohne Binärteil".to_string())?,
+                .ok_or_else(|| "GLB without binary chunk".to_string())?,
             gltf::buffer::Source::Uri(uri) => {
                 if let Some(rest) = uri.strip_prefix("data:") {
-                    let (_, b64) = rest.split_once(";base64,").ok_or("data-URI ohne Base64")?;
-                    b64_decode(b64).ok_or("ungültige data-URI")?
+                    let (_, b64) = rest
+                        .split_once(";base64,")
+                        .ok_or("data URI without Base64")?;
+                    b64_decode(b64).ok_or("invalid data URI")?
                 } else {
                     let file = dir.join(percent_decode(uri));
                     std::fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?
@@ -45,7 +48,7 @@ pub fn load(path: &Path) -> Result<Model, String> {
         };
         buffers.push(data);
     }
-    // Bilder der Materialien (nur PNG/JPEG; gltf-Index → Index in `images`)
+    // Images of the materials (PNG/JPEG only; glTF index → index into `images`)
     let mut images: Vec<Texture> = Vec::new();
     let mut image_map: Vec<(usize, usize)> = Vec::new();
     let mut image_of = |img: gltf::Image| -> Option<usize> {
@@ -66,23 +69,23 @@ pub fn load(path: &Path) -> Result<Model, String> {
                 }
             }
         };
-        // nur Bilder, die DMXCraft lesen kann
+        // only images DMXCraft can read
         image::guess_format(&bytes)
             .ok()
             .filter(|f| matches!(f, image::ImageFormat::Png | image::ImageFormat::Jpeg))?;
         images.push(Texture {
-            name: img.name().unwrap_or("Bild").to_string(),
+            name: img.name().unwrap_or("Image").to_string(),
             data: Blob(bytes.into()),
         });
         image_map.push((img.index(), images.len() - 1));
         Some(images.len() - 1)
     };
-    // Dreiecke je Farbe und Bild sammeln
+    // Collect triangles per color and image
     let mut parts: Vec<RawPart> = Vec::new();
     let scene = gltf
         .default_scene()
         .or_else(|| gltf.scenes().next())
-        .ok_or("Datei enthält keine Szene")?;
+        .ok_or("File contains no scene")?;
     let mut tris = 0usize;
     let mut stack: Vec<(gltf::Node, Mat4)> = scene.nodes().map(|n| (n, Mat4::IDENTITY)).collect();
     while let Some((node, parent)) = stack.pop() {
@@ -123,14 +126,14 @@ pub fn load(path: &Path) -> Result<Model, String> {
             tris += idx.len() / 3;
             if tris > MAX_TRIANGLES {
                 return Err(format!(
-                    "Modell zu groß (über {MAX_TRIANGLES} Dreiecke) – bitte vereinfachen"
+                    "Model too large (over {MAX_TRIANGLES} triangles) – please simplify"
                 ));
             }
             let pbr = prim.material().pbr_metallic_roughness();
             let base = pbr.base_color_factor();
             let color =
                 [base[0], base[1], base[2]].map(|c| (linear_to_srgb(c) * 255.0).round() as u8);
-            // Bild mit Bildkoordinaten (sonst nur Farbe)
+            // Image with image coordinates (otherwise color only)
             let tex = pbr.base_color_texture().and_then(|info| {
                 let uv: Vec<[f32; 2]> = reader
                     .read_tex_coords(info.tex_coord())?
@@ -153,7 +156,7 @@ pub fn load(path: &Path) -> Result<Model, String> {
                         uv: Vec::new(),
                         idx: Vec::new(),
                     });
-                    parts.last_mut().expect("eben angelegt")
+                    parts.last_mut().expect("just created")
                 }
             };
             let off = part.verts.len() as u32;
@@ -169,9 +172,9 @@ pub fn load(path: &Path) -> Result<Model, String> {
         }
     }
     if tris == 0 {
-        return Err("Keine Dreiecke gefunden".into());
+        return Err("No triangles found".into());
     }
-    // Mitte in x/z, Unterkante auf y = 0
+    // Center in x/z, bottom edge at y = 0
     let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     for p in parts.iter().flat_map(|p| p.verts.iter()) {
         let v = Vec3::new(p[0], p[1], p[2]);
@@ -197,7 +200,7 @@ pub fn load(path: &Path) -> Result<Model, String> {
     Ok(Model {
         name: path
             .file_name()
-            .map_or_else(|| "Modell".into(), |s| s.to_string_lossy().into_owned()),
+            .map_or_else(|| "Model".into(), |s| s.to_string_lossy().into_owned()),
         size: (hi - lo).to_array(),
         parts,
         images,
@@ -250,7 +253,7 @@ fn percent_decode(s: &str) -> String {
 mod tests {
     use super::*;
 
-    /// Minimaler glTF mit einem Dreieck (data-URI), um 90° gedreht und verschoben.
+    /// Minimal glTF with one triangle (data URI), rotated by 90° and moved.
     #[test]
     fn loads_embedded_triangle_with_node_transform() {
         let mut bin = Vec::new();
@@ -273,15 +276,15 @@ mod tests {
         assert_eq!(m.triangles(), 1);
         assert_eq!(m.parts[0].color, [255, 0, 0]);
         assert_eq!(m.size, [1.0, 2.0, 0.0]);
-        // Unterkante bei 0, Mitte in x bei 0
+        // Bottom edge at 0, center in x at 0
         let v = m.parts[0].vertices();
         assert_eq!(v[0][..3], [-0.5, 0.0, 0.0]);
         assert_eq!(v[2][..3], [-0.5, 2.0, 0.0]);
-        // Normale aus den Dreiecken (z)
+        // Normal from the triangles (z)
         assert!((v[0][5].abs() - 1.0).abs() < 1e-5);
     }
 
-    /// Dreieck mit Bild (PNG als data-URI) und Bildkoordinaten.
+    /// Triangle with an image (PNG as a data URI) and image coordinates.
     #[test]
     fn loads_base_color_texture() {
         let mut bin = Vec::new();

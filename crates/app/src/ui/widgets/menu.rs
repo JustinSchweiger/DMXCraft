@@ -1,16 +1,16 @@
-//! Menüs im App-Stil: Hauptmenü und alle Kontextmenüs.
+//! App-style menus: main menu and all context menus.
 //!
-//! Ein Eintrag: Symbolspalte links, Text, Tastenkürzel rechts (gedämpft),
-//! bei Untermenüs ein Pfeil. Überfahren = hinterlegt, ohne Rahmen.
+//! An entry: icon column on the left, text, shortcut on the right (muted),
+//! an arrow for submenus. Hover = highlighted, without a frame.
 
 use eframe::egui::{self, pos2, vec2, Align2, Color32, Painter, Rect, Response, Sense, Stroke, Ui};
 
 use crate::ui::theme;
 use crate::ui::widgets::Icon;
 
-/// Höhe eines Menüeintrags.
+/// Height of a menu entry.
 pub const ITEM_H: f32 = 28.0;
-/// Mindestbreite eines Menüs.
+/// Minimum width of a menu.
 pub const MIN_W: f32 = 230.0;
 const ICON_SLOT: f32 = 28.0;
 
@@ -48,7 +48,7 @@ impl<'a> MenuItem<'a> {
         self
     }
 
-    /// Eigenes Symbol (z. B. Gerätform).
+    /// Custom icon (e.g. fixture shape).
     pub fn icon_fn(mut self, f: impl FnOnce(&Painter, Rect, Color32) + 'a) -> Self {
         self.icon = Some(Box::new(f));
         self
@@ -64,26 +64,26 @@ impl<'a> MenuItem<'a> {
         self
     }
 
-    /// Aktiver Zustand: Häkchen in der Symbolspalte (wenn kein Symbol) und
-    /// Text in `ACCENT`.
+    /// Active state: checkmark in the icon column (if there is no icon) and text
+    /// in `ACCENT`.
     pub fn checked(mut self, on: bool) -> Self {
         self.checked = on;
         self
     }
 
-    /// Ohne Symbolspalte (oberste Menüebene).
+    /// Without an icon column (top menu level).
     pub fn plain(mut self) -> Self {
         self.slot = false;
         self
     }
 
-    /// Zerstörende Aktion (Löschen): beim Überfahren rot.
+    /// Destructive action (delete): red on hover.
     pub fn danger(mut self) -> Self {
         self.danger = true;
         self
     }
 
-    /// Hinweis für noch nicht verfügbare oder erklärungsbedürftige Einträge.
+    /// Hint for entries that are not available yet or need an explanation.
     pub fn tooltip(mut self, t: &'a str) -> Self {
         self.tooltip = Some(t);
         self
@@ -212,13 +212,13 @@ impl egui::Widget for MenuItem<'_> {
     }
 }
 
-/// Am Anfang jedes Menüs: Mindestbreite, Einträge ohne Lücke.
+/// At the start of every menu: minimum width, entries without gaps.
 pub fn begin(ui: &mut Ui) {
     ui.set_min_width(MIN_W);
     ui.spacing_mut().item_spacing.y = 1.0;
 }
 
-/// Eintrag, der beim Klick das Menü schließt. Gibt `true` bei Klick zurück.
+/// Entry that closes the menu when clicked. Returns `true` on click.
 pub fn item(ui: &mut Ui, item: MenuItem<'_>) -> bool {
     let clicked = ui.add(item).clicked();
     if clicked {
@@ -227,7 +227,7 @@ pub fn item(ui: &mut Ui, item: MenuItem<'_>) -> bool {
     clicked
 }
 
-/// Eintrag mit Untermenü (öffnet beim Überfahren).
+/// Entry with a submenu (opens on hover).
 pub fn sub(ui: &mut Ui, mut item: MenuItem<'_>, content: impl FnOnce(&mut Ui)) {
     item.arrow = true;
     let enabled = item.enabled;
@@ -240,24 +240,24 @@ pub fn sub(ui: &mut Ui, mut item: MenuItem<'_>, content: impl FnOnce(&mut Ui)) {
     }
 }
 
-/// Kontextmenü (Rechtsklick) im App-Stil. Klicks auf deaktivierte Einträge
-/// oder Trenner lassen das Menü offen; Einträge schließen es selbst.
+/// App-style context menu (right-click). Clicks on disabled entries or
+/// separators keep the menu open; entries close it themselves.
 pub fn context(resp: &Response, content: impl FnOnce(&mut Ui)) {
     egui::Popup::context_menu(resp)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(content);
 }
 
-/// Aufklappmenü an einem Knopf (z. B. Hauptmenü), gleiches Schließverhalten.
+/// Dropdown menu on a button (e.g. main menu), same closing behavior.
 pub fn dropdown(resp: &Response, content: impl FnOnce(&mut Ui)) {
     egui::Popup::menu(resp)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(content);
 }
 
-/// Trennlinie zwischen Gruppen.
+/// Divider between groups.
 pub fn separator(ui: &mut Ui) {
-    // Breite 0: das gestreckte Layout füllt die Menübreite, ohne sie zu vergrößern.
+    // Width 0: the stretched layout fills the menu width without enlarging it.
     let rect = ui.allocate_response(vec2(0.0, 9.0), Sense::hover()).rect;
     ui.painter().hline(
         (rect.left() + theme::SP_S)..=(rect.right() - theme::SP_S),
@@ -266,7 +266,7 @@ pub fn separator(ui: &mut Ui) {
     );
 }
 
-/// Kopfzeile eines Kontextmenüs (z. B. Gerätename), nicht anklickbar.
+/// Header of a context menu (e.g. fixture name), not clickable.
 pub fn title(ui: &mut Ui, text: &str) {
     let rect = ui.allocate_response(vec2(0.0, 26.0), Sense::hover()).rect;
     ui.painter().text(
@@ -278,7 +278,7 @@ pub fn title(ui: &mut Ui, text: &str) {
     );
 }
 
-/// Grundeinstellungen für Menüs (Rahmen, Abstände) – in `theme::apply`.
+/// Base settings for menus (frame, spacing) – in `theme::apply`.
 pub fn style(style: &mut egui::Style) {
     style.spacing.menu_margin = egui::Margin::same(theme::SP_XS as i8);
     style.visuals.menu_corner_radius = egui::CornerRadius::same(theme::R_M);
@@ -286,7 +286,7 @@ pub fn style(style: &mut egui::Style) {
         offset: [0, 6],
         blur: 18,
         spread: 0,
-        // auf hellem Grund wirkt derselbe Schatten viel schwerer
+        // on a light background the same shadow looks much heavier
         color: Color32::from_black_alpha(if theme::is_light() { 45 } else { 140 }),
     };
 }

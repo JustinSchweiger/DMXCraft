@@ -1,4 +1,4 @@
-//! Anzeige einer 10-fach-DIP-Schalterleiste für eine DMX-Adresse.
+//! Display of a 10-way DIP switch bank for a DMX address.
 
 use dmxcraft_core::dip;
 use eframe::egui::{self, pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
@@ -7,7 +7,7 @@ use crate::ui::theme;
 
 pub struct DipSwitch {
     pub address: u16,
-    /// Kleine Darstellung für Kopfzeilen.
+    /// Small rendering for header rows.
     pub compact: bool,
 }
 
@@ -91,7 +91,7 @@ impl DipSwitch {
         resp.on_hover_text(tr!("Address {address} = switches {text}\n(switch n has the value 2^(n-1); switch 10 stays off)", text = text, address = self.address))
     }
 
-    /// Flache Leiste mit fester Höhe von 24 px für Kopfzeilen.
+    /// Flat bar with a fixed height of 24 px for header rows.
     fn show_compact(self, ui: &mut Ui) -> egui::Response {
         const H: f32 = 24.0;
         const W: f32 = 11.0;

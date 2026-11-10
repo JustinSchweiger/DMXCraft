@@ -1,6 +1,6 @@
-//! HTTP-Endpunkt („Streamable HTTP“ des MCP): `POST /mcp` mit JSON-RPC.
-//! Lauscht nur auf 127.0.0.1; Anfragen aus Webseiten (fremder `Origin`)
-//! werden abgewiesen.
+//! HTTP endpoint (“Streamable HTTP” of MCP): `POST /mcp` with JSON-RPC.
+//! Listens on 127.0.0.1 only; requests from web pages (foreign `Origin`)
+//! are rejected.
 
 use std::io::Read;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use tiny_http::{Header, Method, Response, Server};
 
 use crate::{protocol, Host};
 
-/// Laufender Server; beim Fallenlassen wird er beendet.
+/// Running server; it is shut down when dropped.
 pub struct McpServer {
     server: Arc<Server>,
     thread: Option<JoinHandle<()>>,
@@ -19,7 +19,7 @@ pub struct McpServer {
 }
 
 impl McpServer {
-    /// Startet den Server auf `127.0.0.1:port`.
+    /// Starts the server on `127.0.0.1:port`.
     pub fn start(host: Host, port: u16) -> Result<Self, String> {
         let server =
             Arc::new(Server::http(("127.0.0.1", port)).map_err(|e| format!("Port {port}: {e}"))?);
@@ -42,18 +42,18 @@ impl McpServer {
 
 impl Drop for McpServer {
     fn drop(&mut self) {
-        // Annahme beenden, aber nicht auf den Faden warten: eine hängende
-        // Verbindung darf das Beenden von DMXCraft nicht aufhalten
+        // Stop accepting, but do not wait for the thread: a hanging connection
+        // must not hold up closing DMXCraft
         self.server.unblock();
         drop(self.thread.take());
     }
 }
 
 fn header(name: &str, value: &str) -> Header {
-    Header::from_bytes(name.as_bytes(), value.as_bytes()).expect("gültiger Header")
+    Header::from_bytes(name.as_bytes(), value.as_bytes()).expect("valid header")
 }
 
-/// Nur Aufrufe ohne `Origin` (Programme) oder von localhost zulassen.
+/// Only allow calls without `Origin` (programs) or from localhost.
 fn origin_ok(req: &tiny_http::Request) -> bool {
     req.headers()
         .iter()
@@ -79,12 +79,12 @@ fn serve(host: &Host, mut req: tiny_http::Request) {
     match req.method() {
         Method::Post => {}
         Method::Delete => {
-            // Sitzung beenden: es gibt keine Sitzungen
+            // End session: there are no sessions
             let _ = req.respond(Response::empty(200));
             return;
         }
         _ => {
-            // kein Server-Sent-Events-Strom
+            // no server-sent events stream
             let _ = req.respond(
                 Response::from_string("Method not allowed")
                     .with_status_code(405)
@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn http_roundtrip() {
         let host = Host::headless(dmxcraft_core::Engine::new(dmxcraft_core::Show::new("T", 1)));
-        // freien Port suchen
+        // find a free port
         let port = (40000..40100)
             .find(|p| std::net::TcpListener::bind(("127.0.0.1", *p)).is_ok())
             .unwrap();

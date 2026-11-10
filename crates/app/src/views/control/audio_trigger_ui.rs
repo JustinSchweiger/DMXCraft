@@ -1,5 +1,5 @@
-//! Eigenschaften der Audio-Trigger eines Audio-Blocks (SUPER SCENE):
-//! Band, Schwellwert, Hysterese, Abstände und Ziel.
+//! Properties of the audio triggers of an audio block (SUPER SCENE): band,
+//! threshold, hysteresis, intervals and target.
 
 use std::collections::HashMap;
 
@@ -14,28 +14,28 @@ use crate::state::AppState;
 use crate::ui::theme;
 use crate::ui::widgets::{menu, Icon, IconButton};
 
-/// Was die Trigger-Liste anzeigt (vorab aus Show und Zustand ermittelt).
+/// What the trigger list shows (determined beforehand from show and state).
 pub struct TriggerCx {
-    /// Szenen als mögliche Ziele (ohne die SUPER SCENE selbst).
+    /// Scenes as possible targets (without the SUPER SCENE itself).
     pub scenes: Vec<(SceneId, String)>,
-    /// Beschriftung des Ziels je Trigger.
+    /// Label of the target per trigger.
     pub labels: HashMap<u32, String>,
-    /// Anzahl der Ereignisse je Trigger (`None`: wird berechnet).
+    /// Number of events per trigger (`None`: being calculated).
     pub counts: HashMap<u32, Option<usize>>,
-    /// Trigger, dessen Ziel gerade gewählt wird.
+    /// Trigger whose target is currently being chosen.
     pub picking: Option<u32>,
 }
 
-/// Wunsch aus der Liste an den Aufrufer.
+/// Request from the list to the caller.
 #[derive(Clone, Copy, PartialEq)]
 pub enum TriggerAction {
     None,
-    /// Ziel per Alt + Klick wählen.
+    /// Choose the target via Alt + click.
     Pick(u32),
     CancelPick,
 }
 
-/// Anzeige-Daten für den Audio-Block `clip` der SUPER SCENE `scene`.
+/// Display data for the audio block `clip` of the SUPER SCENE `scene`.
 pub fn trigger_cx(
     e: &Engine,
     st: &AppState,
@@ -86,7 +86,7 @@ pub fn trigger_cx(
     })
 }
 
-/// Liste der Trigger; `true`, wenn sich etwas geändert hat.
+/// List of triggers; `true` if something changed.
 pub fn triggers_ui(
     ui: &mut egui::Ui,
     triggers: &mut Vec<AudioTrigger>,
@@ -158,7 +158,7 @@ fn trigger_ui(
     remove: &mut Option<u32>,
 ) {
     let id = ui.make_persistent_id(("audio_trigger", tr.id));
-    // Kopf: Name, Anzahl, stumm, löschen
+    // Header: name, count, mute, delete
     ui.horizontal(|ui| {
         ui.add_enabled(
             enabled,
@@ -216,7 +216,7 @@ fn trigger_ui(
             {
                 match band {
                     Some(b) => (tr.low_hz, tr.high_hz) = b.range(),
-                    // eigenes Band: Startwerte, die keinem Preset entsprechen
+                    // custom band: start values that match no preset
                     None => (tr.low_hz, tr.high_hz) = (40.0, 120.0),
                 }
             }
@@ -279,7 +279,7 @@ fn trigger_ui(
     ms(ui, "hold", t("Hold time (ms)"), &mut tr.hold_ms, 1000.0);
     ms(ui, "lead", t("Lead time (ms)"), &mut tr.lead_ms, 500.0);
     toggle_row(ui, t("Only during the event"), &mut tr.flash, enabled);
-    // Ziel
+    // Target
     let label = tcx.labels.get(&tr.id).cloned().unwrap_or_default();
     label_row(ui, t("Target"), |ui| {
         ui.add(
@@ -340,7 +340,7 @@ fn trigger_ui(
     }
 }
 
-/// Alt + Klick während der Zielwahl: Ziel des Triggers setzen.
+/// Alt + click while choosing the target: set the trigger's target.
 pub fn apply_trigger_pick(
     e: &mut Engine,
     st: &mut AppState,

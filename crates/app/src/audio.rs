@@ -1,9 +1,9 @@
-//! Audiowiedergabe der SUPER SCENES und Analyse (Wellenform, Bänder, Beat-
-//! Raster) für die Zeitleiste.
+//! Audio playback of SUPER SCENES and analysis (waveform, bands, beat grid)
+//! for the timeline.
 //!
-//! Jedes Frame werden die Audioblöcke laufender SUPER SCENES mit ihrer
-//! Zeitleiste abgeglichen: fehlende Spieler werden an der richtigen Stelle
-//! gestartet, abweichende nachgestellt, beendete entfernt.
+//! Every frame the audio blocks of running SUPER SCENES are matched against
+//! their timeline: missing players are started at the right position,
+//! drifting ones are corrected, finished ones are removed.
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -17,7 +17,7 @@ use dmxcraft_core::timeline::ClipContent;
 use dmxcraft_core::{Engine, SceneId};
 use rodio::{Decoder, OutputStream, Sink, Source};
 
-/// Zustand der Analyse einer Datei: läuft, fertig oder nicht lesbar.
+/// State of the analysis of a file: running, done or unreadable.
 #[derive(Clone)]
 pub enum WaveState {
     Loading,
@@ -25,8 +25,8 @@ pub enum WaveState {
     Failed(String),
 }
 
-/// Ein laufender Spieler: `base` = Stelle in der Datei, an der er begann
-/// (nur bei Formaten ohne Sprungmöglichkeit ≠ 0).
+/// A running player: `base` = position in the file where it started
+/// (≠ 0 only for formats that cannot seek).
 pub(crate) struct Player {
     pub(crate) sink: Sink,
     pub(crate) base: Duration,
@@ -41,27 +41,27 @@ impl Player {
 pub struct AudioPlayer {
     stream: Option<OutputStream>,
     stream_failed: bool,
-    /// Laufende Spieler je (Szene, Block).
+    /// Running players per (scene, block).
     sinks: HashMap<(SceneId, u32), Player>,
     waves: Arc<Mutex<HashMap<String, WaveState>>>,
-    /// Ton-Master 0–1 (nur DMXCraft, nicht die Systemlautstärke).
+    /// Sound master 0–1 (DMXCraft only, not the system volume).
     pub master: f32,
     pub mute: bool,
-    /// Nach dem Zurücksetzen: MIDI-Fader wird ignoriert, bis er den
-    /// aktuellen Wert erreicht (bzw. überquert).
+    /// After a reset: the MIDI fader is ignored until it reaches (or crosses)
+    /// the current value.
     pub pickup: bool,
-    /// Letzter ignorierter Fader-Wert (zum Erkennen des Überquerens).
+    /// Last ignored fader value (to detect crossing).
     pickup_last: Option<f32>,
-    /// Laufendes Ausfaden: Startwert, Beginn, Dauer.
+    /// Running fade-out: start value, start time, duration.
     fade: Option<(f32, Instant, Duration)>,
-    /// Dauer für „Ton ausfaden“ (aus den Einstellungen).
+    /// Duration of “Fade out sound” (from the settings).
     pub fade_ms: u32,
-    /// Höchstlautstärke 0–1: Ton-Master 100 % entspricht diesem Wert.
+    /// Maximum volume 0–1: sound master 100 % corresponds to this value.
     pub limit: f32,
-    /// Laufende SUPER SCENES im letzten Frame (zum Erkennen eines Starts).
+    /// Running SUPER SCENES in the last frame (to detect a start).
     running: HashSet<SceneId>,
-    /// Abspielkopf wird gezogen: Ton bis zum Loslassen anhalten (setzt die
-    /// Zeitleiste in jedem Frame, `update` setzt es zurück).
+    /// Playhead is being dragged: hold the sound until release (set by the
+    /// timeline every frame, reset by `update`).
     pub scrubbing: bool,
 }
 
@@ -86,7 +86,7 @@ impl Default for AudioPlayer {
 }
 
 impl AudioPlayer {
-    /// Wirksame Lautstärke (Master × Höchstlautstärke, stumm).
+    /// Effective volume (master × maximum volume, mute).
     pub fn gain(&self) -> f32 {
         if self.mute {
             0.0
@@ -95,14 +95,14 @@ impl AudioPlayer {
         }
     }
 
-    /// Ton-Master setzen (beendet ein laufendes Ausfaden).
+    /// Set the sound master (ends a running fade-out).
     pub fn set_master(&mut self, v: f32) {
         self.master = v.clamp(0.0, 1.0);
         self.fade = None;
     }
 
-    /// Wert eines MIDI-Faders: nach dem Zurücksetzen erst übernehmen, wenn
-    /// der Fader den aktuellen Wert erreicht oder überquert hat.
+    /// Value of a MIDI fader: after a reset only take it over once the fader
+    /// has reached or crossed the current value.
     pub fn fader_input(&mut self, v: f32) {
         if self.pickup {
             let near = (v - self.master).abs() <= 0.03;
@@ -119,8 +119,8 @@ impl AudioPlayer {
         self.set_master(v);
     }
 
-    /// Dauer von „Ton ausfaden“: die einer laufenden SUPER SCENE mit Ton,
-    /// sonst die aus den Programmeinstellungen.
+    /// Duration of “Fade out sound”: that of a running SUPER SCENE with audio,
+    /// otherwise the one from the program settings.
     pub fn fade_ms_for(&self, e: &Engine) -> u32 {
         e.show()
             .scenes
@@ -131,7 +131,7 @@ impl AudioPlayer {
             .unwrap_or(self.fade_ms)
     }
 
-    /// Gleichmäßig auf 0 ausblenden (Dauer siehe [`Self::fade_ms_for`]).
+    /// Fade out evenly to 0 (duration see [`Self::fade_ms_for`]).
     pub fn start_fade(&mut self, e: &Engine) {
         let ms = self.fade_ms_for(e);
         self.start_fade_ms(ms);
@@ -148,19 +148,19 @@ impl AudioPlayer {
         self.fade.is_some()
     }
 
-    /// Ton-Master auf 100 % (z. B. beim Start einer SUPER SCENE).
+    /// Sound master to 100 % (e.g. when a SUPER SCENE starts).
     fn reset(&mut self) {
         if self.master < 1.0 || self.fade.is_some() {
             self.master = 1.0;
             self.fade = None;
-            // ein MIDI-Fader steht vermutlich noch unten
+            // a MIDI fader is probably still at the bottom
             self.pickup = true;
             self.pickup_last = None;
         }
     }
 
-    /// Ausfaden fortschreiben und Starts von SUPER SCENES erkennen.
-    /// Gibt `true` zurück, wenn ein Ausfaden gerade fertig wurde.
+    /// Advance the fade-out and detect starts of SUPER SCENES.
+    /// Returns `true` when a fade-out has just finished.
     fn tick(&mut self, e: &Engine, reset_on_start: bool) -> bool {
         let mut done = false;
         if let Some((from, start, dur)) = self.fade {
@@ -187,8 +187,8 @@ impl AudioPlayer {
         done
     }
 
-    /// Analyse einer Datei (startet sie beim ersten Aufruf im Hintergrund;
-    /// fertige Analysen kommen aus dem Zwischenspeicher).
+    /// Analysis of a file (starts it in the background on the first call;
+    /// finished analyses come from the cache).
     pub fn wave(&self, path: &str, ctx: &eframe::egui::Context) -> WaveState {
         let mut map = self.waves.lock().expect("Wellenformen");
         if let Some(w) = map.get(path) {
@@ -209,7 +209,7 @@ impl AudioPlayer {
         WaveState::Loading
     }
 
-    /// Fertige Analyse einer Datei (ohne eine neue zu starten).
+    /// Finished analysis of a file (without starting a new one).
     pub fn ready(&self, path: &str) -> Option<Arc<AudioAnalysis>> {
         match self.waves.lock().expect("Wellenformen").get(path) {
             Some(WaveState::Ready(a)) => Some(a.clone()),
@@ -217,13 +217,13 @@ impl AudioPlayer {
         }
     }
 
-    /// Wiedergabe an die laufenden SUPER SCENES anpassen.
+    /// Adapt playback to the running SUPER SCENES.
     pub fn update(&mut self, e: &mut Engine, settings: &crate::settings::Settings) {
         let scrubbing = std::mem::take(&mut self.scrubbing);
         self.fade_ms = settings.audio_fade_ms;
         self.limit = f32::from(settings.audio_limit_pct.clamp(1, 100)) / 100.0;
         if self.tick(e, settings.audio_reset_on_start) && settings.audio_fade_stop {
-            // ausgeblendet: SUPER SCENES mit Ton beenden (inkl. „Springe zu“)
+            // faded out: stop SUPER SCENES with audio (incl. “Jump to”)
             let with_audio: Vec<SceneId> = e
                 .show()
                 .scenes
@@ -283,8 +283,8 @@ impl AudioPlayer {
         };
         for (key, (path, pos, vol, rate)) in wanted {
             let vol = vol.clamp(0.0, 1.0);
-            // langsamer/schneller abspielen wie ein Plattenspieler (Tonhöhe
-            // ändert sich mit), damit der Ton synchron zur Szene bleibt
+            // play slower/faster like a turntable (the pitch changes too) so the
+            // sound stays in sync with the scene
             let running = rate > 0.01;
             if let std::collections::hash_map::Entry::Vacant(slot) = self.sinks.entry(key) {
                 let Some(p) = start_player(stream, &path, pos) else {
@@ -303,8 +303,8 @@ impl AudioPlayer {
                 p.sink.pause();
                 continue;
             }
-            // weicht die Wiedergabe ab (Lineal, Sprung, Fortsetzen nach
-            // Pause): springen; geht das nicht, an der Stelle neu starten
+            // playback drifts (ruler, jump, resume after pause): seek; if that is
+            // not possible, restart at the position
             let drift = p.pos().as_secs_f64() - pos.as_secs_f64();
             if p.sink.is_paused() || drift.abs() > 0.15 {
                 let seeked = p.base.is_zero() && p.sink.try_seek(pos).is_ok();
@@ -324,7 +324,7 @@ impl AudioPlayer {
     }
 }
 
-/// SUPER SCENE mit Audioblöcken?
+/// SUPER SCENE with audio blocks?
 fn has_audio(s: &dmxcraft_core::Scene) -> bool {
     s.timeline().is_some_and(|tl| {
         tl.tracks
@@ -334,13 +334,13 @@ fn has_audio(s: &dmxcraft_core::Scene) -> bool {
     })
 }
 
-/// Datei öffnen; aus einer `File` (nicht `BufReader`) erzeugt, damit der
-/// Decoder springen kann (Länge bekannt, „seekable“).
+/// Open the file; created from a `File` (not a `BufReader`) so the decoder
+/// can seek (length known, “seekable”).
 pub(crate) fn open_decoder(path: &str) -> Option<Decoder<BufReader<File>>> {
     Decoder::try_from(File::open(path).ok()?).ok()
 }
 
-/// Spieler an Stelle `pos` starten.
+/// Start a player at position `pos`.
 pub(crate) fn start_player(stream: &OutputStream, path: &str, pos: Duration) -> Option<Player> {
     let sink = Sink::connect_new(stream.mixer());
     sink.append(open_decoder(path)?);
@@ -350,13 +350,13 @@ pub(crate) fn start_player(stream: &OutputStream, path: &str, pos: Duration) -> 
             base: Duration::ZERO,
         });
     }
-    // Format ohne Sprungmöglichkeit: bis zur Stelle vorspulen
+    // Format cannot seek: skip ahead to the position
     let sink = Sink::connect_new(stream.mixer());
     sink.append(open_decoder(path)?.skip_duration(pos));
     Some(Player { sink, base: pos })
 }
 
-/// Analyse aus dem Zwischenspeicher oder neu erstellen (und speichern).
+/// Analysis from the cache or created anew (and stored).
 fn analysis(path: &str) -> Result<AudioAnalysis, String> {
     let cache = cache_file(path);
     if let Some(a) = cache
@@ -379,7 +379,7 @@ fn analysis(path: &str) -> Result<AudioAnalysis, String> {
     Ok(a)
 }
 
-/// Datei dekodieren (auf Mono gemischt) und analysieren.
+/// Decode the file (mixed to mono) and analyze it.
 fn analyze_file(path: &str) -> Result<AudioAnalysis, String> {
     let file = File::open(path).map_err(|e| e.to_string())?;
     let dec = Decoder::try_from(file).map_err(|e| e.to_string())?;
@@ -398,7 +398,7 @@ fn analyze_file(path: &str) -> Result<AudioAnalysis, String> {
     Ok(an.finish())
 }
 
-/// Zwischenspeicher je Datei (Pfad, Größe und Änderungszeit im Namen).
+/// Cache per file (path, size and modification time in the name).
 fn cache_file(path: &str) -> Option<std::path::PathBuf> {
     let meta = std::fs::metadata(path).ok()?;
     let mtime = meta
@@ -418,13 +418,13 @@ fn cache_file(path: &str) -> Option<std::path::PathBuf> {
     Some(dir.join(format!("{h:016x}.json")))
 }
 
-/// Länge einer Audiodatei in ms (für neue Blöcke).
+/// Length of an audio file in ms (for new blocks).
 pub fn duration_ms(path: &str) -> Option<u64> {
     let dec = open_decoder(path)?;
     if let Some(d) = dec.total_duration() {
         return Some(d.as_millis() as u64);
     }
-    // ohne Längenangabe: Samples zählen
+    // no length given: count samples
     let rate = u64::from(dec.sample_rate()).max(1);
     let channels = u64::from(dec.channels()).max(1);
     let n = dec.count() as u64;
@@ -435,7 +435,7 @@ pub fn duration_ms(path: &str) -> Option<u64> {
 mod tests {
     use super::*;
 
-    /// Nach dem Zurücksetzen wirkt der MIDI-Fader erst ganz oben.
+    /// After a reset the MIDI fader only takes effect at the very top.
     #[test]
     fn fader_pickup_after_reset() {
         let mut a = AudioPlayer::default();
@@ -444,16 +444,16 @@ mod tests {
         a.reset();
         assert_eq!(a.master, 1.0);
         assert!(a.pickup);
-        // Fader steht noch unten / wird hochgeschoben: ignoriert
+        // Fader is still at the bottom / being pushed up: ignored
         a.fader_input(0.0);
         a.fader_input(0.6);
         assert_eq!(a.master, 1.0);
-        // oben angekommen: übernimmt wieder
+        // arrived at the top: takes over again
         a.fader_input(1.0);
         assert!(!a.pickup);
         a.fader_input(0.4);
         assert!((a.master - 0.4).abs() < 1e-6);
-        // ohne Änderung kein Fangmodus
+        // no change, no catch mode
         a.set_master(1.0);
         a.reset();
         assert!(!a.pickup);
@@ -468,14 +468,14 @@ mod tests {
         assert_eq!(a.gain(), 0.0);
         a.mute = false;
         a.limit = 0.3;
-        assert!((a.gain() - 0.3).abs() < 1e-6, "Höchstlautstärke begrenzt");
+        assert!((a.gain() - 0.3).abs() < 1e-6, "Maximum volume limited");
         a.start_fade_ms(100);
         assert!(a.fading());
         a.set_master(0.5);
-        assert!(!a.fading(), "Eingriff beendet das Ausfaden");
+        assert!(!a.fading(), "Intervention ends the fade-out");
     }
 
-    /// Kleine WAV-Datei (Mono, 8 kHz, 16 Bit): 0,5 s Ton, 0,5 s Stille.
+    /// Small WAV file (mono, 8 kHz, 16 bit): 0.5 s tone, 0.5 s silence.
     fn wav(path: &std::path::Path) {
         let rate = 8000u32;
         let n = rate as usize;
@@ -505,8 +505,8 @@ mod tests {
         std::fs::write(path, f).unwrap();
     }
 
-    /// MP3 (falls ffmpeg da ist): der Decoder muss springen können, sonst
-    /// folgt der Ton dem Lineal nicht.
+    /// MP3 (if ffmpeg is present): the decoder must be able to seek, otherwise
+    /// the sound does not follow the ruler.
     #[test]
     fn mp3_decoder_can_seek() {
         let w = std::env::temp_dir().join("dmxcraft_seek.wav");
@@ -523,7 +523,7 @@ mod tests {
         }
         let mut dec = open_decoder(&mp3.to_string_lossy()).expect("Decoder");
         assert!(dec.try_seek(Duration::from_millis(600)).is_ok());
-        // zurückspringen geht nur mit „seekable“
+        // seeking backwards only works when “seekable”
         assert!(dec.try_seek(Duration::from_millis(100)).is_ok());
         let _ = std::fs::remove_file(w);
         let _ = std::fs::remove_file(mp3);

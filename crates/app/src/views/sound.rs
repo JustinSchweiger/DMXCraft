@@ -1,5 +1,5 @@
-//! Reiter SOUND: zwei Player mit Wellenform und Playlist, Überblenden und
-//! Jingle-Pads. Abgespielt wird in [`crate::sound::SoundPlayer`].
+//! SOUND tab: two players with waveform and playlist, crossfade and jingle
+//! pads. Playback happens in [`crate::sound::SoundPlayer`].
 
 use dmxcraft_core::sound::{SoundBoard, Track};
 use eframe::egui::{
@@ -22,9 +22,9 @@ const BAR_H: f32 = 44.0;
 
 #[derive(Default)]
 pub struct SoundView {
-    /// Markierter Titel je Player.
+    /// Selected track per player.
     sel: [Option<usize>; 2],
-    /// Titel, der gerade umbenannt wird: Player, Index, Text, Fokus gesetzt.
+    /// Track currently being renamed: player, index, text, focus set.
     rename: Option<(usize, usize, String, bool)>,
 }
 
@@ -61,7 +61,7 @@ impl View for SoundView {
         let p = ui.painter().clone();
         p.rect_filled(full, 0.0, theme::surface());
 
-        // Player oben
+        // Players at the top
         let decks = board.decks.len().min(2);
         let top = Rect::from_min_size(full.min, vec2(full.width(), DECK_H));
         let w = top.width() / decks as f32;
@@ -80,7 +80,7 @@ impl View for SoundView {
             Stroke::new(1.0, theme::border()),
         );
 
-        // Überblenden + Master
+        // Crossfade + master
         let bar = Rect::from_min_size(pos2(full.left(), top.bottom()), vec2(full.width(), BAR_H));
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar.shrink2(vec2(12.0, 0.0))));
         crossfade_bar(&mut child, &mut cx.state.sound, &mut board);
@@ -90,9 +90,9 @@ impl View for SoundView {
             Stroke::new(1.0, theme::border()),
         );
 
-        // Playlisten + Pads
+        // Playlists + pads
         let bottom = Rect::from_min_max(pos2(full.left(), bar.bottom() + 1.0), full.max);
-        // Spalten mit verschiebbaren Trennern (Breitenanteile in der Show)
+        // Columns with movable dividers (width shares stored in the show)
         let n = decks + 1;
         let weights: Vec<f32> = (0..n)
             .map(|k| {
@@ -165,12 +165,12 @@ impl View for SoundView {
     }
 }
 
-/// Ein Player: Kopf, Wellenform, Zeiten, Bedienung, Lautstärke.
+/// One player: header, waveform, times, controls, volume.
 fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, rect: Rect) {
     let color = deck_color(d);
     let sp = &mut cx.state.sound;
     let state = sp.state(d);
-    // geladener Titel; auch wenn er inzwischen in eine andere Liste verschoben wurde
+    // loaded track; also if it has been moved to another list in the meantime
     let track: Option<Track> = sp.current_path(d).map(|path| {
         board
             .decks
@@ -196,7 +196,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
     let pos = sp.pos_ms(d);
     let p = ui.painter().clone();
     let vol_w = 52.0;
-    // Lautstärke zur Mitte hin: bei A rechts, bei B links
+    // Volume towards the middle: on the right for A, on the left for B
     let vol_left = d % 2 == 1;
     let (main_l, main_r) = if vol_left {
         (rect.left() + vol_w, rect.right())
@@ -213,7 +213,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
     let ui = &mut ui;
     ui.spacing_mut().item_spacing = vec2(theme::SP_XS, theme::SP_S);
 
-    // Kopf
+    // Header
     ui.horizontal(|ui| {
         ui.set_height(24.0);
         ui.label(label(&tr!("PLAYER {d}", d = deck_name(d)), color));
@@ -254,7 +254,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
         });
     });
 
-    // Wellenform
+    // Waveform
     let (wr, resp) =
         ui.allocate_exact_size(vec2(ui.available_width(), 96.0), Sense::click_and_drag());
     p.rect_filled(wr, CornerRadius::same(theme::R_S), theme::bg());
@@ -311,7 +311,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
         }
     }
 
-    // Zeiten
+    // Times
     ui.horizontal(|ui| {
         let elapsed_color = if state == DeckState::Ready || state == DeckState::Empty {
             theme::text_dim()
@@ -352,7 +352,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
         });
     });
 
-    // Bedienung
+    // Controls
     ui.horizontal(|ui| {
         let key = |k: &str| format!("sound/deck/{d}/{k}");
         let name = |what: &str| {
@@ -430,7 +430,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
         });
     });
 
-    // Lautstärke
+    // Volume
     let vr = if vol_left {
         Rect::from_min_max(rect.min, pos2(rect.left() + vol_w, rect.bottom()))
     } else {
@@ -465,7 +465,7 @@ fn deck_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, d: usize, 
     vertical_slider(ui, track_r, vol, color, ("sound/deck/vol", d));
 }
 
-/// Senkrechter Lautstärkeregler (0–1).
+/// Vertical volume slider (0–1).
 fn vertical_slider(ui: &mut Ui, r: Rect, v: &mut f32, color: Color32, id: (&str, usize)) {
     let resp = ui.interact(
         r.expand(4.0),
@@ -495,7 +495,7 @@ fn vertical_slider(ui: &mut Ui, r: Rect, v: &mut f32, color: Color32, id: (&str,
     );
 }
 
-/// Waagrechter Regler (0–1).
+/// Horizontal slider (0–1).
 fn horizontal_slider(
     ui: &mut Ui,
     width: f32,
@@ -573,7 +573,7 @@ fn crossfade_bar(ui: &mut Ui, sp: &mut SoundPlayer, board: &mut SoundBoard) {
             board.crossfade_ms = (secs * 1000.0) as u32;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            // feste Breite, sonst wandert der Regler beim Ziehen mit
+            // fixed width, otherwise the slider moves along while dragging
             ui.add_sized(
                 vec2(40.0, 20.0),
                 egui::Label::new(
@@ -650,8 +650,8 @@ impl SoundView {
         });
 
         let body = Rect::from_min_max(pos2(rect.left(), head.bottom() + 1.0), rect.max).shrink(4.0);
-        // Dateien aus Explorer/Finder: Zeiger-Stelle (während des Ziehens
-        // meldet nicht jedes System Bewegungen, daher die letzte bekannte)
+        // Files from Explorer/Finder: pointer position (not every system reports
+        // movement during the drag, hence the last known one)
         let pointer = crate::ui::file_drop::pointer(ui.ctx());
         let hovering = crate::ui::file_drop::hovering(ui.ctx());
         let over = pointer.is_some_and(|q| rect.contains(q));
@@ -664,7 +664,7 @@ impl SoundView {
             );
             ui.ctx().request_repaint();
         }
-        // Dateien auf die Liste ziehen
+        // Drag files onto the list
         if !locked && over {
             let dropped = ui.input(|i| i.raw.dropped_files.clone());
             for f in dropped {
@@ -692,9 +692,9 @@ impl SoundView {
             None
         };
         let mut action: Option<(usize, &str)> = None;
-        // Umbenennen beendet: Some(neuer Name) bzw. None = abgebrochen
+        // Renaming finished: Some(new name) or None = cancelled
         let mut rename_done: Option<Option<String>> = None;
-        // abgelegter Titel: Quell-Player, Quell-Index, Einfügestelle
+        // dropped track: source player, source index, insertion point
         let mut drop_track: Option<(usize, usize, usize)> = None;
         egui::ScrollArea::vertical()
             .id_salt(("playlist", d))
@@ -791,8 +791,7 @@ impl SoundView {
                         matches!(&self.rename, Some((rd, ri, _, _)) if *rd == d && *ri == i);
                     if renaming {
                         if let Some((_, _, text, focused)) = &mut self.rename {
-                            // eigene Kind-Ebene, damit das Feld die Zeilen
-                            // darunter nicht verschiebt
+                            // own child layer so the field does not shift the rows below
                             let mut fui = ui.new_child(
                                 egui::UiBuilder::new().max_rect(name_r.shrink2(vec2(0.0, 4.0))),
                             );
@@ -803,10 +802,9 @@ impl SoundView {
                                     .id(id)
                                     .hint_text(tr_.file_name()),
                             );
-                            // Fokus so lange anfordern, bis das Feld ihn hat
-                            // (das schließende Kontextmenü kann ihn im ersten
-                            // Frame wieder nehmen); dann alles markieren,
-                            // damit Tippen den Namen ersetzt.
+                            // Keep requesting focus until the field has it (the closing context menu
+                            // can take it away again in the first frame); then select everything so
+                            // typing replaces the name.
                             if !*focused {
                                 te.request_focus();
                                 if te.has_focus() {
@@ -849,7 +847,7 @@ impl SoundView {
                             name_c,
                         );
                     }
-                    // Dateiname bleibt beim Überfahren sichtbar
+                    // File name stays visible on hover
                     let file = std::path::Path::new(&tr_.path)
                         .file_name()
                         .map_or(tr_.path.clone(), |n| n.to_string_lossy().into_owned());
@@ -859,8 +857,8 @@ impl SoundView {
                         resp.on_hover_text(file.clone())
                     };
                     if resp.clicked() {
-                        // nur eine Auswahl über beide Playlisten, damit
-                        // Entf genau einen Titel trifft
+                        // only one selection across both playlists so Delete hits exactly one
+                        // track
                         self.sel = [None, None];
                         self.sel[d] = Some(i);
                     }
@@ -925,7 +923,7 @@ impl SoundView {
                         }
                     });
                 }
-                // Einfügestelle beim Ziehen eines Titels
+                // Insertion point while dragging a track
                 if let (Some(_), Some(q)) = (&dragging, pointer) {
                     let list_rect = body;
                     if list_rect.contains(q) {
@@ -953,7 +951,7 @@ impl SoundView {
                     }
                 }
             });
-        // Entf entfernt den ausgewählten Titel (nicht beim Tippen)
+        // Delete removes the selected track (not while typing)
         if action.is_none() && !locked && self.rename.is_none() {
             if let Some(i) = self.sel[d] {
                 let typing = ui.memory(|m| m.focused().is_some());
@@ -1018,15 +1016,15 @@ impl SoundView {
     }
 }
 
-/// Ein Titel wird gezogen (innerhalb oder zwischen den Playlisten).
+/// A track is being dragged (within or between the playlists).
 #[derive(Clone, Copy)]
 struct TrackDrag {
     deck: usize,
     index: usize,
 }
 
-/// Länge eines Titels: gespeichert oder aus der (zwischengespeicherten)
-/// Analyse, die dafür bei Bedarf im Hintergrund startet.
+/// Length of a track: stored or from the (cached) analysis, which starts in
+/// the background if needed.
 fn track_len_audio(audio: &crate::audio::AudioPlayer, t: &Track, ctx: &egui::Context) -> u64 {
     if t.length_ms > 0 {
         return t.length_ms;
@@ -1041,7 +1039,7 @@ fn track_len(cx: &ViewCtx<'_>, t: &Track, ctx: &egui::Context) -> u64 {
     track_len_audio(&cx.state.audio, t, ctx)
 }
 
-/// Audiodateien eines Ordners, nach Namen sortiert.
+/// Audio files of a folder, sorted by name.
 fn audio_files(dir: &std::path::Path) -> Vec<Track> {
     let mut files: Vec<_> = std::fs::read_dir(dir)
         .into_iter()
@@ -1061,7 +1059,7 @@ fn audio_files(dir: &std::path::Path) -> Vec<Track> {
         .collect()
 }
 
-/// Jingle-Pads (3 × 4).
+/// Jingle pads (grid).
 fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect, locked: bool) {
     let p = ui.painter().clone();
     let head = Rect::from_min_size(rect.min, vec2(rect.width(), 32.0));
@@ -1085,7 +1083,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
                 cx.state.sound.stop_pads();
             }
             ui.add_space(theme::SP_S);
-            // Raster: Spalten × Zeilen
+            // Grid: columns × rows
             ui.add_enabled_ui(!locked, |ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 let mut rows = board.pad_rows;
@@ -1257,7 +1255,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
                 cx.state.sound.pad(board, i);
             }
         }
-        // Datei auf ein Pad ziehen
+        // Drag a file onto a pad
         if !locked && hovering && hover.is_some_and(|h| r.contains(h)) {
             ui.painter().rect_stroke(
                 r,
@@ -1354,7 +1352,7 @@ fn pads_ui(ui: &mut Ui, cx: &mut ViewCtx<'_>, board: &mut SoundBoard, rect: Rect
     }
 }
 
-/// Zugeordnete Tasten/MIDI auch auswerten, wenn der Reiter nicht offen ist.
+/// Evaluate mapped keys/MIDI even when the tab is not open.
 pub fn poll(ctx: &egui::Context, board: &SoundBoard, sp: &mut SoundPlayer) {
     use crate::mapping::poll as fired;
     for d in 0..board.decks.len().min(2) {

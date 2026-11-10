@@ -1,4 +1,4 @@
-//! EINRICHTEN → Bühnenplan: Geräte anordnen.
+//! SETUP → stage plan: arrange fixtures.
 
 use crate::i18n::t;
 use dmxcraft_core::{plan, FixtureId};
@@ -39,8 +39,8 @@ enum Arrange {
 impl View for StageEditorView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut arrange: Option<Arrange> = None;
-        // Werkzeuge senkrecht links: Anordnen, Ansicht (Einrasten, Raster,
-        // Namen), Zoom, Hilfe
+        // Tools vertically on the left: arrange, view (snap, grid, names), zoom,
+        // help
         egui::Panel::left("stage_tools")
             .resizable(false)
             .exact_size(34.0)
@@ -214,7 +214,7 @@ fn set_pos(cx: &mut ViewCtx<'_>, id: FixtureId, p: [f32; 2]) {
     }
 }
 
-/// Kurze waagerechte Trennlinie in der Werkzeugleiste.
+/// Short horizontal divider in the toolbar.
 fn tool_sep(ui: &mut egui::Ui) {
     let (r, _) = ui.allocate_exact_size(egui::vec2(26.0, 7.0), egui::Sense::hover());
     ui.painter().line_segment(

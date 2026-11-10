@@ -1,10 +1,10 @@
-//! Sound-Player (Reiter SOUND): Player mit Playlisten und Jingle-Pads.
-//! Hier nur die mit der Show gespeicherten Einstellungen; abgespielt wird in
-//! der Oberfläche.
+//! Sound player (SOUND tab): players with playlists and jingle pads.
+//! Only the settings stored with the show live here; playback happens in the
+//! UI.
 
 use serde::{Deserialize, Serialize};
 
-/// Anzahl der Player und Pads.
+/// Number of players and pads.
 pub const DECKS: usize = 2;
 pub const PADS: usize = 12;
 
@@ -13,22 +13,22 @@ pub const PADS: usize = 12;
 pub struct SoundBoard {
     pub decks: Vec<Deck>,
     pub pads: Vec<Pad>,
-    /// Dauer von „Überblenden“.
+    /// Duration of “Crossfade”.
     pub crossfade_ms: u32,
-    /// Lautstärke aller Player und Pads (0–1).
+    /// Volume of all players and pads (0–1).
     pub master: f32,
-    /// Raster der Pads (Spalten × Zeilen).
+    /// Grid of the pads (columns × rows).
     pub pad_cols: u8,
     pub pad_rows: u8,
-    /// Breitenanteile der Spalten unten: Playlisten, dann Pads.
+    /// Width shares of the columns at the bottom: playlists, then pads.
     pub widths: Vec<f32>,
 }
 
-/// Grenzen für das Pad-Raster.
+/// Limits for the pad grid.
 pub const PAD_GRID_MAX: u8 = 8;
-/// Standardaufteilung unten (Playlist A, Playlist B, Pads).
+/// Default layout at the bottom (playlist A, playlist B, pads).
 pub const WIDTHS: [f32; 3] = [1.0, 1.0, 1.15];
-/// Kleinster Breitenanteil einer Spalte.
+/// Smallest width share of a column.
 pub const MIN_WIDTH: f32 = 0.25;
 
 impl Default for SoundBoard {
@@ -50,7 +50,7 @@ impl SoundBoard {
         *self == Self::default()
     }
 
-    /// Fehlende Player/Pads ergänzen (ältere oder von Hand bearbeitete Shows).
+    /// Add missing players/pads (older or hand-edited shows).
     pub fn normalize(&mut self) {
         self.decks
             .resize(self.decks.len().max(DECKS), Deck::default());
@@ -58,8 +58,8 @@ impl SoundBoard {
         self.pad_rows = self.pad_rows.clamp(1, PAD_GRID_MAX);
         let n = self.pad_count();
         self.pads.resize(self.pads.len().max(n), Pad::default());
-        // leere Pads hinter dem Raster fallen weg; belegte bleiben erhalten
-        // und erscheinen wieder, wenn das Raster größer wird
+        // empty pads beyond the grid are dropped; used ones are kept and appear
+        // again when the grid grows
         while self.pads.len() > n && self.pads.last().is_some_and(|p| p.path.is_empty()) {
             self.pads.pop();
         }
@@ -73,12 +73,12 @@ impl SoundBoard {
         }
     }
 
-    /// Anzahl der sichtbaren Pads.
+    /// Number of visible pads.
     pub fn pad_count(&self) -> usize {
         self.pad_cols as usize * self.pad_rows as usize
     }
 
-    /// Alle verwendeten Dateien (für die Prüfung auf fehlende Dateien).
+    /// All files in use (for the check for missing files).
     pub fn paths(&self) -> impl Iterator<Item = &str> {
         self.decks
             .iter()
@@ -87,7 +87,7 @@ impl SoundBoard {
             .filter(|p| !p.is_empty())
     }
 
-    /// Pfad überall ersetzen (Neu verknüpfen); Anzahl der Stellen.
+    /// Replace a path everywhere (relink); number of places.
     pub fn relink(&mut self, old: &str, new: &str) -> usize {
         let mut n = 0;
         for t in self.decks.iter_mut().flat_map(|d| d.playlist.iter_mut()) {
@@ -106,18 +106,18 @@ impl SoundBoard {
     }
 }
 
-/// Ein Player mit seiner Playlist.
+/// A player with its playlist.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Deck {
     pub playlist: Vec<Track>,
-    /// Lautstärke (0–1).
+    /// Volume (0–1).
     pub volume: f32,
-    /// Titel endlos wiederholen.
+    /// Repeat the track endlessly.
     pub repeat: bool,
-    /// Nach dem Ende den nächsten Titel der Playlist starten.
+    /// Start the next track of the playlist after the end.
     pub auto_next: bool,
-    /// Dauer von „Ausfaden“.
+    /// Duration of “Fade out”.
     pub fade_ms: u32,
 }
 
@@ -133,14 +133,14 @@ impl Default for Deck {
     }
 }
 
-/// Titel einer Playlist.
+/// Track of a playlist.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Track {
     pub path: String,
-    /// Länge (0 = unbekannt).
+    /// Length (0 = unknown).
     #[serde(default)]
     pub length_ms: u64,
-    /// Eigener Anzeigename (leer = Dateiname).
+    /// Own display name (empty = file name).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
 }
@@ -154,12 +154,12 @@ impl Track {
         }
     }
 
-    /// Dateiname ohne Ordner und Endung.
+    /// File name without folder and extension.
     pub fn file_name(&self) -> String {
         file_name(&self.path)
     }
 
-    /// Anzeigename: eigener Name, sonst Dateiname.
+    /// Display name: own name, otherwise the file name.
     pub fn label(&self) -> String {
         if self.name.trim().is_empty() {
             self.file_name()
@@ -169,21 +169,21 @@ impl Track {
     }
 }
 
-/// Jingle-Pad.
+/// Jingle pad.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Pad {
-    /// Anzeigename (leer = Dateiname).
+    /// Display name (empty = file name).
     pub name: String,
     pub path: String,
     pub color: Option<[u8; 3]>,
-    /// Pegel (0–1).
+    /// Level (0–1).
     pub volume: f32,
-    /// Endlos wiederholen, bis erneut gedrückt.
+    /// Repeat endlessly until pressed again.
     pub repeat: bool,
-    /// Beim Start alle anderen Pads stoppen.
+    /// Stop all other pads on start.
     pub exclusive: bool,
-    /// Länge (0 = unbekannt).
+    /// Length (0 = unknown).
     pub length_ms: u64,
 }
 
@@ -211,7 +211,7 @@ impl Pad {
     }
 }
 
-/// Dateiname ohne Ordner und Endung.
+/// File name without folder and extension.
 pub fn file_name(path: &str) -> String {
     std::path::Path::new(path)
         .file_stem()
@@ -247,7 +247,7 @@ mod tests {
         b.pad_cols = 2;
         b.pad_rows = 2;
         b.normalize();
-        // Pad 11 leer → weg, Pad 10 belegt → bleibt (versteckt)
+        // Pad 11 empty → gone, pad 10 used → stays (hidden)
         assert_eq!(b.pad_count(), 4);
         assert_eq!(b.pads.len(), 11);
         b.pad_rows = 6;

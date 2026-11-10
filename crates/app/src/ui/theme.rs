@@ -1,16 +1,16 @@
-//! Design-Tokens von DMXCraft (siehe docs/UI-GUIDELINES.md).
-//! Farben, Abstände, Radien und Schriftgrößen nur von hier verwenden.
+//! Design tokens of DMXCraft (see docs/UI-GUIDELINES.md).
+//! Use colors, spacing, radii and font sizes only from here.
 
 use dmxcraft_core::{Show, ZoneId};
 use eframe::egui::{self, Color32, CornerRadius, FontId, Stroke, Visuals};
 
-// ---------- Farben ----------
+// ---------- Colors ----------
 //
-// Die Flächen- und Textfarben hängen vom gewählten Theme ab und werden über
-// Funktionen gelesen (`theme::bg()` …). Signalfarben (Gefahr, OK, Warnung)
-// sind in allen Themes gleich.
+// Surface and text colors depend on the chosen theme and are read through
+// functions (`theme::bg()` …). Signal colors (danger, OK, warning) are the
+// same in all themes.
 
-/// Ein Farbsatz für Flächen und Text.
+/// A color set for surfaces and text.
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
     pub bg: Color32,
@@ -24,11 +24,11 @@ pub struct Palette {
     pub text: Color32,
     pub text_dim: Color32,
     pub text_faint: Color32,
-    /// Geräte-Balken im DMX-Patch.
+    /// Fixture bars in the DMX patch.
     pub fixture_bar: Color32,
-    /// Helles Theme (egui-Grundstil hell, farbige Schrift wird abgedunkelt).
+    /// Light theme (egui base style light, colored text is darkened).
     pub light: bool,
-    /// Hintergrund der Arbeitsflächen (Bühnenansicht, Effekt-Felder).
+    /// Background of the work areas (stage view, effect fields).
     pub canvas: Color32,
 }
 
@@ -36,7 +36,7 @@ const fn c(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
 
-/// Dunkelblau mit Cyan – die Farben des Logos (Standard).
+/// Navy with cyan – the colors of the logo (default).
 pub const NAVY: Palette = Palette {
     bg: c(0x0b, 0x0e, 0x12),
     surface: c(0x12, 0x16, 0x1c),
@@ -54,7 +54,7 @@ pub const NAVY: Palette = Palette {
     canvas: c(0x0b, 0x0e, 0x12),
 };
 
-/// Neutrales Grau ohne Farbstich, Akzent bleibt Cyan.
+/// Neutral gray without a color cast, accent stays cyan.
 pub const GRAY: Palette = Palette {
     bg: c(0x17, 0x17, 0x18),
     surface: c(0x20, 0x20, 0x21),
@@ -72,7 +72,7 @@ pub const GRAY: Palette = Palette {
     canvas: c(0x17, 0x17, 0x18),
 };
 
-/// Graphit mit kräftigem Blau als Akzent.
+/// Graphite with a strong blue accent.
 pub const GRAPHITE: Palette = Palette {
     bg: c(0x1b, 0x1d, 0x20),
     surface: c(0x23, 0x26, 0x2a),
@@ -90,7 +90,7 @@ pub const GRAPHITE: Palette = Palette {
     canvas: c(0x1b, 0x1d, 0x20),
 };
 
-/// Tiefschwarz (OLED-Bildschirme, dunkle Säle).
+/// Pitch black (OLED screens, dark venues).
 pub const BLACK: Palette = Palette {
     bg: c(0x00, 0x00, 0x00),
     surface: c(0x08, 0x08, 0x09),
@@ -108,8 +108,8 @@ pub const BLACK: Palette = Palette {
     canvas: c(0x00, 0x00, 0x00),
 };
 
-/// Nachtmodus: gedämpftes Rot statt Weiß – blendet am dunklen Pult nicht und
-/// schont die Nachtsicht.
+/// Night mode: muted red instead of white – does not dazzle at a dark desk
+/// and preserves night vision.
 pub const NIGHT: Palette = Palette {
     bg: c(0x0a, 0x05, 0x05),
     surface: c(0x12, 0x09, 0x09),
@@ -127,7 +127,7 @@ pub const NIGHT: Palette = Palette {
     canvas: c(0x0a, 0x05, 0x05),
 };
 
-/// Violett mit Magenta-Akzent.
+/// Violet with a magenta accent.
 pub const VIOLET: Palette = Palette {
     bg: c(0x0f, 0x0b, 0x16),
     surface: c(0x16, 0x11, 0x20),
@@ -145,7 +145,7 @@ pub const VIOLET: Palette = Palette {
     canvas: c(0x0f, 0x0b, 0x16),
 };
 
-/// Hoher Kontrast: Schwarz, Weiß und Gelb, kräftige Ränder.
+/// High contrast: black, white and yellow, strong borders.
 pub const CONTRAST: Palette = Palette {
     bg: c(0x00, 0x00, 0x00),
     surface: c(0x00, 0x00, 0x00),
@@ -163,7 +163,7 @@ pub const CONTRAST: Palette = Palette {
     canvas: c(0x00, 0x00, 0x00),
 };
 
-/// Hell (neutral), Akzent Petrol (Cyan wäre auf Weiß zu blass).
+/// Light (neutral), petrol accent (cyan would be too pale on white).
 pub const LIGHT: Palette = Palette {
     bg: c(0xe9, 0xec, 0xef),
     surface: c(0xf4, 0xf6, 0xf8),
@@ -181,8 +181,8 @@ pub const LIGHT: Palette = Palette {
     canvas: c(0xdf, 0xe3, 0xe7),
 };
 
-/// Daslight: Farben der Daslight-Oberfläche (aus dem Profile Builder
-/// gemessen): Hellgrau, weiße Karten, Blau als Akzent.
+/// Daslight: colors of the Daslight interface (measured from the Profile
+/// Builder): light gray, white cards, blue accent.
 pub const DASLIGHT: Palette = Palette {
     bg: c(0xf6, 0xf6, 0xf6),
     surface: c(0xf6, 0xf6, 0xf6),
@@ -200,7 +200,7 @@ pub const DASLIGHT: Palette = Palette {
     canvas: c(0xe7, 0xe7, 0xe7),
 };
 
-/// Wählbare Themes.
+/// Selectable themes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Theme {
     Navy,
@@ -227,7 +227,7 @@ impl Theme {
         Theme::Daslight,
     ];
 
-    /// Schlüssel für die Einstellungen.
+    /// Key for the settings.
     pub fn key(self) -> &'static str {
         match self {
             Theme::Navy => "navy",
@@ -249,7 +249,7 @@ impl Theme {
             .unwrap_or(Theme::Navy)
     }
 
-    /// Anzeigename (deutsche Quelle, übersetzt über `i18n::t`).
+    /// Display name (English source, translated via `i18n::t`).
     pub fn label(self) -> &'static str {
         match self {
             Theme::Navy => "Dark blue",
@@ -281,7 +281,7 @@ impl Theme {
 
 static ACTIVE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
-/// Aktives Theme setzen; danach `apply` aufrufen, damit egui es übernimmt.
+/// Set the active theme; call `apply` afterwards so egui takes it over.
 pub fn set_theme(t: Theme) {
     let i = Theme::ALL.iter().position(|x| *x == t).unwrap_or(0) as u8;
     ACTIVE.store(i, std::sync::atomic::Ordering::Relaxed);
@@ -331,15 +331,15 @@ pub fn text_faint() -> Color32 {
 pub fn fixture_bar() -> Color32 {
     pal().fixture_bar
 }
-/// Ist das aktive Theme hell?
+/// Is the active theme light?
 pub fn is_light() -> bool {
     pal().light
 }
-/// Hintergrund der Arbeitsflächen (Bühnenansicht, Effekt-Felder).
+/// Background of the work areas (stage view, effect fields).
 pub fn canvas() -> Color32 {
     pal().canvas
 }
-/// Rasterlinien auf der Arbeitsfläche.
+/// Grid lines on the work area.
 pub fn canvas_line() -> Color32 {
     if is_light() {
         c(0xb4, 0xb9, 0xbf)
@@ -347,7 +347,7 @@ pub fn canvas_line() -> Color32 {
         border()
     }
 }
-/// Linien/Bahnen auf der Arbeitsfläche.
+/// Lines/tracks on the work area.
 pub fn canvas_dim() -> Color32 {
     if is_light() {
         c(0x5d, 0x63, 0x6a)
@@ -355,7 +355,7 @@ pub fn canvas_dim() -> Color32 {
         text_dim()
     }
 }
-/// Hilfslinien auf der Arbeitsfläche.
+/// Guide lines on the work area.
 pub fn canvas_faint() -> Color32 {
     if is_light() {
         c(0x95, 0x9b, 0xa2)
@@ -363,8 +363,7 @@ pub fn canvas_faint() -> Color32 {
         text_faint()
     }
 }
-/// Griffe und Markierungen auf der Arbeitsfläche (hell auf dunkel, dunkel
-/// auf hell).
+/// Handles and markers on the work area (light on dark, dark on light).
 pub fn handle() -> Color32 {
     if is_light() {
         c(0x2a, 0x2e, 0x33)
@@ -372,10 +371,10 @@ pub fn handle() -> Color32 {
         Color32::WHITE
     }
 }
-/// Farbe einer Lampe auf der Arbeitsfläche. `col` ist die Lichtfarbe schon
-/// mit der Helligkeit verrechnet (aus = schwarz). Auf dunklem Grund passt
-/// das so; auf hellem Grund wäre „aus“ ein schwarzer Fleck – dort geht es
-/// von einem hellen Grau (aus) zur vollen Farbe (an).
+/// Color of a lamp on the work area. `col` is the light color already
+/// multiplied by the brightness (off = black). On a dark background that
+/// works as is; on a light background “off” would be a black blot – there
+/// it goes from a light gray (off) to the full color (on).
 pub fn lamp(col: Color32) -> Color32 {
     if !is_light() {
         return col;
@@ -387,13 +386,13 @@ pub fn lamp(col: Color32) -> Color32 {
     let mix = |o: f32, x: f32| (o * (1.0 - l) + full(x) * l).clamp(0.0, 255.0) as u8;
     Color32::from_rgb(mix(off[0], r), mix(off[1], g), mix(off[2], b))
 }
-/// Farbige Schrift (Zonen-/Szenenfarbe) lesbar machen: auf hellen Themes
-/// abgedunkelt, sonst unverändert.
+/// Make colored text (zone/scene color) readable: darkened on light themes,
+/// otherwise unchanged.
 pub fn ink(c: Color32) -> Color32 {
     if !is_light() {
         return c;
     }
-    // so weit abdunkeln, dass die Helligkeit für dunkle Schrift reicht
+    // darken until the brightness is enough for dark text
     let lum = 0.2126 * f32::from(c.r()) + 0.7152 * f32::from(c.g()) + 0.0722 * f32::from(c.b());
     let target = 105.0;
     let k = if lum > target { target / lum } else { 1.0 };
@@ -407,14 +406,14 @@ pub fn ink(c: Color32) -> Color32 {
 pub const DANGER: Color32 = Color32::from_rgb(0xef, 0x44, 0x55);
 pub const OK: Color32 = Color32::from_rgb(0x34, 0xd3, 0x99);
 pub const WARN: Color32 = Color32::from_rgb(0xfb, 0xbf, 0x24);
-/// Frequenzbänder der Audio-Wellenform (Low, Mid, High).
+/// Frequency bands of the audio waveform (low, mid, high).
 pub const BAND_LOW: Color32 = Color32::from_rgb(0x2f, 0x80, 0xff);
 pub const BAND_MID: Color32 = Color32::from_rgb(0xf5, 0xa5, 0x24);
 pub const BAND_HIGH: Color32 = Color32::from_rgb(0xee, 0xf2, 0xff);
-/// Gehäusefarbe der DIP-Schalter-Anzeige.
+/// Housing color of the DIP switch display.
 pub const DIP_BODY: Color32 = Color32::from_rgb(0x1c, 0x3f, 0x8a);
 
-/// Standardfarben für Zonen ohne eigene Farbe.
+/// Default colors for zones without their own color.
 pub const ZONE_PALETTE: [[u8; 3]; 8] = [
     [0x19, 0xe3, 0xf0],
     [0xf4, 0x5d, 0xb8],
@@ -426,7 +425,7 @@ pub const ZONE_PALETTE: [[u8; 3]; 8] = [
     [0xd8, 0xde, 0xe6],
 ];
 
-// ---------- Abstände, Radien, Schrift ----------
+// ---------- Spacing, radii, fonts ----------
 pub const SP_XS: f32 = 4.0;
 pub const SP_S: f32 = 8.0;
 pub const SP_M: f32 = 12.0;
@@ -445,16 +444,16 @@ pub fn body() -> FontId {
     FontId::proportional(FS_BODY)
 }
 
-/// Schriftfamilie für Bereichsüberschriften (Noto Sans SemiBold, OFL).
+/// Font family for section headings (Noto Sans SemiBold, OFL).
 pub const HEADING_FAMILY: &str = "heading";
-/// Größe der Bereichsüberschriften.
+/// Size of the section headings.
 pub const FS_HEADING: f32 = 12.0;
 
 pub fn heading_font() -> FontId {
     FontId::new(FS_HEADING, egui::FontFamily::Name(HEADING_FAMILY.into()))
 }
 
-/// Text einer Bereichsüberschrift – überall gleich: Großbuchstaben, halbfett.
+/// Text of a section heading – the same everywhere: upper case, semibold.
 pub fn heading_text(title: &str) -> egui::RichText {
     egui::RichText::new(title.to_uppercase())
         .font(heading_font())
@@ -470,7 +469,7 @@ fn install_fonts(ctx: &egui::Context) {
         ))),
     );
     let mut family = vec![HEADING_FAMILY.to_string()];
-    // Fallback für Zeichen, die die Überschriftenschrift nicht hat
+    // Fallback for characters the heading font does not have
     family.extend(
         fonts
             .families
@@ -481,7 +480,7 @@ fn install_fonts(ctx: &egui::Context) {
     fonts
         .families
         .insert(egui::FontFamily::Name(HEADING_FAMILY.into()), family);
-    // Symbole (Phosphor, MIT)
+    // Icons (Phosphor, MIT)
     use crate::ui::widgets::icons::{ICON_FAMILY, ICON_FILL_FAMILY};
     for (name, bytes) in [
         (
@@ -518,8 +517,8 @@ pub fn apply(ctx: &egui::Context) {
         Visuals::dark()
     };
     v.panel_fill = surface();
-    // Menüs, Aufklapplisten und Tooltips schweben eine Stufe heller;
-    // Dialoge setzen ihren Rahmen selbst (surface()).
+    // Menus, dropdowns and tooltips float one step lighter; dialogs set their
+    // own frame (surface()).
     v.window_fill = raised();
     v.window_stroke = Stroke::new(1.0, border());
     v.extreme_bg_color = bg();
@@ -557,7 +556,7 @@ pub fn apply(ctx: &egui::Context) {
     }
     v.widgets.noninteractive.fg_stroke.color = text_dim();
     if light {
-        // weichere Schatten auf hellem Grund
+        // softer shadows on a light background
         v.window_shadow.color = Color32::from_black_alpha(40);
         v.popup_shadow.color = Color32::from_black_alpha(40);
     }
@@ -585,7 +584,7 @@ pub fn rgb(c: [u8; 3]) -> Color32 {
     Color32::from_rgb(c[0], c[1], c[2])
 }
 
-/// Farbe einer Zone (eigene Farbe oder aus der Palette nach Position).
+/// Color of a zone (own color or from the palette by position).
 pub fn zone_color(show: &Show, zone: Option<ZoneId>) -> Color32 {
     let Some(z) = zone else {
         return text_dim();

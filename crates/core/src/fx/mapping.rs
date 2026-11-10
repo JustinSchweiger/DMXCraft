@@ -1,7 +1,7 @@
-//! MAPPINGS und COLOR MAPPINGS: ein Bild (Verlauf, Spirale, Feuer …) liegt
-//! als verschieb-, skalier- und drehbares Rechteck über dem Bühnenplan.
-//! Jeder Beam unter dem Rechteck bekommt die Farbe bzw. den Pegel an seiner
-//! Stelle; Beams außerhalb bleiben unberührt.
+//! MAPPINGS and COLOR MAPPINGS: an image (gradient, spiral, fire …) lies as
+//! a movable, scalable and rotatable rectangle over the stage plan. Every
+//! beam under the rectangle gets the color or level at its position; beams
+//! outside stay untouched.
 
 use std::f32::consts::{PI, TAU};
 
@@ -81,8 +81,8 @@ impl MapPreset {
         }
     }
 
-    /// Vorlagen mit Objekten vor einem Hintergrund (Palette: erste Farbe =
-    /// Hintergrund, übrige = Objekte).
+    /// Templates with objects in front of a background (palette: first color =
+    /// background, the rest = objects).
     pub fn has_background(self) -> bool {
         matches!(
             self,
@@ -105,20 +105,21 @@ pub struct MappingFx {
     pub palette: Vec<[u8; 3]>,
     pub grayscale: bool,
     pub transform: Transform,
-    /// Rechteck im Bühnenplan: Mitte, halbe Breite/Höhe, Drehung (Grad).
+    /// Rectangle in the stage plan: center, half width/height, rotation
+    /// (degrees).
     pub center: [f32; 2],
     pub size: [f32; 2],
     pub rotation: f32,
-    /// Drehungen des Bilds je Durchlauf.
+    /// Rotations of the image per cycle.
     pub spin: f32,
     pub width: f32,
     pub angle: f32,
     pub blend: f32,
     pub radius: f32,
     pub swirls: f32,
-    /// Größe der Objekte (Bounce, Knight Rider, Text, Explosion …): 0..=100.
+    /// Size of the objects (bounce, Knight Rider, text, explosion …): 0..=100.
     pub object: f32,
-    /// Anzahl (Funken, Tropfen, Sterne, Linien, Balken, Felder).
+    /// Count (sparks, drops, stars, lines, bars, fields).
     pub count: f32,
     pub zoom: f32,
     pub octaves: f32,
@@ -157,7 +158,7 @@ impl MappingFx {
         }
     }
 
-    /// Vorlage wechseln (Rechteck, Umformung und Graustufen bleiben).
+    /// Switch the template (rectangle, transform and gray levels stay).
     pub fn set_preset(&mut self, preset: MapPreset, color: bool) {
         let keep = (
             self.center,
@@ -176,7 +177,8 @@ impl MappingFx {
         ) = keep;
     }
 
-    /// Bühnenplan-Punkt → lokale Lage im Rechteck (-1..=1), außerhalb `None`.
+    /// Stage plan point → local position in the rectangle (-1..=1), `None`
+    /// outside.
     pub fn local(&self, p: [f32; 2]) -> Option<[f32; 2]> {
         let (s, c) = self.rotation.to_radians().sin_cos();
         let (dx, dy) = (p[0] - self.center[0], p[1] - self.center[1]);
@@ -185,7 +187,7 @@ impl MappingFx {
         (l[0].abs() <= 1.0 && l[1].abs() <= 1.0).then_some(l)
     }
 
-    /// Lokaler Punkt → Bühnenplan.
+    /// Local point → stage plan.
     pub fn to_plan(&self, l: [f32; 2]) -> [f32; 2] {
         let (s, c) = self.rotation.to_radians().sin_cos();
         let (x, y) = (l[0] * self.size[0], l[1] * self.size[1]);
@@ -195,7 +197,7 @@ impl MappingFx {
         ]
     }
 
-    /// Farbe (0..1) an der lokalen Stelle `l`.
+    /// Color (0..1) at the local position `l`.
     pub fn color_at(&self, l: [f32; 2], cycles: f64) -> [f32; 3] {
         let palette: Vec<[f32; 3]> = if self.palette.is_empty() {
             vec![[1.0; 3]]
@@ -219,7 +221,7 @@ impl MappingFx {
         let round = cycles.floor() as i64;
         let t = cycles as f32;
         let blend = (self.blend / 100.0).clamp(0.0, 1.0);
-        // Drehung des Bilds über die Zeit
+        // Rotation of the image over time
         let spin = self.spin * t * TAU;
         let (ss, sc) = spin.sin_cos();
         let (u, v) = (l[0] * sc - l[1] * ss, l[0] * ss + l[1] * sc);
@@ -247,7 +249,7 @@ impl MappingFx {
                 sample(pal, x, blend)
             }
             MapPreset::Burst => {
-                // wie COLOR FX: größere Farbenbreite = breitere Ringe
+                // like COLOR FX: larger color width = wider rings
                 sample(pal, r / 2.0 / (1.0 + self.width / 10.0) - phase, blend)
             }
             MapPreset::Butterfly => {
@@ -264,7 +266,7 @@ impl MappingFx {
                 sample(pal, ((a + b + c + d) / 4.0 + 1.0) / 2.0, blend)
             }
             MapPreset::Bounce => {
-                // Bälle prallen an den Rändern ab
+                // Balls bounce off the edges
                 let mut level: f32 = 0.0;
                 let mut col = fg(0);
                 for k in 0..count as i64 {
@@ -285,7 +287,7 @@ impl MappingFx {
             }
             MapPreset::Fire => {
                 let z = 1.0 + self.zoom / 25.0;
-                let h = (1.0 - v) / 2.0; // 0 unten … 1 oben
+                let h = (1.0 - v) / 2.0; // 0 bottom … 1 top
                 let n = fbm(u * z * 2.0, v * z * 2.0 + t * 3.0, 4);
                 let x = (1.0 - h) * (0.6 + n * self.amplitude / 70.0) - 0.15;
                 sample(pal, x.clamp(0.0, 0.999), blend)
@@ -322,7 +324,7 @@ impl MappingFx {
                 mixc(level, fg(cell as i64 + round))
             }
             MapPreset::Tube => {
-                // Tunnel: Ringe laufen auf die Mitte zu
+                // Tunnel: rings run towards the center
                 let x = count / (r + 0.15) * 0.1 + phase;
                 sample(pal, x, blend)
             }
@@ -385,7 +387,7 @@ impl MappingFx {
             MapPreset::Graph => {
                 let bars = count.max(1.0);
                 let b = ((u + 1.0) / 2.0 * bars).floor().min(bars - 1.0);
-                // Höhe wandert weich von Wert zu Wert
+                // The height glides smoothly from value to value
                 let a = hash01(b as u64, round as u64);
                 let c = hash01(b as u64, round as u64 + 1);
                 let h = a + (c - a) * smooth(phase);
@@ -393,7 +395,7 @@ impl MappingFx {
                 mixc(if y <= h { 1.0 } else { 0.0 }, fg(b as i64))
             }
             MapPreset::Lines => {
-                // Streifen laufen quer durch das Rechteck; zwischen ihnen dunkel
+                // Stripes run across the rectangle; dark between them
                 let (s, c) = self.angle.to_radians().sin_cos();
                 let x = ((u * c + v * s) + 1.0) / 2.0 * count - phase * count;
                 let f = x.rem_euclid(1.0);
@@ -450,7 +452,7 @@ fn mix(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
     [0, 1, 2].map(|i| a[i] + (b[i] - a[i]) * t)
 }
 
-/// Dreieck 0..1..0 über eine Periode.
+/// Triangle 0..1..0 over one period.
 fn tri(x: f32) -> f32 {
     1.0 - (2.0 * x.rem_euclid(1.0) - 1.0).abs()
 }
@@ -459,7 +461,7 @@ fn smooth(t: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-/// 5×7-Pixelschrift (eigene, einfache Zeichen): je Zeile 5 Bit.
+/// 5×7 pixel font (own, simple glyphs): 5 bits per row.
 fn glyph(c: char) -> [u8; 7] {
     match c.to_ascii_uppercase() {
         'A' => [0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
@@ -514,14 +516,14 @@ fn glyph(c: char) -> [u8; 7] {
     }
 }
 
-/// Laufschrift: Pegel an der lokalen Stelle, `None` = Hintergrund.
-/// `zoom` (0..1) = Anteil der Schrifthöhe am Rechteck.
+/// Scrolling text: level at the local position, `None` = background.
+/// `zoom` (0..1) = share of the text height in the rectangle.
 fn text_level(text: &str, u: f32, v: f32, phase: f32, zoom: f32) -> Option<f32> {
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() {
         return None;
     }
-    // 7 Zeilen über die Höhe (je nach Zoom), Spalten im gleichen Raster
+    // 7 rows over the height (depending on zoom), columns in the same grid
     let rows = 7.0 / zoom.clamp(0.3, 1.0);
     let cell = 2.0 / rows;
     let row = ((v + 1.0) / cell - (rows - 7.0) / 2.0).floor();
@@ -530,7 +532,7 @@ fn text_level(text: &str, u: f32, v: f32, phase: f32, zoom: f32) -> Option<f32> 
     }
     let width = chars.len() as f32 * 6.0;
     let visible = 2.0 / cell;
-    // von rechts herein, links hinaus
+    // in from the right, out to the left
     let col = ((u + 1.0) / cell + phase * (width + visible) - visible).floor();
     if col < 0.0 || col >= width {
         return None;

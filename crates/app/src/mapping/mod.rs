@@ -1,9 +1,9 @@
-//! Tastatur- und MIDI-Zuordnung: Überlagerung über der Oberfläche (jedes
-//! zuordenbare Element wird markiert und lässt sich anklicken), Lernen einer
-//! Taste bzw. MIDI-Nachricht, Auslösen im Betrieb und LED-Rückmeldung.
+//! Keyboard and MIDI mapping: overlay above the interface (every mappable
+//! element is highlighted and can be clicked), learning a key or MIDI
+//! message, triggering during operation and LED feedback.
 //!
-//! Bedienelemente melden sich mit [`target`] an. Ist die Überlagerung aktiv,
-//! liegt darüber eine Klickfläche – das Element selbst reagiert dann nicht.
+//! Controls register with [`target`]. While the overlay is active a click
+//! area lies on top – the element itself does not react then.
 
 pub mod window;
 
@@ -20,7 +20,7 @@ use crate::midi_device::{self, MidiDevice};
 use crate::state::AppState;
 use crate::ui::theme;
 
-/// Farbe der Überlagerung: Tastatur rot, MIDI violett.
+/// Color of the overlay: keyboard red, MIDI violet.
 pub fn color(kind: MapKind) -> Color32 {
     match kind {
         MapKind::Keyboard => Color32::from_rgb(214, 64, 82),
@@ -28,12 +28,12 @@ pub fn color(kind: MapKind) -> Color32 {
     }
 }
 
-/// Was die Überlagerung in diesem Bild zeigt (vom App-Rahmen gesetzt).
+/// What the overlay shows in this frame (set by the app frame).
 #[derive(Clone, Default)]
 struct Overlay {
     kind: Option<MapKind>,
     selected: Option<Control>,
-    /// Zugeordnete Elemente mit Kurzform der Eingabe.
+    /// Mapped elements with a short form of the input.
     labels: Vec<(Control, String)>,
 }
 
@@ -45,8 +45,8 @@ fn pick_id() -> egui::Id {
     egui::Id::unique("mapping_pick")
 }
 
-/// Angeklicktes Element mit Anzeigename (nur bei [`Control::Ui`]) und den
-/// Kanälen, die es gerade steuert (Programmer-Fader).
+/// Clicked element with display name (only for [`Control::Ui`]) and the
+/// channels it currently controls (programmer faders).
 #[derive(Clone, Debug)]
 struct Pick {
     element: Control,
@@ -69,12 +69,12 @@ fn pick_full(ctx: &egui::Context, p: Pick) {
     ctx.data_mut(|d| d.insert_temp(pick_id(), Some(p)));
 }
 
-/// Ausgelöste Eingaben für Bedienelemente der Oberfläche (für das nächste Bild).
+/// Triggered inputs for interface controls (for the next frame).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct UiFire {
-    /// Taste gedrückt (Knopf: wie ein Klick).
+    /// Key pressed (button: like a click).
     pub press: bool,
-    /// Wert 0–1 (Regler über CC bzw. „Wert in %“).
+    /// Value 0–1 (knob via CC or “value in %”).
     pub value: Option<f32>,
 }
 
@@ -86,7 +86,7 @@ fn states_id() -> egui::Id {
     egui::Id::unique("mapping_ui_states")
 }
 
-/// Ausgelöste Eingabe eines Elements abholen.
+/// Collect the triggered input of an element.
 fn take_fire(ctx: &egui::Context, key: u64) -> Option<UiFire> {
     ctx.data_mut(|d| {
         d.get_temp_mut_or_default::<HashMap<u64, UiFire>>(fires_id())
@@ -94,12 +94,12 @@ fn take_fire(ctx: &egui::Context, key: u64) -> Option<UiFire> {
     })
 }
 
-/// Gemeldete Zustände der Bedienelemente (für Touch-Schaltflächen).
+/// Reported states of the controls (for touch buttons).
 pub fn ui_states(ctx: &egui::Context) -> HashMap<u64, bool> {
     ctx.data(|d| d.get_temp(states_id())).unwrap_or_default()
 }
 
-/// Zustand eines Elements für die LED-Rückmeldung merken.
+/// Remember the state of an element for LED feedback.
 fn report(ctx: &egui::Context, key: u64, on: bool) {
     ctx.data_mut(|d| {
         d.get_temp_mut_or_default::<HashMap<u64, bool>>(states_id())
@@ -107,18 +107,18 @@ fn report(ctx: &egui::Context, key: u64, on: bool) {
     });
 }
 
-/// Zugeordnete Taste eines Bedienelements auswerten, auch wenn es gerade
-/// nicht angezeigt wird (z. B. Sound-Pads aus einem anderen Reiter).
+/// Evaluate the mapped key of a control even when it is not shown at the
+/// moment (e.g. sound pads from another tab).
 pub fn poll(ctx: &egui::Context, key: &str, on: bool) -> bool {
     let key = dmxcraft_core::mapping::ui_key(key);
     report(ctx, key, on);
     take_fire(ctx, key).is_some_and(|f| f.press || f.value.is_some_and(|v| v > 0.0))
 }
 
-/// Knopf der Oberfläche zuordenbar machen. `key` ist ein fester Name wie
-/// „programmer/mode/live“, `on` der Zustand für die LED, `name` liefert
-/// (Kategorie, Ziel) für die Liste. Gibt `true` zurück, wenn eine
-/// zugeordnete Taste gedrückt wurde (dann wie ein Klick behandeln).
+/// Make an interface button mappable. `key` is a fixed name such as
+/// “programmer/mode/live”, `on` the state for the LED, `name` returns
+/// (category, target) for the list. Returns `true` if a mapped key was
+/// pressed (then treat it like a click).
 pub fn button(
     ui: &egui::Ui,
     resp: &Response,
@@ -129,7 +129,8 @@ pub fn button(
     button_rect(ui, resp.rect, key, on, name)
 }
 
-/// Wie [`button`] für eine Fläche ohne eigene Antwort (z. B. Geräte im Plan).
+/// Like [`button`] for an area without its own response (e.g. fixtures in
+/// the plan).
 pub fn button_rect(
     ui: &egui::Ui,
     rect: Rect,
@@ -140,14 +141,14 @@ pub fn button_rect(
     let key = dmxcraft_core::mapping::ui_key(key);
     let control = Control::Ui { key, fader: false };
     report(ui.ctx(), key, on);
-    // Eingaben wirken auch bei offenem Zuordnungsfenster (zum Ausprobieren)
+    // Inputs also work while the mapping window is open (to try them out)
     target_with(ui, rect, control, name);
     take_fire(ui.ctx(), key).is_some_and(|f| f.press || f.value.is_some_and(|v| v > 0.0))
 }
 
-/// Regler der Oberfläche zuordenbar machen. `value` ist der aktuelle Wert
-/// 0–1. Gibt den neuen Wert zurück, wenn eine Eingabe kam (Regler: Wert,
-/// Taste: zwischen 0 und 1 umschalten).
+/// Make an interface slider mappable. `value` is the current value 0–1.
+/// Returns the new value when an input came (knob: value, key: toggle
+/// between 0 and 1).
 pub fn fader(
     ui: &egui::Ui,
     rect: Rect,
@@ -158,10 +159,10 @@ pub fn fader(
     fader_channels(ui, rect, key, value, &[], name)
 }
 
-/// Wie [`fader`] für einen Fader, der gerade bestimmte Kanäle steuert
-/// (Programmer). Eine neue Zuordnung steuert dann fest diese Kanäle – auch
-/// wenn die Geräte später nicht mehr ausgewählt sind. Im Fenster lässt sich
-/// stattdessen „Ausgewählte Geräte“ wählen (folgt der Auswahl).
+/// Like [`fader`] for a fader that currently controls specific channels
+/// (programmer). A new mapping then controls exactly these channels – even if
+/// the fixtures are no longer selected later. In the window you can choose
+/// “Selected fixtures” instead (follows the selection).
 pub fn fader_channels(
     ui: &egui::Ui,
     rect: Rect,
@@ -171,14 +172,14 @@ pub fn fader_channels(
     name: impl FnOnce() -> (String, String),
 ) -> Option<f32> {
     let key = dmxcraft_core::mapping::ui_key(key);
-    // Element = Fader mit genau diesen Kanälen (Schlüssel ^ Kanalliste)
+    // Element = fader with exactly these channels (key ^ channel list)
     let element = if channels.is_empty() {
         key
     } else {
         key ^ dmxcraft_core::mapping::channels_key(channels)
     };
     report(ui.ctx(), key, value > 0.0);
-    // Eingaben wirken auch bei offenem Zuordnungsfenster (zum Ausprobieren)
+    // Inputs also work while the mapping window is open (to try them out)
     target_shape(
         ui,
         rect,
@@ -198,14 +199,14 @@ pub fn fader_channels(
     }
 }
 
-/// Bedienelement anmelden. Gibt `true` zurück, wenn die Überlagerung aktiv
-/// ist (dann hat die Überlagerung den Klick, nicht das Element).
+/// Register a control. Returns `true` if the overlay is active (then the
+/// overlay gets the click, not the element).
 pub fn target(ui: &egui::Ui, rect: Rect, control: Control) -> bool {
     target_with(ui, rect, control, || (String::new(), String::new()))
 }
 
-/// Wie [`target`] für eine gedrehte Fläche (Grad um die Mitte), z. B. ein
-/// gedrehtes Gerät im Bühnenplan.
+/// Like [`target`] for a rotated area (degrees around the center), e.g. a
+/// rotated fixture in the stage plan.
 pub fn target_rotated(ui: &egui::Ui, rect: Rect, rotation: f32, control: Control) -> bool {
     target_shape(
         ui,
@@ -217,7 +218,7 @@ pub fn target_rotated(ui: &egui::Ui, rect: Rect, rotation: f32, control: Control
     )
 }
 
-/// Wie [`target`], mit Anzeigename für Bedienelemente der Oberfläche.
+/// Like [`target`], with a display name for interface controls.
 fn target_with(
     ui: &egui::Ui,
     rect: Rect,
@@ -227,7 +228,7 @@ fn target_with(
     target_shape(ui, rect, 0.0, control, name, &[])
 }
 
-/// Ecken eines um seine Mitte gedrehten Rechtecks.
+/// Corners of a rectangle rotated around its center.
 fn rotated_quad(rect: Rect, rotation: f32) -> [egui::Pos2; 4] {
     let c = rect.center();
     let (sin, cos) = rotation.to_radians().sin_cos();
@@ -243,7 +244,7 @@ fn rotated_quad(rect: Rect, rotation: f32) -> [egui::Pos2; 4] {
     })
 }
 
-/// Liegt ein Punkt im gedrehten Rechteck?
+/// Does a point lie inside the rotated rectangle?
 fn in_rotated(rect: Rect, rotation: f32, p: egui::Pos2) -> bool {
     let c = rect.center();
     let (sin, cos) = (-rotation).to_radians().sin_cos();
@@ -264,7 +265,7 @@ fn target_shape(
         return false;
     };
     let Some(kind) = o.kind else {
-        // Alt + Klick: Element zur Touch-Oberfläche hinzufügen
+        // Alt + click: add the element to the touch surface
         let mut chans = channels.to_vec();
         alt_click(ui, rect, rotation, control, |p| {
             p.name = matches!(control, Control::Ui { .. }).then(name);
@@ -318,7 +319,7 @@ fn target_shape(
             egui::FontId::proportional(theme::FS_CAPTION),
             Color32::WHITE,
         );
-        // gedreht: mittig (die Ecke liegt sonst neben der Form)
+        // rotated: centered (otherwise the corner lies next to the shape)
         let pos = if rotated {
             rect.center() - g.size() * 0.5
         } else {
@@ -340,7 +341,7 @@ fn target_shape(
     true
 }
 
-/// Element für die Touch-Oberfläche (Alt + Klick bzw. Kontextmenü).
+/// Element for the touch surface (Alt + click or context menu).
 #[derive(Clone, Debug, Default)]
 pub struct TouchPick {
     pub kind: dmxcraft_core::touch::TouchKind,
@@ -354,7 +355,7 @@ fn touch_pick_id() -> egui::Id {
     egui::Id::unique("touch_pick")
 }
 
-/// Element zur Touch-Oberfläche vormerken (verarbeitet der App-Rahmen).
+/// Queue an element for the touch surface (processed by the app frame).
 pub fn touch_pick(ctx: &egui::Context, p: TouchPick) {
     ctx.data_mut(|d| {
         d.get_temp_mut_or_default::<Vec<TouchPick>>(touch_pick_id())
@@ -362,13 +363,13 @@ pub fn touch_pick(ctx: &egui::Context, p: TouchPick) {
     });
 }
 
-/// Vorgemerkte Elemente abholen.
+/// Collect queued elements.
 pub fn take_touch_picks(ctx: &egui::Context) -> Vec<TouchPick> {
     ctx.data_mut(|d| d.remove_temp::<Vec<TouchPick>>(touch_pick_id()))
         .unwrap_or_default()
 }
 
-/// Bedienelement über ein Kontextmenü zur Touch-Oberfläche vormerken.
+/// Queue a control for the touch surface via a context menu.
 pub fn touch_pick_control(ctx: &egui::Context, control: Control) {
     touch_pick(
         ctx,
@@ -379,8 +380,8 @@ pub fn touch_pick_control(ctx: &egui::Context, control: Control) {
     );
 }
 
-/// Ist Alt gedrückt, liegt eine Klickfläche über dem Element (hebt es hervor)
-/// und ein Klick merkt es für die Touch-Oberfläche vor.
+/// While Alt is pressed a click area lies above the element (highlights it)
+/// and a click queues it for the touch surface.
 fn alt_click(
     ui: &egui::Ui,
     rect: Rect,
@@ -433,8 +434,8 @@ fn t_touch_hint() -> &'static str {
     crate::i18n::t("Add to touch surface")
 }
 
-/// Farbfeld bzw. XY-Feld des Programmers: Alt + Klick legt ein Farbrad bzw.
-/// XY-Feld für die ausgewählten Geräte auf der Touch-Oberfläche an.
+/// Color field or XY field of the programmer: Alt + click creates a color
+/// wheel or XY pad for the selected fixtures on the touch surface.
 pub fn touch_source(
     ui: &egui::Ui,
     rect: Rect,
@@ -468,10 +469,10 @@ pub fn touch_source(
     }
 }
 
-/// Anzeigename einer Zuordnung: (Kategorie, Ziel).
+/// Display name of a mapping: (category, target).
 pub fn describe_mapping(show: &Show, m: &Mapping) -> (String, String) {
     match (&m.control, &m.name) {
-        // feste Kanäle: aktuelle Gerätenamen (Umbenennen wirkt sofort)
+        // fixed channels: current fixture names (renaming takes effect at once)
         (Control::Channels, _) if !m.channels.is_empty() => {
             let fixtures: std::collections::BTreeSet<_> =
                 m.channels.iter().map(|c| c.fixture).collect();
@@ -489,7 +490,7 @@ pub fn describe_mapping(show: &Show, m: &Mapping) -> (String, String) {
     }
 }
 
-/// Name des Bedienelements für Listen: (Kategorie, Ziel).
+/// Name of the control for lists: (category, target).
 pub fn describe(show: &Show, c: &Control) -> (String, String) {
     use crate::i18n::t;
     let zone = |z: ZoneId| {
@@ -573,7 +574,7 @@ pub fn describe(show: &Show, c: &Control) -> (String, String) {
     }
 }
 
-/// Geräte einer Gruppe (`None` = alle).
+/// Fixtures of a group (`None` = all).
 fn group_set(
     show: &Show,
     id: Option<dmxcraft_core::GroupId>,
@@ -589,7 +590,7 @@ fn group_set(
     }
 }
 
-/// „Gerät: Kanalname“.
+/// “Fixture: channel name”.
 pub fn channel_name(show: &Show, ch: dmxcraft_core::ChannelRef) -> String {
     let Some(f) = show.fixture(ch.fixture) else {
         return t_deleted();
@@ -608,7 +609,7 @@ fn t_deleted() -> String {
     crate::i18n::t("(deleted)").to_string()
 }
 
-/// Szenen einer Bank in der angezeigten Reihenfolge (ohne ausgeblendete).
+/// Scenes of a bank in the displayed order (without hidden ones).
 fn zone_scenes(show: &Show, z: ZoneId) -> Vec<SceneId> {
     show.scenes
         .iter()
@@ -617,7 +618,7 @@ fn zone_scenes(show: &Show, z: ZoneId) -> Vec<SceneId> {
         .collect()
 }
 
-/// Szenen, auf die ein Ziel gerade zeigt.
+/// Scenes a target currently points to.
 pub fn resolve(show: &Show, st: &AppState, t: &SceneTarget) -> Vec<SceneId> {
     match *t {
         SceneTarget::Scene { id } => show.scene(id).map(|_| id).into_iter().collect(),
@@ -638,7 +639,7 @@ pub fn resolve(show: &Show, st: &AppState, t: &SceneTarget) -> Vec<SceneId> {
     }
 }
 
-/// Zustand „an“ eines Elements (für die LED-Rückmeldung).
+/// “On” state of an element (for LED feedback).
 pub(crate) fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, m: &Mapping) -> bool {
     match &m.control {
         Control::Channels => m
@@ -668,7 +669,7 @@ pub(crate) fn is_on(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, m: &
     }
 }
 
-/// Eingabe auslösen: `pressed` (Taste/Note an) und Wert 0–127.
+/// Trigger an input: `pressed` (key/note on) and value 0–127.
 fn fire(
     e: &mut Engine,
     st: &mut AppState,
@@ -851,8 +852,8 @@ fn fire(
     }
 }
 
-/// LED-Rückmeldung für eine neu gelernte Taste: Ausgang des eingerichteten
-/// Geräts (oder gleichnamiger Ausgang), „An“ in der Szenenfarbe.
+/// LED feedback for a newly learned key: output of the configured device
+/// (or the output with the same name), “on” in the scene color.
 fn default_feedback(
     devices: &[MidiDevice],
     outputs: &[String],
@@ -877,26 +878,26 @@ fn default_feedback(
     Some(fb)
 }
 
-/// Zustand der Zuordnung zwischen den Bildern.
+/// State of the mapping between frames.
 #[derive(Default)]
 pub struct Mapper {
     pub midi: MidiHub,
-    /// Zuletzt gesendete LED-Zustände je MIDI-Zuordnung.
+    /// Last sent LED states per MIDI mapping.
     sent: HashMap<u32, Sent>,
-    /// Gedrückte Tasten (für Loslassen bei Flash).
+    /// Pressed keys (for releasing with flash).
     held: Vec<u32>,
-    /// Zustand des Zuordnungsfensters.
+    /// State of the mapping window.
     pub win: window::WindowState,
-    /// Eingerichtete Controller (aus den Einstellungen).
+    /// Configured controllers (from the settings).
     pub devices: Vec<MidiDevice>,
-    /// Ausgänge, deren LEDs seit dem Verbinden gelöscht wurden.
+    /// Outputs whose LEDs have been cleared since connecting.
     cleared: HashSet<String>,
-    /// Ausgelöste Eingaben für Bedienelemente (gehen ans nächste Bild).
+    /// Triggered inputs for controls (go to the next frame).
     ui_fires: HashMap<u64, UiFire>,
 }
 
 impl Mapper {
-    /// Je Bild vor den Ansichten: Überlagerung bereitstellen.
+    /// Every frame before the views: provide the overlay.
     pub fn begin_frame(&mut self, ctx: &egui::Context, show: &Show, st: &AppState) {
         let o = match st.mapping {
             Some(kind) => {
@@ -932,11 +933,11 @@ impl Mapper {
         });
     }
 
-    /// Je Bild nach den Ansichten: Klicks der Überlagerung, Tastatur und
-    /// MIDI verarbeiten, Rückmeldung senden.
+    /// Every frame after the views: process clicks of the overlay, keyboard and
+    /// MIDI, send feedback.
     pub fn end_frame(&mut self, ctx: &egui::Context, e: &mut Engine, st: &mut AppState) {
         self.midi.scan();
-        // Zuordnungen gelöschter Szenen entfernen
+        // Remove mappings of deleted scenes
         let show = e.show();
         let stale = show.mappings.keyboard.iter().chain(&show.mappings.midi).any(|m| {
             matches!(m.element(), Control::Scene { target: SceneTarget::Scene { id } } if show.scene(id).is_none())
@@ -973,7 +974,7 @@ impl Mapper {
                 list.retain(|m| alive(m.element()) && alive(m.control));
             }
         }
-        // angeklicktes Element: vorhandene Zuordnung wählen oder neue anlegen
+        // clicked element: select the existing mapping or create a new one
         if let (
             Some(kind),
             Some(Some(Pick {
@@ -1009,7 +1010,7 @@ impl Mapper {
                     if let Some(m) = maps.find_mut(kind, id) {
                         m.flash = flash;
                         m.name = name;
-                        // Programmer-Fader: fest die gerade gesteuerten Kanäle
+                        // Programmer fader: fixed to the channels currently controlled
                         if !channels.is_empty() {
                             m.element = Some(c);
                             m.control = Control::Channels;
@@ -1037,11 +1038,11 @@ impl Mapper {
         for ev in events {
             self.midi_event(&ev, e, st);
         }
-        // Touch-Oberfläche: Schaltflächen und Fader lösen wie Tasten aus
+        // Touch surface: buttons and faders trigger like keys
         for (m, pressed, value, cc) in std::mem::take(&mut st.touch_fire) {
             fire(e, st, &mut self.ui_fires, &m, pressed, value, cc);
         }
-        // Touch-Elemente gelöschter Szenen/Geräte leeren
+        // Clear touch elements of deleted scenes/fixtures
         let show = e.show();
         let stale_touch = show.touch.pages.iter().flat_map(|p| &p.items).any(|i| {
             i.fixtures.iter().any(|f| show.fixture(*f).is_none())
@@ -1071,7 +1072,7 @@ impl Mapper {
         self.feedback(e, st, &states);
     }
 
-    /// LEDs neu verbundener Ausgänge löschen (Einstellung je Gerät).
+    /// Clear the LEDs of newly connected outputs (setting per device).
     fn clear_leds(&mut self) {
         let connected = &self.midi.output_names;
         self.cleared.retain(|o| connected.contains(o));
@@ -1091,7 +1092,7 @@ impl Mapper {
         }
     }
 
-    /// Alle LEDs eines Ausgangs ausschalten, danach die Zustände neu senden.
+    /// Switch off all LEDs of an output, then send the states again.
     pub fn clear_now(&mut self, output: &str, model: midi_device::DeviceModel) {
         for msg in model.clear_messages() {
             self.midi.send(output, &msg);
@@ -1118,7 +1119,7 @@ impl Mapper {
                 .collect()
         });
         for (key, pressed, mods) in events {
-            // Lernen: nächste Taste wird zugeordnet (Esc bricht ab)
+            // Learning: the next key gets mapped (Esc cancels)
             if st.map_learn && st.mapping == Some(MapKind::Keyboard) {
                 if !pressed {
                     continue;
@@ -1180,7 +1181,7 @@ impl Mapper {
 
     fn midi_event(&mut self, ev: &MidiEvent, e: &mut Engine, st: &mut AppState) {
         if st.map_learn && st.mapping == Some(MapKind::Midi) {
-            // Szenenfarbe als „An“-Farbe vorschlagen
+            // Suggest the scene color as the “on” color
             let color_hint = st.map_sel.and_then(|id| {
                 let show = e.show();
                 let m = show.mappings.midi.iter().find(|m| m.id == id)?;
@@ -1197,7 +1198,7 @@ impl Mapper {
                     _ => None,
                 }
             });
-            // nur „Drücken“ bzw. Reglerbewegung lernen
+            // only learn “press” or knob movement
             if ev.value > 0 || ev.message == MidiMessage::Cc {
                 if let Some(id) = st.map_sel {
                     if let Some(m) = e.show_mut().mappings.find_mut(MapKind::Midi, id) {
@@ -1218,7 +1219,7 @@ impl Mapper {
                         {
                             m.mode = ButtonMode::Value;
                         }
-                        // LED-Rückmeldung vorschlagen: Ausgang des Geräts
+                        // Suggest LED feedback: output of the device
                         if m.feedback.is_none() && ev.message == MidiMessage::Note {
                             m.feedback = default_feedback(
                                 &self.devices,
@@ -1247,8 +1248,8 @@ impl Mapper {
             .collect();
         let cc = ev.message == MidiMessage::Cc;
         for m in hits {
-            // Ton-Master per Fader: Übernahme erst, wenn der Fader den Wert
-            // erreicht (nach dem Zurücksetzen beim Start einer SUPER SCENE)
+            // Sound master via fader: only take over once the fader reaches the value
+            // (after the reset when a SUPER SCENE starts)
             if m.control == Control::AudioMaster && (cc || m.mode == ButtonMode::Value) {
                 st.audio.fader_input(f32::from(ev.value) / 127.0);
                 continue;
@@ -1257,9 +1258,9 @@ impl Mapper {
         }
     }
 
-    /// LED-Rückmeldung: geänderte Zustände senden. LEDs gelöschter oder
-    /// umgelegter Zuordnungen werden ausgeschaltet. Im Zuordnungsfenster zeigt
-    /// die gewählte Zuordnung den gerade bearbeiteten Zustand (Vorschau).
+    /// LED feedback: send changed states. LEDs of deleted or reassigned mappings
+    /// are switched off. In the mapping window the selected mapping shows the
+    /// state currently being edited (preview).
     fn feedback(&mut self, e: &Engine, st: &AppState, states: &HashMap<u64, bool>) {
         if std::mem::take(&mut self.midi.new_outputs) {
             self.sent.clear();
@@ -1298,7 +1299,7 @@ impl Mapper {
                 },
             );
         }
-        // nicht mehr verwendete Tasten ausschalten
+        // switch off keys that are no longer used
         let gone: Vec<(u32, Sent)> = self
             .sent
             .iter()
@@ -1320,7 +1321,7 @@ impl Mapper {
     }
 }
 
-/// Zuletzt an eine Taste gesendete Rückmeldung.
+/// Last feedback sent to a key.
 #[derive(Clone, Debug, PartialEq)]
 struct Sent {
     device: String,
@@ -1338,7 +1339,7 @@ impl Sent {
         let base = if self.cc { 0xb0 } else { 0x90 };
         [base | (self.channel - 1), self.number, self.velocity]
     }
-    /// Taste aus (Kanal 1, Wert 0).
+    /// Key off (channel 1, value 0).
     fn blank(&self) -> [u8; 3] {
         [if self.cc { 0xb0 } else { 0x90 }, self.number, 0]
     }
@@ -1486,7 +1487,7 @@ mod tests {
         assert!(st.selected.is_empty());
         fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, true);
         assert!(chans.iter().all(|c| e.live().get(c) == Some(&255)));
-        // Taste: an/aus für alle zusammen
+        // Key: on/off for all together
         fire(&mut e, &mut st, &mut HashMap::new(), &m, true, 127, false);
         assert!(chans.iter().all(|c| e.live().get(c).is_none()));
     }

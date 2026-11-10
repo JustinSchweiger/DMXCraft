@@ -1,9 +1,10 @@
-//! STEUERN → Bühnenplan: Gruppen und Geräteauswahl (Anordnen unter EINRICHTEN).
+//! CONTROL → stage plan: groups and fixture selection (arranging is in
+//! SETUP).
 //!
-//! Über dem Plan stehen die Gruppen als Pillen. Klick wählt genau die Gruppe
-//! (nochmal Klick hebt die Auswahl auf), Strg/Umschalt+Klick fügt sie hinzu
-//! bzw. nimmt sie heraus. Doppelklick benennt um, Rechtsklick öffnet das
-//! Gruppenmenü, **+** legt eine Gruppe aus der aktuellen Auswahl an.
+//! The groups sit above the plan as pills. A click selects exactly the group
+//! (clicking again clears the selection), Ctrl/Shift+click adds or removes
+//! it. Double-click renames, right-click opens the group menu, **+** creates
+//! a group from the current selection.
 
 use crate::i18n::t;
 use std::collections::BTreeSet;
@@ -22,7 +23,7 @@ use crate::views::{View, ViewCtx};
 #[derive(Default)]
 pub struct StageView {
     interaction: StageInteraction,
-    /// Laufende Umbenennung einer Gruppe.
+    /// Ongoing rename of a group.
     rename: Option<(GroupId, String)>,
     rename_focus: bool,
 }
@@ -39,7 +40,7 @@ enum GroupAction {
 impl View for StageView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut actions = Vec::new();
-        // Gruppenleiste links, rechts der FX-Knopf
+        // Group bar on the left, the FX button on the right
         let full = ui.available_rect_before_wrap();
         const FX_W: f32 = 40.0;
         let mut bar = ui.new_child(
@@ -59,7 +60,7 @@ impl View for StageView {
         ui.add_space(theme::SP_S);
         let show = cx.engine.show();
         let order = cx.state.selection_order.clone();
-        // angeklicktes Mapping: Bild unter den Geräten, Rahmen darüber
+        // clicked mapping: image below the fixtures, frame on top
         let mapping = mapping_target(cx.engine, cx.state);
         let cycles = mapping
             .as_ref()
@@ -89,17 +90,18 @@ impl View for StageView {
         let locked = cx.state.locked;
         let area = ui.available_rect_before_wrap();
         let blind = cx.state.programmer_mode == crate::state::ProgrammerMode::Blind;
-        // Geräte mit Live-Werten (für „Live-Werte zurücksetzen“)
+        // Fixtures with live values (for “Reset live values”)
         let live_fixtures: BTreeSet<FixtureId> =
             cx.engine.live().keys().map(|c| c.fixture).collect();
         let mut clear_live: Option<BTreeSet<FixtureId>> = None;
-        // Im Auswahlmodus entstehen keine Verschiebungen.
+        // No moves happen in selection mode.
         let _ = canvas.show(
             ui,
             &mut self.interaction,
             &mut cx.state.selected,
             &mut |ui, target, sel| {
-                // Ziel: Auswahl, wenn das Gerät dazugehört, sonst nur das Gerät
+                // Target: the selection if the fixture belongs to it, otherwise just the
+                // fixture
                 let ids: BTreeSet<FixtureId> = match target {
                     Some(t) if !sel.contains(&t) => [t].into(),
                     _ => sel.clone(),
@@ -137,7 +139,7 @@ impl View for StageView {
             },
         );
         if blind {
-            // Hinweis: Bühne zeigt die Bearbeitung, nicht den Ausgang
+            // Hint: the stage shows the edit, not the output
             ui.painter().text(
                 area.right_bottom() - Vec2::new(14.0, 10.0),
                 egui::Align2::RIGHT_BOTTOM,
@@ -146,7 +148,7 @@ impl View for StageView {
                 theme::DANGER,
             );
         }
-        // Geräte im Plan: zuordenbar (Auswahl umschalten oder einzelner Kanal)
+        // Fixtures in the plan: mappable (toggle selection or a single channel)
         if let Some((rect, cam)) = self.interaction.view {
             let show = cx.engine.show();
             for f in &show.fixtures {
@@ -197,7 +199,7 @@ impl View for StageView {
     }
 }
 
-/// Angeklicktes MAPPINGS/COLOR MAPPINGS (Szene, Effekt, Einstellungen).
+/// Clicked MAPPINGS/COLOR MAPPINGS (scene, effect, settings).
 fn mapping_target(
     e: &Engine,
     st: &AppState,
@@ -211,7 +213,7 @@ fn mapping_target(
     Some((scene, fx, f.mapping.clone()?))
 }
 
-/// Bild des Mappings als weich eingefärbtes Gitter im Rechteck.
+/// Image of the mapping as a softly colored grid in the rectangle.
 fn paint_mapping(
     p: &egui::Painter,
     cam: crate::ui::widgets::stage_canvas::Camera,
@@ -246,8 +248,8 @@ fn paint_mapping(
     p.add(egui::Shape::mesh(mesh));
 }
 
-/// Rahmen des Mappings auf der Bühne: Fläche ziehen verschiebt, Ecken
-/// skalieren, der Griff oben dreht. `true`, wenn sich etwas geändert hat.
+/// Frame of the mapping on the stage: dragging the area moves it, corners
+/// scale, the handle at the top rotates. `true` if something changed.
 fn mapping_handles(
     ui: &mut egui::Ui,
     area: egui::Rect,
@@ -267,8 +269,8 @@ fn mapping_handles(
             4.0,
         ));
     }
-    // Fläche: verschieben (als Polygon-Hülle reicht das umschließende Rechteck nicht
-    // bei Drehung – Treffer per lokaler Lage)
+    // Area: move (as a polygon hull the enclosing rectangle is not enough when
+    // rotated – hit test in local coordinates)
     let body = egui::Rect::from_points(&corners);
     let r = ui.interact(body, id.with("body"), Sense::drag());
     let inside = r
@@ -282,7 +284,7 @@ fn mapping_handles(
     if inside && (r.hovered() || r.dragged()) {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
     }
-    // Ecken: Größe
+    // Corners: size
     for (i, c) in corners.iter().enumerate() {
         let r = ui.interact(
             egui::Rect::from_center_size(*c, Vec2::splat(14.0)),
@@ -311,10 +313,10 @@ fn mapping_handles(
             },
         );
     }
-    // Drehgriff über der oberen Kante
+    // Rotation handle above the top edge
     let top = cam.to_screen(m.to_plan([0.0, -1.0]));
     let dir = (top - cam.to_screen(m.center)).normalized();
-    // außerhalb der Fläche: Griff nach innen setzen
+    // outside the area: put the handle inside
     let knob = if area.shrink(8.0).contains(top + dir * 22.0) {
         top + dir * 22.0
     } else {
@@ -471,16 +473,16 @@ impl StageView {
     }
 }
 
-/// FX-Knopf: übernimmt die aktuelle Geräteauswahl in den zuletzt
-/// angeklickten Effekt. Nur sichtbar, solange ein Effekt gewählt ist. Grau, solange die Auswahl den Geräten des Effekts
-/// entspricht; rot, wenn sie davon abweicht.
+/// FX button: takes over the current fixture selection into the last
+/// clicked effect. Only visible while an effect is selected. Gray while the
+/// selection matches the effect's fixtures; red when it differs.
 fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppState) {
     let target = st.fx_target.filter(|(scene, fx)| {
         e.show()
             .scene(*scene)
             .is_some_and(|s| s.effects.iter().any(|f| f.id == *fx))
     });
-    // ohne angeklickten Effekt kein Knopf
+    // no button without a clicked effect
     if target.is_none() {
         return;
     }
@@ -492,11 +494,11 @@ fn fx_button(ui: &mut egui::Ui, rect: egui::Rect, e: &mut Engine, st: &mut AppSt
             .find(|f| f.id == fx)
             .map(|f| f.fixtures.clone())
     });
-    // abweichende Geräte oder andere Reihenfolge
+    // different fixtures or a different order
     let pending = !st.locked
         && !st.selected.is_empty()
         && current.as_ref().is_some_and(|c| *c != st.selection_order);
-    // rot hinterlegt, sobald sich die Auswahl vom Effekt unterscheidet
+    // red background as soon as the selection differs from the effect
     let btn = IconButton::new(Icon::Fx)
         .size(28.0)
         .enabled(pending)
@@ -542,8 +544,8 @@ struct PillResult {
 }
 
 impl PillResult {
-    /// Gruppen-Pille: Name und Anzahl der Geräte. Ganz ausgewählt = gefüllt,
-    /// teilweise ausgewählt = farbiger Rand.
+    /// Group pill: name and number of fixtures. Fully selected = filled,
+    /// partially selected = colored border.
     fn show(
         ui: &mut egui::Ui,
         group: Option<GroupId>,
@@ -603,7 +605,7 @@ impl PillResult {
                 theme::text_dim()
             },
         );
-        // Anzahl als kleines Abzeichen rechts
+        // Count as a small badge on the right
         let badge = egui::Rect::from_center_size(
             egui::pos2(rect.right() - 4.0 - count_w * 0.5, rect.center().y),
             Vec2::new(count_w, 18.0),
@@ -642,7 +644,7 @@ impl PillResult {
         if resp.clicked() {
             let mods = ui.input(|i| i.modifiers);
             action = Some(GroupAction::Select(if mods.command || mods.shift {
-                // hinzufügen bzw. herausnehmen
+                // add or remove
                 if full {
                     selected.difference(set).copied().collect()
                 } else {

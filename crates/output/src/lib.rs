@@ -1,8 +1,8 @@
-//! Ausgabeschicht.
+//! Output layer.
 //!
-//! Alles, was DMX-Daten irgendwohin schickt, implementiert [`DmxOutput`].
-//! Der [`Runtime`]-Thread taktet die Engine und schickt jeden Frame an das
-//! gewählte Backend: Simulation oder USB-DMX-Kabel ([`open_dmx`]).
+//! Everything that sends DMX data somewhere implements [`DmxOutput`].
+//! The [`Runtime`] thread clocks the engine and sends every frame to the
+//! chosen backend: simulation or USB DMX cable ([`open_dmx`]).
 
 pub mod backends;
 pub mod open_dmx;
@@ -17,40 +17,41 @@ pub use runtime::{OutputStatus, Runtime};
 
 #[derive(Debug, Error)]
 pub enum OutputError {
-    #[error("Gerät nicht gefunden: {0}")]
+    #[error("Device not found: {0}")]
     NotFound(String),
-    #[error("Übertragungsfehler: {0}")]
+    #[error("Transfer error: {0}")]
     Transfer(String),
 }
 
-/// Ein DMX-Ausgang.
+/// A DMX output.
 pub trait DmxOutput: Send {
-    /// Anzeigename für die Oberfläche.
+    /// Display name for the UI.
     fn name(&self) -> &str;
-    /// Verbindung aufbauen (inkl. eventuellem Handshake).
+    /// Connect (including a handshake, if any).
     fn open(&mut self) -> Result<(), OutputError>;
-    /// Einen vollständigen Frame senden.
+    /// Send a complete frame.
     fn send(&mut self, frame: &DmxFrame) -> Result<(), OutputError>;
-    /// Verbindung schließen. Darf mehrfach aufgerufen werden.
+    /// Close the connection. May be called several times.
     fn close(&mut self) {}
-    /// Wie viele Universen der Ausgang bedienen kann.
+    /// How many universes the output can serve.
     fn max_universes(&self) -> usize {
         usize::MAX
     }
-    /// Teilprobleme bei laufendem Ausgang (z. B. ein Kabel von zweien fehlt).
+    /// Partial problems while the output is running (e.g. one of two cables is
+    /// missing).
     fn health(&self) -> Option<String> {
         None
     }
 }
 
-/// Einstellungen für die Ausgänge.
+/// Settings for the outputs.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OutputConfig {
-    /// USB-DMX: je Universum (Index) der Schlüssel des Kabels.
+    /// USB DMX: per universe (index) the key of the cable.
     pub open_dmx: Vec<Option<String>>,
 }
 
-/// Verfügbare Ausgänge für die Auswahl in der Oberfläche.
+/// Available outputs for the selection in the UI.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputKind {
     Simulation,
@@ -58,7 +59,7 @@ pub enum OutputKind {
 }
 
 impl OutputKind {
-    /// Zur Auswahl angebotene Ausgänge.
+    /// Outputs offered for selection.
     pub const ALL: [OutputKind; 2] = [OutputKind::Simulation, OutputKind::OpenDmx];
 
     pub fn label(self) -> &'static str {
@@ -68,7 +69,7 @@ impl OutputKind {
         }
     }
 
-    /// Schlüssel für die Einstellungen.
+    /// Key for the settings.
     pub fn key(self) -> &'static str {
         match self {
             OutputKind::Simulation => "simulation",

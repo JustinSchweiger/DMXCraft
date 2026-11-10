@@ -4,8 +4,8 @@ use dmxcraft_core::DmxFrame;
 
 use crate::{DmxOutput, OutputError};
 
-/// Verwirft alle Frames. Für Arbeit ohne Gerät; die Oberfläche zeigt die
-/// Werte trotzdem im DMX-Monitor an.
+/// Discards all frames. For working without a device; the UI still shows
+/// the values in the DMX monitor.
 #[derive(Default)]
 pub struct NullOutput {
     pub frames_sent: u64,
@@ -24,7 +24,7 @@ impl DmxOutput for NullOutput {
     }
 }
 
-/// Speichert gesendete Frames – für Tests und zum Debuggen.
+/// Stores sent frames – for tests and debugging.
 #[derive(Clone, Default)]
 pub struct RecordingOutput {
     pub frames: Arc<Mutex<Vec<DmxFrame>>>,
