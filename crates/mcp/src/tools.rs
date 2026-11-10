@@ -108,7 +108,7 @@ fn venue_object_schema() -> Value {
             "color": string("#rrggbb"),
             "opacity": num("Opacity 0–1"),
             "gloss": num("Gloss 0–1"),
-            "emissive": num("Selbstleuchten 0–1"),
+            "emissive": num("Self-illumination 0–1"),
             "locked": boolean("lock against moving"),
             "hidden": boolean("hide"),
         },
@@ -265,7 +265,7 @@ const TOOLS: &[Tool] = &[
             "steps": json!({ "type": "array", "items": step_schema(), "description": "Steps (at least one)" }),
             "color": string("Color of the card #rrggbb (optional)"),
             "loop": boolean("Repeat the sequence endlessly (default true)"),
-            "settings": any_obj("Szeneneinstellungen, z. B. {\"fade_in_ms\":500,\"fade_out_ms\":500,\"dimmer\":255,\"speed_pct\":100,\"flash\":false}"),
+            "settings": any_obj("Scene settings, e.g. {\"fade_in_ms\":500,\"fade_out_ms\":500,\"dimmer\":255,\"speed_pct\":100,\"flash\":false}"),
             "select": boolean("select in the UI (default true)"),
             "verbose": boolean("return the full scene with all channel values (default: short summary; details via get_scene)"),
         }, &["name", "bank", "steps"]),
@@ -303,7 +303,7 @@ const TOOLS: &[Tool] = &[
         title: "Add effect",
         description: "Adds an effect to a scene (makes it an FX scene). `fixtures` in the desired order (= run/color order). `params` overrides fields of the template from describe_effect.",
         schema: || obj(props! {
-            "scene": int("Scene ID"), "kind": string("Effekttyp, z. B. ColorFx"),
+            "scene": int("Scene ID"), "kind": string("Effect type, e.g. ColorFx"),
             "fixtures": ids("Fixtures in effect order"), "params": any_obj("Fields as in describe_effect"),
             "verbose": boolean("return the full scene with all channel values (default: short summary; details via get_scene)"),
         }, &["scene", "kind", "fixtures"]),
@@ -498,7 +498,7 @@ const TOOLS: &[Tool] = &[
         description: "Renders the 3D view with the current DMX output as a PNG image (light beams, light spots, structures) – e.g. to check positions, aiming or colors of a scene. Without `camera` from the point of view of the current camera. The window does not need to be open.",
         schema: || obj(props! {
             "camera": camera_schema(),
-            "width": int("Breite in Pixel (Standard 1280, 320–2560)"),
+            "width": int("Width in pixels (default 1280, 320–2560)"),
             "height": int("Height in pixels (default 720, 240–1600)"),
         }, &[]),
         read_only: true,
@@ -534,7 +534,7 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "delete_profile",
         title: "Remove fixture profile",
-        description: "Removes a custom fixture profile from the library (the file goes to the “geloescht” folder). Patched fixtures keep their fixture type.",
+        description: "Removes a custom fixture profile from the library (the file goes to the “deleted” folder). Patched fixtures keep their fixture type.",
         schema: || obj(props! { "key": string("Key from list_profiles") }, &["key"]),
         read_only: false,
     },
@@ -542,7 +542,7 @@ const TOOLS: &[Tool] = &[
         name: "save_show",
         title: "Save show",
         description: "Saves the show (without `path` under the current path).",
-        schema: || obj(props! { "path": string("Dateipfad, Endung .dmxcraft (optional)") }, &[]),
+        schema: || obj(props! { "path": string("File path, extension .dmxcraft (optional)") }, &[]),
         read_only: false,
     },
 ];
@@ -822,7 +822,7 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
         "update_venue_object" => crate::venue::update_object(e, a),
         "delete_venue_objects" => crate::venue::delete_objects(e, &id_list(a, "ids")?),
         "place_fixtures" => crate::venue::place_fixtures(e, a),
-        _ => Err(format!("Unbekanntes Werkzeug: {name}")),
+        _ => Err(format!("Unknown tool: {name}")),
     };
     drop(guard);
     out
@@ -894,7 +894,7 @@ fn parse_kind(s: &str) -> Result<EffectKind, String> {
     EffectKind::ALL
         .into_iter()
         .find(|k| norm(kind_name(*k)) == norm(s) || norm(k.label()) == norm(s))
-        .ok_or_else(|| format!("Unbekannter Effekttyp „{s}“"))
+        .ok_or_else(|| format!("Unknown effect type “{s}”"))
 }
 
 fn kind_name(k: EffectKind) -> &'static str {
@@ -969,7 +969,7 @@ fn collect_values(show: &Show, a: &Value) -> Result<Vec<ChannelValue>, String> {
             // short: [fixture, channel, value]
             let (f, c, val) = match v.as_array() {
                 Some(t) if t.len() == 3 => (t[0].clone(), t[1].clone(), t[2].clone()),
-                Some(_) => return Err("Kurzform: [fixture, channel, value]".into()),
+                Some(_) => return Err("short form: [fixture, channel, value]".into()),
                 None => (
                     v.get("fixture").cloned().unwrap_or(Value::Null),
                     v.get("channel").cloned().unwrap_or(Value::Null),
@@ -1793,7 +1793,7 @@ mod tests {
             &h,
             "create_scene",
             json!({
-                "name":"Rot","bank":bank,
+                "name":"Red","bank":bank,
                 "steps":[{"fixtures":ids,"set":{"Dimmer":255,"color":"#ff0000"}}],
                 "settings":{"fade_in_ms":500},
                 "verbose":true

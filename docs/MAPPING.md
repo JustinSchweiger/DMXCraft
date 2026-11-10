@@ -1,94 +1,94 @@
-# Tastatur- und MIDI-Zuordnung
+# Keyboard and MIDI mapping
 
-## Zuordnung einschalten
+## Turning mapping on
 
-Die Zuordnung lässt sich auf zwei Wegen einschalten:
+There are two ways to turn mapping on:
 
-* über die zwei Symbole links vom Schloss in der Titelleiste,
-* über das Menü **Mappings**.
+* the two icons to the left of the lock in the title bar,
+* the **Mappings** menu.
 
-Es gibt eine Zuordnung für die **Tastatur** (rot) und eine für **MIDI** (violett).
+There is one mapping for the **keyboard** (red) and one for **MIDI** (violet).
 
-## Zuordenbare Elemente
+## Mappable elements
 
-Alle zuordenbaren Elemente werden farbig markiert:
+All mappable elements are highlighted in color:
 
-* **Szenen:** Szenenkarten, Bank-Chips („Alle“ und jede Bank) sowie die Knöpfe Pause, Zurück und Vor im Bankkopf.
-* **Szenen-Seitenleiste:**
-  * die Reiter,
-  * Abspielen/Pause,
-  * die Regler Dimmer, Speed, Phase und Size,
-  * Anfang/Ende, vorwärts/rückwärts, die Wiederholungsart,
-  * die Schalter „Am Ende freigeben“ und „Flash-Modus“.
+* **Scenes:** scene cards, bank chips (“All” and every bank) and the pause, back and forward buttons in the bank header.
+* **Scene sidebar:**
+  * the tabs,
+  * play/pause,
+  * the dimmer, speed, phase and size knobs,
+  * start/end, forward/backward, the repeat mode,
+  * the “Release at end” and “Flash mode” switches.
 * **Programmer:**
-  * die Knöpfe Edit, Blind und Live,
-  * Beams aus, an und zentrieren,
-  * die zwei Zurücksetzen-Knöpfe,
-  * die Kategorien,
-  * jeder Fader,
-  * die Farbvorgaben.
-* **Bühne:**
-  * jedes Gerät im Plan,
-  * die Gruppen,
-  * der FX-Knopf.
+  * the Edit, Blind and Live buttons,
+  * beams off, on and center,
+  * the two reset buttons,
+  * the categories,
+  * every fader,
+  * the color presets.
+* **Stage:**
+  * every fixture in the plan,
+  * the groups,
+  * the FX button.
 
-  Bei einem Gerät wählst du unter „Ziel“, was die Taste macht: die Auswahl des Geräts umschalten oder einen einzelnen Kanal steuern, z. B. Dimmer, Pan oder Rot. Der Kanal wird als Live-Wert gesetzt, unabhängig davon, was gerade ausgewählt ist. Ein Regler (CC) setzt den Wert direkt. Eine Taste schaltet zwischen 0 und voll um, als Flash-Taste nur solange sie gedrückt ist.
-* **Globale Befehle** über „+“ im Fenster: Blackout, Master, Alle Szenen stoppen, nächste/vorige Bank, ausgewählte Szene.
+  For a fixture you choose under “Target” what the key does: toggle the fixture's selection or control a single channel, e.g. dimmer, pan or red. The channel is set as a live value, independent of what is currently selected. A knob (CC) sets the value directly. A key toggles between 0 and full, as a flash key only while it is held.
+* **Global commands** via “+” in the window: blackout, master, stop all scenes, next/previous bank, selected scene.
 
-Ein Klick auf ein markiertes Element löst nichts aus. Er wählt das Element aus bzw. legt eine neue Zuordnung an und wartet auf die Eingabe.
+Clicking a highlighted element does not trigger anything. It selects the element or creates a new mapping and waits for the input.
 
-Zwei Arten von Elementen verhalten sich verschieden:
+Two kinds of elements behave differently:
 
-* **Szenen, Bänke und globale Befehle** wirken immer.
-* **Elemente der Oberfläche** (Programmer, Seitenleiste, Bühne) wirken wie ein Klick bzw. eine Reglerbewegung. Das geht nur, solange das Element angezeigt wird. Der Dimmer-Fader des Programmers wirkt also auf die gerade ausgewählten Geräte.
+* **Scenes, banks and global commands** always work.
+* **Interface elements** (programmer, sidebar, stage) act like a click or a slider movement. That only works while the element is shown. The programmer's dimmer fader therefore acts on the fixtures currently selected.
 
-**Programmer-Fader** werden mit den gerade ausgewählten Geräten zugeordnet: Die Zuordnung steuert fest deren Kanal als Live-Wert, auch wenn die Geräte später nicht mehr ausgewählt sind („Ziel: Fest“). Wer lieber einen Fader möchte, der immer auf die aktuelle Auswahl wirkt, wählt unter „Ziel“ „Ausgewählte Geräte (folgt der Auswahl)“. Derselbe Fader kann mit verschiedenen Geräteauswahlen mehrfach zugeordnet werden.
+**Programmer faders** are mapped together with the fixtures currently selected: the mapping controls exactly their channel as a live value, even if the fixtures are no longer selected later (“Target: Fixed”). If you prefer a fader that always acts on the current selection, choose “Selected fixtures (follows the selection)” under “Target”. The same fader can be mapped several times with different fixture selections.
 
-Regler (Fader, Drehregler) folgen einem MIDI-Regler (CC) direkt. Eine Taste schaltet einen Regler zwischen 0 und voll um.
+Sliders (faders, knobs) follow a MIDI controller (CC) directly. A key toggles a slider between 0 and full.
 
-## Fenster
+## Window
 
-**Voreinstellungen:**
+**Presets:**
 
-* Löschen,
-* Import und Export als `.dmxmap`-Datei.
+* Clear,
+* import and export as a `.dmxmap` file.
 
-**Liste:**
+**List:**
 
-* Spalten Kategorie, Ziel und Taste bzw. MIDI-Eingang.
-* Ein Klick auf den Kopf „Kategorie“ dreht die Sortierung um.
-* Rechtsklick oder Entf löscht die Zuordnung.
+* Columns category, target and key or MIDI input.
+* Clicking the “Category” header reverses the sort order.
+* Right-click or Delete removes the mapping.
 
-**Einstellungen** der gewählten Zuordnung:
+**Settings** of the selected mapping:
 
-* Eingabe mit dem Knopf „Neu zuweisen“.
-* Bei Szenen das Ziel: die Szene, die ausgewählte Szene, Nr. n in dieser Bank oder Nr. n in der angezeigten Bank.
-* Tastenmodus und Flash-Taste.
-* Bei MIDI: Gerät, Kanal, Note oder CC und die Nummer.
+* Input with the “Reassign” button.
+* For scenes the target: the scene, the selected scene, no. n in this bank or no. n in the bank currently shown.
+* Key mode and flash key.
+* For MIDI: device, channel, note or CC and the number.
 
-**MIDI-Ausgang** (LEDs):
+**MIDI output** (LEDs):
 
-* Gerät,
-* für die Zustände Aus und An jeweils Kanal und Velocity.
-* Bei bekannten Controllern zeigt die Kanalliste die Bedeutung, und die Velocity lässt sich als Farbe aus der Palette wählen.
-* **Vorschau:** Solange eine Zuordnung gewählt ist, zeigt ihre Taste am Controller den gerade bearbeiteten Zustand (Aus/An).
+* device,
+* channel and velocity for each of the states off and on.
+* For known controllers the channel list shows the meaning, and the velocity can be picked as a color from the palette.
+* **Preview:** while a mapping is selected, its key on the controller shows the state currently being edited (off/on).
 
-Die LED einer gelöschten oder umgelegten Zuordnung wird ausgeschaltet. Das gilt auch, wenn alle Zuordnungen gelöscht oder importiert werden.
+The LED of a deleted or reassigned mapping is switched off. This also happens when all mappings are cleared or imported.
 
-## MIDI-Controller einrichten (Einstellungen → MIDI)
+## Setting up MIDI controllers (Settings → MIDI)
 
-Alle angeschlossenen MIDI-Eingänge werden automatisch geöffnet. Die Suche läuft alle 3 s. Unter „+“ lässt sich ein Gerät einrichten. Typ und LED-Ausgang werden dabei am Namen erkannt:
+All connected MIDI inputs are opened automatically; the search runs every 3 s. “+” sets up a device. Type and LED output are detected from its name:
 
-* **Typ:** allgemeiner Controller oder **Akai APC mini mk2**.
-  * Für den APC kennt DMXCraft die Farbtabelle aus Akais veröffentlichtem Kommunikationsprotokoll: 128 Farben, die Velocity wählt die Farbe.
-  * Der MIDI-Kanal wählt das Leuchtverhalten: 1–7 Helligkeit 10–100 %, 8–11 Pulsieren, 12–16 Blinken.
-* **LED-Ausgang:** Neu gelernte Tasten bekommen die Rückmeldung auf diesen Ausgang. Die „An“-Farbe ist die Szenenfarbe, sofern sie bekannt ist.
-* **LEDs löschen beim Verbinden:** Beim Programmstart und beim Einstecken werden alle LEDs ausgeschaltet. Danach gehen die aktuellen Zustände raus. „Jetzt löschen“ macht dasselbe sofort.
+* **Type:** generic controller or **Akai APC mini mk2**.
+  * For the APC, DMXCraft knows the color table from Akai's published communication protocol: 128 colors, the velocity picks the color.
+  * The MIDI channel picks the light behavior: 1–7 brightness 10–100 %, 8–11 pulsing, 12–16 blinking.
+* **LED output:** newly learned keys send their feedback to this output. The “on” color is the scene color if it is known.
+* **Clear LEDs on connect:** at program start and when the device is plugged in, all LEDs are switched off and the current states are sent afterwards. “Clear now” does the same immediately.
 
-Zuordnungen werden in der Show gespeichert (`mappings`), Controller in den Programmeinstellungen. Zuordnungen wirken auch bei gesperrter Oberfläche. Tasten werden ignoriert, solange ein Eingabefeld den Fokus hat.
+Mappings are saved in the show (`mappings`), controllers in the program settings. Mappings also work while the interface is locked. Keys are ignored while an input field has focus.
 
-## Neue Elemente zuordenbar machen
+## Making new elements mappable
 
-Ein neues Element meldet sich mit `mapping::button(ui, &resp, "schlüssel", an, || (kategorie, ziel))` an. Ein Regler nutzt `mapping::fader(…)`. Für Drehregler gibt es `Knob::map(…)`, für Schalter `Toggle::map(…)`.
+A new element registers with `mapping::button(ui, &resp, "key", on, || (category, target))`. A slider uses `mapping::fader(…)`. Knobs have `Knob::map(…)`, switches `Toggle::map(…)`.
 
-Der Schlüssel muss fest bleiben, denn er wird in der Show gespeichert.
+The key must stay fixed because it is saved in the show.

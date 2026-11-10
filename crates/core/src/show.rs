@@ -1599,7 +1599,7 @@ mod tests {
         let f = s.add_fixture("A", "generic/rgb-3ch", 0, 1).unwrap();
         let z = s.add_zone("Colors");
         s.add_scene(
-            "Rot",
+            "Red",
             Some(z),
             vec![Step::new(vec![ChannelValue {
                 fixture: f,
@@ -1640,7 +1640,7 @@ mod tests {
         let mut s = show();
         let f = s.add_fixture("A", "generic/rgb-3ch", 0, 1).unwrap();
         let id = s.add_scene(
-            "Rot",
+            "Red",
             None,
             vec![Step::new(vec![ChannelValue {
                 fixture: f,

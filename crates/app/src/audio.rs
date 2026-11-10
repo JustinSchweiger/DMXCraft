@@ -190,7 +190,7 @@ impl AudioPlayer {
     /// Analysis of a file (starts it in the background on the first call;
     /// finished analyses come from the cache).
     pub fn wave(&self, path: &str, ctx: &eframe::egui::Context) -> WaveState {
-        let mut map = self.waves.lock().expect("Wellenformen");
+        let mut map = self.waves.lock().expect("waveforms");
         if let Some(w) = map.get(path) {
             return w.clone();
         }
@@ -203,7 +203,7 @@ impl AudioPlayer {
                 Ok(w) => WaveState::Ready(Arc::new(w)),
                 Err(e) => WaveState::Failed(e),
             };
-            waves.lock().expect("Wellenformen").insert(path, state);
+            waves.lock().expect("waveforms").insert(path, state);
             ctx.request_repaint();
         });
         WaveState::Loading
@@ -211,7 +211,7 @@ impl AudioPlayer {
 
     /// Finished analysis of a file (without starting a new one).
     pub fn ready(&self, path: &str) -> Option<Arc<AudioAnalysis>> {
-        match self.waves.lock().expect("Wellenformen").get(path) {
+        match self.waves.lock().expect("waveforms").get(path) {
             Some(WaveState::Ready(a)) => Some(a.clone()),
             _ => None,
         }

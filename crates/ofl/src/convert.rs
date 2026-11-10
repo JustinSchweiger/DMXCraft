@@ -667,7 +667,7 @@ pub fn convert_fixture(
                 }
                 _ => {
                     return Err(OflError::Invalid(format!(
-                        "unbekannter Kanaleintrag in {mode_name}"
+                        "unknown channel entry in {mode_name}"
                     )))
                 }
             }
@@ -786,7 +786,7 @@ mod tests {
                 K::Generic
             ]
         );
-        assert_eq!(m.channels[0].default, 128, "16-Bit-Default → grobes Byte");
+        assert_eq!(m.channels[0].default, 128, "16-bit default → coarse byte");
         assert_eq!(m.channels[2].default, 128, "50 %");
         assert_eq!(m.channels[1].default, 0);
         assert_eq!(m.key, "ofl/x/spot/extended");

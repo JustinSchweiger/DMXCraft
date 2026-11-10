@@ -233,8 +233,8 @@ mod tests {
         assert_eq!(old.pads.len(), PADS);
         assert_eq!(old.widths, WIDTHS.to_vec());
         assert_eq!(old.decks[0].playlist[0].label(), "a");
-        old.decks[0].playlist[0].name = "Einmarsch".into();
-        assert_eq!(old.decks[0].playlist[0].label(), "Einmarsch");
+        old.decks[0].playlist[0].name = "Entrance".into();
+        assert_eq!(old.decks[0].playlist[0].label(), "Entrance");
         assert_eq!(old.decks[0].playlist[0].file_name(), "a");
         assert_eq!(old.relink("/a.mp3", "/b.mp3"), 1);
         assert_eq!(old.paths().collect::<Vec<_>>(), vec!["/b.mp3"]);

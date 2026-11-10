@@ -32,7 +32,7 @@ pub struct RecordingOutput {
 
 impl DmxOutput for RecordingOutput {
     fn name(&self) -> &str {
-        "Aufzeichnung"
+        "Recording"
     }
     fn open(&mut self) -> Result<(), OutputError> {
         Ok(())
@@ -40,7 +40,7 @@ impl DmxOutput for RecordingOutput {
     fn send(&mut self, frame: &DmxFrame) -> Result<(), OutputError> {
         self.frames
             .lock()
-            .map_err(|_| OutputError::Transfer("Mutex vergiftet".into()))?
+            .map_err(|_| OutputError::Transfer("mutex poisoned".into()))?
             .push(frame.clone());
         Ok(())
     }

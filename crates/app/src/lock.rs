@@ -44,14 +44,14 @@ mod tests {
 
     #[test]
     fn hash_and_verify() {
-        let h = hash_password("geheim");
-        assert!(verify(&h, "geheim"));
+        let h = hash_password("secret");
+        assert!(verify(&h, "secret"));
         assert!(!verify(&h, "Geheim"));
-        assert!(!verify("kaputt", "geheim"));
+        assert!(!verify("broken", "secret"));
         assert_ne!(
-            hash_password("geheim"),
-            hash_password("geheim"),
-            "Salz unterscheidet"
+            hash_password("secret"),
+            hash_password("secret"),
+            "salt differs"
         );
     }
 }

@@ -1,47 +1,47 @@
-# OBS-Anbindung
+# OBS integration
 
-DMXCraft steuert OBS (ab Version 28) über dessen eingebauten WebSocket-Server
-(obs-websocket 5). OBS spielt Videos selbst ab – DMXCraft sagt nur, welche
-Datei, ab welcher Stelle und in welchem Tempo.
+DMXCraft controls OBS (version 28 and later) through its built-in WebSocket
+server (obs-websocket 5). OBS plays the videos itself – DMXCraft only tells it
+which file, from which position and at which speed.
 
-## Einrichten
+## Setup
 
-1. In OBS: *Werkzeuge → WebSocket-Server-Einstellungen*, Server aktivieren,
-   Port (Standard 4455) und Passwort notieren.
-2. In DMXCraft: *Bearbeiten → Einstellungen → OBS*, „Mit OBS verbinden“ einschalten, Adresse
-   (`localhost`, wenn OBS auf demselben Rechner läuft), Port und Passwort
-   eintragen. Die Daten werden mit der Show gespeichert.
-3. Der Verbindungsstatus steht in den Einstellungen und als „OBS“ in der Titelleiste
-   (grün = verbunden, rot = getrennt; Klick öffnet die Einstellungen). DMXCraft
-   verbindet sich bei Abbruch alle paar Sekunden neu.
+1. In OBS: *Tools → WebSocket Server Settings*, enable the server, note the
+   port (default 4455) and the password.
+2. In DMXCraft: *Edit → Settings → OBS*, turn on “Connect to OBS”, enter the
+   address (`localhost` if OBS runs on the same computer), port and password.
+   The data is saved with the show.
+3. The connection state is shown in the settings and as “OBS” in the title
+   bar (green = connected, red = disconnected; a click opens the settings).
+   DMXCraft reconnects every few seconds after a drop.
 
-## Videoblöcke
+## Video blocks
 
-* Videodatei (MP4, MOV, MKV, WebM …) in die Zeitleiste einer SUPER SCENE
-  ziehen oder im Kontextmenü der Spuren *Video hinzufügen …* wählen. Die
-  Länge wird aus MP4/MOV gelesen.
-* Erreicht die Wiedergabe den Block, setzt DMXCraft die Datei in die
-  Medienquelle (Standard „DMXCraft Video“, je Block änderbar) und startet sie
-  an der passenden Stelle. Fehlt die Quelle in OBS, wird sie in der
-  OBS-Szene des Blocks (sonst in der aktuellen Szene) angelegt.
-* Optional wechselt OBS beim Start des Blocks in eine Szene
-  (Block-Eigenschaften → OBS-Szene).
-* Pause, Springen mit dem Lineal, Geschwindigkeit und Pegel (Lautstärke der
-  Quelle) folgen der Zeitleiste; Abweichungen über ca. 0,3 s werden
-  nachgestellt. Am Ende des Blocks wird die Quelle gestoppt.
-* Kürzen von links/rechts verschiebt wie bei Audio den Beginn in der Datei.
+* Drag a video file (MP4, MOV, MKV, WebM …) onto the timeline of a SUPER SCENE
+  or choose *Add video …* in the track context menu. The length is read from
+  MP4/MOV.
+* When playback reaches the block, DMXCraft puts the file into the media
+  source (default “DMXCraft Video”, changeable per block) and starts it at the
+  right position. If the source is missing in OBS, it is created in the
+  block's OBS scene (otherwise in the current scene).
+* Optionally OBS switches to a scene when the block starts (block properties
+  → OBS scene).
+* Pause, seeking with the ruler, speed and level (volume of the source)
+  follow the timeline; drift of more than about 0.3 s is corrected. At the
+  end of the block the source is stopped.
+* Trimming from the left/right moves the start within the file, as for audio.
 
-## OBS-Aktionen
+## OBS actions
 
-Kontextmenü der Spuren → *OBS-Aktion hinzufügen*. Beim Erreichen des Blocks
-(nur bei laufender Wiedergabe):
+Track context menu → *Add OBS action*. When the block is reached (only during
+playback):
 
-* **Szene wechseln** – z. B. zum Countdown in die Video-Szene springen.
-* **Quelle einblenden / ausblenden** – Quelle in einer Szene schalten.
+* **Switch scene** – e.g. jump to the video scene for a countdown.
+* **Show / hide source** – toggle a source in a scene.
 
-## Tipps
+## Tips
 
-* Bildausgabe auf einen Beamer: in OBS Rechtsklick auf die Vorschau →
-  *Vollbild-Projektor*.
-* Der Ton des Videos läuft über den Audiomixer von OBS und landet damit auch
-  in der Aufnahme. Für stumme Videos den Pegel des Blocks auf 0 ziehen.
+* Video output to a projector: in OBS right-click the preview →
+  *Fullscreen Projector*.
+* The video's sound runs through OBS's audio mixer and therefore also ends up
+  in the recording. For silent videos pull the block's level down to 0.

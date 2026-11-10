@@ -1155,7 +1155,7 @@ mod tests {
     fn virtual_dimmer_scales_colors_and_keeps_ratio() {
         let (s, a, b) = setup();
         assert!(s.virtual_dimmer(b).is_some());
-        assert!(s.virtual_dimmer(a).is_none(), "eigener Dimmer");
+        assert!(s.virtual_dimmer(a).is_none(), "own dimmer");
         let mut e = Engine::new(s);
         let r = ChannelRef {
             fixture: b,
@@ -1395,7 +1395,7 @@ mod tests {
     fn zones_are_exclusive() {
         let (mut s, a, _) = setup();
         let z = s.add_zone("Color");
-        let s1 = s.add_scene("Rot", Some(z), vec![Step::new(vec![cv(a, 1, 255)])]);
+        let s1 = s.add_scene("Red", Some(z), vec![Step::new(vec![cv(a, 1, 255)])]);
         let s2 = s.add_scene("Blue", Some(z), vec![Step::new(vec![cv(a, 3, 255)])]);
         let free = s.add_scene("Free", None, vec![Step::new(vec![cv(a, 0, 255)])]);
         let mut e = Engine::new(s);
@@ -1491,7 +1491,7 @@ mod tests {
         assert_eq!(
             e.render_frame().get(0, 1),
             Some(50),
-            "halb eingeblendet, Dimmer 50 %"
+            "half faded in, dimmer 50 %"
         );
         e.tick(Duration::from_millis(600));
         assert_eq!(e.render_frame().get(0, 1), Some(100));
@@ -1609,7 +1609,7 @@ mod tests {
     #[test]
     fn blind_keeps_output_but_monitor_shows_edits() {
         let (mut s, a, _) = setup();
-        let red = s.add_scene("Rot", None, vec![Step::new(vec![cv(a, 1, 255)])]);
+        let red = s.add_scene("Red", None, vec![Step::new(vec![cv(a, 1, 255)])]);
         let mut e = Engine::new(s);
         e.activate(red);
         e.set_blind(true);
@@ -1634,7 +1634,7 @@ mod tests {
     fn live_overrides_scenes_and_resets() {
         let (mut s, a, _) = setup();
         let red = s.add_scene(
-            "Rot",
+            "Red",
             None,
             vec![Step::new(vec![cv(a, 1, 255), cv(a, 2, 0), cv(a, 3, 0)])],
         );

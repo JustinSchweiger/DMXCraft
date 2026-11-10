@@ -344,7 +344,7 @@ mod tests {
             assert_eq!(v.find(id).unwrap().transform.position[0], 1.0);
         }
         let ids: std::collections::BTreeSet<u32> = v.flatten().iter().map(|(o, _)| o.id).collect();
-        assert_eq!(ids.len(), v.flatten().len(), "IDs eindeutig");
+        assert_eq!(ids.len(), v.flatten().len(), "IDs unique");
         assert!(v.flatten().len() > before + list.len());
     }
 

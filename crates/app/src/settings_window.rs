@@ -934,7 +934,7 @@ fn project(ui: &mut Ui, e: &mut Engine, show_path: &str) {
         f.row(t("Content"), |ui| {
             ui.label(
                 egui::RichText::new(tr!(
-                    "{n} Geräte · {n1} Szenen · {n2} Zonen · {n3} Gruppen",
+                    "{n} fixtures · {n1} scenes · {n2} banks · {n3} groups",
                     n = show.fixtures.len(),
                     n1 = show.scenes.len(),
                     n2 = show.zones.len(),

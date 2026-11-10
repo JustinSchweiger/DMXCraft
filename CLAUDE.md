@@ -1,45 +1,50 @@
-# DMXCraft – Hinweise für KI-Assistenten
+# DMXCraft – notes for AI assistants
 
-DMX-Lichtsteuerung in Rust (egui), Ziel: Daslight-5-Arbeitsablauf auf Linux,
-Windows und macOS, Ausgabe über USB-DMX-Kabel (Open DMX / FTDI).
+DMX lighting control in Rust (egui). Goal: the Daslight 5 workflow on Linux,
+Windows and macOS, output via USB DMX cables (Open DMX / FTDI).
 
-## Orientierung (Tokens sparen)
+## Orientation (save tokens)
 
-* Zuerst den Code-Graphen nutzen: `graphify query "<Frage>"`,
-  `graphify explain "<Symbol>"`, Überblick in `graphify-out/GRAPH_REPORT.md`.
-* Nach Codeänderungen `graphify update .` ausführen (kostet keine Tokens).
-* Dateien erst öffnen, wenn sie geändert werden müssen.
+* Use the code graph first: `graphify query "<question>"`,
+  `graphify explain "<symbol>"`, overview in `graphify-out/GRAPH_REPORT.md`.
+* Run `graphify update .` after code changes (costs no tokens).
+* Only open files when they need to be changed.
 
-## Struktur
+## Structure
 
 ```
-crates/core    Datenmodell (Show, Patch, Szenen, Zonen, Gruppen) + Engine – ohne I/O, mit Tests
-crates/output  DmxOutput-Trait, Ausgabe-Thread, Backends (open_dmx.rs = USB-DMX-Kabel)
-crates/ofl     Open-Fixture-Library-Konverter + eingebettete Bibliothek (data/)
-crates/mcp     MCP-Server (KI-Assistent): tools.rs, protocol.rs, server.rs, bridge.rs – docs/MCP.md
-crates/app     Oberfläche
-  src/ui/        Design-System: theme.rs (Tokens), widgets/ (Fader, SceneCard, …)
-  src/views/     Ansichten, je ein Typ mit `impl View` (control/, setup/, windows.rs)
-  src/titlebar.rs  eigene Titelleiste + Hauptmenü; src/settings.rs Programmeinstellungen
-  src/state.rs   gemeinsamer UI-Zustand (AppState)
-  src/viz/       3D-Visualisierer (wgpu): render.rs, shader.wgsl, rig.rs, panels.rs, gltf_import.rs – docs/VISUALIZER.md
-  src/sound.rs   Wiedergabe Reiter SOUND (Player, Pads), Ansicht views/sound.rs – docs/SOUND.md
-  src/obs.rs     OBS-Anbindung (obs-websocket 5): Videoblöcke, OBS-Aktionen – docs/OBS.md
-  src/app.rs     Rahmen: Kopfzeile, Modus, Layout, Runtime
-docs/UI-GUIDELINES.md  verbindliche UI-Regeln – vor UI-Arbeit lesen
+crates/core    data model (show, patch, scenes, zones, groups) + engine – no I/O, with tests
+crates/output  DmxOutput trait, output thread, backends (open_dmx.rs = USB DMX cable)
+crates/ofl     Open Fixture Library / QLC+ converters + embedded library (data/)
+crates/mcp     MCP server (AI assistant): tools.rs, protocol.rs, server.rs, bridge.rs – docs/MCP.md
+crates/app     user interface
+  src/ui/        design system: theme.rs (tokens), widgets/ (Fader, SceneCard, …)
+  src/views/     views, one type with `impl View` each (control/, setup/, windows.rs)
+  src/titlebar.rs  custom title bar + main menu; src/settings.rs program settings
+  src/state.rs   shared UI state (AppState)
+  src/i18n/      translation: English source, German in de.rs
+  src/viz/       3D visualizer (wgpu): render.rs, shader.wgsl, rig.rs, panels.rs, gltf_import.rs – docs/VISUALIZER.md
+  src/sound.rs   playback of the SOUND tab (players, pads), view in views/sound.rs – docs/SOUND.md
+  src/obs.rs     OBS integration (obs-websocket 5): video blocks, OBS actions – docs/OBS.md
+  src/app.rs     frame: header, mode, layout, runtime
+docs/UI-GUIDELINES.md  binding UI rules – read before UI work
 ```
 
-## Regeln
+## Rules
 
-* UI-Änderungen folgen `docs/UI-GUIDELINES.md` (Tokens, Komponenten, keine
-  Sonderzeichen-Glyphen, Flächen füllen).
-* **Texte** der Oberfläche immer über `t("…")` bzw. `tr!("… {name}", name = x)`
-  (englische Quelle) und die deutsche Übersetzung in `crates/app/src/i18n/de.rs`
-  ergänzen – der Test `all_texts_translated` prüft das.
-* **Farben** nur über `theme::bg()`, `theme::text()` … (abhängig vom Theme);
-  feste Signalfarben `theme::DANGER/OK/WARN`.
-* Keine Grafiken, Icons oder Gerätebibliotheken aus Daslight übernehmen.
-* Show-Format abwärtskompatibel halten (`#[serde(default)]` für neue Felder).
-* Vor jedem Commit: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`,
-  `cargo test --workspace`; jeden Stand auf `main` pushen.
-* Releases: Version in `Cargo.toml` erhöhen, Tag `vX.Y.Z` pushen (release.yml).
+* The repository language is English (code, comments, docs, commit messages).
+* UI changes follow `docs/UI-GUIDELINES.md` (tokens, components, no special
+  glyphs, fill the space).
+* **UI texts** always go through `t("…")` or `tr!("… {name}", name = x)`
+  (English source); add the German translation to `crates/app/src/i18n/de.rs`
+  – the test `all_texts_translated` checks this.
+* **Colors** only via `theme::bg()`, `theme::text()` … (theme-dependent);
+  fixed signal colors `theme::DANGER/OK/WARN`.
+* Do not copy graphics, icons or fixture libraries from Daslight.
+* Keep the show format backwards compatible (`#[serde(default)]` for new
+  fields).
+* Before every commit: `cargo fmt --all`,
+  `cargo clippy --workspace --all-targets -- -D warnings`,
+  `cargo test --workspace`; push every state to `main`.
+* Releases: bump the version in `Cargo.toml`, push a `vX.Y.Z` tag
+  (release.yml; macos-app.yml adds the macOS DMG).

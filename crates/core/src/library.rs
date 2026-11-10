@@ -43,7 +43,7 @@ pub fn builtin_fixture_types() -> Vec<FixtureType> {
             "RGB-PAR",
             "3 channel",
             vec![
-                ChannelDef::new("Rot", K::Red),
+                ChannelDef::new("Red", K::Red),
                 ChannelDef::new("Green", K::Green),
                 ChannelDef::new("Blue", K::Blue),
             ],
@@ -54,7 +54,7 @@ pub fn builtin_fixture_types() -> Vec<FixtureType> {
             "4 channel (D+RGB)",
             vec![
                 ChannelDef::new("Dimmer", K::Dimmer),
-                ChannelDef::new("Rot", K::Red),
+                ChannelDef::new("Red", K::Red),
                 ChannelDef::new("Green", K::Green),
                 ChannelDef::new("Blue", K::Blue),
             ],
@@ -65,7 +65,7 @@ pub fn builtin_fixture_types() -> Vec<FixtureType> {
             "6 channel",
             vec![
                 ChannelDef::new("Dimmer", K::Dimmer),
-                ChannelDef::new("Rot", K::Red),
+                ChannelDef::new("Red", K::Red),
                 ChannelDef::new("Green", K::Green),
                 ChannelDef::new("Blue", K::Blue),
                 ChannelDef::new("White", K::White),

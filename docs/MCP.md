@@ -1,15 +1,15 @@
-# KI-Assistent (MCP)
+# AI assistant (MCP)
 
-DMXCraft enthält einen Server für das **Model Context Protocol (MCP)**. Damit
-kann ein KI-Assistent wie Claude die laufende Show lesen und bedienen.
+DMXCraft contains a server for the **Model Context Protocol (MCP)**. It lets
+an AI assistant such as Claude read and operate the running show.
 
-## Einschalten
+## Turning it on
 
-*Bearbeiten → Einstellungen → MCP*: „MCP-Server einschalten“.
-Der Server lauscht nur lokal auf `http://127.0.0.1:7373/mcp` (Port
-einstellbar). Anfragen aus Webseiten (fremder `Origin`) werden abgewiesen.
+*Edit → Settings → MCP*: “Enable MCP server”.
+The server only listens locally on `http://127.0.0.1:7373/mcp` (the port is
+configurable). Requests from web pages (foreign `Origin`) are rejected.
 
-## Verbinden
+## Connecting
 
 **Claude Code**
 
@@ -17,8 +17,8 @@ einstellbar). Anfragen aus Webseiten (fremder `Origin`) werden abgewiesen.
 claude mcp add --transport http dmxcraft http://127.0.0.1:7373/mcp
 ```
 
-**Claude Desktop** – in `claude_desktop_config.json` (der genaue Pfad zur
-Programmdatei steht in den Einstellungen zum Kopieren bereit):
+**Claude Desktop** – in `claude_desktop_config.json` (the exact path of the
+executable can be copied from the settings):
 
 ```json
 {
@@ -28,74 +28,73 @@ Programmdatei steht in den Einstellungen zum Kopieren bereit):
 }
 ```
 
-`dmxcraft-mcp` ist eine kleine stdio-Brücke zum laufenden DMXCraft (kein
-Fenster); bei anderem Port `"args": ["--port", "7474"]`. DMXCraft legt beim
-Start eine Kopie davon im Konfigurationsordner ab. Claude Desktop hält die
-Brücke dauerhaft offen – weil die Kopie benutzt wird, bleiben `dmxcraft.exe`
-und der Build-Ordner frei (Neubauen/Aktualisieren unter Windows). DMXCraft
-muss gestartet und der Server eingeschaltet sein. `dmxcraft mcp` funktioniert
-weiterhin, sperrt aber `dmxcraft.exe`, solange der Client läuft.
+`dmxcraft-mcp` is a small stdio bridge to the running DMXCraft (no window);
+for another port use `"args": ["--port", "7474"]`. At startup DMXCraft puts a
+copy of it into its config folder. Claude Desktop keeps the bridge open all
+the time – because the copy is used, `dmxcraft.exe` and the build folder stay
+free (rebuilding/updating on Windows). DMXCraft must be running and the
+server enabled. `dmxcraft mcp` still works, but locks `dmxcraft.exe` while
+the client is running.
 
-**Andere Clients**: „Streamable HTTP“ mit der URL oben (JSON-Antworten, keine
-Sitzungen).
+**Other clients**: “Streamable HTTP” with the URL above (JSON responses, no
+sessions).
 
-## Werkzeuge
+## Tools
 
-| Bereich | Werkzeuge |
+| Area | Tools |
 |---|---|
-| Überblick | `get_overview`, `list_fixtures`, `list_scenes`, `get_scene`, `get_dmx_output` |
+| Overview | `get_overview`, `list_fixtures`, `list_scenes`, `get_scene`, `get_dmx_output` |
 | Patch | `search_fixture_library`, `add_fixtures`, `update_fixture`, `delete_fixtures` |
-| Gruppen, Bänke | `create_group`, `delete_group`, `create_bank`, `update_bank`, `delete_bank` |
-| Szenen | `create_scene`, `update_scene`, `delete_scenes`, `select_scene` |
-| Effekte | `describe_effect`, `add_effect`, `update_effect`, `remove_effect` |
-| SUPER SCENE | `create_super_scene`, `add_timeline_clips`, `remove_timeline_clips` (Blöcke: Szene, `audio_path`, `video_path` für OBS, `obs_scene`/`obs_source` für OBS-Aktionen, siehe `docs/OBS.md`) |
-| Wiedergabe | `play_scene`, `stop_scene`, `pause_scene`, `set_output` (Master, Blackout, Tempo) |
+| Groups, banks | `create_group`, `delete_group`, `create_bank`, `update_bank`, `delete_bank` |
+| Scenes | `create_scene`, `update_scene`, `delete_scenes`, `select_scene` |
+| Effects | `describe_effect`, `add_effect`, `update_effect`, `remove_effect` |
+| SUPER SCENE | `create_super_scene`, `add_timeline_clips`, `remove_timeline_clips` (blocks: scene, `audio_path`, `video_path` for OBS, `obs_scene`/`obs_source` for OBS actions, see `docs/OBS.md`) |
+| Playback | `play_scene`, `stop_scene`, `pause_scene`, `set_output` (master, blackout, tempo) |
 | Live | `set_live_values`, `clear_live_values` |
-| 3D-Ort | `get_venue`, `set_venue`, `add_venue_object`, `update_venue_object`, `delete_venue_objects`, `place_fixtures` (Position, an Traverse hängen, auf Punkt ausrichten) |
-| 3D-Visualisierer | `get_visualizer`, `set_visualizer` (Fenster, Qualität, Kamera), `visualizer_screenshot` (PNG-Bild der Ansicht mit dem aktuellen DMX-Ausgang) |
+| 3D venue | `get_venue`, `set_venue`, `add_venue_object`, `update_venue_object`, `delete_venue_objects`, `place_fixtures` (position, hang on a truss, aim at a point) |
+| 3D visualizer | `get_visualizer`, `set_visualizer` (window, quality, camera), `visualizer_screenshot` (PNG image of the view with the current DMX output) |
 | Profile Builder | `list_profiles`, `get_profile`, `describe_profile_format`, `save_profile`, `delete_profile` |
-| Datei | `save_show` |
+| File | `save_show` |
 
-Kanalwerte gibt man entweder einzeln an (`{fixture, channel, value}`, Kanal
-als Index, Art wie `"Red"` oder Name) oder bequem je Kanalart für mehrere
-Geräte: `{"fixtures": [1,2,3], "set": {"Dimmer": 255, "color": "#ff8800"}}`.
-Bei vielen Werten (z. B. beim Übernehmen ganzer Szenen) gibt es die Kurzform
-`[fixture, channel, value]`, etwa `"values": [[3, 1, 255], [3, "Dimmer", 128]]`.
+Channel values are given either individually (`{fixture, channel, value}`,
+channel as index, kind such as `"Red"` or name) or conveniently per channel
+kind for several fixtures: `{"fixtures": [1,2,3], "set": {"Dimmer": 255, "color": "#ff8800"}}`.
+For many values (e.g. when copying whole scenes) there is the short form
+`[fixture, channel, value]`, such as `"values": [[3, 1, 255], [3, "Dimmer", 128]]`.
 
-`create_scene`, `update_scene`, `add_effect`, `update_effect` und
-`create_super_scene` antworten mit einer kurzen Zusammenfassung (ID, Bank,
-Art, Anzahl der Werte je Schritt, Effekte, Länge der Zeitleiste). Die ganze
-Szene mit allen Kanalwerten liefert `get_scene` oder `"verbose": true`.
+`create_scene`, `update_scene`, `add_effect`, `update_effect` and
+`create_super_scene` answer with a short summary (ID, bank, kind, number of
+values per step, effects, length of the timeline). The whole scene with all
+channel values comes from `get_scene` or `"verbose": true`.
 
-**3D-Visualisierer:** `visualizer_screenshot` rendert die Ansicht direkt auf
-der Grafikkarte (das Fenster muss nicht offen sein) und liefert sie als Bild –
-so kann der Assistent Positionen, Ausrichtung und Farben prüfen. Kamera über
-`view` (`front`, `back`, `left`, `right`, `top`, `overview`) und/oder `yaw`,
-`pitch`, `distance`, `target`, `fov`; `front` blickt von der Publikumsseite
-(+z); gespeicherte Kamerapunkte über `point` (Name oder Nummer).
-`set_visualizer` setzt dieselben Angaben für das Fenster und legt mit
-`save_point`/`delete_point` Kamerapunkte an bzw. entfernt sie.
+**3D visualizer:** `visualizer_screenshot` renders the view directly on the
+graphics card (the window does not need to be open) and returns it as an
+image – so the assistant can check positions, aiming and colors. Camera via
+`view` (`front`, `back`, `left`, `right`, `top`, `overview`) and/or `yaw`,
+`pitch`, `distance`, `target`, `fov`; `front` looks from the audience side
+(+z); saved camera points via `point` (name or number).
+`set_visualizer` sets the same values for the window and creates or removes
+camera points with `save_point`/`delete_point`.
 
-**Profile Builder:** `save_profile` speichert wie der Profile Builder in den
-Konfigurationsordner (`fixtures/`), macht die Bereiche lückenlos und nennt
-Probleme (fehlender Modus, Winkel bei Pan …) statt zu speichern. Eigene
-Profile erscheinen in `search_fixture_library` (mit `own_profile`) und lassen
-sich mit `add_fixtures` patchen; bereits gepatchte Geräte werden beim
-Speichern aktualisiert. `describe_profile_format` liefert eine Vorlage.
+**Profile Builder:** `save_profile` saves to the config folder (`fixtures/`)
+like the Profile Builder, makes the ranges gapless and lists problems
+(missing mode, angle for pan …) instead of saving. Custom profiles show up in
+`search_fixture_library` (with `own_profile`) and can be patched with
+`add_fixtures`; fixtures already patched are updated on save.
+`describe_profile_format` returns a template.
 
-Effekte werden über ihre JSON-Einstellungen gesteuert: `describe_effect`
-liefert die Vorlage, `add_effect`/`update_effect` übernehmen davon nur die
-angegebenen Felder.
+Effects are controlled through their JSON settings: `describe_effect` returns
+the template, `add_effect`/`update_effect` only take over the fields given.
 
-## Sicherheit
+## Security
 
-* Nur lokal erreichbar (127.0.0.1).
-* Ist DMXCraft gesperrt (Schloss), sind nur lesende Werkzeuge erlaubt.
-* Jede Änderung erscheint sofort in der Oberfläche und lässt sich mit Strg+Z
-  rückgängig machen; gespeichert wird erst mit `save_show`.
+* Reachable locally only (127.0.0.1).
+* While DMXCraft is locked (lock icon), only read-only tools are allowed.
+* Every change shows up in the interface immediately and can be undone with
+  Ctrl+Z; nothing is saved until `save_show`.
 
-## Aufbau
+## Structure
 
-`crates/mcp`: `tools.rs` (Werkzeuge auf der Engine), `protocol.rs`
-(JSON-RPC/MCP), `server.rs` (HTTP), `bridge.rs` (stdio-Brücke).
-Die App startet/stoppt den Server in `crates/app/src/mcp.rs`.
+`crates/mcp`: `tools.rs` (tools on the engine), `protocol.rs` (JSON-RPC/MCP),
+`server.rs` (HTTP), `bridge.rs` (stdio bridge). The app starts/stops the
+server in `crates/app/src/mcp.rs`.

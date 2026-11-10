@@ -1,216 +1,223 @@
-# DMXCraft – UI-Richtlinien
+# DMXCraft – UI guidelines
 
-Verbindliche Regeln für jede Änderung an der Oberfläche (`crates/app`).
-Ziel: ein ruhiges, dichtes Pult-Layout, das im Dunkeln bei einer Show
-bedienbar ist – mit eigenem Erscheinungsbild (keine Grafiken, Icons oder
-Farbschemata anderer Programme übernehmen).
+Binding rules for every change to the interface (`crates/app`).
+Goal: a calm, dense desk layout that can be operated in the dark during a
+show – with its own look (do not copy graphics, icons or color schemes of
+other programs).
 
-## 1. Grundprinzipien
+## 1. Principles
 
-1. **Live zuerst.** Alles, was während einer Show gebraucht wird, liegt unter
-   STEUERN und ist mit einem Klick erreichbar. Einrichten (Patch, Bühnenplan
-   bearbeiten, Zonen) gehört unter EINRICHTEN.
-2. **Flächen füllen.** Panels, Fader und Canvas nutzen den verfügbaren Platz
-   vollständig (`ui.available_height()`/`available_width()`); keine festen
-   Höhen, außer für Kopfzeilen und Buttons.
-3. **Ein Bedienelement, eine Bedeutung.** Gleiche Aktionen sehen überall gleich
-   aus (z. B. „freigeben“ immer als Rechtsklick + Kontextmenü-Eintrag).
-4. **Zustand sichtbar machen.** Aktive Szenen, gesetzte Programmer-Kanäle,
-   Auswahl und Ausgangsstatus sind ohne Hover erkennbar.
-5. **Keine Überraschungen bei Shows.** Destruktive Aktionen nie per einfachem
-   Linksklick ohne Rückfrage, nie in der Nähe häufig genutzter Buttons.
+1. **Live first.** Everything needed during a show lives under CONTROL and is
+   reachable with one click. Setting up (patch, editing the stage plan,
+   zones) belongs under SETUP.
+2. **Fill the space.** Panels, faders and canvases use the available space
+   completely (`ui.available_height()`/`available_width()`); no fixed
+   heights except for header rows and buttons.
+3. **One control, one meaning.** The same actions look the same everywhere
+   (e.g. “release” always as right-click + context menu entry).
+4. **Make state visible.** Active scenes, programmer channels that are set,
+   the selection and the output state are recognizable without hovering.
+5. **No surprises during shows.** Never put destructive actions on a simple
+   left-click without confirmation, and never next to frequently used buttons.
 
-## 2. Design-Tokens (`ui/theme.rs`)
+## 2. Design tokens (`ui/theme.rs`)
 
-Farben, Abstände, Radien und Schriftgrößen kommen **ausschließlich** aus
-`ui::theme`. Keine `Color32::from_rgb(..)`-Literale in Views.
+Colors, spacing, radii and font sizes come **exclusively** from `ui::theme`.
+No `Color32::from_rgb(..)` literals in views.
 
-Flächen- und Textfarben hängen vom gewählten **Theme** ab (Dunkelblau, Grau –
-Einstellungen → Allgemein) und werden als Funktion gelesen: `theme::bg()`,
-`theme::surface()`, `theme::text()` … Neue Themes sind ein weiterer
-`Palette`-Eintrag in `theme.rs`. Signalfarben (`DANGER`, `OK`, `WARN`) und der
-Akzent bleiben in allen Themes gleich erkennbar.
+Surface and text colors depend on the chosen **theme** (navy, gray, … –
+Settings → General) and are read as functions: `theme::bg()`,
+`theme::surface()`, `theme::text()` … New themes are another `Palette` entry
+in `theme.rs`. Signal colors (`DANGER`, `OK`, `WARN`) and the accent stay
+recognizable in all themes.
 
-**Begriffe:** Die Spalten unter STEUERN heißen in der Oberfläche **Bänke**
-(im Code `Zone`). Inline-Umbenennen (Chips, Patch) fokussiert das Feld nur beim
-Start – nie jeden Frame `request_focus()`.
+**Terms:** the columns under CONTROL are called **banks** in the interface
+(`Zone` in the code). Inline renaming (chips, patch) focuses the field only
+at the start – never call `request_focus()` every frame.
 
-**Sprache:** Jeder sichtbare Text läuft über `t("…")` oder
-`tr!("… {name}", name = x)` (deutsche Quelle, Übersetzung in
-`i18n/en.rs`). Keine Texte per `format!` zusammensetzen, die übersetzt werden
-müssen – Platzhalter benennen, damit die Übersetzung die Reihenfolge ändern
-kann. Showdaten (Gerätenamen, Szenen, Zonen) werden nicht übersetzt.
+**Language:** every visible text goes through `t("…")` or
+`tr!("… {name}", name = x)` (English source, German translation in
+`i18n/de.rs`). Do not assemble texts that need translating with `format!` –
+name the placeholders so the translation can change their order. Show data
+(fixture names, scenes, zones) is not translated.
 
-| Token | Verwendung |
+| Token | Use |
 |---|---|
-| `bg()` | Fensterhintergrund, Canvas |
-| `surface()` | Panels |
-| `raised()` | Karten, Fader-Spuren, Buttons |
-| `raised_hover()` | Hover-Zustand |
-| `border()` | 1-px-Kanten von Karten/Panels |
-| `accent()` | Auswahl, aktive Werte, Fokus (Cyan aus dem Logo) |
-| `TEXT` / `TEXT_DIM` / `TEXT_FAINT` | Primär-, Sekundär-, deaktivierter Text |
-| `DANGER`, `OK`, `WARN` | Blackout/Fehler, Ausgang aktiv, Warnung |
+| `bg()` | window background, canvas |
+| `surface()` | panels |
+| `raised()` | cards, fader tracks, buttons |
+| `raised_hover()` | hover state |
+| `border()` | 1 px edges of cards/panels |
+| `accent()` | selection, active values, focus (cyan from the logo) |
+| `TEXT` / `TEXT_DIM` / `TEXT_FAINT` | primary, secondary, disabled text |
+| `DANGER`, `OK`, `WARN` | blackout/error, output active, warning |
 
-Abstände im 4-px-Raster: `SP_XS=4`, `SP_S=8`, `SP_M=12`, `SP_L=16`.
-Radien: `R_S=4` (kleine Buttons), `R_M=8` (Karten, Fader).
-Schrift: `FS_CAPTION=10.5` (Sektionstitel, GROSS), `FS_BODY=13`,
+Spacing on a 4 px grid: `SP_XS=4`, `SP_S=8`, `SP_M=12`, `SP_L=16`.
+Radii: `R_S=4` (small buttons), `R_M=8` (cards, faders).
+Fonts: `FS_CAPTION=10.5` (section titles, UPPER CASE), `FS_BODY=13`,
 `FS_TITLE=15`.
 
 ## 3. Layout
 
-* **Eigene Titelleiste** (`titlebar.rs`, Fenster ohne Betriebssystem-Leiste):
-  links Menü (Datei, Bearbeiten, Ansicht, Tools, Mappings, Hilfe) · Modus
-  Einrichten/Steuern;
-  Mitte „DMXCraft · Showname“ (= Dateiname, `*` bei ungespeicherten
-  Änderungen); rechts Auslastungsleiste „LAST“ (Statuspunkt, Details im
-  Tooltip), Sperre-Knopf, Fensterknöpfe. Keine fps- oder Geräte-/Szenenzahlen.
-* **Keine Statusleiste.** Kurze Meldungen (`AppState::info/error`) erscheinen
-  rechts in der Titelleiste und blenden nach 5 s (Fehler 10 s) aus; Update-
-  Hinweise ebenfalls dort.
-* **Randlos:** Bereiche stoßen aneinander und sind nur durch 1-px-Trennlinien
-  (Panel-Grenzen) getrennt. Innenabstand eines Bereichs `SP_XS`–`SP_S`,
-  keine äußeren Rahmen oder Rundungen um ganze Bereiche (Canvas, Raster).
-* STEUERN: oben Szenen-Raster (flexibel), unten Bühnenplan + Programmer
-  (Höhe per Splitter, Standard 40 %).
-* **Keine Bereichsüberschriften** („Bühne“, „Programmer“, „Patch“ …) – sie
-  kosten Platz und sagen nichts Neues. Eine Werkzeugzeile über einem Bereich
-  nutzt `widgets::section_header(ui, "", …)` (Aktionen rechts). Wo eine
-  Beschriftung nötig ist (z. B. „GRUPPEN |“ vor Pillen), immer über
+* **Custom title bar** (`titlebar.rs`, window without an operating system
+  bar): menu on the left (File, Edit, View, Tools, Mappings, Help) · modes
+  Setup/Control/Touch/Sound; in the middle “DMXCraft · show name” (= file
+  name, `*` for unsaved changes); on the right the load bar “LOAD” (status
+  dot, details in the tooltip), lock button, window buttons. No fps or
+  fixture/scene counts.
+* **No status bar.** Short messages (`AppState::info/error`) appear on the
+  right of the title bar and fade out after 5 s (errors 10 s); update notices
+  too.
+* **Borderless:** areas touch each other and are only separated by 1 px
+  divider lines (panel borders). Inner padding of an area `SP_XS`–`SP_S`, no
+  outer frames or rounding around whole areas (canvas, grid).
+* CONTROL: scene grid at the top (flexible), stage plan + programmer at the
+  bottom (height via splitter, 40 % by default).
+* **No area headings** (“Stage”, “Programmer”, “Patch” …) – they cost space
+  and say nothing new. A toolbar above an area uses
+  `widgets::section_header(ui, "", …)` (actions on the right). Where a label
+  is needed (e.g. “GROUPS |” before pills), always use
   `theme::heading_text()`.
-* **Sperre:** Ist die Oberfläche gesperrt (`AppState::locked`), gibt es nur
-  STEUERN; Einrichten, Szenen-/Zonenbearbeitung, Kontextmenüs zum Ändern,
-  Einstellungen und Show öffnen sind aus. Neue Bedienelemente, die etwas am
-  Patch oder an Szenen ändern, müssen `locked` beachten.
-* Inhalte haben `SP_S` Innenabstand; zwischen Karten `SP_XS`.
+* **Lock:** while the interface is locked (`AppState::locked`) only CONTROL
+  is available; setup, scene/zone editing, context menus for changes,
+  settings and opening shows are off. New controls that change something in
+  the patch or in scenes must respect `locked`.
+* Content has `SP_S` padding; `SP_XS` between cards.
 
-## 4. Komponenten (`ui/widgets/`)
+## 4. Components (`ui/widgets/`)
 
-Wiederverwendbare Elemente sind eigene Typen mit `impl egui::Widget` oder
-einer `show(self, ui) -> Response`-Methode. Sie kennen **keine** Engine und
-keinen App-Zustand – nur ihre Eingabewerte.
+Reusable elements are their own types with `impl egui::Widget` or a
+`show(self, ui) -> Response` method. They know **neither** the engine nor
+the app state – only their input values.
 
-* **Fader** (Programmer): Statuspunkt oben (Farbe des Modus, anklickbar =
-  Kanal speichern/freigeben), Kanalnummer, Symbol der Kanalart (Name nur als
-  Hinweis am Symbol), Wert bzw. „OFF“ (Klick = eintippen, Ziehen hoch/runter =
-  ändern), Schiene mit Griff. Mausrad ±2, Doppelklick 0 ↔ voll, Rechtsklick
-  Menü (Freigeben, 0/25/50/75 %/Voll). In allen Kategorien außer „Alle
-  Kanäle“ steuert ein Fader die Kanalart **aller** ausgewählten Geräte.
-* **SceneCard**: Name in Szenenfarbe, Typ in Großbuchstaben (STATISCH, ABLAUF,
-  FX), rechts der Markier-Streifen (Klick = auswählen, Ziehen = in andere Bank
-  verschieben), Hauptfläche = starten/stoppen. Leiste unten: Laufzeit bzw.
-  Rampe beim Ein-/Ausblenden; kleine Symbole für Ablauf und Flash.
-* **Knob** (Drehregler): Bezeichnung darunter, Wert **nur beim Drehen** als
-  Hinweis am Mauszeiger; Akzent in der Farbe des Objekts (z. B. Szene).
-* **Zeitfeld** (`widgets::time_field`): `00h00m00s00` (Stunden nur, wo sinnvoll,
-  z. B. Dauer), jede Zahl per Ziehen hoch/runter, Hundertstel in 4er-Schritten.
-* **Dialog** (`widgets::Dialog`): **jedes** Fenster läuft hierüber, nie
-  `egui::Window` direkt. Kopf: Titel zentriert in Überschrift-Schrift,
-  Schließen-Symbol rechts. Inhalt auf `SURFACE`. Aktionsknöpfe (Abbrechen,
-  Schließen, Speichern …) **immer in der Fußzeile unten rechts**, Hauptaktion
-  ganz rechts in `ACCENT` (auch per Enter), Esc schließt.
-  Erstes Feld nur über das `first`-Flag fokussieren – nie jeden Frame
-  `request_focus()`, sonst funktioniert Tab nicht.
-* **Fenster mit Reitern** (Vorbild: `settings_window.rs`): `Dialog` mit
-  `.flush()` und fester `.height()`, Reiterleiste links (`BG`, aktiver Reiter
-  `SURFACE` mit Akzentstreifen, Symbol + Text), Inhalt rechts scrollbar. Das
-  Fenster behält beim Reiterwechsel seine Größe.
-* **Formulare** (`widgets::form` + `Form::row`): Beschriftung links
-  (`TEXT_DIM`, feste Spaltenbreite, ohne Doppelpunkt), Bedienelement rechts
-  in voller Breite, alle Zeilen gleich hoch (`INPUT_H`).
-* **Eingabefelder** immer über `widgets::text_field()` (Text vertikal mittig,
-  feste Höhe, Hintergrund `BG`), nie `TextEdit::singleline` direkt.
-* **Menüs** (`widgets::menu`): Hauptmenü und **alle** Kontextmenüs nur mit
-  `MenuItem` (Symbolspalte, Text, Kürzel rechts gedämpft, Pfeil bei
-  Untermenüs), `menu::item`, `menu::sub`, `menu::separator`, `menu::title`;
-  jedes Menü beginnt mit `menu::begin`. Nie `ui.button`/`ui.menu_button` in
-  Menüs. Symbole, wo sie helfen; die oberste Ebene des Hauptmenüs ohne
-  Symbolspalte (`plain()`). Löschen direkt und rot (`danger()`), ohne
-  Rückfrage – Strg+Z macht es rückgängig; Geräte zusätzlich per Entf. Noch nicht Verfügbares deaktiviert mit
-  Tooltip „Noch nicht verfügbar“ – Klick darauf tut nichts, das Menü bleibt
-  offen (`menu::context`/`menu::dropdown`, nie `resp.context_menu`).
-  Kürzel-Texte aus `titlebar::keys`. „…“ am Ende heißt: es öffnet sich ein
-  Dialog; Dateien **immer** über den Systemdialog (`rfd`, eigener Thread),
-  nie über ein eigenes Pfad-Feld.
-* **Toggle** (Schiebeschalter): für alle An/Aus-Optionen – **keine Checkboxen**.
-* **RangeSlider**: senkrechter Regler mit Unter- und Obergrenze (z. B. Dimmer-Limit).
-* **LimitPad**: XY-Feld mit Griffen für Bereiche (Pan/Tilt-Grenzen).
-* **SegmentedTabs**: für Modus- und Kategorie-Umschalter.
-* **XyPad**, **Swatch** (Farbfeld), **StageCanvas** (Bühnenplan in den
-  Modi Auswahl/Bearbeiten).
+* **Fader** (programmer): status dot at the top (color of the mode,
+  clickable = store/release the channel), channel number, icon of the channel
+  kind (name only as a tooltip on the icon), value or “OFF” (click = type in,
+  drag up/down = change), track with handle. Mouse wheel ±2, double-click
+  0 ↔ full, right-click menu (release, 0/25/50/75 %/full). In all categories
+  except “All channels” one fader controls the channel kind of **all**
+  selected fixtures.
+* **SceneCard**: name in the scene color, type in upper case (STATIC,
+  SEQUENCE, FX), the selection strip on the right (click = select, drag =
+  move to another bank), main area = start/stop. Bar at the bottom: run time
+  or ramp while fading in/out; small icons for sequence and flash.
+* **Knob**: label below, value **only while turning** as a hint at the mouse
+  pointer; accent in the color of the object (e.g. scene).
+* **Time field** (`widgets::time_field`): `00h00m00s00` (hours only where it
+  makes sense, e.g. duration), every number by dragging up/down, hundredths in
+  steps of 4.
+* **Dialog** (`widgets::Dialog`): **every** window goes through this, never
+  `egui::Window` directly. Header: title centered in the heading font, close
+  icon on the right. Content on `SURFACE`. Action buttons (Cancel, Close,
+  Save …) **always in the footer at the bottom right**, the main action far
+  right in `ACCENT` (also via Enter), Esc closes.
+  Only focus the first field via the `first` flag – never `request_focus()`
+  every frame, otherwise Tab does not work.
+* **Windows with tabs** (model: `settings_window.rs`): `Dialog` with
+  `.flush()` and a fixed `.height()`, tab bar on the left (`BG`, active tab
+  `SURFACE` with an accent strip, icon + text), content on the right
+  scrollable. The window keeps its size when switching tabs.
+* **Forms** (`widgets::form` + `Form::row`): label on the left (`TEXT_DIM`,
+  fixed column width, no colon), control on the right at full width, all rows
+  the same height (`INPUT_H`).
+* **Input fields** always via `widgets::text_field()` (text vertically
+  centered, fixed height, background `BG`), never `TextEdit::singleline`
+  directly.
+* **Menus** (`widgets::menu`): main menu and **all** context menus only with
+  `MenuItem` (icon column, text, shortcut muted on the right, arrow for
+  submenus), `menu::item`, `menu::sub`, `menu::separator`, `menu::title`;
+  every menu starts with `menu::begin`. Never `ui.button`/`ui.menu_button`
+  in menus. Icons where they help; the top level of the main menu without an
+  icon column (`plain()`). Delete directly and in red (`danger()`), without
+  confirmation – Ctrl+Z undoes it; fixtures additionally via Delete. Clicks on
+  disabled entries do nothing and keep the menu open
+  (`menu::context`/`menu::dropdown`, never `resp.context_menu`). Do not add
+  placeholder entries for features that do not exist yet. Shortcut texts come
+  from `titlebar::keys`. “…” at the end means: a dialog opens; files
+  **always** via the system dialog (`rfd`, own thread), never via an own path
+  field.
+* **Toggle** (switch): for all on/off options – **no checkboxes**.
+* **RangeSlider**: vertical slider with lower and upper bound (e.g. dimmer
+  limit).
+* **LimitPad**: XY pad with handles for ranges (pan/tilt limits).
+* **SegmentedTabs**: for mode and category switches.
+* **XyPad**, **Swatch** (color swatch), **StageCanvas** (stage plan in the
+  select/edit modes).
 
-## 5. Interaktion
+## 5. Interaction
 
-* Jeder Befehl ist über das Hauptmenü erreichbar; häufige zusätzlich direkt
-  in der Ansicht oder per Tastenkürzel (Strg+S, Strg+O, F11, B).
-* Rechtsklick auf Geräte öffnet überall dasselbe Menü (`views/fixture_menu.rs`).
+* Every command is reachable through the main menu; frequent ones also
+  directly in the view or via shortcut (Ctrl+S, Ctrl+O, F11, B).
+* Right-clicking fixtures opens the same menu everywhere
+  (`views/fixture_menu.rs`).
+* Hover: `RAISED_HOVER`; pressed/active: muted `ACCENT`; selection: 2 px
+  border in `ACCENT`.
+* Multi-selection: Ctrl/Cmd or Shift + click, dragging a box.
+* Dragging only starts after the egui threshold; hits are determined at the
+  **press point** (`press_origin`), not at the current position.
+* Context menus for rare actions (edit, delete, release).
+* **No hint or empty-state texts** (“Select a fixture …”, “No scene
+  selected”, “Select fixtures and use + …”, “no channels in this category”):
+  if there is nothing, the area stays empty. Help belongs in tooltips, if
+  needed on an info icon (`Icon::Info`).
+* Elements that appear depending on the selection (e.g. DIP switches) must
+  not change the height of their row.
+* All areas of a page can be resized at their dividers. Widgets only set the
+  mouse cursor when they really need it (e.g. grab while moving) – never a
+  blanket `Default`, otherwise the resize cursor of the dividers disappears.
+* Tools and selections with few fixed options (shapes, arrange, repeat) as
+  icon buttons with a tooltip instead of dropdowns.
+* **Delete** acts on the last clicked element (`AppState::focus`: scenes,
+  bank, effect) – never on something else that happens to be selected too.
+* **Inline renaming:** the field appears in place, the whole name is
+  selected (`dialog::select_all`, also after a double-click), Enter applies,
+  Esc cancels. New objects (scene, bank, group) start right in renaming.
+* **Drag & drop** where it is natural: scenes by their strip into other
+  banks, fixtures from the library into the patch, tracks between playlists.
+  The target shows an insertion mark or free/occupied (green/red), a label
+  without line breaks at the mouse pointer.
+* **Sidebars** (e.g. scene properties): label on the left, control
+  **right-aligned**; dropdowns with one-word options (Off/All/Bank …). Long
+  lists to choose from (scenes, banks) open their own window with a column
+  per bank and multi-selection.
+* Controls of a scene use the **scene color** as the accent (exception:
+  play/pause).
+* Values you need to read (times, run time) are large enough and
+  high-contrast; the current time on the left in the object color, the total
+  time on the right in the text color.
+* Stage plan: fixtures without light are black (like a closed dimmer), strobe
+  blinks, every fixture shape is distinguishable.
+* Window and area sizes are saved (eframe persistence).
 
-* Hover: `RAISED_HOVER`; gedrückt/aktiv: `ACCENT` gedämpft; Auswahl:
-  2-px-Rand in `ACCENT`.
-* Mehrfachauswahl: Strg/Cmd oder Shift + Klick, Aufziehen eines Rahmens.
-* Ziehen beginnt erst nach der egui-Schwelle; Treffer werden am
-  **Druckpunkt** (`press_origin`) ermittelt, nicht an der aktuellen Position.
-* Kontextmenüs für seltene Aktionen (Bearbeiten, Löschen, Freigeben).
-* **Keine Hinweis- oder Leer-Texte** („Gerät auswählen …“, „Keine Szene
-  ausgewählt“, „Geräte auswählen und mit + …“, „keine Kanäle in dieser
-  Kategorie“): ist nichts da, bleibt die Fläche leer. Hilfe gehört in Tooltips,
-  bei Bedarf an einem Info-Symbol (`Icon::Info`).
-* Elemente, die abhängig von der Auswahl erscheinen (z. B. DIP-Schalter), dürfen
-  die Höhe ihrer Zeile nicht verändern.
-* Alle Bereiche einer Seite sind an ihren Trennlinien in der Größe veränderbar.
-  Widgets setzen den Mauszeiger nur, wenn sie ihn wirklich brauchen (z. B.
-  Greifen beim Verschieben) – nie pauschal `Default`, sonst verschwindet der
-  Größenänderungs-Cursor der Trennlinien.
-* Werkzeuge und Auswahlen mit wenigen festen Optionen (Formen, Anordnen,
-  Wiederholung) als Symbol-Knöpfe mit Tooltip statt Auswahllisten.
-* **Entf** wirkt auf das zuletzt angeklickte Element (`AppState::focus`:
-  Szenen, Bank, Effekt) – nie auf etwas anderes, das zufällig auch markiert ist.
-* **Umbenennen inline:** Feld erscheint an Ort und Stelle, der ganze Name ist
-  markiert (`dialog::select_all`, auch nach einem Doppelklick), Enter
-  übernimmt, Esc bricht ab. Neue Objekte (Szene, Bank, Gruppe) starten direkt
-  im Umbenennen.
-* **Drag & Drop**, wo es naheliegt: Szenen am Streifen in andere Bänke,
-  Geräte aus der Bibliothek ins Patch. Ziel zeigt Einfügemarke bzw. frei/belegt
-  (grün/rot), am Mauszeiger eine Beschriftung ohne Umbruch.
-* **Seitenleisten** (z. B. Szenen-Eigenschaften): Beschriftung links,
-  Bedienelement **rechtsbündig**; Auswahllisten mit Ein-Wort-Optionen
-  (Aus/Alle/Bank …). Lange Listen zum Auswählen (Szenen, Bänke) öffnen ein
-  eigenes Fenster mit Spalten je Bank und Mehrfachauswahl.
-* Bedienelemente einer Szene nutzen die **Szenenfarbe** als Akzent
-  (Ausnahme: Play/Pause).
-* Werte, die man ablesen muss (Zeiten, Laufzeit), groß genug und kontrastreich;
-  aktuelle Zeit links in Objektfarbe, Gesamtzeit rechts in Textfarbe.
-* Bühnenplan: Geräte ohne Licht sind schwarz (wie Dimmer zu), Strobe blinkt,
-  jede Geräteform ist unterscheidbar.
-* Größen von Fenster und Bereichen werden gespeichert (eframe-Persistenz).
+## 6. Text & icons
 
-## 6. Text & Symbole
+* Language: English source, short, imperative verbs (“Save”, “Release”);
+  every text also gets a German translation.
+* Only characters the built-in font renders reliably: Latin letters, digits,
+  common punctuation, `·`, `–`, `“”`, `„“`. **No emojis or arrow/symbol
+  characters** (▶ ❚ ● … etc.) in text.
+* **Icons** come uniformly from the Phosphor icon font (MIT,
+  `assets/fonts/Phosphor*.ttf`) via `widgets::Icon` – add new icons there as
+  a variant with the matching glyph. Icons must fit their function (e.g. a
+  gear for settings, not a magnifier). Draw by hand only if there is no
+  matching glyph.
+* Lighting terms (EDIT, LIVE, BLIND, FX, STEPS …) stay as they are in both
+  languages.
 
-* Sprache: Deutsch, kurz, Verben im Infinitiv („Speichern“, „Freigeben“).
-* Nur Zeichen, die die eingebaute Schrift sicher darstellt: lateinische
-  Buchstaben, Ziffern, gängige Satzzeichen, `·`, `–`, `„“`. **Keine Emojis
-  oder Pfeil-/Symbolzeichen** (▶ ❚ ● … usw.) im Text.
-* **Symbole** kommen einheitlich aus der Phosphor-Icon-Schrift (MIT,
-  `assets/fonts/Phosphor*.ttf`) über `widgets::Icon` – neue Symbole dort als
-  Variante mit passender Glyphe ergänzen. Symbole müssen zur Funktion passen
-  (z. B. Zahnrad für Einstellungen, nicht Lupe). Selbst gezeichnet nur, wenn
-  es keine passende Glyphe gibt.
-* Fachbegriffe aus dem Lichtbereich (EDIT, LIVE, BLIND, FX, STEPS …) dürfen
-  englisch bleiben.
+## 7. UI architecture
 
-## 7. Architektur der Oberfläche
+* Every view is a type that implements the `views::View` trait and keeps its
+  own UI state as fields.
+* Shared state (selection, messages, paths) lives in `state::AppState`;
+  views get it via `ViewCtx` (`engine`, `state`, `frame`).
+* Views change the show only through `Engine`/`Show` methods from
+  `dmxcraft-core`; logic that does not look like UI belongs in the core and
+  gets tests.
 
-* Jede Ansicht ist ein Typ, der das Trait `views::View` implementiert und
-  ihren eigenen UI-Zustand als Felder hält.
-* Gemeinsamer Zustand (Auswahl, Meldungen, Pfade) liegt in `state::AppState`;
-  Ansichten bekommen ihn über `ViewCtx` (`engine`, `state`, `frame`).
-* Views ändern die Show nur über `Engine`/`Show`-Methoden aus `dmxcraft-core`;
-  Logik, die nicht nach UI aussieht, gehört in den Core und bekommt Tests.
-
-## 8. Prüfen vor jedem Commit
+## 8. Checks before every commit
 
 1. `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`,
    `cargo test --workspace`.
-2. App unter Xvfb starten, betroffene Ansichten per Screenshot prüfen
-   (Füllen die Fader die Höhe? Abgeschnittene Texte? Fehlende Glyphen?).
-3. `graphify update .` ausführen, damit der Code-Graph aktuell bleibt.
+2. Start the app under Xvfb and check the affected views with screenshots
+   (do the faders fill the height? cut-off texts? missing glyphs?).
+3. Run `graphify update .` so the code graph stays up to date.

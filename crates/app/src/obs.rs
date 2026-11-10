@@ -500,19 +500,19 @@ fn open(cfg: &ObsSettings) -> Result<Ws, String> {
     let (mut ws, _) = tungstenite::client(url, tcp).map_err(|e| e.to_string())?;
     let hello = read_json(&mut ws)?;
     if hello["op"] != 0 {
-        return Err("Unerwartete Antwort".into());
+        return Err("Unexpected answer".into());
     }
     let mut identify = json!({ "rpcVersion": 1, "eventSubscriptions": 0 });
     if let Some(a) = hello["d"].get("authentication") {
         let (Some(ch), Some(salt)) = (a["challenge"].as_str(), a["salt"].as_str()) else {
-            return Err("Unerwartete Anmeldung".into());
+            return Err("Unexpected authentication".into());
         };
         identify["authentication"] = json!(auth_response(&cfg.password, salt, ch));
     }
     send_json(&mut ws, &json!({ "op": 1, "d": identify }))?;
     match read_json(&mut ws) {
         Ok(v) if v["op"] == 2 => {}
-        Ok(_) => return Err("Unerwartete Antwort".into()),
+        Ok(_) => return Err("Unexpected answer".into()),
         Err(e) if e.contains("4009") => {
             return Err(crate::i18n::t("Incorrect password").to_string());
         }
@@ -531,7 +531,7 @@ fn read_json(ws: &mut Ws) -> Result<Value, String> {
                 return serde_json::from_str(t.as_str()).map_err(|e| e.to_string());
             }
             Ok(Message::Close(f)) => {
-                return Err(f.map_or("Verbindung geschlossen".into(), |f| {
+                return Err(f.map_or("Connection closed".into(), |f| {
                     format!("{} {}", u16::from(f.code), f.reason)
                 }));
             }
@@ -657,7 +657,7 @@ fn session(
                 }
             }
             Ok(Message::Close(f)) => {
-                return f.map_or("Verbindung geschlossen".into(), |f| f.reason.to_string());
+                return f.map_or("Connection closed".into(), |f| f.reason.to_string());
             }
             Ok(_) => {}
             Err(tungstenite::Error::Io(e))
@@ -790,7 +790,7 @@ mod tests {
     #[test]
     fn wrong_password_is_reported() {
         let (port, _) = fake_obs("geheim");
-        let (e, _) = engine(port, "falsch");
+        let (e, _) = engine(port, "wrong");
         let ctx = eframe::egui::Context::default();
         let mut obs = Obs::default();
         wait(&mut obs, &e, &ctx, |o| {

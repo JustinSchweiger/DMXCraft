@@ -116,21 +116,25 @@ mod tests {
                 continue;
             }
             let src = std::fs::read_to_string(&f).unwrap();
-            for marker in ["t(\"", "tr!(\""] {
+            for marker in ["t(", "tr!("] {
                 let mut rest = src.as_str();
                 while let Some(i) = rest.find(marker) {
-                    // only as a separate word (not `set(`, `hint(`, `include_str!(` …)
+                    // only as a separate word (not `set(`, `hint(`, `include_str!(` …),
+                    // the literal may follow on the next line (rustfmt)
                     let before = rest[..i].chars().last();
                     let ok = !before.is_some_and(|c| c.is_alphanumeric() || c == '_');
-                    let start = i + marker.len();
-                    let end = start + rest[start..].find('"').unwrap();
-                    if ok {
+                    let after = rest[i + marker.len()..].trim_start();
+                    if ok && after.starts_with('"') {
+                        let start = rest.len() - after.len() + 1;
+                        let end = start + rest[start..].find('"').unwrap();
                         found.push((
                             rest[start..end].replace("\\n", "\n"),
                             f.display().to_string(),
                         ));
+                        rest = &rest[end..];
+                    } else {
+                        rest = &rest[i + marker.len()..];
                     }
-                    rest = &rest[end..];
                 }
             }
         }

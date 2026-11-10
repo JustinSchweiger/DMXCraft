@@ -1503,7 +1503,7 @@ mod tests {
     fn proposals_for_easy_view_names() {
         let (t, exact) = propose_type("Stairville/LED PAR 56.ssl2");
         assert!(exact && t.manufacturer.contains("Stairville"));
-        let (t, exact) = propose_type("_imported/Unbekannt Sky Wash 25ch.ssl2");
+        let (t, exact) = propose_type("_imported/Unknown Sky Wash 25ch.ssl2");
         assert!(!exact);
         assert_eq!(t.key, "generic/moving-head-spot-11ch");
     }

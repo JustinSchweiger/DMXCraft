@@ -14,7 +14,7 @@ use dmxcraft_ofl::{convert_fixture, Library, OflError};
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 3 {
-        eprintln!("Aufruf: ofl-bundle <OFL-Checkout> <Ausgabedatei.json.gz>");
+        eprintln!("Usage: ofl-bundle <OFL checkout> <output.json.gz>");
         std::process::exit(2);
     }
     let root = PathBuf::from(&args[1]);

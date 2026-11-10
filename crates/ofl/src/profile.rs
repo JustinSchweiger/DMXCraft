@@ -1663,7 +1663,7 @@ mod tests {
                 pan,
                 ProfileChannel::new("Dimmer", Capability::new(CapabilityKind::Intensity)),
                 ProfileChannel::new(
-                    "Rot",
+                    "Red",
                     Capability::new(CapabilityKind::ColorIntensity).color("Red"),
                 ),
                 gobo,
@@ -1676,7 +1676,7 @@ mod tests {
                         "Pan".into(),
                         "Pan fine".into(),
                         "Dimmer".into(),
-                        "Rot".into(),
+                        "Red".into(),
                         "Gobo".into(),
                     ],
                     ..ProfileMode::default()
@@ -1755,7 +1755,7 @@ mod tests {
         p.channels[0].capabilities[0].to.clear();
         let pr = p.problems();
         assert!(pr.contains(&Problem::Gap("Dimmer".into(), 0)));
-        assert!(pr.contains(&Problem::Gap("Rot".into(), 201)));
+        assert!(pr.contains(&Problem::Gap("Red".into(), 201)));
         assert!(pr.contains(&Problem::MissingValue("Pan".into(), 0)));
         assert!(pr.contains(&Problem::UnknownChannel(
             "Basic".into(),

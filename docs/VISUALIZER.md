@@ -1,106 +1,101 @@
-# 3D-Visualisierer
+# 3D visualizer
 
-*Tools → 3D-Visualisierer* öffnet den Visualisierer in einem eigenen Fenster
-(z. B. auf einem zweiten Bildschirm, Vollbild über den Knopf oben rechts).
+*Tools → 3D visualizer* opens the visualizer in its own window (e.g. on a
+second screen; fullscreen via the button at the top right).
 
-## Technik
+## Technology
 
-* Gezeichnet wird auf der Grafikkarte mit **wgpu** – unter Windows und Linux
-  über **Vulkan** (sonst DirectX 12), unter macOS über Metal. Es wird die
-  leistungsstärkste Grafikkarte gewählt; Name und Schnittstelle stehen unten
-  rechts im Bild.
-* Szene in ein HDR-Ziel mit 4× Mehrfachabtastung, alle Scheinwerfer als
-  Spotlights mit Lichtflecken auf den Flächen, Lichtstrahlen additiv im Dunst,
-  ACES-Tonemapping. Lichtstrahlen enden am ersten Hindernis.
-* Schatten: Die hellsten Scheinwerfer bekommen je eine Schattenkarte
-  (Tiefen-Textur-Array, weich gefiltert); Bauten werfen Schatten.
-* Bloom: helle Stellen (Linsen, Lichtflecken) strahlen weich über
-  (verkleinern/vergrößern in fünf Stufen).
-* Qualitätsstufen: Niedrig (60 % Auflösung, ohne Kantenglättung, 32 Lichter,
-  ohne Schatten/Bloom), Mittel (4×, 96 Lichter, 8 Schatten à 512 px, Bloom),
-  Hoch (256 Lichter, 16 Schatten à 1024 px), Ultra (150 % Auflösung,
-  32 Schatten).
-* Die Werte kommen direkt aus dem DMX-Ausgang: Dimmer, RGB/W/Amber/UV (auch je
-  Zelle bei Bars), Strobe, Pan/Tilt (mit Feinkanal) bei Moving Heads.
-* **Wertebereiche** der Kanäle (aus OFL, QLC+ und dem Profile Builder):
-  Shutter offen/zu und Strobe-Frequenz, Farbrad-Felder mit ihrer Farbe,
-  Gobo-Felder. Ohne Bereiche wird angenähert (Strobe unter 10 offen,
-  Farbrad mit acht typischen Farben, Gobo mit sechs Mustern: Stern, Punkte,
-  Ringe, Breakup, Balken, Spirale – im Lichtfleck und als Schächte im Strahl).
-  Ältere Shows bekommen die Bereiche beim Öffnen aus der Bibliothek bzw. den
-  eigenen Profilen (gleicher Schlüssel und gleiche Kanalnamen).
-* **Fokus**: Der Fokuskanal stellt eine Schärfeweite von 1,5 bis 20 m ein;
-  Lichtfleck und Gobo sind dort scharf, wo der Strahl in dieser Entfernung
-  auftrifft, sonst weich.
+* Rendering happens on the graphics card with **wgpu** – on Windows and Linux
+  via **Vulkan** (otherwise DirectX 12), on macOS via Metal. The most powerful
+  graphics card is chosen; its name and backend are shown at the bottom right
+  of the image.
+* Scene into an HDR target with 4× multisampling, all fixtures as spotlights
+  with light spots on the surfaces, light beams added up in the haze, ACES
+  tonemapping. Light beams end at the first obstacle.
+* Shadows: the brightest fixtures get one shadow map each (depth texture
+  array, soft filtering); structures cast shadows.
+* Bloom: bright spots (lenses, light spots) glow softly (downsample/upsample
+  in five steps).
+* Quality levels: Low (60 % resolution, no anti-aliasing, 32 lights, no
+  shadows/bloom), Medium (4×, 96 lights, 8 shadows at 512 px, bloom), High
+  (256 lights, 16 shadows at 1024 px), Ultra (150 % resolution, 32 shadows).
+* Values come directly from the DMX output: dimmer, RGB/W/amber/UV (also per
+  cell for bars), strobe, pan/tilt (with fine channel) for moving heads.
+* **Value ranges** of the channels (from OFL, QLC+ and the Profile Builder):
+  shutter open/closed and strobe rate, color wheel slots with their color,
+  gobo slots. Without ranges it is approximated (strobe below 10 open, color
+  wheel with eight typical colors, gobo with six patterns: star, dots, rings,
+  breakup, bars, spiral – in the light spot and as shafts in the beam).
+  Older shows get the ranges from the library or the custom profiles when
+  they are opened (same key and same channel names).
+* **Focus**: the focus channel sets a focus distance from 1.5 to 20 m; light
+  spot and gobo are sharp where the beam hits at that distance, soft
+  otherwise.
 
-## Veranstaltungsort
+## Venue
 
-* Gehört zur Show und lässt sich als **`.dmxvenue`** (JSON) speichern und in
-  anderen Shows laden. Einheiten: Meter, y nach oben, Drehungen in Grad
-  (X, dann Y, dann Z).
-* Formen: Quader, Fläche, Zylinder, Traverse (Drei-/Vierpunkt), Gruppen.
-* **Bauen**: Objekte hinzufügen, im Objektbaum auswählen, Lage/Maße/Farbe/
-  Deckkraft/Glanz/Leuchten ändern; Objekte und Geräte mit der Maus auf dem
-  Boden verschieben (Raster 5 cm, Strg: frei).
-* **Aufteilung**: links Raum, Hinzufügen und der Objektbaum (Gruppen
-  aufklappbar; ein Klick im Bild klappt bis zum Objekt auf) bzw. im Reiter
-  *Geräte* die Geräteliste mit Suche (Strg/Umschalt für Mehrfachauswahl);
-  rechts angedockt die Eigenschaften der Auswahl in aufklappbaren Abschnitten.
-  Rückgängig/Wiederholen oben neben *Bauen/Live* (oder Strg+Z/Strg+Y).
-* **Ordner**: Im Objektbaum sind Gruppen Ordner – mit „+“ oder Rechtsklick
-  anlegen, umbenennen (Doppelklick oder Menü), Objekte per Ziehen
-  einsortieren (die Lage im Raum bleibt), „Auswahl in neuen Ordner“, nach
-  Namen sortieren. Die Geräteliste hat eigene Ordner (nur zum Sortieren,
-  im Ort gespeichert), Ziehen in einen Ordner, Sortierung nach Adresse oder
-  Name.
-* **Mehrfachauswahl** (Strg/Umschalt): Griffe und Ziehen wirken auf alle
-  ausgewählten Objekte und Geräte; Drehen dreht jedes an seinem Platz.
-* **Bibliothek**: mitgelieferte Objekte (Podest, Bühne, Treppe, DJ-Pult,
-  Lautsprecher, Subwoofer, Traversen-Turm und -Rahmen, Leinwand, Tische,
-  Theke, Person) und eigene: Objekt oder Ordner auswählen, „Auswahl als
-  eigenes Objekt speichern“ (samt Modellen und Bildern, im
-  Konfigurationsordner unter `objects/`).
-* **Bilder (Texturen)**: im Material ein mitgeliefertes Bild (Holzdielen,
-  Bühnenboden, Beton, Teppich, Ziegel, Fliesen, Molton) oder ein eigenes PNG/
-  JPEG wählen; Kachelgröße in Metern; bei Ordnern für alles darin. Die Farbe
-  tönt das Bild. glTF-Modelle bringen ihre Bilder (Grundfarbe) mit.
-* **Griffe** an der Auswahl: rote/grüne/blaue Achse verschiebt entlang x/y/z
-  des Raums, die drei Ringe drehen um x/y/z des Raums (5-cm- bzw. 5°-Raster,
-  Strg: frei) – auch für Objekte in gedrehten Gruppen und für Geräte.
-* **Eigene 3D-Modelle** (glTF/GLB) importieren: Geometrie mit allen
-  Knoten-Lagen, die Grundfarben und Bilder der Materialien werden in
-  die Show eingebettet; das Modell steht mit der Unterkante auf dem Boden.
-  Bis 2 Mio. Dreiecke.
-* **Geräte ausrichten**: auf einen Zielpunkt richten (Zahlen oder im Bild
-  anklicken), senkrecht nach unten, an die nächste Traverse hängen – jeweils
-  für alle ausgewählten Geräte.
-* Geräte ohne eigene 3D-Lage stehen automatisch nach dem Bühnenplan unter der
-  Decke.
+* Belongs to the show and can be saved as **`.dmxvenue`** (JSON) and loaded
+  into other shows. Units: meters, y up, rotations in degrees (X, then Y,
+  then Z).
+* Shapes: box, plane, cylinder, truss (three-/four-point), groups.
+* **Build**: add objects, select them in the object tree, change
+  placement/size/color/opacity/gloss/glow; move objects and fixtures on the
+  floor with the mouse (5 cm grid, Ctrl: free).
+* **Layout**: on the left room, add and the object tree (groups can be
+  expanded; a click in the image expands down to the object) or, in the
+  *Fixtures* tab, the fixture list with search (Ctrl/Shift for
+  multi-selection); docked on the right the properties of the selection in
+  collapsible sections. Undo/redo at the top next to *Build/Live* (or
+  Ctrl+Z/Ctrl+Y).
+* **Folders**: in the object tree groups are folders – create them with “+”
+  or a right-click, rename them (double-click or menu), sort objects in by
+  dragging (their placement in the room is kept), “Selection into new
+  folder”, sort by name. The fixture list has its own folders (only for
+  sorting, saved in the venue), drag into a folder, sort by address or name.
+* **Multi-selection** (Ctrl/Shift): handles and dragging act on all selected
+  objects and fixtures; rotating turns each one in place.
+* **Library**: bundled objects (riser, stage, stairs, DJ booth, speaker,
+  subwoofer, truss tower and frame, screen, tables, bar, person) and your
+  own: select an object or folder, “Save selection as custom object”
+  (including models and images, in the config folder under `objects/`).
+* **Images (textures)**: choose a bundled image in the material (wooden
+  planks, stage floor, concrete, carpet, bricks, tiles, molton) or your own
+  PNG/JPEG; tile size in meters; for folders it applies to everything inside.
+  The color tints the image. glTF models bring their images (base color).
+* **Handles** on the selection: the red/green/blue axis moves along the
+  room's x/y/z, the three rings rotate around the room's x/y/z (5 cm or 5°
+  grid, Ctrl: free) – also for objects in rotated groups and for fixtures.
+* **Import custom 3D models** (glTF/GLB): geometry with all node transforms,
+  the base colors and images of the materials are embedded in the show; the
+  model stands with its bottom edge on the floor. Up to 2 million triangles.
+* **Aiming fixtures**: aim at a target point (numbers or click in the image),
+  straight down, hang on the nearest truss – each for all selected fixtures.
+* Fixtures without their own 3D placement are placed automatically below the
+  ceiling according to the stage plan.
 
-## Kamerapunkte
+## Camera points
 
-Rechts in der Leiste (neben Vollbild): „+“ speichert die aktuelle Ansicht als
-Kamerapunkt (gleich umbenennen, Enter). Ein Klick auf einen Punkt – oder die
-Tasten 1–9 – fährt die Kamera weich dorthin; Rechtsklick: mit der aktuellen
-Ansicht überschreiben, umbenennen, löschen; Doppelklick: umbenennen. Der
-Punkt, an dem die Kamera gerade steht, ist hervorgehoben. Passen die Punkte
-nicht in die Leiste (schmales Fenster), erscheinen sie als Auswahlliste.
-Kamerapunkte gehören zum Ort (in der Show und in `.dmxvenue` gespeichert) und
-sind auch für den KI-Assistenten nutzbar (`set_visualizer`,
-`visualizer_screenshot` mit `camera.point`).
+On the right of the bar (next to fullscreen): “+” saves the current view as a
+camera point (rename it right away, Enter). A click on a point – or keys
+1–9 – moves the camera there smoothly; right-click: overwrite with the
+current view, rename, delete; double-click: rename. The point where the
+camera currently is is highlighted. If the points do not fit into the bar
+(narrow window) they appear as a dropdown. Camera points belong to the venue
+(saved in the show and in `.dmxvenue`) and can also be used by the AI
+assistant (`set_visualizer`, `visualizer_screenshot` with `camera.point`).
 
-## Import aus Easy View 2
+## Import from Easy View 2
 
-Erwartet die Datei als XML. Übernommen werden Raum, Bauten (Quader, Flächen),
-Traversen (als eigene Traversen), Umgebung und die Lage der Geräte; Geräte
-werden über Universum und Adresse den Geräten im Patch zugeordnet. Für Geräte
-ohne Gegenstück schlägt DMXCraft einen Typ aus der Bibliothek vor (Hersteller
-und Modell aus dem Easy-View-Bibliotheksnamen, Kanalzahl wenn angegeben,
-sonst generisch) und legt sie auf Wunsch an der richtigen Adresse an. Nicht
-übernommen werden Easy-View-Modelle, Texturen und die eingebettete
-Daslight-Gerätebibliothek.
+Expects the file as XML. Room, structures (boxes, planes), trusses (as own
+trusses), environment and the placement of the fixtures are taken over;
+fixtures are matched to the fixtures in the patch by universe and address.
+For fixtures without a counterpart DMXCraft suggests a type from the library
+(manufacturer and model from the Easy View library name, channel count if
+given, otherwise generic) and creates them at the right address on request.
+Easy View models, textures and the embedded Daslight fixture library are not
+taken over.
 
-## Nächste Schritte
+## Next steps
 
-Farbfelder und Gobo-Bilder je Gerät (Profile Builder), Zellen aus den
-physischen Gerätedaten, Normal-/Rauheitskarten.
+Color slots and gobo images per fixture (Profile Builder), cells from the
+physical fixture data, normal/roughness maps.

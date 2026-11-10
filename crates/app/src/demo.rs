@@ -40,7 +40,7 @@ pub fn demo_show() -> Show {
                 0,
                 1 + i * 6,
             )
-            .expect("Demo-Patch")
+            .expect("demo patch")
         })
         .collect();
     let heads: Vec<FixtureId> = (0..2)
@@ -51,7 +51,7 @@ pub fn demo_show() -> Show {
                 0,
                 101 + i * 11,
             )
-            .expect("Demo-Patch")
+            .expect("demo patch")
         })
         .collect();
 
@@ -69,8 +69,8 @@ pub fn demo_show() -> Show {
     s.add_group("PARs", pars.clone());
     s.add_group("Moving Heads", heads.clone());
 
-    let farben = s.add_zone("Colors");
-    let bewegung = s.add_zone("Movement");
+    let colors = s.add_zone("Colors");
+    let movement = s.add_zone("Movement");
 
     // PAR channels: 0 dimmer, 1 R, 2 G, 3 B, 4 W, 5 strobe
     let color = |rgbw: [u8; 4]| -> Vec<ChannelValue> {
@@ -87,11 +87,11 @@ pub fn demo_show() -> Show {
             .collect()
     };
 
-    s.add_scene("Rot", Some(farben), vec![Step::new(color([255, 0, 0, 0]))]);
-    s.add_scene("Blue", Some(farben), vec![Step::new(color([0, 0, 255, 0]))]);
+    s.add_scene("Red", Some(colors), vec![Step::new(color([255, 0, 0, 0]))]);
+    s.add_scene("Blue", Some(colors), vec![Step::new(color([0, 0, 255, 0]))]);
     s.add_scene(
         "Warm white",
-        Some(farben),
+        Some(colors),
         vec![Step::new(color([255, 120, 20, 255]))],
     );
 
@@ -110,7 +110,7 @@ pub fn demo_show() -> Show {
         st
     })
     .collect();
-    s.add_scene("Farbwechsel", Some(farben), rainbow);
+    s.add_scene("Color fade", Some(colors), rainbow);
 
     // Chaser across the PARs (freely combinable, dimmer only → HTP)
     let chase: Vec<Step> = pars
@@ -122,7 +122,7 @@ pub fn demo_show() -> Show {
             st
         })
         .collect();
-    s.add_scene("Lauflicht", Some(farben), chase);
+    s.add_scene("Chaser", Some(colors), chase);
 
     // Moving heads: 0 pan, 2 tilt, 5 dimmer
     let pos = |pan: u8, tilt: u8| -> Vec<ChannelValue> {
@@ -131,7 +131,7 @@ pub fn demo_show() -> Show {
             .flat_map(|&h| [cv(h, 0, pan), cv(h, 2, tilt), cv(h, 5, 255)])
             .collect()
     };
-    s.add_scene("Center", Some(bewegung), vec![Step::new(pos(128, 128))]);
+    s.add_scene("Center", Some(movement), vec![Step::new(pos(128, 128))]);
     let sweep: Vec<Step> = [(60, 90), (200, 90), (200, 170), (60, 170)]
         .into_iter()
         .map(|(p, t)| {
@@ -141,7 +141,7 @@ pub fn demo_show() -> Show {
             st
         })
         .collect();
-    s.add_scene("Schwenk", Some(bewegung), sweep);
+    s.add_scene("Sweep", Some(movement), sweep);
 
     s.normalize();
     s

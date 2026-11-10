@@ -12,11 +12,11 @@ fn vec3(a: &Value, k: &str) -> Result<Option<[f32; 3]>, String> {
         Some(Value::Array(v)) if v.len() == 3 => {
             let mut r = [0.0; 3];
             for (o, x) in r.iter_mut().zip(v) {
-                *o = x.as_f64().ok_or(format!("`{k}`: Zahlen erwartet"))? as f32;
+                *o = x.as_f64().ok_or(format!("`{k}`: numbers expected"))? as f32;
             }
             Ok(Some(r))
         }
-        _ => Err(format!("`{k}`: [x, y, z] erwartet")),
+        _ => Err(format!("`{k}`: [x, y, z] expected")),
     }
 }
 

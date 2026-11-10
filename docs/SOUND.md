@@ -1,49 +1,46 @@
-# Reiter SOUND
+# SOUND tab
 
-Zwei Player mit eigener Playlist, Überblenden und Jingle-Pads (Raster einstellbar, Standard 3 × 4). Alles wird
-mit der Show gespeichert (Dateipfade, Lautstärken, Einstellungen); die
-Wiedergabe selbst nicht.
+Two players with their own playlist, crossfade and jingle pads (adjustable
+grid, 3 × 4 by default). Everything is saved with the show (file paths,
+volumes, settings); playback itself is not.
 
-## Player
+## Players
 
-* **Playlist füllen:** Dateien oder Ordner über die Knöpfe oben rechts, oder
-  Dateien/Ordner auf die Liste ziehen. Rechtsklick auf einen Titel: Laden,
-  Abspielen, Umbenennen (der Dateiname bleibt im Tooltip sichtbar),
-  nach oben/unten, Entfernen. Doppelklick lädt den Titel, Entf entfernt den
-  markierten. Titel lassen sich per Drag & Drop innerhalb und zwischen den
-  Playlisten verschieben.
-* **Aufteilung:** Die Trenner zwischen Playlist A, B und den Pads lassen sich
-  ziehen (Doppelklick = Standard); die Aufteilung wird mit der Show gespeichert.
-* **Bedienung:** Zum Anfang, Abspielen/Pause, Stopp, CUE (steht der Titel:
-  Cue-Marke setzen; läuft er: zurück zur Marke und anhalten), Ausfaden mit
-  einstellbarer Dauer. Klick oder Ziehen in der Wellenform springt.
-* **Automatisch weiter** startet nach dem Ende den nächsten Titel,
-  **Wiederholen** spielt den Titel endlos. Gespielte Titel werden abgeblendet,
-  der nächste ist dünn umrandet. In den letzten 10 s wird die Restzeit gelb.
-* Rechts am Player die Lautstärke (Doppelklick = Standard).
+* **Filling a playlist:** files or folders via the buttons at the top right,
+  or drag files/folders onto the list. Right-click a track: load, play,
+  rename (the file name stays visible in the tooltip), move up/down, remove.
+  Double-click loads the track, Delete removes the selected one. Tracks can
+  be moved by drag & drop within and between the playlists.
+* **Layout:** the dividers between playlist A, B and the pads can be dragged
+  (double-click = default); the layout is saved with the show.
+* **Controls:** to start, play/pause, stop, CUE (track stopped: set the cue
+  mark; playing: back to the mark and stop), fade out with an adjustable
+  duration. Clicking or dragging in the waveform seeks.
+* **Auto next** starts the next track after the end, **repeat** plays the
+  track endlessly. Played tracks are dimmed, the next one has a thin outline.
+  In the last 10 s the remaining time turns yellow.
+* The volume sits next to each player (double-click = default).
 
-## Überblenden
+## Crossfade
 
-Der Regler mischt A und B (Mitte = beide voll). „Überblenden zu …“ startet
-den anderen Player und blendet in der eingestellten Zeit hinüber; der
-bisherige stoppt danach. **Master** regelt alle Player und Pads; zusätzlich
-wirkt der Ton-Master der Titelleiste.
+The crossfader mixes A and B (center = both full). “Crossfade to …” starts
+the other player and fades over in the set time; the previous one stops
+afterwards. **Master** controls all players and pads; the sound master in the
+title bar applies as well.
 
 ## Pads
 
-Klick spielt das Pad, erneuter Klick stoppt es. Pads laufen über den
-Playern. Leeres Pad anklicken oder eine Datei darauf ziehen weist sie zu.
-Rechtsklick: Datei, Name, Pegel, Farbe, Wiederholen, „Andere Pads stoppen“
-(startet allein), Leeren. Oben rechts das Raster (Spalten × Zeilen, je 1–8);
-belegte Pads außerhalb des Rasters bleiben erhalten und erscheinen wieder,
-wenn es größer wird.
+A click plays the pad, another click stops it. Pads play on top of the
+players. Clicking an empty pad or dropping a file onto it assigns the file.
+Right-click: file, name, level, color, repeat, “Stop other pads” (plays on its
+own), clear. At the top right is the grid (columns × rows, 1–8 each); used
+pads outside the grid are kept and appear again when it grows.
 
-## Tasten und MIDI
+## Keys and MIDI
 
-Alle Knöpfe (Player, Überblenden, Pads, „Alle Pads stoppen“) lassen sich im
-Zuordnungsmodus wie andere Bedienelemente belegen. Zugeordnete Tasten wirken
-auch, wenn gerade ein anderer Reiter offen ist – z. B. der Tusch auf einer
-MIDI-Taste während der Lichtsteuerung.
+All buttons (players, crossfade, pads, “Stop all pads”) can be mapped in
+mapping mode like other controls. Mapped keys also work while another tab is
+open – e.g. a fanfare on a MIDI key while you run the lights.
 
-Fehlende Dateien meldet das rote Ausrufezeichen in der Titelleiste wie bei
-den SUPER SCENES.
+Missing files are reported by the red exclamation mark in the title bar, as
+for SUPER SCENES.

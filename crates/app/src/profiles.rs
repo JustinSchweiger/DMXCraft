@@ -98,7 +98,7 @@ pub fn save(p: &mut Profile, taken: &[Profile]) -> Result<PathBuf, String> {
 }
 
 /// Removes a profile from the library. The file moves to
-/// `fixtures/geloescht/` so nothing is lost for good.
+/// `fixtures/deleted/` so nothing is lost for good.
 pub fn delete(key: &str) -> Result<(), String> {
     let (Some(f), Some(d)) = (file(key), dir()) else {
         return Ok(());
@@ -106,7 +106,7 @@ pub fn delete(key: &str) -> Result<(), String> {
     if !f.exists() {
         return Ok(());
     }
-    let trash = d.join("geloescht");
+    let trash = d.join("deleted");
     std::fs::create_dir_all(&trash).map_err(|e| e.to_string())?;
     let target = trash.join(format!("{key}-{}.{PROFILE_EXT}", today()));
     std::fs::rename(&f, target).map_err(|e| e.to_string())

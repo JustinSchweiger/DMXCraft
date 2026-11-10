@@ -527,7 +527,7 @@ mod refine_tests {
         ];
         for (k, name, want) in cases {
             assert_eq!(k.refine(name), want, "{name}");
-            assert_eq!(want.refine(name), want, "{name} stabil");
+            assert_eq!(want.refine(name), want, "{name} stable");
         }
     }
 }

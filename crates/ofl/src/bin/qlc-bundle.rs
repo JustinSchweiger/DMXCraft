@@ -14,7 +14,7 @@ use dmxcraft_ofl::{convert_qxf, Library, LibraryFixture};
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 3 {
-        eprintln!("Aufruf: qlc-bundle <QLC+-Checkout> <Ausgabedatei.json.gz>");
+        eprintln!("Usage: qlc-bundle <QLC+ checkout> <output.json.gz>");
         std::process::exit(2);
     }
     if let Err(e) = run(Path::new(&args[1]), Path::new(&args[2])) {

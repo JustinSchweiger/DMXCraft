@@ -1,68 +1,82 @@
-# Touch-Oberfläche
+# Touch surface
 
-Im Reiter **Touch** (oben neben „Einrichten“ und „Steuern“) liegt eine frei gestaltbare Bedienoberfläche aus Seiten mit einem Raster. Darunter bleiben Bühnenplan und Programmer sichtbar. Die Oberfläche wird in der Show gespeichert (`touch`) und ist für eine spätere mobile App gedacht.
+The **Touch** tab (at the top next to “Setup” and “Control”) holds a freely
+designable control surface made of pages with a grid. Stage plan and
+programmer stay visible below it. The surface is saved in the show (`touch`)
+and can also be operated from a phone or tablet via the touch remote
+(*Settings → Remote*).
 
-## Elemente hinzufügen
+## Adding elements
 
-* **Alt + Klick** auf ein Bedienelement legt es auf der aktuellen Touch-Seite an:
-  * Szenen, Bank-Chips, Pause/Schritt im Bankkopf,
-  * Gruppen, Geräte,
-  * Programmer-Fader,
-  * Knöpfe der Seitenleiste.
+* **Alt + click** on a control places it on the current touch page:
+  * scenes, bank chips, pause/step in the bank header,
+  * groups, fixtures,
+  * programmer faders,
+  * buttons of the sidebar.
 
-  Gibt es noch keine Seite, entsteht „Seite 1“.
-  * **Programmer-Fader** steuern danach fest die Geräte, die beim Anlegen ausgewählt waren.
-  * **Farbfeld bzw. XY-Feld des Programmers** (Alt + Klick) legen ein Farbrad bzw. XY-Feld für die ausgewählten Geräte an.
-* **Kontextmenü** einer Szene oder eines Geräts im Plan: „Zur Touch-Oberfläche hinzufügen“.
-* **Bearbeiten → Bedienelemente hinzufügen:**
-  * Beschriftung, Schaltfläche, Fader, Drehregler,
-  * Farbrad und XY-Feld, beide für die aktuelle Auswahl.
+  If there is no page yet, “Page 1” is created.
+  * **Programmer faders** then control exactly the fixtures that were
+    selected when the element was created.
+  * **The programmer's color field or XY field** (Alt + click) creates a color
+    wheel or XY pad for the selected fixtures.
+* **Context menu** of a scene or of a fixture in the plan: “Add to touch
+  surface”.
+* **Edit → Add controls:**
+  * label, button, fader, knob,
+  * color wheel and XY pad, both for the current selection.
 
-  Eine neue Schaltfläche, ein Fader oder ein Drehregler hat noch kein Ziel (roter Punkt). Ist sie gewählt, gibt ihr Alt + Klick auf ein Bedienelement dieses Ziel.
+  A new button, fader or knob has no target yet (red dot). While it is
+  selected, Alt + click on a control gives it that target.
 
-## Bearbeiten
+## Editing
 
-**Bearbeiten** oben rechts zeigt rechts die Leiste:
+**Edit** at the top right shows the bar on the right:
 
-* **Hinzufügen:** Schaltfläche, Fader, Drehregler, Beschriftung, Farbrad, XY-Feld.
-* **Seite** (wenn kein Element gewählt ist):
-  * Hintergrundfarbe,
-  * Hintergrundbild (PNG/JPEG, wird in der Show gespeichert).
-* **Raster:**
-  * anzeigen,
-  * einrasten,
-  * Schrittweite 12–72 px.
+* **Add:** button, fader, knob, label, color wheel, XY pad.
+* **Page** (when no element is selected):
+  * background color,
+  * background image (PNG/JPEG, saved in the show).
+* **Grid:**
+  * show,
+  * snap,
+  * step size 12–72 px.
 
-  Ohne Einrasten lassen sich Elemente frei platzieren und auch überlappen.
+  Without snapping, elements can be placed freely and may also overlap.
 * **Element:**
-  * Beschriftung, Textgröße, Textfarbe,
-  * Farbe (Vorgaben oder eigene Farbe),
-  * Symbol aus der Symbolbibliothek,
-  * Bild,
-  * Größe, Flash-Taste, „Auswahl übernehmen“ (Farbrad/XY).
+  * label, text size, text color,
+  * color (presets or a custom color),
+  * icon from the icon library,
+  * image,
+  * size, flash key, “Take over selection” (color wheel/XY).
 
-Elemente lassen sich so bearbeiten:
+Elements can be
 
-* ziehen,
-* mit dem Griff unten rechts die Größe ändern,
-* mit den Pfeiltasten verschieben,
-* mit Entf löschen.
+* dragged,
+* resized with the handle at the bottom right,
+* moved with the arrow keys,
+* deleted with Delete.
 
-Das Kontextmenü zeigt das Ziel des Elements (bei festen Kanälen alle Kanäle), dazu Duplizieren, Löschen und Farbe.
+The context menu shows the element's target (all channels for fixed
+channels), plus duplicate, delete and color.
 
-Seiten:
+Pages:
 
-* hinzufügen mit „+“,
-* umbenennen per Doppelklick,
-* löschen per Rechtsklick.
+* add with “+”,
+* rename with a double-click,
+* delete with a right-click.
 
-Die Lupen ändern die Ansichtsgröße (Klick auf die Prozentzahl: 100 %).
+The magnifiers change the view size (click the percentage: 100 %).
 
-## Bedienen
+## Operating
 
-* **Schaltflächen** lösen ihr Ziel aus wie eine Taste der Tastatur- und MIDI-Zuordnung (siehe `MAPPING.md`). Aktive Szenen und gewählte Gruppen haben einen weißen Rahmen.
-* **Fader und Drehregler** setzen den Wert direkt, z. B. Master oder feste Kanäle. Doppelklick: 0 ↔ voll. Der Pegel erscheint in der Elementfarbe.
-* **Farbrad:** Farbton nach rechts, Sättigung nach unten. Es setzt Rot, Grün und Blau der Geräte als Live-Werte.
-* **XY-Feld:** setzt Pan und Tilt als Live-Werte.
+* **Buttons** trigger their target like a key of the keyboard and MIDI
+  mapping (see `MAPPING.md`). Active scenes and selected groups have a white
+  frame.
+* **Faders and knobs** set the value directly, e.g. master or fixed channels.
+  Double-click: 0 ↔ full. The level appears in the element color.
+* **Color wheel:** hue to the right, saturation downwards. It sets red, green
+  and blue of the fixtures as live values.
+* **XY pad:** sets pan and tilt as live values.
 
-Knöpfe des Programmers oder der Seitenleiste wirken nur, solange das jeweilige Element angezeigt wird.
+Programmer or sidebar buttons only work while the respective element is
+shown.
