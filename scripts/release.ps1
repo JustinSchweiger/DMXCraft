@@ -39,6 +39,12 @@ if ((Core $Version) -lt (Core $current) -or $Version -eq $current) {
 }
 
 # --- Check the repository ----------------------------------------------------
+if (-not (git config user.name) -or -not (git config user.email)) {
+    Fail ("Git doesn't know who you are yet. Run once:`n" +
+          "  git config --global user.name  `"Your Name`"`n" +
+          "  git config --global user.email `"you@example.com`"")
+}
+
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
 if ($branch -ne "main") { Fail "Not on main (on '$branch')." }
 if (git status --porcelain) { Fail "There are uncommitted changes. Commit or stash them first." }
@@ -50,26 +56,36 @@ if (git tag --list $tag) { Fail "Tag $tag already exists." }
 Write-Host "Releasing $current -> $Version" -ForegroundColor Cyan
 
 # --- Bump --------------------------------------------------------------------
+# From here on, any failure before the push undoes the local changes.
+function Undo {
+    if (git tag --list $tag) { git tag -d $tag | Out-Null }
+    if ((git log -1 --format=%s) -eq "Version $Version") { git reset --quiet --hard HEAD~1 }
+    git reset --quiet
+    git checkout -- Cargo.toml Cargo.lock
+}
+function Step($exe, [string[]]$argv) {
+    & $exe @argv
+    if ($LASTEXITCODE -ne 0) { Undo; Fail "'$exe $($argv -join ' ')' failed - version change undone." }
+}
+
 $start = $m.Groups[1].Index
 $toml = $toml.Substring(0, $start) + $Version + $toml.Substring($start + $current.Length)
 [System.IO.File]::WriteAllText((Resolve-Path Cargo.toml), $toml)
-Run cargo @("update", "--workspace", "--quiet")   # updates Cargo.lock
+Step cargo @("update", "--workspace", "--quiet")   # updates Cargo.lock
 
 if (-not $SkipTests) {
     Write-Host "Running tests ..." -ForegroundColor Cyan
     & cargo test --workspace --quiet
-    if ($LASTEXITCODE -ne 0) {
-        git checkout -- Cargo.toml Cargo.lock
-        Fail "Tests failed - version change undone."
-    }
+    if ($LASTEXITCODE -ne 0) { Undo; Fail "Tests failed - version change undone." }
 }
 
 # --- Commit, tag, push -------------------------------------------------------
-Run git @("add", "Cargo.toml", "Cargo.lock")
-Run git @("commit", "--quiet", "-m", "Version $Version")
-Run git @("tag", "-a", $tag, "-m", "DMXCraft $Version")
-Run git @("push", "--quiet", "origin", "main")
-Run git @("push", "--quiet", "origin", $tag)
+Step git @("add", "Cargo.toml", "Cargo.lock")
+Step git @("commit", "--quiet", "-m", "Version $Version")
+Step git @("tag", "-a", $tag, "-m", "DMXCraft $Version")
+Step git @("push", "--quiet", "origin", "main")
+& git push --quiet origin $tag
+if ($LASTEXITCODE -ne 0) { Fail "main is pushed, but the tag push failed. Retry with: git push origin $tag" }
 
 $repo = "https://github.com/JustinSchweiger/DMXCraft"
 Write-Host ""
