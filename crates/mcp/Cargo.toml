@@ -1,6 +1,6 @@
 [package]
 name = "dmxcraft-mcp"
-description = "MCP-Server (Model Context Protocol): DMXCraft per KI-Assistent bedienen"
+description = "MCP server (Model Context Protocol): control DMXCraft with an AI assistant"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "dmxcraft-ofl"
-description = "Gerätebibliotheken (Open Fixture Library, QLC+) als DMXCraft-Gerätetypen"
+description = "Fixture libraries (Open Fixture Library, QLC+) as DMXCraft fixture types"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

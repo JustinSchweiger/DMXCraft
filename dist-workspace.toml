@@ -17,9 +17,9 @@ install-path = "CARGO_HOME"
 install-updater = true
 # Which actions to run on pull requests
 pr-run-mode = "plan"
-# main.wxs ist angepasst (Startmenü-/Desktop-Verknüpfung) – nicht überschreiben
+# main.wxs is customized (Start menu / desktop shortcut) – do not overwrite
 allow-dirty = ["msi"]
 
-# Audio (rodio/cpal) braucht unter Linux ALSA
+# Audio (rodio/cpal) needs ALSA on Linux
 [dist.dependencies.apt]
 libasound2-dev = "*"

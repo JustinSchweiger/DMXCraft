@@ -20,7 +20,7 @@ dmxcraft-output = { path = "crates/output" }
 dmxcraft-ofl = { path = "crates/ofl" }
 dmxcraft-mcp = { path = "crates/mcp" }
 
-# Release-Profil für die Installer (von dist genutzt)
+# Release profile for the installers (used by dist)
 [profile.dist]
 inherits = "release"
 lto = "thin"

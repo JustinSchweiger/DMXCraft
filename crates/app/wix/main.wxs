@@ -69,7 +69,7 @@
 
         <Package Id='*'
             Keywords='Installer'
-            Description='Desktop-Oberfläche (egui) für DMXCraft'
+            Description='Desktop interface (egui) for DMXCraft'
             Manufacturer='Justin Schweiger'
             InstallerVersion='450'
             Languages='1033'
@@ -127,14 +127,14 @@
                                 DiskId='1'
                                 Source='$(var.CargoTargetBinDir)\dmxcraft.exe'
                                 KeyPath='yes'/>
-                            <!-- DMXCraft: Dateityp .dmxcraft mit DMXCraft verknüpfen -->
+                            <!-- DMXCraft: associate .dmxcraft files with DMXCraft -->
                             <ProgId Id='DMXCraft.Show' Description='DMXCraft-Show' Icon='exe0' IconIndex='0'>
                                 <Extension Id='dmxcraft' ContentType='application/x-dmxcraft'>
                                     <Verb Id='open' Command='Open' TargetFile='exe0' Argument='"%1"'/>
                                 </Extension>
                             </ProgId>
                         </Component>
-                        <!-- DMXCraft: kleine stdio-Brücke für KI-Assistenten (MCP) -->
+                        <!-- DMXCraft: small stdio bridge for AI assistants (MCP) -->
                         <Component Id='binary1' Guid='*'>
                             <File
                                 Id='exe1'
@@ -146,7 +146,7 @@
                     </Directory>
                 </Directory>
             </Directory>
-            <!-- DMXCraft: Startmenü- und Desktop-Verknüpfung -->
+            <!-- DMXCraft: Start menu and desktop shortcut -->
             <Directory Id='ProgramMenuFolder'>
                 <Directory Id='AppMenuDir' Name='DMXCraft'>
                     <Component Id='MenuShortcut' Guid='5B0E4E52-2B7B-4C1A-9F3E-4C6A1D2E7F10'>

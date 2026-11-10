@@ -153,7 +153,8 @@ Bump the version in `Cargo.toml` (`[workspace.package]`), commit, then:
 git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
-GitHub Actions builds all platforms, the installers and the macOS DMG.
+GitHub Actions builds all platforms, the installers and the macOS DMG, and puts install
+instructions (`.github/release-install.md`) at the top of the release notes.
 </details>
 
 <details>

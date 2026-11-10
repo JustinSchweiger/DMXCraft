@@ -1,12 +1,13 @@
-# macOS: DMXCraft.app als DMG zum Release legen.
+# macOS app bundle + install notes for every release.
 #
-# cargo-dist liefert für macOS nur das nackte Programm (und den Shell-
-# Installer); per Doppelklick startet es dann über das Terminal. Dieser
-# Workflow baut daraus ein richtiges App-Bundle (Universal: Apple Silicon und
-# Intel) und lädt es als DMG zum Release hoch, sobald cargo-dist das Release
-# angelegt hat.
+# Runs automatically for every version tag (same trigger as release.yml).
+# cargo-dist only ships the bare binary for macOS, which opens through the
+# Terminal. This workflow builds a proper universal app bundle (Apple Silicon
+# and Intel), uploads it as a DMG once cargo-dist has created the release and
+# puts install instructions for all platforms at the top of the release notes
+# (.github/release-install.md).
 #
-# Nachträglich für ein bestehendes Release: „Run workflow“ mit dem Tag.
+# For an existing release: "Run workflow" with the tag.
 
 name: macOS-App
 
@@ -17,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release-Tag, z. B. v0.4.1"
+        description: "Release tag, e.g. v0.4.1"
         required: true
 
 permissions:
@@ -40,12 +41,12 @@ jobs:
           rustup update stable
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - name: Bauen (Apple Silicon + Intel)
+      - name: Build (Apple Silicon + Intel)
         run: |
           cargo build --release --locked -p dmxcraft --target aarch64-apple-darwin
           cargo build --release --locked -p dmxcraft --target x86_64-apple-darwin
 
-      - name: App-Bundle
+      - name: App bundle
         run: |
           VERSION="${TAG#v}"
           APP="dist/DMXCraft.app"
@@ -54,7 +55,7 @@ jobs:
             target/aarch64-apple-darwin/release/dmxcraft \
             target/x86_64-apple-darwin/release/dmxcraft
 
-          # Symbol aus icon-512.png
+          # Icon from icon-512.png
           ICONSET=dist/DMXCraft.iconset
           mkdir -p "$ICONSET"
           SRC=crates/app/assets/icon-512.png
@@ -89,7 +90,7 @@ jobs:
           sed -i '' 's/^          //' "$APP/Contents/Info.plist"
           plutil -lint "$APP/Contents/Info.plist"
 
-          # Ad-hoc-Signatur (ohne Apple-Entwicklerkonto keine Notarisierung)
+          # Ad-hoc signature (no notarization without an Apple developer account)
           codesign --force --deep --sign - "$APP"
 
       - name: DMG
@@ -100,9 +101,9 @@ jobs:
           hdiutil create -volname DMXCraft -srcfolder dist/dmg -ov -format UDZO \
             "dist/DMXCraft-macos-universal.dmg"
 
-      - name: Auf das Release warten und hochladen
+      - name: Wait for the release and upload
         run: |
-          # cargo-dist legt das Release erst am Ende seiner Builds an
+          # cargo-dist creates the release only at the end of its builds
           for i in $(seq 1 120); do
             if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
               gh release upload "$TAG" dist/DMXCraft-macos-universal.dmg \
@@ -111,5 +112,24 @@ jobs:
             fi
             sleep 30
           done
-          echo "Release $TAG nicht gefunden" >&2
+          echo "Release $TAG not found" >&2
           exit 1
+
+      - name: Install notes
+        run: |
+          MARK="<!-- dmxcraft-install -->"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body -q .body > dist/body.md
+          if grep -qF "$MARK" dist/body.md; then
+            # Replace the block from a previous run
+            awk -v m="$MARK" 'f==0 && index($0,m){f=1;next} f==1 && index($0,m){f=2;next} f!=1' dist/body.md | sed '/./,$!d' > dist/rest.md
+          else
+            cp dist/body.md dist/rest.md
+          fi
+          {
+            echo "$MARK"
+            sed "s/{TAG}/$TAG/g; s/{VERSION}/${TAG#v}/g" .github/release-install.md
+            echo "$MARK"
+            echo
+            cat dist/rest.md
+          } > dist/notes.md
+          gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file dist/notes.md

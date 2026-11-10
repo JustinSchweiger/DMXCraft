@@ -1,6 +1,6 @@
 [package]
 name = "dmxcraft-core"
-description = "Datenmodell und Lichtengine (Patch, Szenen, Zonen, Fades, DMX-Rendering)"
+description = "Data model and lighting engine (patch, scenes, zones, fades, DMX rendering)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

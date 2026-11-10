@@ -1,7 +1,7 @@
 [package]
 name = "dmxcraft"
 default-run = "dmxcraft"
-description = "Desktop-Oberfläche (egui) für DMXCraft"
+description = "Desktop interface (egui) for DMXCraft"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -23,7 +23,7 @@ eula = false
 name = "dmxcraft"
 path = "src/main.rs"
 
-# stdio-Brücke für MCP-Clients (sperrt dmxcraft.exe nicht)
+# stdio bridge for MCP clients (does not lock dmxcraft.exe)
 [[bin]]
 name = "dmxcraft-mcp"
 path = "src/bin/dmxcraft-mcp.rs"
