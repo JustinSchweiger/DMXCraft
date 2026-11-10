@@ -321,8 +321,16 @@ impl DmxCraftApp {
                     }
                 }
             }
+            MenuAction::ShowTab(m, visible) => {
+                if self.settings.set_tab_visible(m, visible) {
+                    self.save_settings();
+                    if visible {
+                        self.state.mode = m;
+                    }
+                }
+            }
             MenuAction::Visualizer => {
-                if self.settings.tools_as_tabs && !self.state.viz_window {
+                if self.settings.tab_visible(Mode::Visualizer) && !self.state.viz_window {
                     self.state.mode = Mode::Visualizer;
                 } else {
                     self.state.viz_window = !self.state.viz_window;
@@ -807,6 +815,10 @@ impl eframe::App for DmxCraftApp {
             .current_message()
             .map(|(m, e)| (m.to_string(), e));
         let obs_enabled = Self::lock(&self.engine).show().obs.enabled;
+        let tabs: Vec<Mode> = Mode::TABS
+            .into_iter()
+            .filter(|&m| self.settings.tab_visible(m))
+            .collect();
         let info = TitleInfo {
             show_name: &show_name,
             status,
@@ -821,7 +833,7 @@ impl eframe::App for DmxCraftApp {
             message: message.as_ref().map(|(m, e)| (m.as_str(), *e)),
             update,
             mapping: self.state.mapping,
-            tools_as_tabs: self.settings.tools_as_tabs,
+            tabs: &tabs,
             audio: titlebar::AudioInfo {
                 master: self.state.audio.master,
                 mute: self.state.audio.mute,
@@ -881,20 +893,22 @@ impl eframe::App for DmxCraftApp {
             let area = egui::Frame::new()
                 .fill(theme::surface())
                 .inner_margin(egui::Margin::same(6));
-            // Tool tabs only with the setting (Builder not locked)
-            let tool_tab = match cx.state.mode {
-                Mode::Visualizer => true,
-                Mode::Builder => !cx.state.locked,
-                _ => false,
-            };
-            if matches!(cx.state.mode, Mode::Visualizer | Mode::Builder)
-                && !(self.settings.tools_as_tabs && tool_tab)
-            {
-                cx.state.mode = Mode::Control;
+            // Hidden tab (or not available while locked): switch to the first
+            // available one
+            let usable = |m: Mode| !(cx.state.locked && m.needs_unlock());
+            let mode = cx.state.mode;
+            if !self.settings.tab_visible(mode) || !usable(mode) {
+                cx.state.mode = Mode::TABS
+                    .into_iter()
+                    .find(|&m| self.settings.tab_visible(m) && usable(m))
+                    .unwrap_or(Mode::Control);
             }
             if settling {
                 // Window is changing size (fullscreen): keep the layout as it is
                 // instead of squeezing the areas into the intermediate sizes.
+                if cx.state.mode == Mode::Visualizer {
+                    self.viz.mark_drawn(&ctx);
+                }
                 egui::CentralPanel::default_margins()
                     .frame(egui::Frame::new().fill(theme::surface()))
                     .show(ui, |_| {});
@@ -1074,7 +1088,7 @@ impl eframe::App for DmxCraftApp {
         // Profile Builder in its own window
         if let Some(req) = self.state.builder.take() {
             // as a tab: open there, unless the window is already open
-            if self.settings.tools_as_tabs && !self.builder.is_open() {
+            if self.settings.tab_visible(Mode::Builder) && !self.builder.is_open() {
                 self.builder.request(req, false);
                 self.state.mode = Mode::Builder;
             } else {

@@ -40,7 +40,14 @@ impl<'a, T: PartialEq + Copy> Segmented<'a, T> {
 
     /// Draws the switch; returns `true` if `value` changed.
     pub fn show(self, ui: &mut Ui, value: &mut T) -> bool {
+        self.show_items(ui, value).0
+    }
+
+    /// Like [`show`](Self::show), also returns the response of every entry
+    /// (e.g. for a context menu).
+    pub fn show_items(self, ui: &mut Ui, value: &mut T) -> (bool, Vec<(T, egui::Response)>) {
         let mut changed = false;
+        let mut responses = Vec::new();
         let mut body = |ui: &mut Ui| {
             for (item, label) in self.items {
                 let selected = *value == *item;
@@ -90,6 +97,7 @@ impl<'a, T: PartialEq + Copy> Segmented<'a, T> {
                     *value = *item;
                     changed = true;
                 }
+                responses.push((*item, resp));
             }
         };
         if self.vertical {
@@ -97,6 +105,6 @@ impl<'a, T: PartialEq + Copy> Segmented<'a, T> {
         } else {
             ui.horizontal(|ui| body(ui));
         }
-        changed
+        (changed, responses)
     }
 }

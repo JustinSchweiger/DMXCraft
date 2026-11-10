@@ -83,6 +83,8 @@ camera currently is is highlighted. If the points do not fit into the bar
 (narrow window) they appear as a dropdown. Camera points belong to the venue
 (saved in the show and in `.dmxvenue`) and can also be used by the AI
 assistant (`set_visualizer`, `visualizer_screenshot` with `camera.point`).
+Whenever the visualizer is opened (tab, own window, another show loaded) the
+camera starts at the first camera point; without one at the room overview.
 
 ## Import from Easy View 2
 

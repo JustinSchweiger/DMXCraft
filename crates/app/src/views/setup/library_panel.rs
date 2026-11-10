@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use dmxcraft_core::library::builtin_fixture_types;
 use dmxcraft_core::{Engine, FixtureType};
-use dmxcraft_ofl::{convert_fixture, convert_qxf, Library, LibraryFixture, Source};
+use dmxcraft_ofl::{convert_fixture, convert_qxf, Library, Source};
 use eframe::egui;
 
 use crate::profiles::{self, UserProfile};
@@ -28,6 +28,54 @@ pub struct LibraryPanel {
     import_dialog: Option<std::sync::mpsc::Receiver<Option<std::path::PathBuf>>>,
     /// Action from a context menu (executed after drawing).
     action: Option<LibAction>,
+    /// Search result for `query`: groups of the library index with the
+    /// matching fixtures, and whether the result was cut off.
+    search: Option<(String, Vec<SearchGroup>, bool)>,
+    /// Height of a closed group header incl. spacing (measured), for
+    /// skipping headers outside the visible area.
+    header_h: f32,
+}
+
+/// Search hits of one manufacturer: index into `LibIndex::groups`, fixtures.
+type SearchGroup = (usize, Vec<usize>);
+
+/// Library grouped by manufacturer, built once (the library is embedded).
+struct LibIndex {
+    /// Manufacturer (upper case) and the indices of its fixtures.
+    groups: Vec<(String, Vec<usize>)>,
+    /// Search text per fixture (lower case): manufacturer, name, categories.
+    hay: Vec<String>,
+}
+
+fn lib_index() -> &'static LibIndex {
+    static INDEX: std::sync::OnceLock<LibIndex> = std::sync::OnceLock::new();
+    INDEX.get_or_init(|| {
+        let lib = Library::embedded();
+        let mut by_man: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for (i, f) in lib.fixtures.iter().enumerate() {
+            by_man
+                .entry(f.manufacturer.to_uppercase())
+                .or_default()
+                .push(i);
+        }
+        LibIndex {
+            groups: by_man.into_iter().collect(),
+            hay: lib
+                .fixtures
+                .iter()
+                .map(|f| {
+                    format!("{} {} {}", f.manufacturer, f.name, f.categories.join(" "))
+                        .to_lowercase()
+                })
+                .collect(),
+        }
+    })
+}
+
+/// Built-in fixture types (built once).
+fn builtin_types() -> &'static [FixtureType] {
+    static TYPES: std::sync::OnceLock<Vec<FixtureType>> = std::sync::OnceLock::new();
+    TYPES.get_or_init(builtin_fixture_types)
 }
 
 enum LibAction {
@@ -173,20 +221,18 @@ impl LibraryPanel {
         }
 
         // Built-in types and types already in the show
-        let builtin = builtin_fixture_types();
-        let in_show: Vec<FixtureType> = e
+        let in_show: Vec<&FixtureType> = e
             .show()
             .fixture_types
             .iter()
             .filter(|t| !t.key.starts_with("generic/"))
-            .cloned()
             .collect();
         for (title, types) in [
-            (t("_Generic"), builtin),
-            (t("_Imported"), imported.to_vec()),
+            (t("_Generic"), builtin_types().iter().collect::<Vec<_>>()),
+            (t("_Imported"), imported.iter().collect()),
             (t("_In this show"), in_show),
         ] {
-            let list: Vec<FixtureType> = types
+            let list: Vec<&FixtureType> = types
                 .into_iter()
                 .filter(|t| !searching || matches(&t.display_name()))
                 .collect();
@@ -195,32 +241,59 @@ impl LibraryPanel {
             }
             self.group(ui, title, searching, |me, ui| {
                 for ty in list {
-                    let r = me.type_row(ui, &ty.display_name(), &ty, None);
-                    me.template_menu(&r, &ty.manufacturer, &ty.model, std::slice::from_ref(&ty));
+                    let r = me.type_row(ui, &ty.display_name(), ty, None);
+                    me.template_menu(&r, &ty.manufacturer, &ty.model, std::slice::from_ref(ty));
                 }
             });
         }
 
-        // Open Fixture Library, grouped by manufacturer
+        // Open Fixture Library, grouped by manufacturer. The search runs only
+        // when the query changes.
         let lib = Library::embedded();
-        let mut by_man: BTreeMap<String, Vec<&LibraryFixture>> = BTreeMap::new();
-        let mut count = 0;
-        for f in &lib.fixtures {
-            if searching {
-                let hay = format!("{} {} {}", f.manufacturer, f.name, f.categories.join(" "));
-                if !matches(&hay) || count >= MAX_FIXTURES_PER_SEARCH {
-                    continue;
+        let index = lib_index();
+        if searching {
+            let query = self.query.trim().to_string();
+            if self.search.as_ref().is_none_or(|(q, _, _)| *q != query) {
+                let mut groups = Vec::new();
+                let mut count = 0;
+                for (g, (_, fixtures)) in index.groups.iter().enumerate() {
+                    let hits: Vec<usize> = fixtures
+                        .iter()
+                        .copied()
+                        .filter(|&i| words.iter().all(|w| index.hay[i].contains(w.as_str())))
+                        .take(MAX_FIXTURES_PER_SEARCH.saturating_sub(count))
+                        .collect();
+                    count += hits.len();
+                    if !hits.is_empty() {
+                        groups.push((g, hits));
+                    }
                 }
-                count += 1;
+                self.search = Some((query, groups, count >= MAX_FIXTURES_PER_SEARCH));
             }
-            by_man
-                .entry(f.manufacturer.to_uppercase())
-                .or_default()
-                .push(f);
+        } else {
+            self.search = None;
         }
-        for (man, fixtures) in by_man {
-            self.group(ui, &man, searching, |me, ui| {
-                for f in fixtures {
+        let truncated = self.search.as_ref().is_some_and(|(_, _, cut)| *cut);
+        // taken out while drawing (the rows need `&mut self`)
+        let search = self.search.take();
+        let shown: &[SearchGroup] = search.as_ref().map_or(&[], |(_, g, _)| g);
+        let groups: Box<dyn Iterator<Item = (&str, &[usize])>> = if searching {
+            Box::new(
+                shown
+                    .iter()
+                    .map(|(g, hits)| (index.groups[*g].0.as_str(), hits.as_slice())),
+            )
+        } else {
+            Box::new(
+                index
+                    .groups
+                    .iter()
+                    .map(|(name, all)| (name.as_str(), all.as_slice())),
+            )
+        };
+        for (man, fixtures) in groups {
+            self.group(ui, man, searching, |me, ui| {
+                for f in fixtures.iter().map(|&i| &lib.fixtures[i]) {
                     // Append the origin so identical fixtures from OFL and QLC+ can be told
                     // apart
                     let tag = (f.source == Source::Qlc).then(|| f.source.label());
@@ -240,7 +313,9 @@ impl LibraryPanel {
                             // Dragging the header = first mode
                             let r = ui.add(egui::Label::new(&f.name).sense(egui::Sense::drag()));
                             if let Some(m) = f.modes.first() {
-                                r.dnd_set_drag_payload(LibraryDrag(m.clone()));
+                                if r.drag_started() || r.hovered() {
+                                    r.dnd_set_drag_payload(LibraryDrag(m.clone()));
+                                }
                             }
                             me.template_menu(&r, &f.manufacturer, &f.name, &f.modes);
                             if let Some(tag) = tag {
@@ -259,7 +334,8 @@ impl LibraryPanel {
                 }
             });
         }
-        if searching && count >= MAX_FIXTURES_PER_SEARCH {
+        self.search = search;
+        if searching && truncated {
             ui.label(
                 egui::RichText::new(t("More results – narrow your search"))
                     .color(theme::text_faint()),
@@ -274,6 +350,25 @@ impl LibraryPanel {
         open: bool,
         body: impl FnOnce(&mut Self, &mut egui::Ui),
     ) {
+        // The library has hundreds of manufacturers: closed headers outside the
+        // visible area only take up their space.
+        let closed = !open
+            && !egui::collapsing_header::CollapsingState::load(
+                ui.ctx(),
+                ui.make_persistent_id(("lib_group", title)),
+            )
+            .is_some_and(|s| s.is_open());
+        if closed && self.header_h > 0.0 {
+            let rect = egui::Rect::from_min_size(
+                ui.cursor().min,
+                egui::vec2(ui.available_width(), self.header_h),
+            );
+            if !ui.is_rect_visible(rect) {
+                ui.add_space(self.header_h);
+                return;
+            }
+        }
+        let top = ui.cursor().min.y;
         let header = egui::CollapsingHeader::new(
             egui::RichText::new(title)
                 .strong()
@@ -285,7 +380,10 @@ impl LibraryPanel {
         } else {
             header
         };
-        header.show(ui, |ui| body(self, ui));
+        let r = header.show(ui, |ui| body(self, ui));
+        if closed && r.body_returned.is_none() {
+            self.header_h = ui.cursor().min.y - top;
+        }
     }
 
     /// Context menu “As template …” for fixtures not built by the user.
@@ -394,20 +492,25 @@ impl LibraryPanel {
                 r
             })
             .inner;
-        let r = r.on_hover_text(
-            ty.channels
-                .iter()
-                .enumerate()
-                .map(|(i, c)| format!("{:>3}  {}", i + 1, c.name))
-                .collect::<Vec<_>>()
-                .join("\n"),
-        );
+        // channel list only built when hovered
+        let r = r.on_hover_ui(|ui| {
+            ui.label(
+                ty.channels
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| format!("{:>3}  {}", i + 1, c.name))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
+        });
         if r.clicked() {
             self.chosen = Some(ty.clone());
         }
         // drag directly into the patch
         let r = r.interact(egui::Sense::click_and_drag());
-        r.dnd_set_drag_payload(LibraryDrag(ty.clone()));
+        if r.drag_started() {
+            r.dnd_set_drag_payload(LibraryDrag(ty.clone()));
+        }
         r
     }
 

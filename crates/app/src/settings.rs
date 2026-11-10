@@ -46,9 +46,12 @@ pub struct Settings {
     pub mcp_port: u16,
     /// Touch remote on the local network (web app for phone/tablet).
     pub remote_enabled: bool,
-    /// 3D visualizer and Profile Builder additionally as tabs in the title bar
-    /// (instead of only as windows).
+    /// Old setting (until 0.4): 3D visualizer and Profile Builder as tabs.
+    /// Only read to take it over into `hidden_tabs`.
+    #[serde(skip_serializing)]
     pub tools_as_tabs: bool,
+    /// Tabs hidden in the title bar (keys of `state::Mode`).
+    pub hidden_tabs: Vec<String>,
     /// Port of the remote (http://<computer>:<port>).
     pub remote_port: u16,
     /// Optional PIN of the remote (empty = none).
@@ -90,6 +93,7 @@ impl Default for Settings {
             mcp_port: dmxcraft_mcp::DEFAULT_PORT,
             remote_enabled: false,
             tools_as_tabs: false,
+            hidden_tabs: vec!["visualizer".into(), "builder".into()],
             remote_port: crate::remote::DEFAULT_PORT,
             remote_pin: String::new(),
             audio_reset_on_start: true,
@@ -187,8 +191,40 @@ impl Settings {
     pub fn load() -> Settings {
         Self::path()
             .and_then(|p| std::fs::read_to_string(p).ok())
-            .and_then(|s| serde_json::from_str(&s).ok())
+            .and_then(|s| Self::parse(&s))
             .unwrap_or_default()
+    }
+
+    fn parse(json: &str) -> Option<Settings> {
+        let value: serde_json::Value = serde_json::from_str(json).ok()?;
+        let mut s: Settings = serde_json::from_value(value.clone()).ok()?;
+        // Settings from before the tab context menu: tools were shown as tabs
+        // only with “tools_as_tabs”
+        if value.get("hidden_tabs").is_none() && s.tools_as_tabs {
+            s.hidden_tabs.clear();
+        }
+        Some(s)
+    }
+
+    /// Is this tab shown in the title bar?
+    pub fn tab_visible(&self, m: crate::state::Mode) -> bool {
+        !self.hidden_tabs.iter().any(|k| k == m.key())
+    }
+
+    /// Show or hide a tab. The last visible tab cannot be hidden.
+    pub fn set_tab_visible(&mut self, m: crate::state::Mode, visible: bool) -> bool {
+        if visible {
+            self.hidden_tabs.retain(|k| k != m.key());
+            return true;
+        }
+        let others = crate::state::Mode::TABS
+            .iter()
+            .any(|&o| o != m && self.tab_visible(o));
+        if !others || !self.tab_visible(m) {
+            return false;
+        }
+        self.hidden_tabs.push(m.key().into());
+        true
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -217,6 +253,30 @@ impl Settings {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn hidden_tabs_from_old_setting() {
+        use crate::state::Mode;
+        let old = Settings::parse(r#"{"tools_as_tabs": true}"#).unwrap();
+        assert!(old.tab_visible(Mode::Visualizer) && old.tab_visible(Mode::Builder));
+        let old = Settings::parse(r#"{"tools_as_tabs": false}"#).unwrap();
+        assert!(!old.tab_visible(Mode::Visualizer));
+        let new = Settings::parse(r#"{"hidden_tabs": ["touch"]}"#).unwrap();
+        assert!(new.tab_visible(Mode::Visualizer) && !new.tab_visible(Mode::Touch));
+        assert!(!serde_json::to_string(&new)
+            .unwrap()
+            .contains("tools_as_tabs"));
+    }
+
+    #[test]
+    fn last_tab_stays() {
+        use crate::state::Mode;
+        let mut s = Settings::default();
+        for m in Mode::TABS {
+            s.set_tab_visible(m, false);
+        }
+        assert_eq!(Mode::TABS.iter().filter(|&&m| s.tab_visible(m)).count(), 1);
+    }
+
     use super::*;
 
     #[test]

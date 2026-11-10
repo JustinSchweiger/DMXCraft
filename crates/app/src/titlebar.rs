@@ -45,8 +45,8 @@ pub struct TitleInfo<'a> {
     pub missing_audio: usize,
     /// OBS connection (only when enabled): connected?
     pub obs: Option<bool>,
-    /// 3D visualizer and Profile Builder as tabs.
-    pub tools_as_tabs: bool,
+    /// Tabs shown in the title bar (in this order).
+    pub tabs: &'a [Mode],
 }
 
 /// State of the sound master for the title bar.
@@ -90,6 +90,8 @@ pub enum MenuAction {
     DmxLevels,
     /// Open/close the 3D visualizer in its own window.
     Visualizer,
+    /// Show (true) or hide a tab in the title bar.
+    ShowTab(Mode, bool),
     ProfileBuilder,
     Settings,
     CheckUpdates,
@@ -168,20 +170,28 @@ pub fn show(ui: &mut egui::Ui, info: &TitleInfo<'_>, mode: &mut Mode) -> Vec<Men
         }
         main_menu(ui, info, &mut actions);
         ui.add_space(theme::SP_XS);
-        let mut tabs: Vec<(Mode, &str)> = Vec::new();
-        if !info.locked {
-            tabs.push((Mode::Setup, t("Setup")));
+        let tabs: Vec<(Mode, &str)> = info
+            .tabs
+            .iter()
+            .filter(|m| !(info.locked && m.needs_unlock()))
+            .map(|&m| (m, t(m.label())))
+            .collect();
+        let (_, items) = Segmented::new(&tabs).show_items(ui, mode);
+        // Right-click on a tab: hide it (shown again via View → Tabs)
+        let last = info.tabs.len() <= 1;
+        for (m, r) in items {
+            menu::context(&r, |ui| {
+                menu::begin(ui);
+                if menu::item(
+                    ui,
+                    MenuItem::new(&tr!("Hide “{tab}”", tab = t(m.label())))
+                        .icon(Icon::EyeOff)
+                        .enabled(!last),
+                ) {
+                    actions.push(MenuAction::ShowTab(m, false));
+                }
+            });
         }
-        tabs.push((Mode::Control, t("Control")));
-        tabs.push((Mode::Touch, t("Touch")));
-        tabs.push((Mode::Sound, t("Sound")));
-        if info.tools_as_tabs {
-            tabs.push((Mode::Visualizer, t("3D visualizer")));
-            if !info.locked {
-                tabs.push((Mode::Builder, t("Profile builder")));
-            }
-        }
-        Segmented::new(&tabs).show(ui, mode);
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
@@ -610,6 +620,18 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             );
         });
         menu::sub(ui, MenuItem::new(t("View")).plain(), |ui| {
+            menu::title(ui, t("Tabs"));
+            for m in Mode::TABS {
+                let shown = info.tabs.contains(&m);
+                act(
+                    ui,
+                    MenuItem::new(t(m.label()))
+                        .checked(shown)
+                        .enabled(!(shown && info.tabs.len() <= 1)),
+                    MenuAction::ShowTab(m, !shown),
+                );
+            }
+            menu::separator(ui);
             act(
                 ui,
                 MenuItem::new(t("Full screen"))

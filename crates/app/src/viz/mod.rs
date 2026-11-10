@@ -161,6 +161,10 @@ pub struct VizView {
     /// Camera point currently being renamed (index, text).
     cam_rename: Option<(usize, String)>,
     cam_rename_focus: bool,
+    /// Frame in which the view was last drawn and the show it showed – to
+    /// notice when it is opened again or another show is loaded.
+    last_frame: Option<u64>,
+    last_show: String,
 }
 
 /// Fixture from an import without a counterpart in the patch, with a
@@ -469,6 +473,8 @@ impl Default for VizView {
             fly: None,
             cam_rename: None,
             cam_rename_focus: false,
+            last_frame: None,
+            last_show: String::new(),
             outline: Default::default(),
             fixture_filter: String::new(),
             fixture_sort: Default::default(),
@@ -485,6 +491,13 @@ impl Default for VizView {
 const VENUE_EXT: &str = "dmxvenue";
 
 impl VizView {
+    /// Count the view as drawn in this frame (also while the layout is
+    /// paused, e.g. during a fullscreen change), so it does not count as
+    /// opened again.
+    pub fn mark_drawn(&mut self, ctx: &egui::Context) {
+        self.last_frame = Some(ctx.cumulative_frame_nr());
+    }
+
     /// `window`: runs in its own window (there: fullscreen toggle instead of
     /// “Window”).
     pub fn ui(
@@ -498,9 +511,24 @@ impl VizView {
         self.poll_model(cx);
         let locked = cx.state.locked;
         let size = cx.engine.show().venue.size;
-        if self.camera.is_none() || self.room != size {
-            self.camera = Some(OrbitCamera::for_room(size));
+        // Opened (again), another show or another room: start at the first
+        // camera point, without one at the overview of the room.
+        let frame = ui.ctx().cumulative_frame_nr();
+        let reopened = self.last_frame.is_none_or(|f| frame > f + 1);
+        let show_changed = self.last_show != cx.state.show_path;
+        self.mark_drawn(ui.ctx());
+        self.last_show.clone_from(&cx.state.show_path);
+        let first = cx.engine.show().venue.cameras.first();
+        if self.camera.is_none() || self.room != size || show_changed {
+            self.camera =
+                Some(first.map_or_else(|| OrbitCamera::for_room(size), OrbitCamera::from_preset));
             self.room = size;
+            self.fly = None;
+        } else if reopened {
+            if let Some(p) = first {
+                self.camera = Some(OrbitCamera::from_preset(p));
+                self.fly = None;
+            }
         }
         self.camera_keys(ui, cx);
         self.toolbar(ui, cx, locked, window);

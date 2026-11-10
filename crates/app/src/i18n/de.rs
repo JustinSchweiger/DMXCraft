@@ -1261,8 +1261,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("The Profile Builder is open in its own window.", "Der Profile Builder ist in einem eigenen Fenster geöffnet."),
     ("Show here", "Hier anzeigen"),
     ("Open in window", "Im Fenster öffnen"),
-    ("3D visualizer and Profile Builder as tabs in the title bar", "3D-Visualisierer und Profile Builder als Reiter in der Titelleiste"),
-    ("In addition to Setup, Control and Touch; the button in the tab still opens them in their own window", "Zusätzlich zu Einrichten, Steuern und Touch; über den Knopf im Reiter lassen sie sich weiterhin im eigenen Fenster öffnen"),
+    ("Tabs", "Reiter"),
+    ("Hide “{tab}”", "„{tab}“ ausblenden"),
     ("One USB DMX cable (Open DMX / FTDI) per universe. The assignment follows the cable's serial number and survives replugging.", "Ein USB-DMX-Kabel (Open DMX / FTDI) je Universum. Die Zuordnung hängt an der Seriennummer des Kabels und bleibt beim Umstecken erhalten."),
     ("free", "frei"),
 ];

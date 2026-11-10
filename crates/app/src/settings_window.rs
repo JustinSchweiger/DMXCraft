@@ -643,15 +643,6 @@ fn customize(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
         ))
         .on_hover_text(t("Off: plain tracks; the label still appears while moving"))
         .changed();
-    ch.save |= ui
-        .add(Toggle::new(
-            &mut s.tools_as_tabs,
-            t("3D visualizer and Profile Builder as tabs in the title bar"),
-        ))
-        .on_hover_text(t(
-            "In addition to Setup, Control and Touch; the button in the tab still opens them in their own window",
-        ))
-        .changed();
 }
 
 /// Startup: what happens when the program starts.

@@ -12,12 +12,53 @@ pub enum Mode {
     Control,
     /// Touch surface (freely arranged controls).
     Touch,
-    /// 3D visualizer as a tab (setting “Tools as tabs”).
+    /// 3D visualizer as a tab.
     Visualizer,
-    /// Profile Builder as a tab (setting “Tools as tabs”).
+    /// Profile Builder as a tab.
     Builder,
     /// Sound player with playlists and jingle pads.
     Sound,
+}
+
+impl Mode {
+    /// Tabs in the title bar, in their order.
+    pub const TABS: [Mode; 6] = [
+        Mode::Setup,
+        Mode::Control,
+        Mode::Touch,
+        Mode::Sound,
+        Mode::Visualizer,
+        Mode::Builder,
+    ];
+
+    /// Key in the settings (hidden tabs).
+    pub fn key(self) -> &'static str {
+        match self {
+            Mode::Setup => "setup",
+            Mode::Control => "control",
+            Mode::Touch => "touch",
+            Mode::Sound => "sound",
+            Mode::Visualizer => "visualizer",
+            Mode::Builder => "builder",
+        }
+    }
+
+    /// Tab label (English source, translated via `i18n::t`).
+    pub fn label(self) -> &'static str {
+        match self {
+            Mode::Setup => "Setup",
+            Mode::Control => "Control",
+            Mode::Touch => "Touch",
+            Mode::Sound => "Sound",
+            Mode::Visualizer => "3D visualizer",
+            Mode::Builder => "Profile builder",
+        }
+    }
+
+    /// Not available while the program is locked.
+    pub fn needs_unlock(self) -> bool {
+        matches!(self, Mode::Setup | Mode::Builder)
+    }
 }
 
 /// “Add fixtures” form (shared between patch and fixture library).
