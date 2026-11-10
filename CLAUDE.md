@@ -46,6 +46,7 @@ docs/UI-GUIDELINES.md  binding UI rules – read before UI work
 * Before every commit: `cargo fmt --all`,
   `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo test --workspace`; push every state to `main`.
-* Releases: bump the version in `Cargo.toml`, push a `vX.Y.Z` tag
+* Releases: `scripts/release.ps1 X.Y.Z` (bumps `Cargo.toml`, tests, tags, pushes),
+  or bump the version in `Cargo.toml` and push a `vX.Y.Z` tag
   (release.yml; macos-app.yml adds the macOS DMG and the install notes
   from .github/release-install.md to the release page).

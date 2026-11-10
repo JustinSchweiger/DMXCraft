@@ -150,11 +150,15 @@ docs/      guidelines and guides
 <details>
 <summary><b>Releasing</b></summary>
 
-Bump the version in `Cargo.toml` (`[workspace.package]`), commit, then:
+On Windows, run the release script with the new version:
 
-```sh
-git tag vX.Y.Z && git push origin vX.Y.Z
+```powershell
+.\scripts\release.ps1 0.4.2
 ```
+
+It checks that you are on a clean, up-to-date `main`, bumps the version in `Cargo.toml`, runs
+the tests, then commits, tags `v0.4.2` and pushes both. Elsewhere, do the same by hand: bump
+`[workspace.package] version`, commit, then `git tag vX.Y.Z && git push origin main vX.Y.Z`.
 
 GitHub Actions builds all platforms, the installers and the macOS DMG, and puts install
 instructions (`.github/release-install.md`) at the top of the release notes.
