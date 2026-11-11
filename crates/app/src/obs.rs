@@ -14,12 +14,14 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use dmxcraft_core::obs::{ObsAction, ObsSettings};
+use dmxcraft_core::obs::{ObsAction, ObsSettings, VideoOutput};
 use dmxcraft_core::timeline::ClipContent;
 use dmxcraft_core::{Engine, SceneId};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tungstenite::Message;
+
+use crate::video_out::{OutClip, VideoOut};
 
 /// Connection state.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -38,6 +40,12 @@ struct Shared {
     /// Scenes (top first, as shown in OBS).
     scenes: Vec<String>,
     inputs: Vec<String>,
+    /// Kind of each source (`browser_source`, `ffmpeg_source`, …).
+    kinds: HashMap<String, String>,
+    /// The source list has been received since connecting.
+    inputs_known: bool,
+    /// Size of the OBS canvas.
+    canvas: Option<(u64, u64)>,
     program: String,
     /// Media state per source: position (ms), playing, time of the answer.
     media: HashMap<String, (f64, bool, Instant)>,
@@ -88,7 +96,17 @@ pub struct Obs {
     videos: HashMap<(SceneId, u32), VideoPlay>,
     actions: HashSet<(SceneId, u32)>,
     last: Option<Instant>,
+    /// Video output for the browser source (started when needed).
+    video: Option<VideoOut>,
+    video_err: Option<String>,
+    /// Browser mode: blocks already started (their OBS scene was switched).
+    started: HashSet<(SceneId, u32)>,
+    /// The browser source was checked / set up for this connection.
+    browser_ready: bool,
 }
+
+/// Video blocks that start this soon are loaded ahead.
+const PRELOAD_MS: u64 = 3000;
 
 impl Obs {
     pub fn status(&self) -> Status {
@@ -110,6 +128,29 @@ impl Obs {
         self.lock().last_error.clone()
     }
 
+    /// Address of the video output page (when it runs).
+    pub fn video_url(&self) -> Option<String> {
+        self.video.as_ref().map(VideoOut::url)
+    }
+
+    /// The browser source shows the video output page.
+    pub fn video_connected(&self) -> bool {
+        self.video.as_ref().is_some_and(VideoOut::connected)
+    }
+
+    /// The video output could not start.
+    pub fn video_error(&self) -> Option<String> {
+        self.video_err.clone()
+    }
+
+    /// Video files the browser source could not play (path, message).
+    pub fn video_file_errors(&self) -> Vec<(String, String)> {
+        self.video
+            .as_ref()
+            .map(VideoOut::errors)
+            .unwrap_or_default()
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, Shared> {
         self.shared.lock().unwrap_or_else(|p| p.into_inner())
     }
@@ -128,8 +169,11 @@ impl Obs {
             if self.link.take().is_some() {
                 self.videos.clear();
                 self.actions.clear();
+                self.started.clear();
                 *self.lock() = Shared::default();
             }
+            self.video = None;
+            self.video_err = None;
             return;
         }
         if self.link.as_ref().is_none_or(|l| l.cfg != *cfg) {
@@ -151,6 +195,7 @@ impl Obs {
             volume: f32,
         }
         let mut videos: HashMap<(SceneId, u32), Want> = HashMap::new();
+        let mut out_clips: Vec<OutClip> = Vec::new();
         let mut actions: Vec<((SceneId, u32), ObsAction, bool)> = Vec::new();
         for scene in &e.show().scenes {
             let (Some(tl), Some(t)) = (scene.timeline(), e.timeline_time(scene.id)) else {
@@ -163,6 +208,31 @@ impl Obs {
                 0.0
             };
             let now = t as u64;
+            let n = tl.tracks.len() as i32;
+            // load the next video blocks ahead (browser source)
+            if running {
+                for (ti, tr) in tl.tracks.iter().enumerate().filter(|(_, tr)| !tr.muted) {
+                    for clip in &tr.clips {
+                        if let ClipContent::Video {
+                            path, offset_ms, ..
+                        } = &clip.content
+                        {
+                            if clip.start_ms > now && clip.start_ms <= now + PRELOAD_MS {
+                                out_clips.push(OutClip {
+                                    key: format!("{}-{}", scene.id.0, clip.id),
+                                    path: path.clone(),
+                                    pos: *offset_ms as f64,
+                                    rate: 0.0,
+                                    opacity: 0.0,
+                                    volume: 0.0,
+                                    z: n - ti as i32,
+                                    preload: true,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
             for (ti, clip) in tl.active_at(now) {
                 if tl.tracks.get(ti).is_some_and(|tr| tr.muted) {
                     continue;
@@ -180,6 +250,22 @@ impl Obs {
                         } else {
                             source.clone()
                         };
+                        // its sound plays in DMXCraft (linked sound block)
+                        let volume = if clip.link.is_some() {
+                            0.0
+                        } else {
+                            (clip.level * clip.fade_at(now)).clamp(0.0, 1.0)
+                        };
+                        out_clips.push(OutClip {
+                            key: format!("{}-{}", scene.id.0, clip.id),
+                            path: path.clone(),
+                            pos: (offset_ms + (now - clip.start_ms)) as f64,
+                            rate,
+                            opacity: clip.fade_at(now).clamp(0.0, 1.0),
+                            volume,
+                            z: n - ti as i32,
+                            preload: false,
+                        });
                         videos.insert(
                             (scene.id, clip.id),
                             Want {
@@ -188,12 +274,7 @@ impl Obs {
                                 obs_scene: obs_scene.clone(),
                                 pos: (offset_ms + (now - clip.start_ms)) as f64,
                                 rate,
-                                // its sound plays in DMXCraft (linked sound block)
-                                volume: if clip.link.is_some() {
-                                    0.0
-                                } else {
-                                    (clip.level * clip.fade_at(now)).clamp(0.0, 1.0)
-                                },
+                                volume,
                             },
                         );
                     }
@@ -205,9 +286,29 @@ impl Obs {
             }
         }
 
+        let browser = cfg.video_output == VideoOutput::Browser;
+        if browser {
+            self.videos.clear();
+            if self.video.is_none() && self.video_err.is_none() {
+                match VideoOut::start() {
+                    Ok(v) => self.video = Some(v),
+                    Err(e) => self.video_err = Some(e),
+                }
+            }
+            if let Some(v) = &self.video {
+                v.set(out_clips, cfg.video_delay_ms);
+            }
+        } else {
+            self.video = None;
+            self.video_err = None;
+            self.started.clear();
+        }
+
         if !connected {
             // after connecting only trigger new things, restart videos
             self.videos.clear();
+            self.started = videos.keys().copied().collect();
+            self.browser_ready = false;
             self.actions = actions.iter().map(|(k, _, _)| *k).collect();
             return;
         }
@@ -221,6 +322,24 @@ impl Obs {
             }
         }
         self.actions = current;
+
+        if browser {
+            self.browser_source(cfg, e, &mut out);
+            // switch to the block's OBS scene when it starts
+            for (key, w) in &videos {
+                if self.started.insert(*key) && w.rate > 0.0 && !w.obs_scene.is_empty() {
+                    out.push((
+                        "SetCurrentProgramScene",
+                        json!({ "sceneName": w.obs_scene }),
+                    ));
+                }
+            }
+            self.started.retain(|k| videos.contains_key(k));
+            for (kind, data) in out {
+                self.send(kind, data);
+            }
+            return;
+        }
 
         // stop finished videos
         let gone: Vec<(SceneId, u32)> = self
@@ -373,8 +492,81 @@ impl Obs {
         }
     }
 
+    /// Browser mode: create the browser source when the show has videos, or
+    /// point it to the current address of the page.
+    fn browser_source(&mut self, cfg: &ObsSettings, e: &Engine, out: &mut Vec<(&str, Value)>) {
+        let Some(url) = self.video_url() else {
+            return;
+        };
+        let (known, kinds, canvas, program) = {
+            let s = self.lock();
+            (s.inputs_known, s.kinds.clone(), s.canvas, s.program.clone())
+        };
+        if self.browser_ready || !known || program.is_empty() {
+            return;
+        }
+        let name = cfg.browser_source.trim();
+        if name.is_empty() {
+            self.browser_ready = true;
+            return;
+        }
+        match kinds.get(name).map(String::as_str) {
+            Some("browser_source") => {
+                out.push((
+                    "SetInputSettings",
+                    json!({ "inputName": name, "inputSettings": { "url": url }, "overlay": true }),
+                ));
+                self.browser_ready = true;
+            }
+            Some(_) => {
+                // another kind of source has the name: leave it alone
+                self.lock().last_error = Some(format!(
+                    "\"{name}\" is not a browser source – choose another name for the video output"
+                ));
+                self.browser_ready = true;
+            }
+            None => {
+                let has_video = e.show().scenes.iter().any(|s| {
+                    s.timeline().is_some_and(|tl| {
+                        tl.tracks.iter().any(|tr| {
+                            tr.clips
+                                .iter()
+                                .any(|c| matches!(c.content, ClipContent::Video { .. }))
+                        })
+                    })
+                });
+                if !has_video {
+                    return;
+                }
+                let Some((w, h)) = canvas else {
+                    return;
+                };
+                out.push((
+                    "CreateInput",
+                    json!({
+                        "sceneName": program,
+                        "inputName": name,
+                        "inputKind": "browser_source",
+                        "inputSettings": {
+                            "url": url,
+                            "width": w,
+                            "height": h,
+                            "reroute_audio": true,
+                            "shutdown": false,
+                            "restart_when_active": false,
+                        },
+                        "sceneItemEnabled": true,
+                    }),
+                ));
+                out.push(("GetInputList", json!({})));
+                self.browser_ready = true;
+            }
+        }
+    }
+
     fn connect(&mut self, cfg: ObsSettings, ctx: &eframe::egui::Context) {
         self.videos.clear();
+        self.browser_ready = false;
         self.link = None;
         let shared = Arc::new(Mutex::new(Shared {
             status: Status::Connecting,
@@ -596,6 +788,7 @@ fn session(
             last_poll = Instant::now();
             out.push(("GetSceneList".into(), json!({})));
             out.push(("GetInputList".into(), json!({})));
+            out.push(("GetVideoSettings".into(), json!({})));
         }
         for (kind, mut data) in out {
             next_id += 1;
@@ -650,7 +843,29 @@ fn session(
                         ctx.request_repaint();
                     }
                     "GetInputList" => {
-                        lock().inputs = names(&r["inputs"], "inputName");
+                        let mut s = lock();
+                        s.inputs = names(&r["inputs"], "inputName");
+                        s.kinds = r["inputs"]
+                            .as_array()
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|i| {
+                                        Some((
+                                            i["inputName"].as_str()?.to_string(),
+                                            i["inputKind"].as_str().unwrap_or("").to_string(),
+                                        ))
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        s.inputs_known = true;
+                    }
+                    "GetVideoSettings" => {
+                        if let (Some(w), Some(h)) =
+                            (r["baseWidth"].as_u64(), r["baseHeight"].as_u64())
+                        {
+                            lock().canvas = Some((w, h));
+                        }
                     }
                     "GetMediaInputStatus" => {
                         let name = req["inputName"].as_str().unwrap_or("").to_string();
@@ -747,6 +962,7 @@ mod tests {
                         json!({"currentProgramSceneName":"Live","scenes":[{"sceneName":"Video"},{"sceneName":"Live"}]})
                     }
                     "GetInputList" => json!({"inputs":[{"inputName":"camera"}]}),
+                    "GetVideoSettings" => json!({"baseWidth":1920,"baseHeight":1080}),
                     _ => json!({}),
                 };
                 log.lock().unwrap().push(kind.clone());
@@ -802,6 +1018,7 @@ mod tests {
         let (port, seen) = fake_obs("geheim");
         let (mut e, sup) = engine(port, "geheim");
         let ctx = eframe::egui::Context::default();
+        e.show_mut().obs.video_output = VideoOutput::Media;
         let mut obs = Obs::default();
         wait(&mut obs, &e, &ctx, |o| o.scenes().len() == 2);
         assert_eq!(obs.scenes(), vec!["Live".to_string(), "Video".to_string()]);
@@ -838,5 +1055,21 @@ mod tests {
             "+IxH4CnCiqpX1rM9scsNynZzbOe4KhDeYcTNS3PDaeY=",
         );
         assert_eq!(a, "1Ct943GAT+6YQUUX47Ia/ncufilbe6+oD6lY+5kaCu4=");
+    }
+
+    #[test]
+    fn browser_mode_creates_the_browser_source_and_serves_the_page() {
+        let (port, seen) = fake_obs("");
+        let (mut e, sup) = engine(port, "");
+        let ctx = eframe::egui::Context::default();
+        let mut obs = Obs::default();
+        let has = |k: &str| seen.lock().unwrap().iter().any(|s| s == k);
+        wait(&mut obs, &e, &ctx, |_| has("CreateInput"));
+        assert!(obs.video_url().is_some());
+        e.activate(sup);
+        e.tick(Duration::from_millis(10));
+        wait(&mut obs, &e, &ctx, |_| has("SetCurrentProgramScene"));
+        // OBS does not play the file itself
+        assert!(!has("TriggerMediaInputAction"));
     }
 }

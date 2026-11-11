@@ -948,9 +948,79 @@ fn obs(ui: &mut Ui, e: &mut Engine, link: &crate::obs::Obs) {
                     .desired_width(220.0),
             );
         });
-        f.row(t("Media source for videos"), |ui| {
-            ui.add(egui::TextEdit::singleline(&mut cfg.video_source).desired_width(220.0));
+        f.row(t("Videos"), |ui| {
+            use dmxcraft_core::obs::VideoOutput;
+            egui::ComboBox::from_id_salt("obs_video_output")
+                .selected_text(match cfg.video_output {
+                    VideoOutput::Browser => t("Browser source, in sync with DMXCraft"),
+                    VideoOutput::Media => t("Media source, played by OBS"),
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut cfg.video_output,
+                        VideoOutput::Browser,
+                        t("Browser source, in sync with DMXCraft"),
+                    );
+                    ui.selectable_value(
+                        &mut cfg.video_output,
+                        VideoOutput::Media,
+                        t("Media source, played by OBS"),
+                    );
+                });
         });
+        if cfg.video_output == dmxcraft_core::obs::VideoOutput::Browser {
+            f.row(t("Browser source"), |ui| {
+                ui.add(egui::TextEdit::singleline(&mut cfg.browser_source).desired_width(220.0));
+            });
+            f.row(t("Delay picture"), |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut cfg.video_delay_ms)
+                        .range(-2000..=2000)
+                        .speed(2)
+                        .suffix(" ms"),
+                );
+            });
+            f.row(t("Video output"), |ui| {
+                if let Some(err) = link.video_error() {
+                    ui.label(egui::RichText::new(tr!("Error: {e}", e = err)).color(theme::DANGER));
+                } else if let Some(url) = link.video_url() {
+                    let (text, color) = if link.video_connected() {
+                        (t("shown in OBS"), theme::OK)
+                    } else {
+                        (t("not shown in OBS yet"), theme::text_dim())
+                    };
+                    ui.label(egui::RichText::new(text).color(color));
+                    ui.label(
+                        egui::RichText::new(&url)
+                            .monospace()
+                            .color(theme::text_faint()),
+                    );
+                    if ui.small_button(t("Copy")).clicked() {
+                        ui.ctx().copy_text(url);
+                    }
+                }
+            });
+            for (path, msg) in link.video_file_errors() {
+                f.row(t("Cannot play"), |ui| {
+                    let name = std::path::Path::new(&path)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or(path.clone());
+                    ui.label(
+                        egui::RichText::new(tr!(
+                            "{name} – format not supported, use H.264 MP4",
+                            name = name
+                        ))
+                        .color(theme::DANGER),
+                    )
+                    .on_hover_text(msg);
+                });
+            }
+        } else {
+            f.row(t("Media source for videos"), |ui| {
+                ui.add(egui::TextEdit::singleline(&mut cfg.video_source).desired_width(220.0));
+            });
+        }
         f.row(t("Status"), |ui| {
             let (text, color) = match link.status() {
                 Status::Off => (t("Not connected").to_string(), theme::text_dim()),

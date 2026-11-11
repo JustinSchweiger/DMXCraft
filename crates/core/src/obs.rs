@@ -16,6 +16,25 @@ pub struct ObsSettings {
     /// Media source in which video blocks are played (created if needed in the
     /// block's OBS scene or the current scene).
     pub video_source: String,
+    /// How video blocks reach OBS.
+    pub video_output: VideoOutput,
+    /// Browser source that shows DMXCraft's video output.
+    pub browser_source: String,
+    /// Shows the picture this much later (ms, negative = earlier), to match
+    /// the sound.
+    pub video_delay_ms: i32,
+}
+
+/// How video blocks reach OBS.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoOutput {
+    /// DMXCraft serves a page that OBS shows in a browser source; the page
+    /// follows DMXCraft's clock (picture in sync with sound and light).
+    #[default]
+    Browser,
+    /// OBS plays the file in a media source and DMXCraft corrects drift.
+    Media,
 }
 
 impl Default for ObsSettings {
@@ -26,6 +45,9 @@ impl Default for ObsSettings {
             port: 4455,
             password: String::new(),
             video_source: "DMXCraft Video".into(),
+            video_output: VideoOutput::Browser,
+            browser_source: "DMXCraft Video Output".into(),
+            video_delay_ms: 0,
         }
     }
 }

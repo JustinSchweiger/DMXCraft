@@ -26,6 +26,7 @@ crates/app     user interface
   src/viz/       3D visualizer (wgpu): render.rs, shader.wgsl, rig.rs, panels.rs, gltf_import.rs – docs/VISUALIZER.md
   src/sound.rs   playback of the SOUND tab (players, pads), view in views/sound.rs – docs/SOUND.md
   src/obs.rs     OBS integration (obs-websocket 5): video blocks, OBS actions – docs/OBS.md
+  src/video_out.rs  video output page for an OBS browser source (follows the timeline clock)
   src/app.rs     frame: header, mode, layout, runtime
 docs/UI-GUIDELINES.md  binding UI rules – read before UI work
 ```

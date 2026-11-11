@@ -29,6 +29,7 @@ mod state;
 mod titlebar;
 mod ui;
 mod updater;
+mod video_out;
 mod views;
 mod viz;
 
