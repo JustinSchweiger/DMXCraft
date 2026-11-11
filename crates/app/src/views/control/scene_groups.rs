@@ -256,7 +256,64 @@ pub fn editor(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState, id: u32) {
                 );
             });
         });
-        // Line 2: bar over the whole width – drag it to move the scene in time
+        // Line 2: own length (empty = one cycle) and fades
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = theme::SP_XS;
+            let mut len_ms = m.duration_ms.unwrap_or(*dur).min(u64::from(u32::MAX)) as u32;
+            ui.label(
+                egui::RichText::new(t("Length"))
+                    .small()
+                    .color(theme::text_dim()),
+            );
+            if time_field_compact(
+                ui,
+                &format!("grp_len_{id}_{i}"),
+                &mut len_ms,
+                !locked,
+                GROUP_COLOR,
+            ) {
+                m.duration_ms = Some(u64::from(len_ms.max(40)));
+            }
+            if m.duration_ms.is_some()
+                && ui
+                    .add(
+                        IconButton::new(Icon::Reset)
+                            .size(20.0)
+                            .flat()
+                            .enabled(!locked),
+                    )
+                    .on_hover_text(t("Length of the scene"))
+                    .clicked()
+            {
+                m.duration_ms = None;
+            }
+            ui.label(
+                egui::RichText::new(t("Fade in"))
+                    .small()
+                    .color(theme::text_dim()),
+            );
+            time_field_compact(
+                ui,
+                &format!("grp_fin_{id}_{i}"),
+                &mut m.fade_in_ms,
+                !locked,
+                GROUP_COLOR,
+            );
+            ui.label(
+                egui::RichText::new(t("Fade out"))
+                    .small()
+                    .color(theme::text_dim()),
+            );
+            time_field_compact(
+                ui,
+                &format!("grp_fout_{id}_{i}"),
+                &mut m.fade_out_ms,
+                !locked,
+                GROUP_COLOR,
+            );
+        });
+        let dur = &m.duration_ms.unwrap_or(*dur);
+        // Line 3: bar over the whole width – drag it to move the scene in time
         let (bar, br) = ui.allocate_exact_size(
             Vec2::new(ui.available_width(), 14.0),
             if locked {
@@ -332,10 +389,7 @@ pub fn editor(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState, id: u32) {
             };
             for sc in list {
                 if e.show().scene(sc).is_some_and(|x| x.timeline().is_none()) {
-                    members.push(GroupMember {
-                        scene: sc,
-                        offset_ms: 0,
-                    });
+                    members.push(GroupMember::new(sc, 0));
                 }
             }
         } else if !ok {

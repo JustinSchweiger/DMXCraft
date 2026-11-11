@@ -261,7 +261,10 @@ const TOOLS: &[Tool] = &[
             "name": string("Name"),
             "members": json!({ "type": "array", "items": { "type": "object", "properties": {
                 "scene": { "type": "integer", "description": "Scene ID" },
-                "offset_ms": { "type": "integer", "description": "Start within the group" }
+                "offset_ms": { "type": "integer", "description": "Start within the group" },
+                "duration_ms": { "type": "integer", "description": "Own length (default: one cycle of the scene; longer repeats it)" },
+                "fade_in_ms": { "type": "integer" },
+                "fade_out_ms": { "type": "integer" }
             }, "required": ["scene"] } }),
         }, &[]),
         read_only: false,
@@ -699,10 +702,14 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
                         if sc.timeline().is_some() {
                             return Err("SUPER SCENES cannot be in a group".into());
                         }
-                        out.push(dmxcraft_core::scene_group::GroupMember {
+                        let mut gm = dmxcraft_core::scene_group::GroupMember::new(
                             scene,
-                            offset_ms: opt_u64(m, "offset_ms").unwrap_or(0),
-                        });
+                            opt_u64(m, "offset_ms").unwrap_or(0),
+                        );
+                        gm.duration_ms = opt_u64(m, "duration_ms").map(|d| d.max(40));
+                        gm.fade_in_ms = opt_u64(m, "fade_in_ms").unwrap_or(0) as u32;
+                        gm.fade_out_ms = opt_u64(m, "fade_out_ms").unwrap_or(0) as u32;
+                        out.push(gm);
                     }
                     Some(out)
                 }
@@ -1375,6 +1382,9 @@ fn scene_group_json(show: &Show, g: &dmxcraft_core::scene_group::SceneGroup) -> 
             "scene": m.scene.0,
             "scene_name": show.scene(m.scene).map(|s| s.name.clone()),
             "offset_ms": m.offset_ms,
+            "duration_ms": m.length(show),
+            "fade_in_ms": m.fade_in_ms,
+            "fade_out_ms": m.fade_out_ms,
         })).collect::<Vec<_>>(),
     })
 }

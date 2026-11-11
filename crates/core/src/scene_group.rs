@@ -13,6 +13,52 @@ pub struct GroupMember {
     /// Start within the group.
     #[serde(default)]
     pub offset_ms: u64,
+    /// Own length (empty = one cycle of the scene; longer repeats it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub fade_in_ms: u32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub fade_out_ms: u32,
+}
+
+fn is_zero(v: &u32) -> bool {
+    *v == 0
+}
+
+impl GroupMember {
+    pub fn new(scene: SceneId, offset_ms: u64) -> Self {
+        Self {
+            scene,
+            offset_ms,
+            duration_ms: None,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+        }
+    }
+
+    /// Length within the group: own or one cycle of the scene.
+    pub fn length(&self, show: &Show) -> u64 {
+        self.duration_ms
+            .unwrap_or_else(|| show.scene(self.scene).map_or(1, |s| s.duration_ms()))
+            .max(1)
+    }
+
+    /// Level from fade in/out at position `t` within the member (0..=1).
+    pub fn fade_at(&self, show: &Show, t: f64) -> f32 {
+        let len = self.length(show) as f64;
+        let a = if self.fade_in_ms > 0 {
+            (t / f64::from(self.fade_in_ms)).min(1.0)
+        } else {
+            1.0
+        };
+        let b = if self.fade_out_ms > 0 {
+            ((len - t) / f64::from(self.fade_out_ms)).min(1.0)
+        } else {
+            1.0
+        };
+        a.min(b).clamp(0.0, 1.0) as f32
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -30,10 +76,8 @@ pub struct SceneGroup {
 pub fn members_length(show: &Show, members: &[GroupMember]) -> u64 {
     members
         .iter()
-        .filter_map(|m| {
-            show.scene(m.scene)
-                .map(|s| m.offset_ms + s.duration_ms().max(1))
-        })
+        .filter(|m| show.scene(m.scene).is_some())
+        .map(|m| m.offset_ms + m.length(show))
         .max()
         .unwrap_or(0)
 }

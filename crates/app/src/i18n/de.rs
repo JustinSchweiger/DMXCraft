@@ -1357,4 +1357,5 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Remove from the group", "Aus der Gruppe entfernen"),
     ("Drag scenes here", "Szenen hierher ziehen"),
     ("SUPER SCENES cannot be in a group", "SUPER SCENES können nicht in einer Gruppe sein"),
+    ("Length of the scene", "Länge der Szene"),
 ];

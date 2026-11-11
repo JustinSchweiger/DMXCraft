@@ -715,13 +715,15 @@ impl Engine {
                         continue;
                     };
                     let l = local - m.offset_ms as f64;
-                    let dur = scene.duration_ms().max(1) as f64;
-                    if l < 0.0 || l >= dur {
+                    let len = m.length(show) as f64;
+                    if l < 0.0 || l >= len {
                         continue;
                     }
-                    let p = Self::virtual_play(scene, l);
+                    // longer than the scene: it repeats
+                    let dur = scene.duration_ms().max(1) as f64;
+                    let p = Self::virtual_play(scene, l.rem_euclid(dur));
                     let values = self.scene_values_d(show, &p, depth + 1);
-                    put(&mut out, values, k);
+                    put(&mut out, values, k * f64::from(m.fade_at(show, l)));
                 }
                 continue;
             }
@@ -1363,14 +1365,8 @@ mod tests {
         s.scene_mut(two).unwrap().steps[0].hold_ms = 1000;
         let g = s.add_scene_group("G");
         s.scene_group_mut(g).unwrap().members = vec![
-            crate::scene_group::GroupMember {
-                scene: one,
-                offset_ms: 500,
-            },
-            crate::scene_group::GroupMember {
-                scene: two,
-                offset_ms: 0,
-            },
+            crate::scene_group::GroupMember::new(one, 500),
+            crate::scene_group::GroupMember::new(two, 0),
         ];
         assert_eq!(s.scene_group_length(g), 1500);
         let sup = s.add_scene("S", None, vec![Step::new(Vec::new())]);
@@ -1390,6 +1386,13 @@ mod tests {
         let v = e.timeline_values(&s, &tl, 700.0, 0);
         assert_eq!(v.get(&ch(0)), Some(&100));
         assert_eq!(v.get(&ch(1)), Some(&50));
+        // own length and fade-out of a member
+        s.scene_group_mut(g).unwrap().members[1].duration_ms = Some(400);
+        s.scene_group_mut(g).unwrap().members[1].fade_out_ms = 200;
+        let e = Engine::new(s.clone());
+        let v = e.timeline_values(&s, &tl, 300.0, 0);
+        assert_eq!(v.get(&ch(1)), Some(&50), "channel 1 is no intensity");
+        assert_eq!(e.timeline_values(&s, &tl, 450.0, 0).get(&ch(0)), None);
         // deleting a scene removes it from the group
         s.remove_scene(two);
         assert_eq!(s.scene_group(g).unwrap().members.len(), 1);
