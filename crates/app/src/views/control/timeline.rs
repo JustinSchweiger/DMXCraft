@@ -488,6 +488,7 @@ impl TimelineView {
         let mut clicked_clip: Option<(u32, bool)> = None;
         let mut clip_rects: Vec<(u32, Rect)> = Vec::new();
         let mut clip_menu: Option<(u32, ClipAction)> = None;
+        let mut ungroup: Option<u32> = None;
         let mut pointer_track = None;
         let mut double: Option<SceneId> = None;
         let snap_targets: Vec<u64> = tl
@@ -537,8 +538,15 @@ impl TimelineView {
                         0,
                     ),
                     ClipContent::Obs(a) => (obs_label(a), OBS_COLOR, 0),
+                    ClipContent::Group { group, .. } => (
+                        e.show()
+                            .scene_group(*group)
+                            .map_or_else(|| t("Deleted").to_string(), |g| g.name.clone()),
+                        super::scene_groups::GROUP_COLOR,
+                        0,
+                    ),
                 };
-                let lead = c.prepare.filter(|_| c.scene().is_some()).map(|p| {
+                let lead = c.prepare.filter(|_| Timeline::is_light(&c)).map(|p| {
                     let lx = self.x_at(
                         c.start_ms.saturating_sub(u64::from(p.lead_ms)) as f64,
                         lanes,
@@ -548,6 +556,36 @@ impl TimelineView {
                     lr
                 });
                 paint_clip(ui, &lp, r, &c, &name, color, sel, scene_ms, st);
+                // SCENE GROUP: its scenes as stripes (offset and length)
+                if let Some(members) = e.show().group_members(&c.content) {
+                    // below the head, above the length label
+                    let bottom = if r.height() > 40.0 {
+                        r.bottom() - 13.0
+                    } else {
+                        r.bottom() - 2.0
+                    };
+                    let body = Rect::from_min_max(
+                        pos2(r.left(), r.top() + 17.0),
+                        pos2(r.right(), bottom.max(r.top() + 20.0)),
+                    );
+                    let n = members.len().max(1) as f32;
+                    let h = ((body.height() - 2.0) / n).min(10.0);
+                    let speed = f64::from(c.speed.max(0.01));
+                    let gp = lp.with_clip_rect(r.intersect(lp.clip_rect()));
+                    for (k, m) in members.iter().enumerate() {
+                        let Some((_, mc, dur)) = names(m.scene) else {
+                            continue;
+                        };
+                        let s0 = c.start_ms as f64 + m.offset_ms as f64 / speed;
+                        let s1 = s0 + dur.max(1) as f64 / speed;
+                        let y = body.top() + 1.0 + k as f32 * (h + 1.0);
+                        let bar = Rect::from_min_max(
+                            pos2(self.x_at(s0, lanes), y),
+                            pos2(self.x_at(s1, lanes).max(self.x_at(s0, lanes) + 2.0), y + h),
+                        );
+                        gp.rect_filled(bar, 2.0, mc);
+                    }
+                }
                 // Sub-track: dimmer or volume as a line
                 if expanded {
                     let lane = Rect::from_min_max(
@@ -690,7 +728,7 @@ impl TimelineView {
                         }
                     }
                     menu::separator(ui);
-                    if c.scene().is_some()
+                    if Timeline::is_light(&c)
                         && menu::item(
                             ui,
                             MenuItem::new(t("Prepare positions"))
@@ -704,6 +742,17 @@ impl TimelineView {
                         && menu::item(ui, MenuItem::new(t("Edit scene")).icon(Icon::Edit))
                     {
                         clip_menu = Some((cid, ClipAction::EditScene));
+                    }
+                    if let ClipContent::Group { group, .. } = c.content {
+                        if menu::item(ui, MenuItem::new(t("Edit group")).icon(Icon::Edit)) {
+                            st.selected_group = Some(group);
+                        }
+                        if menu::item(
+                            ui,
+                            MenuItem::new(t("Ungroup into blocks")).icon(Icon::Stack),
+                        ) {
+                            ungroup = Some(cid);
+                        }
                     }
                     if menu::item(ui, MenuItem::new(t("Reset speed")).icon(Icon::Reset)) {
                         clip_menu = Some((cid, ClipAction::ResetSpeed));
@@ -894,6 +943,49 @@ impl TimelineView {
                 }
             }
         }
+        // Drag a SCENE GROUP in from the strip above the banks
+        if let Some(dragged) =
+            egui::DragAndDrop::payload::<super::scene_groups::GroupDrag>(ui.ctx())
+        {
+            if let Some(q) = pointer.filter(|q| clip_area.contains(*q)) {
+                let ti = track_at(q.y).unwrap_or(tl.tracks.len());
+                let at = self.snap(self.ms_at(q.x, lanes).max(0.0), &tl, &snap_targets, 0);
+                let dur = e.show().scene_group_length(dragged.0).max(100);
+                let ty = rows.iter().find(|r| r.0 == ti).map_or(add_y, |r| r.1);
+                let th = tl.tracks.get(ti).map_or(TRACK_H, track_h);
+                let ghost = Rect::from_min_size(
+                    pos2(self.x_at(at, lanes), ty + 2.0),
+                    Vec2::new(dur as f32 * self.zoom, th - 4.0),
+                );
+                let refused = tl
+                    .tracks
+                    .get(ti)
+                    .is_some_and(|tr| tr.kind == TrackKind::Media);
+                lp.rect_stroke(
+                    ghost,
+                    3.0,
+                    Stroke::new(
+                        2.0,
+                        if refused {
+                            theme::DANGER
+                        } else {
+                            super::scene_groups::GROUP_COLOR
+                        },
+                    ),
+                    StrokeKind::Inside,
+                );
+                if refused {
+                    drop_hint(&lp, q, t("Only audio, video and OBS"));
+                }
+                if ui.input(|i| i.pointer.any_released()) {
+                    if !refused && !locked {
+                        let id = tl.add_group_clip(ti, dragged.0, dur, at as u64);
+                        st.timeline_sel = [id].into();
+                    }
+                    egui::DragAndDrop::clear_payload(ui.ctx());
+                }
+            }
+        }
         // Audio files from the file manager
         let dropped = ui.input(|i| i.raw.dropped_files.clone());
         if !dropped.is_empty() && !locked {
@@ -983,6 +1075,10 @@ impl TimelineView {
         }
         if let Some(id) = double {
             st.selected_scenes = [id].into();
+        }
+        if let Some(cid) = ungroup.filter(|_| !locked) {
+            ungroup_clip(&mut tl, e.show(), cid);
+            st.timeline_sel.clear();
         }
         // Keyboard
         // (Ctrl+X/C/V come from egui as cut/copy/paste events, not as keys)
@@ -1568,7 +1664,7 @@ impl TimelineView {
             ClipAction::TogglePrepare => {
                 let on = tl.clip(cid).is_some_and(|(_, c)| c.prepare.is_none());
                 for id in sel {
-                    if let Some(c) = tl.clip_mut(id).filter(|c| c.scene().is_some()) {
+                    if let Some(c) = tl.clip_mut(id).filter(|c| Timeline::is_light(c)) {
                         c.prepare = on.then(|| c.prepare.unwrap_or_default());
                     }
                 }
@@ -2539,4 +2635,42 @@ fn drop_hint(p: &egui::Painter, at: egui::Pos2, text: &str) {
     p.rect_filled(r, 3.0, theme::raised());
     p.rect_stroke(r, 3.0, Stroke::new(1.0, theme::DANGER), StrokeKind::Inside);
     p.galley(r.min + Vec2::new(6.0, 3.0), galley, theme::DANGER);
+}
+
+/// Replace a SCENE GROUP block by one block per scene: the first scene on the
+/// block's track, the others on new light tracks below (same priority order).
+fn ungroup_clip(tl: &mut Timeline, show: &dmxcraft_core::Show, cid: u32) {
+    let Some((ti, c)) = tl.clip(cid).map(|(t, c)| (t, c.clone())) else {
+        return;
+    };
+    let Some(members) = show.group_members(&c.content).map(<[_]>::to_vec) else {
+        return;
+    };
+    tl.remove_clip(cid);
+    let speed = f64::from(c.speed.max(0.01));
+    for (k, m) in members.iter().enumerate() {
+        let Some(sc) = show.scene(m.scene) else {
+            continue;
+        };
+        let track = if k == 0 {
+            ti
+        } else {
+            tl.add_track_of(Some(ti + k), TrackKind::Light);
+            ti + k
+        };
+        let start = c.start_ms + (m.offset_ms as f64 / speed) as u64;
+        if start >= c.end_ms() {
+            continue;
+        }
+        let id = tl.add_scene_clip(track, sc, start);
+        if let Some(n) = tl.clip_mut(id) {
+            n.speed = c.speed;
+            n.level = c.level;
+            n.looped = false;
+            n.duration_ms = n.duration_ms.min(c.end_ms() - start).max(40);
+            if k == 0 {
+                n.prepare = c.prepare;
+            }
+        }
+    }
 }

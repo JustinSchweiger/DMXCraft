@@ -152,6 +152,8 @@ pub struct AppState {
     /// MOVE FX point being edited (scene, effect, pan/tilt): its beams stay
     /// there. Set by the effect editor every frame, applied in the next one.
     pub move_hold: Option<(dmxcraft_core::SceneId, u32, [f32; 2])>,
+    /// SCENE GROUP shown in the sidebar (instead of the scene).
+    pub selected_group: Option<u32>,
     /// Missing audio files of the SUPER SCENES (check and window).
     pub missing: crate::missing_audio::MissingAudio,
     /// What the Delete key acts on in CONTROL (last clicked).
@@ -256,6 +258,7 @@ impl AppState {
             triggers: Default::default(),
             trigger_pick: None,
             move_hold: None,
+            selected_group: None,
             missing: Default::default(),
             patch: PatchForm {
                 name: String::new(),

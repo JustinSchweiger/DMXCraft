@@ -687,23 +687,8 @@ impl Engine {
         // Lower tracks first, so the upper ones (track 1 = highest priority)
         // are applied last and win.
         let clips: Vec<_> = tl.active_at(now).collect();
-        for (_, clip) in clips.into_iter().rev() {
-            let Some(id) = clip.scene() else {
-                continue;
-            };
-            let Some(scene) = show.scene(id) else {
-                continue;
-            };
-            let dur = scene.duration_ms().max(1) as f64;
-            let mut local = (t - clip.start_ms as f64) * f64::from(clip.speed.max(0.01));
-            local = if clip.looped {
-                local.rem_euclid(dur)
-            } else {
-                local.min(dur - 1.0)
-            };
-            let p = Self::virtual_play(scene, local);
-            let k = f64::from(clip.fade_at(now) * clip.level.clamp(0.0, 1.0));
-            for (ch, v) in self.scene_values_d(show, &p, depth + 1) {
+        let put = |out: &mut HashMap<ChannelRef, u8>, values: HashMap<ChannelRef, u8>, k: f64| {
+            for (ch, v) in values {
                 let v = if k >= 1.0 {
                     v
                 } else if Self::is_intensity(show, ch) {
@@ -713,17 +698,65 @@ impl Engine {
                 };
                 out.insert(ch, v);
             }
+        };
+        for (_, clip) in clips.into_iter().rev() {
+            let k = f64::from(clip.fade_at(now) * clip.level.clamp(0.0, 1.0));
+            let mut local = (t - clip.start_ms as f64) * f64::from(clip.speed.max(0.01));
+            // SCENE GROUP: each scene from its offset on, the first one wins
+            if let Some(members) = show.group_members(&clip.content) {
+                let len = crate::scene_group::members_length(show, members).max(1) as f64;
+                local = if clip.looped {
+                    local.rem_euclid(len)
+                } else {
+                    local.min(len - 1.0)
+                };
+                for m in members.iter().rev() {
+                    let Some(scene) = show.scene(m.scene) else {
+                        continue;
+                    };
+                    let l = local - m.offset_ms as f64;
+                    let dur = scene.duration_ms().max(1) as f64;
+                    if l < 0.0 || l >= dur {
+                        continue;
+                    }
+                    let p = Self::virtual_play(scene, l);
+                    let values = self.scene_values_d(show, &p, depth + 1);
+                    put(&mut out, values, k);
+                }
+                continue;
+            }
+            let Some(id) = clip.scene() else {
+                continue;
+            };
+            let Some(scene) = show.scene(id) else {
+                continue;
+            };
+            let dur = scene.duration_ms().max(1) as f64;
+            local = if clip.looped {
+                local.rem_euclid(dur)
+            } else {
+                local.min(dur - 1.0)
+            };
+            let p = Self::virtual_play(scene, local);
+            let values = self.scene_values_d(show, &p, depth + 1);
+            put(&mut out, values, k);
         }
         // Pre-position (“move in black”) before upcoming blocks: only channels
         // no running block sets, only the chosen channel groups
         for clip in tl.preparing_at(now) {
-            let (Some(prep), Some(scene)) =
-                (clip.prepare, clip.scene().and_then(|id| show.scene(id)))
-            else {
+            let Some(prep) = clip.prepare else {
                 continue;
             };
-            let p = Self::virtual_play(scene, 0.0);
-            let values = self.scene_values_d(show, &p, depth + 1);
+            // the scene of the block, or the scenes of a group (first wins)
+            let scenes: Vec<SceneId> = match show.group_members(&clip.content) {
+                Some(m) => m.iter().map(|m| m.scene).collect(),
+                None => clip.scene().into_iter().collect(),
+            };
+            let mut values: Vec<(ChannelRef, u8)> = Vec::new();
+            for scene in scenes.iter().filter_map(|id| show.scene(*id)) {
+                let p = Self::virtual_play(scene, 0.0);
+                values.extend(self.scene_values_d(show, &p, depth + 1));
+            }
             for (ch, v) in values {
                 if out.contains_key(&ch) {
                     continue;
@@ -1315,6 +1348,51 @@ mod tests {
         let lc = tl2.clip_mut(l).unwrap();
         lc.start_ms = 800;
         assert_eq!(e.timeline_values(&s, &tl2, 1000.0, 0).get(&ch(pan)), None);
+    }
+
+    #[test]
+    fn scene_group_block_plays_members_with_offsets() {
+        let (mut s, a, _) = setup();
+        let one = s.add_scene("One", None, vec![Step::new(vec![cv(a, 0, 100)])]);
+        let two = s.add_scene(
+            "Two",
+            None,
+            vec![Step::new(vec![cv(a, 0, 200), cv(a, 1, 50)])],
+        );
+        s.scene_mut(one).unwrap().steps[0].hold_ms = 1000;
+        s.scene_mut(two).unwrap().steps[0].hold_ms = 1000;
+        let g = s.add_scene_group("G");
+        s.scene_group_mut(g).unwrap().members = vec![
+            crate::scene_group::GroupMember {
+                scene: one,
+                offset_ms: 500,
+            },
+            crate::scene_group::GroupMember {
+                scene: two,
+                offset_ms: 0,
+            },
+        ];
+        assert_eq!(s.scene_group_length(g), 1500);
+        let sup = s.add_scene("S", None, vec![Step::new(Vec::new())]);
+        let sc = s.scene_mut(sup).unwrap();
+        sc.add_effect(crate::show::EffectKind::SuperScene);
+        let tl = sc.timeline_mut().unwrap();
+        tl.add_group_clip(0, g, 1500, 0);
+        let tl = s.scene(sup).unwrap().timeline().unwrap().clone();
+        let e = Engine::new(s.clone());
+        let ch = |c: u16| ChannelRef {
+            fixture: a,
+            channel: c,
+        };
+        // only Two at first, then One wins on channel 0 (first member)
+        let v = e.timeline_values(&s, &tl, 200.0, 0);
+        assert_eq!(v.get(&ch(0)), Some(&200));
+        let v = e.timeline_values(&s, &tl, 700.0, 0);
+        assert_eq!(v.get(&ch(0)), Some(&100));
+        assert_eq!(v.get(&ch(1)), Some(&50));
+        // deleting a scene removes it from the group
+        s.remove_scene(two);
+        assert_eq!(s.scene_group(g).unwrap().members.len(), 1);
     }
 
     #[test]

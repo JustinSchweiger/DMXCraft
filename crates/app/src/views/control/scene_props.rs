@@ -109,6 +109,15 @@ impl View for ScenePropsView {
                 .layout(egui::Layout::top_down(egui::Align::Min)),
         );
         let ui = &mut ui;
+        if let Some(g) = cx.state.selected_group {
+            egui::ScrollArea::vertical()
+                .id_salt("scene_group_editor")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    super::scene_groups::editor(ui, cx.engine, cx.state, g)
+                });
+            return;
+        }
         let scenes = selected_scenes(cx);
         let Some(&id) = scenes.first() else {
             return;
@@ -675,6 +684,7 @@ impl ScenePropsView {
         }
         let mut color_changes: Vec<dmxcraft_core::Effect> = Vec::new();
         let mut move_hold: Option<(u32, [f32; 2])> = None;
+        let groups = cx.engine.show().scene_groups.clone();
         let palettes = &mut self.palettes;
         // SUPER SCENE: selected block and its name
         let block = (cx.state.timeline_sel.len() == 1)
@@ -696,6 +706,11 @@ impl ScenePropsView {
                             .map_or(path.clone(), |n| n.to_string_lossy().into_owned())
                     }
                     dmxcraft_core::timeline::ClipContent::Obs(a) => super::timeline::obs_label(a),
+                    dmxcraft_core::timeline::ClipContent::Group { group, .. } => cx
+                        .engine
+                        .show()
+                        .scene_group(*group)
+                        .map_or_else(|| t("Deleted").to_string(), |g| g.name.clone()),
                 };
                 Some((cid, name, tl.beat_ms()))
             });
@@ -778,6 +793,7 @@ impl ScenePropsView {
                                                 trig_cx.as_ref(),
                                                 &mut trig_action,
                                                 &obs_lists,
+                                                &groups,
                                             ) {
                                                 color_changes.push(e);
                                             }
@@ -1115,6 +1131,7 @@ fn block_props(
     trig: Option<&super::audio_trigger_ui::TriggerCx>,
     trig_action: &mut super::audio_trigger_ui::TriggerAction,
     obs: &(Vec<String>, Vec<String>),
+    groups: &[dmxcraft_core::scene_group::SceneGroup],
 ) -> bool {
     let before = tl.clone();
     let caption = |ui: &mut egui::Ui, s: &str| {
@@ -1153,7 +1170,29 @@ fn block_props(
     row(ui, t("Endless loop"), |ui| {
         ui.add(crate::ui::widgets::Toggle::new(&mut c.looped, "").enabled(enabled));
     });
-    if c.scene().is_some() {
+    if let dmxcraft_core::timeline::ClipContent::Group { group, members } = &mut c.content {
+        let mut linked = members.is_none();
+        row(ui, t("Linked to the group"), |ui| {
+            ui.add(crate::ui::widgets::Toggle::new(&mut linked, "").enabled(enabled))
+                .on_hover_text(t(
+                    "On: changes to the group apply here too. Off: this block keeps its own copy.",
+                ));
+        });
+        if linked != members.is_none() {
+            *members = if linked {
+                None
+            } else {
+                Some(
+                    groups
+                        .iter()
+                        .find(|g| g.id == *group)
+                        .map(|g| g.members.clone())
+                        .unwrap_or_default(),
+                )
+            };
+        }
+    }
+    if dmxcraft_core::timeline::Timeline::is_light(c) {
         ui.add_space(theme::SP_S);
         caption(ui, t("Prepare"));
         let mut on = c.prepare.is_some();

@@ -16,6 +16,7 @@ pub mod look;
 pub mod mapping;
 pub mod obs;
 pub mod plan;
+pub mod scene_group;
 pub mod show;
 pub mod sound;
 pub mod timeline;

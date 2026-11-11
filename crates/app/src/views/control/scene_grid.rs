@@ -123,7 +123,10 @@ impl View for SceneGridView {
         }
         let mut actions = Vec::new();
         self.bank_bar(ui, cx.engine, cx.state.locked, &mut actions);
-        ui.add_space(theme::SP_S);
+        ui.add_space(theme::SP_XS);
+        super::scene_groups::strip(ui, cx.engine, cx.state);
+        ui.add_space(theme::SP_XS);
+        let sel_before = cx.state.selected_scenes.clone();
 
         // a hidden bank can no longer be selected as a filter
         if let PageFilter::Zone(z) = self.page {
@@ -218,6 +221,9 @@ impl View for SceneGridView {
         }
         let renaming = self.rename.is_some();
         let scene_renaming = self.scene_rename.as_ref().map(|(id, _)| *id);
+        let clicked_scene = actions
+            .iter()
+            .any(|a| matches!(a, Action::Select(..) | Action::Mark(..) | Action::Range(..)));
         apply(
             cx.engine,
             cx.state,
@@ -233,6 +239,10 @@ impl View for SceneGridView {
         }
         if self.rename.is_none() {
             self.bar_to_end = false;
+        }
+        // a scene clicked: the sidebar shows it instead of the group
+        if clicked_scene || cx.state.selected_scenes != sel_before {
+            cx.state.selected_group = None;
         }
         let now = self.scene_rename.as_ref().map(|(id, _)| *id);
         if now.is_some() && now != scene_renaming {

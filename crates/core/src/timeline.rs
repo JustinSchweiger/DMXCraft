@@ -75,7 +75,7 @@ impl TrackKind {
     /// Track kind a block belongs on.
     pub fn of(content: &ClipContent) -> Self {
         match content {
-            ClipContent::Scene(_) => TrackKind::Light,
+            ClipContent::Scene(_) | ClipContent::Group { .. } => TrackKind::Light,
             _ => TrackKind::Media,
         }
     }
@@ -145,6 +145,13 @@ pub enum ClipContent {
     },
     /// Action in OBS when the block is reached.
     Obs(crate::obs::ObsAction),
+    /// SCENE GROUP: linked (`members` empty → those of the group) or as a
+    /// copy of its members.
+    Group {
+        group: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        members: Option<Vec<crate::scene_group::GroupMember>>,
+    },
 }
 
 fn is_light(k: &TrackKind) -> bool {
@@ -501,6 +508,30 @@ impl Timeline {
         id
     }
 
+    /// Insert a SCENE GROUP block (linked) with the length of the group.
+    pub fn add_group_clip(
+        &mut self,
+        track: usize,
+        group: u32,
+        length_ms: u64,
+        start_ms: u64,
+    ) -> u32 {
+        let id = self.add_clip(
+            track,
+            ClipContent::Group {
+                group,
+                members: None,
+            },
+            start_ms,
+            length_ms.max(100),
+        );
+        // a group plays once (the block follows its length)
+        if let Some(c) = self.clip_mut(id) {
+            c.looped = false;
+        }
+        id
+    }
+
     pub fn add_clip(
         &mut self,
         track: usize,
@@ -716,7 +747,20 @@ impl Timeline {
     pub fn forget_scene(&mut self, id: SceneId) {
         for t in &mut self.tracks {
             t.clips.retain(|c| c.scene() != Some(id));
+            for c in &mut t.clips {
+                if let ClipContent::Group {
+                    members: Some(m), ..
+                } = &mut c.content
+                {
+                    m.retain(|x| x.scene != id);
+                }
+            }
         }
+    }
+
+    /// Is the block a scene or a SCENE GROUP (light content)?
+    pub fn is_light(c: &Clip) -> bool {
+        TrackKind::of(&c.content) == TrackKind::Light
     }
 
     /// Active scene blocks at time `t` in track order.

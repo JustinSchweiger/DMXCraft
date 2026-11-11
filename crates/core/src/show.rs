@@ -739,6 +739,9 @@ pub struct Show {
     /// SOUND tab: players, playlists, jingle pads.
     #[serde(default, skip_serializing_if = "crate::sound::SoundBoard::is_default")]
     pub sound: crate::sound::SoundBoard,
+    /// SCENE GROUPS (scenes with offsets, used as blocks in SUPER SCENES).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scene_groups: Vec<crate::scene_group::SceneGroup>,
 }
 
 impl Default for Show {
@@ -764,6 +767,7 @@ impl Show {
             touch: Default::default(),
             obs: Default::default(),
             sound: Default::default(),
+            scene_groups: Vec::new(),
         }
     }
 
@@ -1344,7 +1348,16 @@ impl Show {
     /// Deletes a bank together with its scenes.
     pub fn remove_zone_with_scenes(&mut self, id: ZoneId) {
         self.zones.retain(|z| z.id != id);
+        let gone: Vec<SceneId> = self
+            .scenes
+            .iter()
+            .filter(|s| s.zone == Some(id))
+            .map(|s| s.id)
+            .collect();
         self.scenes.retain(|s| s.zone != Some(id));
+        for g in &mut self.scene_groups {
+            g.members.retain(|m| !gone.contains(&m.scene));
+        }
     }
 
     pub fn zone(&self, id: ZoneId) -> Option<&Zone> {
@@ -1498,6 +1511,9 @@ impl Show {
 
     pub fn remove_scene(&mut self, id: SceneId) {
         self.scenes.retain(|s| s.id != id);
+        for g in &mut self.scene_groups {
+            g.members.retain(|m| m.scene != id);
+        }
         for tl in self.scenes.iter_mut().filter_map(|s| s.timeline_mut()) {
             tl.forget_scene(id);
         }

@@ -138,6 +138,7 @@ fn clip_schema() -> Value {
         "properties": {
             "track": { "type": "integer", "description": "Track (from 0); missing tracks are created" },
             "scene": { "type": "integer", "description": "Scene ID for a scene block" },
+            "group": { "type": "integer", "description": "SCENE GROUP ID for a group block (linked)" },
             "audio_path": { "type": "string", "description": "Path of an audio file for an audio block" },
             "video_path": { "type": "string", "description": "Path of a video file (MP4/MOV) for a video block that OBS plays" },
             "obs_scene": { "type": "string", "description": "Video block: OBS scene to switch to at the start. On its own (without scene/audio_path/video_path): OBS block that switches to this scene" },
@@ -249,6 +250,27 @@ const TOOLS: &[Tool] = &[
         title: "Create group",
         description: "Creates a fixture group.",
         schema: || obj(props! { "name": string("Name"), "fixtures": ids("Fixture IDs") }, &["name", "fixtures"]),
+        read_only: false,
+    },
+    Tool {
+        name: "set_scene_group",
+        title: "Create/change SCENE GROUP",
+        description: "SCENE GROUPS are scenes with time offsets that go into SUPER SCENES as one block (`group` in add_timeline_clips; linked blocks follow changes). Without `id` a new group is created. `members` replaces the scenes (first = highest priority).",
+        schema: || obj(props! {
+            "id": int("Group ID (empty = new group)"),
+            "name": string("Name"),
+            "members": json!({ "type": "array", "items": { "type": "object", "properties": {
+                "scene": { "type": "integer", "description": "Scene ID" },
+                "offset_ms": { "type": "integer", "description": "Start within the group" }
+            }, "required": ["scene"] } }),
+        }, &[]),
+        read_only: false,
+    },
+    Tool {
+        name: "delete_scene_group",
+        title: "Delete SCENE GROUP",
+        description: "Deletes a SCENE GROUP; its linked blocks in SUPER SCENES are removed.",
+        schema: || obj(props! { "id": int("Group ID") }, &["id"]),
         read_only: false,
     },
     Tool {
@@ -663,6 +685,53 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
     let e: &mut Engine = &mut guard;
     let out = match name {
         "get_overview" => overview(e),
+        "set_scene_group" => {
+            let members = match a.get("members").and_then(Value::as_array) {
+                Some(list) => {
+                    let mut out = Vec::new();
+                    for m in list {
+                        let scene =
+                            SceneId(opt_u64(m, "scene").ok_or("Member without `scene`")? as u32);
+                        let sc = e
+                            .show()
+                            .scene(scene)
+                            .ok_or(format!("Scene {} not found", scene.0))?;
+                        if sc.timeline().is_some() {
+                            return Err("SUPER SCENES cannot be in a group".into());
+                        }
+                        out.push(dmxcraft_core::scene_group::GroupMember {
+                            scene,
+                            offset_ms: opt_u64(m, "offset_ms").unwrap_or(0),
+                        });
+                    }
+                    Some(out)
+                }
+                None => None,
+            };
+            let show = e.show_mut();
+            let id = match opt_u64(a, "id") {
+                Some(id) => {
+                    show.scene_group(id as u32).ok_or("Group not found")?;
+                    id as u32
+                }
+                None => show.add_scene_group(opt_str(a, "name").unwrap_or_else(|| "Group".into())),
+            };
+            let g = show.scene_group_mut(id).ok_or("Group not found")?;
+            if let Some(n) = opt_str(a, "name") {
+                g.name = n;
+            }
+            if let Some(m) = members {
+                g.members = m;
+            }
+            let g = show.scene_group(id).ok_or("Group not found")?.clone();
+            Ok(scene_group_json(show, &g))
+        }
+        "delete_scene_group" => {
+            let id = req_u32(a, "id")?;
+            e.show().scene_group(id).ok_or("Group not found")?;
+            e.show_mut().remove_scene_group(id);
+            Ok(json!({ "deleted": id }))
+        }
         "list_fixtures" => Ok(
             json!({ "fixtures": e.show().fixtures.iter().map(|f| fixture_json(e.show(), f.id)).collect::<Vec<_>>() }),
         ),
@@ -1216,6 +1285,7 @@ fn overview(e: &Engine) -> R {
             "scenes": show.scenes.iter().filter(|s| s.zone == Some(z.id)).map(|s| json!({ "id": s.id.0, "name": s.name, "kind": scene_kind(s) })).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
         "groups": show.groups.iter().map(|g| json!({ "id": g.id.0, "name": g.name, "fixtures": g.fixtures.iter().map(|f| f.0).collect::<Vec<_>>() })).collect::<Vec<_>>(),
+        "scene_groups": show.scene_groups.iter().map(|g| scene_group_json(show, g)).collect::<Vec<_>>(),
         "running": e.active_scenes().iter().map(|s| s.0).collect::<Vec<_>>(),
         "master": e.master(),
         "blackout": e.blackout(),
@@ -1297,6 +1367,18 @@ fn get_scene(e: &Engine, id: SceneId) -> R {
     Ok(out)
 }
 
+fn scene_group_json(show: &Show, g: &dmxcraft_core::scene_group::SceneGroup) -> Value {
+    json!({
+        "id": g.id, "name": g.name,
+        "length_ms": show.scene_group_length(g.id),
+        "members": g.members.iter().map(|m| json!({
+            "scene": m.scene.0,
+            "scene_name": show.scene(m.scene).map(|s| s.name.clone()),
+            "offset_ms": m.offset_ms,
+        })).collect::<Vec<_>>(),
+    })
+}
+
 fn timeline_json(show: &Show, tl: &Timeline) -> Value {
     json!({
         "length_ms": tl.length_ms(),
@@ -1311,6 +1393,11 @@ fn timeline_json(show: &Show, tl: &Timeline) -> Value {
                     ClipContent::Video { path, obs_scene, source, .. } => json!({ "video_path": path, "obs_scene": obs_scene, "obs_source": source }),
                     ClipContent::Obs(ObsAction::Scene(scene)) => json!({ "obs_scene": scene }),
                     ClipContent::Obs(ObsAction::Source { scene, source, visible }) => json!({ "obs_scene": scene, "obs_source": source, "obs_visible": visible }),
+                    ClipContent::Group { group, members } => json!({
+                        "group": group,
+                        "group_name": show.scene_group(*group).map(|g| g.name.clone()),
+                        "linked": members.is_none(),
+                    }),
                 };
                 json!({
                     "id": c.id, "start_ms": c.start_ms, "duration_ms": c.duration_ms,
@@ -1665,12 +1752,19 @@ fn add_clips(
         Audio(String),
         Video(String),
         Obs(ObsAction),
+        Group(u32, u64),
     }
     let mut parts = Vec::new();
     for c in clips {
         let track = opt_u64(c, "track").unwrap_or(0) as usize;
         let start = opt_u64(c, "start_ms").ok_or("`start_ms` missing")?;
-        let part = if let Some(scene) = opt_u64(c, "scene") {
+        let part = if let Some(g) = opt_u64(c, "group") {
+            let g = g as u32;
+            e.show()
+                .scene_group(g)
+                .ok_or(format!("SCENE GROUP {g} not found"))?;
+            Part::Group(g, e.show().scene_group_length(g))
+        } else if let Some(scene) = opt_u64(c, "scene") {
             let sc = e
                 .show()
                 .scene(SceneId(scene as u32))
@@ -1721,7 +1815,7 @@ fn add_clips(
     // light blocks only on light tracks, media only on media tracks
     for (track, _, part, _) in &parts {
         let kind = match part {
-            Part::Scene(_) => TrackKind::Light,
+            Part::Scene(_) | Part::Group(..) => TrackKind::Light,
             _ => TrackKind::Media,
         };
         match tl.tracks.get(*track) {
@@ -1753,6 +1847,7 @@ fn add_clips(
         let dur = opt_u64(c, "duration_ms").or(len).unwrap_or(10_000);
         let id = match part {
             Part::Scene(sc) => tl.add_scene_clip(track, &sc, start),
+            Part::Group(g, len) => tl.add_group_clip(track, g, len, start),
             Part::Audio(path) => tl.add_clip(
                 track,
                 ClipContent::Audio {
@@ -1812,7 +1907,7 @@ fn apply_clip_fields(cl: &mut dmxcraft_core::timeline::Clip, c: &Value) -> Resul
         cl.speed = v.clamp(0.05, 20.0) as f32;
     }
     if let Some(v) = c.get("prepare") {
-        if cl.scene().is_none() && !matches!(v, Value::Bool(false) | Value::Null) {
+        if !Timeline::is_light(cl) && !matches!(v, Value::Bool(false) | Value::Null) {
             return Err("Pre-position only works on scene blocks".into());
         }
         cl.prepare = parse_prepare(v, cl.prepare);

@@ -5,6 +5,7 @@ pub mod fx_color;
 pub mod fx_ui;
 pub mod programmer;
 pub mod scene_grid;
+pub mod scene_groups;
 pub mod scene_props;
 pub mod stage;
 pub mod timeline;
