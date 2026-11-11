@@ -252,6 +252,9 @@ impl Engine {
             .max(0.0);
         p.finished = false;
         p.first_entry = target == 0.0;
+        if scene.timeline().is_none() {
+            p.fx_ms = target + f64::from(p.cycles) * total as f64;
+        }
         for (i, st) in scene.steps.iter().enumerate() {
             let d = st.duration_ms() as f64;
             if target < d || i + 1 == scene.steps.len() {
@@ -474,7 +477,9 @@ impl Engine {
                 continue;
             };
             p.age_ms += real_ms;
-            if !p.paused {
+            // a finished scene holds its effects at their end
+            let held = p.finished && scene.timeline().is_none();
+            if !p.paused && !held {
                 p.fx_ms += dt_ms * f64::from(scene.settings.speed_pct) / 100.0;
             }
             let len = scene.steps.len();
@@ -523,6 +528,12 @@ impl Engine {
                 } else {
                     p.elapsed_ms = dur;
                     p.finished = true;
+                    // effects stop just before the wrap to their start, so a
+                    // one-shot movement stays at its end point
+                    if scene.timeline().is_none() {
+                        let total = scene.duration_ms().max(100) as f64;
+                        p.fx_ms = total * (f64::from(p.cycles) + 1.0) - 0.5;
+                    }
                     ended.push(p.scene);
                     break;
                 }
@@ -1693,6 +1704,25 @@ mod tests {
         assert!(p.finished);
         assert_eq!(p.step, 1);
         assert_eq!(e.render_frame().get(0, 2), Some(2));
+    }
+
+    #[test]
+    fn finished_scene_holds_effects_at_their_end() {
+        let (mut s, a, _) = setup();
+        let id = s.add_scene("Once", None, vec![Step::new(vec![cv(a, 1, 1)])]);
+        let sc = s.scene_mut(id).unwrap();
+        sc.loop_mode = LoopMode::Once;
+        sc.steps[0].hold_ms = 2000;
+        let mut e = Engine::new(s);
+        e.activate(id);
+        e.tick(MS(1000));
+        assert!((e.fx_cycles(id) - 0.5).abs() < 0.01, "running");
+        for _ in 0..10 {
+            e.tick(MS(700));
+        }
+        assert!(e.progress(id).unwrap().finished);
+        let c = e.fx_cycles(id);
+        assert!(c < 1.0 && c > 0.999, "held just before the wrap: {c}");
     }
 
     #[test]
