@@ -5,7 +5,7 @@
 
 use crate::i18n::t;
 use crate::ui::widgets::color_picker::color_swatches;
-use dmxcraft_core::timeline::{Clip, ClipContent, GridMode, Timeline};
+use dmxcraft_core::timeline::{Clip, ClipContent, GridMode, Prepare, Timeline, TrackKind};
 use dmxcraft_core::{Engine, SceneId};
 use eframe::egui::{self, pos2, Color32, Rect, Sense, Shape, Stroke, StrokeKind, Vec2};
 
@@ -28,11 +28,15 @@ const DEFAULT_CLIP_MS: u64 = 5000;
 /// Ongoing drag on a block.
 #[derive(Clone, Copy, PartialEq)]
 enum Drag {
-    Move { grab_ms: f64 },
+    Move {
+        grab_ms: f64,
+    },
     Left,
     Right,
     FadeIn,
     FadeOut,
+    /// Lead time of the pre-position.
+    Lead,
 }
 
 pub struct TimelineView {
@@ -374,7 +378,8 @@ impl TimelineView {
             }
             if menu::item(ui, MenuItem::new(t("Add audio…")).icon(Icon::Music)) {
                 let first = !has_audio(&tl);
-                if let Some(id) = add_audio_dialog(&mut tl, at.0, at.1) {
+                let track = media_track(&mut tl, at.0);
+                if let Some(id) = add_audio_dialog(&mut tl, track, at.1) {
                     if first {
                         self.pending_grid = Some(id);
                     }
@@ -385,14 +390,16 @@ impl TimelineView {
                     .add_filter(t("Video"), &VIDEO_EXT)
                     .pick_file()
                 {
-                    let id = add_video(&mut tl, at.0, at.1, &path.to_string_lossy()).0;
+                    let track = media_track(&mut tl, at.0);
+                    let id = add_video(&mut tl, track, at.1, &path.to_string_lossy()).0;
                     st.timeline_sel = [id].into();
                 }
             }
             if menu::item(ui, MenuItem::new(t("Add OBS action")).icon(Icon::Camera)) {
                 let first = st.obs.scenes().into_iter().next().unwrap_or_default();
+                let track = media_track(&mut tl, at.0);
                 let id = tl.add_clip(
-                    at.0,
+                    track,
                     ClipContent::Obs(dmxcraft_core::obs::ObsAction::Scene(first)),
                     at.1,
                     1000,
@@ -454,8 +461,17 @@ impl TimelineView {
                 .put(add_rect, egui::Button::new(t("+ Track")).small())
                 .on_hover_text(t("Add track"));
             if r.clicked() && !locked {
-                tl.add_track(None);
+                egui::Popup::toggle_id(ui.ctx(), r.id);
             }
+            menu::dropdown(&r, |ui| {
+                menu::begin(ui);
+                if menu::item(ui, MenuItem::new(t("Light track")).icon(Icon::LightOn)) {
+                    tl.add_track_of(None, TrackKind::Light);
+                }
+                if menu::item(ui, MenuItem::new(t("Media track")).icon(Icon::Music)) {
+                    tl.add_track_of(None, TrackKind::Media);
+                }
+            });
         }
         // Blocks: draw and click only in the track area to the right of the track
         // headers
@@ -522,6 +538,15 @@ impl TimelineView {
                     ),
                     ClipContent::Obs(a) => (obs_label(a), OBS_COLOR, 0),
                 };
+                let lead = c.prepare.filter(|_| c.scene().is_some()).map(|p| {
+                    let lx = self.x_at(
+                        c.start_ms.saturating_sub(u64::from(p.lead_ms)) as f64,
+                        lanes,
+                    );
+                    let lr = Rect::from_min_max(pos2(lx, r.top()), pos2(r.left(), r.bottom()));
+                    paint_lead(&lp, lr, color, p);
+                    lr
+                });
                 paint_clip(ui, &lp, r, &c, &name, color, sel, scene_ms, st);
                 // Sub-track: dimmer or volume as a line
                 if expanded {
@@ -605,9 +630,26 @@ impl TimelineView {
                         lp.circle_filled(pos2(x, r.top() + 5.0), 4.0, Color32::WHITE);
                     }
                 }
+                let lead_handle = lead.map(|lr| {
+                    let h = ui.interact(
+                        Rect::from_center_size(
+                            pos2(lr.left(), lr.center().y),
+                            Vec2::new(EDGE * 1.6, lr.height()),
+                        ),
+                        ui.scope_id().with(("lead", cid)),
+                        Sense::drag(),
+                    );
+                    if h.hovered() || h.dragged() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                    }
+                    h.on_hover_text(t("Lead time of the pre-position"))
+                });
                 let start_drag = |resp: &egui::Response, d: Drag| resp.drag_started().then_some(d);
                 let pointer_ms = pointer.map(|q| self.ms_at(q.x, lanes));
-                if let Some(d) = start_drag(&fin, Drag::FadeIn)
+                if let Some(d) = lead_handle
+                    .as_ref()
+                    .and_then(|h| start_drag(h, Drag::Lead))
+                    .or(start_drag(&fin, Drag::FadeIn))
                     .or(start_drag(&fout, Drag::FadeOut))
                     .or(start_drag(&left, Drag::Left))
                     .or(start_drag(&right, Drag::Right))
@@ -648,6 +690,16 @@ impl TimelineView {
                         }
                     }
                     menu::separator(ui);
+                    if c.scene().is_some()
+                        && menu::item(
+                            ui,
+                            MenuItem::new(t("Prepare positions"))
+                                .icon(Icon::Center)
+                                .checked(c.prepare.is_some()),
+                        )
+                    {
+                        clip_menu = Some((cid, ClipAction::TogglePrepare));
+                    }
                     if c.scene().is_some()
                         && menu::item(ui, MenuItem::new(t("Edit scene")).icon(Icon::Edit))
                     {
@@ -726,7 +778,9 @@ impl TimelineView {
                         } else {
                             s as u64
                         };
-                        if let Some(tt) = pointer_track {
+                        if let Some(tt) = pointer_track.filter(|tt| {
+                            tl.tracks.get(*tt).is_some_and(|tr| tr.accepts(&c.content))
+                        }) {
                             target_track = tt;
                         }
                     }
@@ -761,6 +815,13 @@ impl TimelineView {
                     Drag::FadeOut => {
                         n.fade_out_ms =
                             (c.end_ms() as f64 - ms).clamp(0.0, c.duration_ms as f64) as u32;
+                    }
+                    Drag::Lead => {
+                        if let Some(p) = n.prepare.as_mut() {
+                            let lead =
+                                (c.start_ms as f64 - snap(ms, &tl, self)).clamp(100.0, 30_000.0);
+                            p.lead_ms = (lead / 10.0).round() as u32 * 10;
+                        }
                     }
                 }
                 let group = matches!(d, Drag::Move { .. })
@@ -801,13 +862,30 @@ impl TimelineView {
                     pos2(self.x_at(at, lanes), ty + 2.0),
                     Vec2::new(dur as f32 * self.zoom, th - 4.0),
                 );
+                let refused = tl
+                    .tracks
+                    .get(ti)
+                    .is_some_and(|tr| tr.kind == TrackKind::Media);
                 lp.rect_stroke(
                     ghost,
                     3.0,
-                    Stroke::new(2.0, theme::accent()),
+                    Stroke::new(
+                        2.0,
+                        if refused {
+                            theme::DANGER
+                        } else {
+                            theme::accent()
+                        },
+                    ),
                     StrokeKind::Inside,
                 );
-                if ui.input(|i| i.pointer.any_released()) && *dragged != scene && !locked {
+                if refused {
+                    drop_hint(&lp, q, t("Only audio, video and OBS"));
+                }
+                let released = ui.input(|i| i.pointer.any_released());
+                if released && refused {
+                    egui::DragAndDrop::clear_payload(ui.ctx());
+                } else if released && *dragged != scene && !locked {
                     if let Some(sc) = e.show().scene(*dragged) {
                         let id = tl.add_scene_clip(ti, sc, at as u64);
                         st.timeline_sel = [id].into();
@@ -824,6 +902,7 @@ impl TimelineView {
                 .unwrap_or(lanes.center());
             if clip_area.contains(q) {
                 let ti = track_at(q.y).unwrap_or(tl.tracks.len());
+                let ti = media_track(&mut tl, ti);
                 let mut at = self.ms_at(q.x, lanes).max(0.0) as u64;
                 let first = !has_audio(&tl);
                 for f in dropped {
@@ -995,7 +1074,8 @@ impl TimelineView {
                     }
                 }
                 HeaderAction::Insert => {
-                    tl.add_track(Some(i));
+                    let kind = tl.tracks[i].kind;
+                    tl.add_track_of(Some(i), kind);
                 }
                 HeaderAction::Delete => {
                     tl.tracks.remove(i);
@@ -1485,6 +1565,14 @@ impl TimelineView {
                     }
                 }
             }
+            ClipAction::TogglePrepare => {
+                let on = tl.clip(cid).is_some_and(|(_, c)| c.prepare.is_none());
+                for id in sel {
+                    if let Some(c) = tl.clip_mut(id).filter(|c| c.scene().is_some()) {
+                        c.prepare = on.then(|| c.prepare.unwrap_or_default());
+                    }
+                }
+            }
             ClipAction::ApplyGrid => {
                 let at = self.menu_clip_ms;
                 if let Some((c, (_, g))) = tl
@@ -1568,6 +1656,19 @@ impl TimelineView {
     /// Paste at the first free position from `at` on track `track` (spacing and
     /// track offset of the copied blocks are kept).
     fn paste(&mut self, tl: &mut Timeline, st: &mut AppState, track: usize, at: u64) {
+        // every block must land on a track of its kind
+        let base = self.clipboard.iter().map(|(t, _)| *t).min().unwrap_or(0);
+        let fits = self.clipboard.iter().all(|(t, c)| {
+            tl.tracks
+                .get(track + t - base)
+                .is_none_or(|tr| tr.accepts(&c.content))
+        });
+        if !fits {
+            st.error(t(
+                "Blocks only fit on tracks of their kind (light or media)",
+            ));
+            return;
+        }
         let ids = tl.paste_group(&self.clipboard, track, at);
         if !ids.is_empty() {
             st.timeline_sel = ids.into_iter().collect();
@@ -1688,6 +1789,7 @@ enum ClipAction {
     ResetSpeed,
     ApplyGrid,
     Grid(GridEdit),
+    TogglePrepare,
 }
 
 enum HeaderAction {
@@ -1850,9 +1952,26 @@ fn track_header(
     {
         tr.muted = !tr.muted;
     }
+    // Kind: light (scenes) or media (audio, video, OBS)
+    let kind_rect = Rect::from_min_size(
+        pos2(arrow.right() + 1.0, top.center().y - 8.0),
+        Vec2::splat(16.0),
+    );
+    let media = tr.kind == dmxcraft_core::timeline::TrackKind::Media;
+    if media { Icon::Music } else { Icon::LightOn }.paint(p, kind_rect, theme::text_dim());
+    ui.interact(
+        kind_rect,
+        ui.scope_id().with(("track_kind", tr.id)),
+        Sense::hover(),
+    )
+    .on_hover_text(if media {
+        t("Media track: audio, video and OBS")
+    } else {
+        t("Light track: scenes")
+    });
     // Name
     let name_rect = Rect::from_min_max(
-        pos2(arrow.right() + 2.0, top.center().y - 10.0),
+        pos2(kind_rect.right() + 4.0, top.center().y - 10.0),
         pos2(eye.left() - 2.0, top.center().y + 10.0),
     );
     let editing = matches!(rename, Some((id, _)) if *id == tr.id);
@@ -2347,4 +2466,77 @@ fn add_audio_dialog(tl: &mut Timeline, track: usize, at: u64) -> Option<u32> {
         .add_filter("Audio", &["mp3", "wav", "flac", "ogg", "m4a", "aac"])
         .pick_file()?;
     Some(add_audio(tl, track, at, &path.to_string_lossy()).0)
+}
+
+/// Track for a media block near `ti`: the track itself if it is a media
+/// track, otherwise the first media track, otherwise a new one at the end.
+fn media_track(tl: &mut Timeline, ti: usize) -> usize {
+    if let Some(t) = tl.tracks.get_mut(ti) {
+        // an empty light track becomes a media track
+        if t.clips.is_empty() {
+            t.kind = TrackKind::Media;
+        }
+        if t.kind == TrackKind::Media {
+            return ti;
+        }
+    }
+    if let Some(i) = tl.tracks.iter().position(|t| t.kind == TrackKind::Media) {
+        return i;
+    }
+    tl.add_track_of(None, TrackKind::Media);
+    tl.tracks.len() - 1
+}
+
+/// Lead-in of the pre-position in front of a block: hatched in the scene
+/// color, handle on the left, lead time as text.
+fn paint_lead(p: &egui::Painter, r: Rect, color: Color32, prep: Prepare) {
+    if r.width() < 2.0 {
+        return;
+    }
+    p.rect_filled(r, 3.0, color.gamma_multiply(0.12));
+    let clip = p.with_clip_rect(r.intersect(p.clip_rect()));
+    let mut x = r.left() - r.height();
+    while x < r.right() {
+        clip.line_segment(
+            [pos2(x, r.bottom()), pos2(x + r.height(), r.top())],
+            Stroke::new(1.5, color.gamma_multiply(0.45)),
+        );
+        x += 7.0;
+    }
+    p.rect_stroke(r, 3.0, Stroke::new(1.0, color), StrokeKind::Inside);
+    p.rect_filled(
+        Rect::from_center_size(pos2(r.left(), r.center().y), Vec2::new(5.0, 16.0)),
+        2.0,
+        color,
+    );
+    let text = format!("{:.2}s", f64::from(prep.lead_ms) / 1000.0);
+    let galley = p.layout_no_wrap(text, egui::FontId::proportional(theme::FS_CAPTION), color);
+    if galley.size().x + 12.0 < r.width() {
+        let at = r.center() - galley.size() / 2.0;
+        p.rect_filled(
+            Rect::from_min_size(
+                at - Vec2::new(3.0, 1.0),
+                galley.size() + Vec2::new(6.0, 2.0),
+            ),
+            3.0,
+            theme::bg(),
+        );
+        p.galley(at, galley, color);
+    }
+}
+
+/// Hint next to the pointer when a drop is not possible.
+fn drop_hint(p: &egui::Painter, at: egui::Pos2, text: &str) {
+    let galley = p.layout_no_wrap(
+        text.to_string(),
+        egui::FontId::proportional(theme::FS_CAPTION),
+        theme::DANGER,
+    );
+    let r = Rect::from_min_size(
+        at + Vec2::new(14.0, 10.0),
+        galley.size() + Vec2::new(12.0, 6.0),
+    );
+    p.rect_filled(r, 3.0, theme::raised());
+    p.rect_stroke(r, 3.0, Stroke::new(1.0, theme::DANGER), StrokeKind::Inside);
+    p.galley(r.min + Vec2::new(6.0, 3.0), galley, theme::DANGER);
 }

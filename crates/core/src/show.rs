@@ -770,6 +770,9 @@ impl Show {
     /// Older shows: scenes with several steps get the STEPS effect so their
     /// steps can be edited.
     pub fn normalize(&mut self) {
+        for tl in self.scenes.iter_mut().filter_map(|s| s.timeline_mut()) {
+            tl.normalize();
+        }
         for fx in self.scenes.iter_mut().flat_map(|s| s.effects.iter_mut()) {
             fx.ensure_settings();
         }

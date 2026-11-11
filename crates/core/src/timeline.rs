@@ -47,7 +47,7 @@ impl Default for Timeline {
             next_id: 1,
             loop_resize: true,
             stretch_resize: false,
-            allow_overlap: true,
+            allow_overlap: false,
             auto_scroll: true,
             snap: true,
             grid: GridMode::Time,
@@ -62,9 +62,31 @@ impl Default for Timeline {
     }
 }
 
+/// What a track holds: light (scenes) or media (audio, video, OBS).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrackKind {
+    #[default]
+    Light,
+    Media,
+}
+
+impl TrackKind {
+    /// Track kind a block belongs on.
+    pub fn of(content: &ClipContent) -> Self {
+        match content {
+            ClipContent::Scene(_) => TrackKind::Light,
+            _ => TrackKind::Media,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Track {
     pub id: u32,
+    /// Light track (scenes) or media track (audio, video, OBS).
+    #[serde(default, skip_serializing_if = "is_light")]
+    pub kind: TrackKind,
     /// Muted (eye off).
     #[serde(default)]
     pub muted: bool,
@@ -123,6 +145,61 @@ pub enum ClipContent {
     },
     /// Action in OBS when the block is reached.
     Obs(crate::obs::ObsAction),
+}
+
+fn is_light(k: &TrackKind) -> bool {
+    *k == TrackKind::Light
+}
+
+impl Track {
+    /// May this block be put on the track?
+    pub fn accepts(&self, content: &ClipContent) -> bool {
+        self.kind == TrackKind::of(content)
+    }
+}
+
+/// Pre-position before a scene block (“move in black”): during the lead time
+/// the fixtures of the scene already get the values of its first moment for
+/// the chosen channel groups – no intensity, no color mixing.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Prepare {
+    pub lead_ms: u32,
+    /// Only fixtures without light (in this SUPER SCENE) move.
+    pub only_dark: bool,
+    /// Pan/tilt.
+    pub position: bool,
+    /// Focus/zoom.
+    pub beam: bool,
+    pub gobo: bool,
+    pub color_wheel: bool,
+}
+
+impl Default for Prepare {
+    fn default() -> Self {
+        Self {
+            lead_ms: 1500,
+            only_dark: true,
+            position: true,
+            beam: true,
+            gobo: false,
+            color_wheel: false,
+        }
+    }
+}
+
+impl Prepare {
+    /// Does the channel kind belong to the chosen groups?
+    pub fn includes(&self, k: crate::ChannelKind) -> bool {
+        use crate::ChannelKind as K;
+        match k {
+            K::Pan | K::PanFine | K::Tilt | K::TiltFine => self.position,
+            K::Focus | K::Zoom => self.beam,
+            K::Gobo => self.gobo,
+            K::ColorWheel => self.color_wheel,
+            _ => false,
+        }
+    }
 }
 
 impl ClipContent {
@@ -269,6 +346,9 @@ pub struct Clip {
     #[serde(default = "one")]
     pub level: f32,
     pub content: ClipContent,
+    /// Pre-position before the block (scene blocks).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prepare: Option<Prepare>,
 }
 
 fn yes() -> bool {
@@ -321,6 +401,7 @@ impl Timeline {
         let id = self.next();
         let t = Track {
             id,
+            kind: TrackKind::Light,
             muted: false,
             locked: false,
             expanded: false,
@@ -333,6 +414,48 @@ impl Timeline {
             _ => self.tracks.push(t),
         }
         id
+    }
+
+    /// Insert a track of a kind (before `at`, otherwise at the end).
+    pub fn add_track_of(&mut self, at: Option<usize>, kind: TrackKind) -> u32 {
+        let id = self.add_track(at);
+        if let Some(t) = self.tracks.iter_mut().find(|t| t.id == id) {
+            t.kind = kind;
+        }
+        id
+    }
+
+    /// Older shows: tracks with only audio/video/OBS blocks become media
+    /// tracks.
+    pub fn normalize(&mut self) {
+        for t in &mut self.tracks {
+            if t.kind == TrackKind::Light
+                && !t.clips.is_empty()
+                && t.clips
+                    .iter()
+                    .all(|c| TrackKind::of(&c.content) == TrackKind::Media)
+            {
+                t.kind = TrackKind::Media;
+            }
+        }
+    }
+
+    /// Scene blocks whose pre-position runs at time `t` (lead time before the
+    /// block), the next one first.
+    pub fn preparing_at(&self, t: u64) -> Vec<&Clip> {
+        let mut v: Vec<&Clip> = self
+            .tracks
+            .iter()
+            .filter(|tr| !tr.muted)
+            .flat_map(|tr| tr.clips.iter())
+            .filter(|c| {
+                c.scene().is_some()
+                    && c.prepare
+                        .is_some_and(|p| t < c.start_ms && c.start_ms - t <= u64::from(p.lead_ms))
+            })
+            .collect();
+        v.sort_by_key(|c| c.start_ms);
+        v
     }
 
     /// End of the last block.
@@ -400,6 +523,7 @@ impl Timeline {
             speed: 1.0,
             level: 1.0,
             content,
+            prepare: None,
         });
         id
     }
@@ -486,6 +610,13 @@ impl Timeline {
                 )
             })
             .collect();
+        let wrong_kind = group
+            .iter()
+            .zip(&moved)
+            .any(|((_, c), (t, ..))| !self.tracks[*t].accepts(&c.content));
+        if wrong_kind {
+            return false;
+        }
         if !self.allow_overlap {
             let blocked = moved.iter().any(|(t, s, e, _)| {
                 self.tracks[*t]
@@ -636,6 +767,32 @@ mod tests {
         let last = tl.tracks.len() as isize;
         assert!(!tl.move_group(&ids, 0, last));
         assert_eq!(tl.clip(other).unwrap().0, 0);
+    }
+
+    #[test]
+    fn media_and_light_tracks_stay_apart() {
+        use crate::show::SceneId;
+        let mut tl = Timeline::default();
+        assert!(!tl.allow_overlap, "no overlap by default");
+        let audio = ClipContent::Audio {
+            path: "a.mp3".into(),
+            offset_ms: 0,
+            length_ms: 0,
+            grid: None,
+            segment_grids: Vec::new(),
+            triggers: Vec::new(),
+        };
+        let a = tl.add_clip(0, audio, 0, 1000);
+        let s = tl.add_clip(1, ClipContent::Scene(SceneId(1)), 0, 1000);
+        // older show: the track with only audio becomes a media track
+        tl.normalize();
+        assert_eq!(tl.tracks[0].kind, TrackKind::Media);
+        assert_eq!(tl.tracks[1].kind, TrackKind::Light);
+        // the scene can't move onto the media track, the audio not off it
+        assert!(!tl.move_group(&[s].into(), 2000, -1));
+        assert!(!tl.move_group(&[a].into(), 2000, 1));
+        assert!(tl.move_group(&[s].into(), 0, 1));
+        assert_eq!(tl.clip(s).unwrap().0, 2);
     }
 
     #[test]

@@ -48,7 +48,7 @@ sessions).
 | Groups, banks | `create_group`, `delete_group`, `create_bank`, `update_bank`, `delete_bank` |
 | Scenes | `create_scene`, `update_scene`, `delete_scenes`, `select_scene` |
 | Effects | `describe_effect`, `add_effect`, `update_effect`, `remove_effect` |
-| SUPER SCENE | `create_super_scene`, `add_timeline_clips`, `remove_timeline_clips` (blocks: scene, `audio_path`, `video_path` for OBS, `obs_scene`/`obs_source` for OBS actions, see `docs/OBS.md`) |
+| SUPER SCENE | `create_super_scene`, `add_timeline_clips`, `update_timeline` (block times, fades, `prepare` = pre-position before a block, `allow_overlap`), `remove_timeline_clips` (scene blocks only on light tracks, audio/video/OBS only on media tracks; blocks: scene, `audio_path`, `video_path` for OBS, `obs_scene`/`obs_source` for OBS actions, see `docs/OBS.md`) |
 | Playback | `play_scene`, `stop_scene`, `pause_scene`, `set_output` (master, blackout, tempo) |
 | Live | `set_live_values`, `clear_live_values` |
 | 3D venue | `get_venue`, `set_venue`, `add_venue_object`, `update_venue_object`, `delete_venue_objects`, `place_fixtures` (position, hang on a truss, aim at a point) |

@@ -1144,6 +1144,41 @@ fn block_props(
     row(ui, t("Endless loop"), |ui| {
         ui.add(crate::ui::widgets::Toggle::new(&mut c.looped, "").enabled(enabled));
     });
+    if c.scene().is_some() {
+        ui.add_space(theme::SP_S);
+        caption(ui, t("Prepare"));
+        let mut on = c.prepare.is_some();
+        row(ui, t("Pre-position"), |ui| {
+            ui.add(crate::ui::widgets::Toggle::new(&mut on, "").enabled(enabled))
+                .on_hover_text(t(
+                    "Before the block the fixtures already move to its starting position (no light)",
+                ));
+        });
+        if on != c.prepare.is_some() {
+            c.prepare = on.then(dmxcraft_core::timeline::Prepare::default);
+        }
+        if let Some(p) = c.prepare.as_mut() {
+            time_row(ui, t("Lead time"), "blk_lead", &mut p.lead_ms);
+            p.lead_ms = p.lead_ms.clamp(100, 30_000);
+            row(ui, t("Only while dark"), |ui| {
+                ui.add(crate::ui::widgets::Toggle::new(&mut p.only_dark, "").enabled(enabled));
+            });
+            row(ui, t("Channels"), |ui| {
+                ui.spacing_mut().item_spacing.x = theme::SP_XS;
+                // right to left: last chip first
+                for (v, label) in [
+                    (&mut p.color_wheel, t("Color wheel")),
+                    (&mut p.gobo, t("Gobo")),
+                    (&mut p.beam, t("Focus/Zoom")),
+                    (&mut p.position, t("Pan/Tilt")),
+                ] {
+                    if chip(ui, label, *v, accent, enabled).clicked() {
+                        *v = !*v;
+                    }
+                }
+            });
+        }
+    }
     if c.tempo_sync {
         // Round the length to whole beats
         let beats = (c.duration_ms as f64 / beat).round().max(1.0);
@@ -1156,6 +1191,45 @@ fn block_props(
     }
     obs_props(ui, &mut c.content, obs, enabled);
     *tl != before
+}
+
+/// Small on/off chip in the color of the scene.
+fn chip(
+    ui: &mut egui::Ui,
+    label: &str,
+    on: bool,
+    accent: Color32,
+    enabled: bool,
+) -> egui::Response {
+    let galley = ui.painter().layout_no_wrap(
+        label.to_string(),
+        egui::FontId::proportional(theme::FS_CAPTION),
+        theme::text(),
+    );
+    let size = galley.size() + egui::vec2(12.0, 8.0);
+    let sense = if enabled {
+        egui::Sense::click()
+    } else {
+        egui::Sense::hover()
+    };
+    let (rect, resp) = ui.allocate_exact_size(size, sense);
+    let (fill, text) = if on {
+        (accent.gamma_multiply(0.3), accent)
+    } else if resp.hovered() && enabled {
+        (theme::raised_hover(), theme::text_dim())
+    } else {
+        (theme::raised(), theme::text_dim())
+    };
+    let p = ui.painter();
+    p.rect_filled(rect, theme::R_S as f32, fill);
+    p.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::proportional(theme::FS_CAPTION),
+        text,
+    );
+    resp
 }
 
 /// Video and OBS blocks: choose the target in OBS.

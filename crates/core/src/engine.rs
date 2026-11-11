@@ -710,7 +710,40 @@ impl Engine {
                 out.insert(ch, v);
             }
         }
+        // Pre-position (“move in black”) before upcoming blocks: only channels
+        // no running block sets, only the chosen channel groups
+        for clip in tl.preparing_at(now) {
+            let (Some(prep), Some(scene)) =
+                (clip.prepare, clip.scene().and_then(|id| show.scene(id)))
+            else {
+                continue;
+            };
+            let p = Self::virtual_play(scene, 0.0);
+            let values = self.scene_values_d(show, &p, depth + 1);
+            for (ch, v) in values {
+                if out.contains_key(&ch) {
+                    continue;
+                }
+                let Some(def) = show.channel_def(ch) else {
+                    continue;
+                };
+                if !prep.includes(def.kind) {
+                    continue;
+                }
+                if prep.only_dark && Self::lit_in(show, &out, ch.fixture) {
+                    continue;
+                }
+                out.insert(ch, v);
+            }
+        }
         out
+    }
+
+    /// Does the fixture give light with these values (any intensity > 0)?
+    fn lit_in(show: &Show, values: &HashMap<ChannelRef, u8>, fixture: crate::FixtureId) -> bool {
+        values
+            .iter()
+            .any(|(ch, v)| ch.fixture == fixture && *v > 0 && Self::is_intensity(show, *ch))
     }
 
     /// Playback state of a scene at position `local` (ms) of its sequence.
@@ -1224,6 +1257,49 @@ mod tests {
         e.activate(sup);
         e.tick(Duration::from_millis(500));
         assert_eq!(e.render_frame().get(0, 1), Some(50), "track 1 has priority");
+    }
+
+    #[test]
+    fn prepare_moves_heads_in_black_before_the_block() {
+        let (mut s, _, _) = setup();
+        let mh = s
+            .add_fixture("MH", "generic/moving-head-spot-11ch", 1, 100)
+            .unwrap();
+        let ty = s.type_of(s.fixture(mh).unwrap()).unwrap().clone();
+        let idx = |k: ChannelKind| ty.channels.iter().position(|c| c.kind == k).unwrap() as u16;
+        let (pan, dim) = (idx(ChannelKind::Pan), idx(ChannelKind::Dimmer));
+        let up = s.add_scene(
+            "Up",
+            None,
+            vec![Step::new(vec![cv(mh, pan, 40), cv(mh, dim, 255)])],
+        );
+        let lit = s.add_scene("Lit", None, vec![Step::new(vec![cv(mh, dim, 100)])]);
+        let sup = s.add_scene("S", None, vec![Step::new(Vec::new())]);
+        let sc = s.scene_mut(sup).unwrap();
+        sc.add_effect(crate::show::EffectKind::SuperScene);
+        let tl = sc.timeline_mut().unwrap();
+        let c = tl.add_clip(0, crate::timeline::ClipContent::Scene(up), 2000, 1000);
+        tl.clip_mut(c).unwrap().prepare = Some(crate::timeline::Prepare::default());
+        let l = tl.add_clip(1, crate::timeline::ClipContent::Scene(lit), 0, 300);
+        sc.sync_timeline_length();
+        let tl = s.scene(sup).unwrap().timeline().unwrap().clone();
+        let e = Engine::new(s.clone());
+        let at = |t: f64| e.timeline_values(&s, &tl, t, 0);
+        let ch = |c: u16| ChannelRef {
+            fixture: mh,
+            channel: c,
+        };
+        // before the lead time: nothing
+        assert_eq!(at(400.0).get(&ch(pan)), None);
+        // during the lead time: pan already there, no light
+        let v = at(1000.0);
+        assert_eq!(v.get(&ch(pan)), Some(&40));
+        assert_eq!(v.get(&ch(dim)), None);
+        // only while dark: the lit block keeps the head where it is
+        let mut tl2 = tl.clone();
+        let lc = tl2.clip_mut(l).unwrap();
+        lc.start_ms = 800;
+        assert_eq!(e.timeline_values(&s, &tl2, 1000.0, 0).get(&ch(pan)), None);
     }
 
     #[test]

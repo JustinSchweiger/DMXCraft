@@ -3,7 +3,7 @@
 
 use dmxcraft_core::fixture::ChannelKind;
 use dmxcraft_core::obs::ObsAction;
-use dmxcraft_core::timeline::{ClipContent, Timeline};
+use dmxcraft_core::timeline::{ClipContent, Prepare, Timeline, TrackKind};
 use dmxcraft_core::{
     ChannelRef, ChannelValue, Effect, EffectKind, Engine, FixtureId, FixtureType, GroupId,
     LoopMode, SceneId, Show, Step, ZoneId, UNIVERSE_SIZE,
@@ -148,10 +148,47 @@ fn clip_schema() -> Value {
             "fade_in_ms": { "type": "integer" },
             "fade_out_ms": { "type": "integer" },
             "level": { "type": "number", "description": "Level 0–1 (dimmer or volume)" },
-            "speed": { "type": "number", "description": "Speed of the block (1 = normal)" }
+            "speed": { "type": "number", "description": "Speed of the block (1 = normal)" },
+            "prepare": prepare_schema()
         },
         "required": ["start_ms"]
     })
+}
+
+fn prepare_schema() -> Value {
+    json!({
+        "description": "Scene blocks: pre-position (move in black) before the block – the fixtures get the starting values of the scene for the chosen channel groups during the lead time. `false` switches it off.",
+        "type": ["object", "boolean"],
+        "properties": {
+            "lead_ms": { "type": "integer", "description": "Lead time (default 1500)" },
+            "only_dark": { "type": "boolean", "description": "Only fixtures without light in the SUPER SCENE (default true)" },
+            "position": { "type": "boolean", "description": "Pan/tilt (default true)" },
+            "beam": { "type": "boolean", "description": "Focus/zoom (default true)" },
+            "gobo": { "type": "boolean" },
+            "color_wheel": { "type": "boolean" }
+        }
+    })
+}
+
+/// `prepare` of a block from JSON (`false` = off, `true` = default).
+fn parse_prepare(v: &Value, current: Option<Prepare>) -> Option<Prepare> {
+    match v {
+        Value::Bool(false) | Value::Null => None,
+        Value::Bool(true) => Some(current.unwrap_or_default()),
+        o => {
+            let mut p = current.unwrap_or_default();
+            let b = |k: &str, d: bool| o.get(k).and_then(Value::as_bool).unwrap_or(d);
+            if let Some(l) = o.get("lead_ms").and_then(Value::as_u64) {
+                p.lead_ms = l.clamp(100, 30_000) as u32;
+            }
+            p.only_dark = b("only_dark", p.only_dark);
+            p.position = b("position", p.position);
+            p.beam = b("beam", p.beam);
+            p.gobo = b("gobo", p.gobo);
+            p.color_wheel = b("color_wheel", p.color_wheel);
+            Some(p)
+        }
+    }
 }
 
 const TOOLS: &[Tool] = &[
@@ -345,6 +382,30 @@ const TOOLS: &[Tool] = &[
         title: "Add blocks",
         description: "Adds scene or audio blocks to a SUPER SCENE.",
         schema: || obj(props! { "scene": int("ID of the SUPER SCENE"), "clips": json!({ "type": "array", "items": clip_schema() }) }, &["scene", "clips"]),
+        read_only: false,
+    },
+    Tool {
+        name: "update_timeline",
+        title: "Change SUPER SCENE",
+        description: "Changes blocks of a SUPER SCENE (start, length, fades, level, speed, pre-position) and its settings (`allow_overlap`).",
+        schema: || obj(props! {
+            "scene": int("ID of the SUPER SCENE"),
+            "allow_overlap": boolean("Blocks may overlap on a track"),
+            "clips": json!({ "type": "array", "items": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer", "description": "Block ID (from get_scene)" },
+                    "start_ms": { "type": "integer" },
+                    "duration_ms": { "type": "integer" },
+                    "fade_in_ms": { "type": "integer" },
+                    "fade_out_ms": { "type": "integer" },
+                    "level": { "type": "number" },
+                    "speed": { "type": "number" },
+                    "prepare": prepare_schema()
+                },
+                "required": ["id"]
+            } }),
+        }, &["scene"]),
         read_only: false,
     },
     Tool {
@@ -724,6 +785,31 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
                 .clone();
             let ids = add_clips(host, e, sid, &clips)?;
             Ok(json!({ "scene": sid.0, "clips": ids }))
+        }
+        "update_timeline" => {
+            let sid = SceneId(req_u32(a, "scene")?);
+            let s = e.show_mut().scene_mut(sid).ok_or("Scene not found")?;
+            let tl = s.timeline_mut().ok_or("Not a SUPER SCENE")?;
+            if let Some(v) = a.get("allow_overlap").and_then(Value::as_bool) {
+                tl.allow_overlap = v;
+            }
+            let mut changed = Vec::new();
+            for c in a
+                .get("clips")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let id = opt_u64(c, "id").ok_or("Block without `id`")? as u32;
+                let cl = tl.clip_mut(id).ok_or(format!("Block {id} not found"))?;
+                if let Some(v) = opt_u64(c, "start_ms") {
+                    cl.start_ms = v;
+                }
+                apply_clip_fields(cl, c)?;
+                changed.push(id);
+            }
+            s.sync_timeline_length();
+            Ok(json!({ "scene": sid.0, "changed": changed }))
         }
         "remove_timeline_clips" => {
             let sid = SceneId(req_u32(a, "scene")?);
@@ -1217,6 +1303,7 @@ fn timeline_json(show: &Show, tl: &Timeline) -> Value {
         "bpm": tl.bpm,
         "tracks": tl.tracks.iter().enumerate().map(|(i, t)| json!({
             "index": i, "name": t.name, "muted": t.muted,
+            "kind": if t.kind == TrackKind::Media { "media" } else { "light" },
             "clips": t.clips.iter().map(|c| {
                 let content = match &c.content {
                     ClipContent::Scene(id) => json!({ "scene": id.0, "scene_name": show.scene(*id).map(|s| s.name.clone()) }),
@@ -1229,6 +1316,10 @@ fn timeline_json(show: &Show, tl: &Timeline) -> Value {
                     "id": c.id, "start_ms": c.start_ms, "duration_ms": c.duration_ms,
                     "fade_in_ms": c.fade_in_ms, "fade_out_ms": c.fade_out_ms,
                     "level": c.level, "speed": c.speed, "content": content,
+                    "prepare": c.prepare.map(|p| json!({
+                        "lead_ms": p.lead_ms, "only_dark": p.only_dark, "position": p.position,
+                        "beam": p.beam, "gobo": p.gobo, "color_wheel": p.color_wheel,
+                    })),
                 })
             }).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
@@ -1627,6 +1718,36 @@ fn add_clips(
         .collect();
     let s = e.show_mut().scene_mut(sid).ok_or("Scene not found")?;
     let tl = s.timeline_mut().ok_or("Not a SUPER SCENE")?;
+    // light blocks only on light tracks, media only on media tracks
+    for (track, _, part, _) in &parts {
+        let kind = match part {
+            Part::Scene(_) => TrackKind::Light,
+            _ => TrackKind::Media,
+        };
+        match tl.tracks.get(*track) {
+            Some(t) if t.kind != kind && t.clips.is_empty() => {
+                // an empty track takes the kind of its first block
+                tl.tracks[*track].kind = kind;
+            }
+            Some(t) if t.kind != kind => {
+                return Err(format!(
+                    "Track {track} is a {} track",
+                    if t.kind == TrackKind::Media {
+                        "media"
+                    } else {
+                        "light"
+                    }
+                ));
+            }
+            Some(_) => {}
+            None => {
+                while tl.tracks.len() < *track {
+                    tl.add_track(None);
+                }
+                tl.add_track_of(None, kind);
+            }
+        }
+    }
     let mut ids = Vec::new();
     for ((track, start, part, c), len) in parts.into_iter().zip(durations) {
         let dur = opt_u64(c, "duration_ms").or(len).unwrap_or(10_000);
@@ -1665,26 +1786,38 @@ fn add_clips(
             ),
         };
         if let Some(cl) = tl.clip_mut(id) {
-            if let Some(d) = opt_u64(c, "duration_ms") {
-                cl.duration_ms = d.max(40);
-            }
-            if let Some(v) = opt_u64(c, "fade_in_ms") {
-                cl.fade_in_ms = v as u32;
-            }
-            if let Some(v) = opt_u64(c, "fade_out_ms") {
-                cl.fade_out_ms = v as u32;
-            }
-            if let Some(v) = c.get("level").and_then(Value::as_f64) {
-                cl.level = v.clamp(0.0, 1.0) as f32;
-            }
-            if let Some(v) = c.get("speed").and_then(Value::as_f64) {
-                cl.speed = v.clamp(0.05, 20.0) as f32;
-            }
+            apply_clip_fields(cl, c)?;
         }
         ids.push(id);
     }
     s.sync_timeline_length();
     Ok(ids)
+}
+
+/// Optional block fields from JSON (length, fades, level, speed, prepare).
+fn apply_clip_fields(cl: &mut dmxcraft_core::timeline::Clip, c: &Value) -> Result<(), String> {
+    if let Some(d) = opt_u64(c, "duration_ms") {
+        cl.duration_ms = d.max(40);
+    }
+    if let Some(v) = opt_u64(c, "fade_in_ms") {
+        cl.fade_in_ms = v as u32;
+    }
+    if let Some(v) = opt_u64(c, "fade_out_ms") {
+        cl.fade_out_ms = v as u32;
+    }
+    if let Some(v) = c.get("level").and_then(Value::as_f64) {
+        cl.level = v.clamp(0.0, 1.0) as f32;
+    }
+    if let Some(v) = c.get("speed").and_then(Value::as_f64) {
+        cl.speed = v.clamp(0.05, 20.0) as f32;
+    }
+    if let Some(v) = c.get("prepare") {
+        if cl.scene().is_none() && !matches!(v, Value::Bool(false) | Value::Null) {
+            return Err("Pre-position only works on scene blocks".into());
+        }
+        cl.prepare = parse_prepare(v, cl.prepare);
+    }
+    Ok(())
 }
 
 /// Base64 (standard alphabet, with padding) for images in the MCP result.
