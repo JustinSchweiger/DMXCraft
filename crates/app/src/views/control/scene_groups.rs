@@ -191,94 +191,100 @@ pub fn editor(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState, id: u32) {
     let n = members.len();
     for (i, m) in members.iter_mut().enumerate() {
         let (sname, color, dur) = &rows[i];
+        // Line 1: name, offset, order, remove (controls right-aligned)
         ui.horizontal(|ui| {
             ui.set_min_height(28.0);
             ui.spacing_mut().item_spacing.x = theme::SP_XS;
-            let (nr, _) = ui.allocate_exact_size(Vec2::new(120.0, 24.0), Sense::hover());
-            let p = ui.painter_at(nr);
-            p.text(
-                pos2(nr.left(), nr.center().y),
-                egui::Align2::LEFT_CENTER,
-                sname,
-                theme::body(),
-                theme::text(),
-            );
-            let right = 3.0 * 26.0 + crate::ui::widgets::time_field::COMPACT_W + 4.0 * theme::SP_XS;
-            let (bar, br) = ui.allocate_exact_size(
-                Vec2::new((ui.available_width() - right).max(40.0), 18.0),
-                if locked {
-                    Sense::hover()
-                } else {
-                    Sense::drag()
-                },
-            );
-            let p = ui.painter();
-            p.rect_filled(bar, 3.0, theme::bg());
-            let x = |ms: u64| bar.left() + bar.width() * (ms as f32 / len as f32).min(1.0);
-            let seg = Rect::from_min_max(
-                pos2(x(m.offset_ms), bar.top() + 2.0),
-                pos2(
-                    x(m.offset_ms + dur).max(x(m.offset_ms) + 3.0),
-                    bar.bottom() - 2.0,
-                ),
-            );
-            p.rect_filled(seg, 2.0, *color);
-            // drag the bar: move the scene in time (10 ms steps)
-            if br.dragged() {
-                let d = br.drag_delta().x / bar.width() * len as f32;
-                let v = (m.offset_ms as f32 + d).max(0.0);
-                m.offset_ms = (v / 10.0).round() as u64 * 10;
-            }
-            if br.hovered() || br.dragged() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-            }
-            let mut off = m.offset_ms.min(u64::from(u32::MAX)) as u32;
-            if time_field_compact(
-                ui,
-                &format!("grp_off_{id}_{i}"),
-                &mut off,
-                !locked,
-                GROUP_COLOR,
-            ) {
-                m.offset_ms = u64::from(off);
-            }
-            if ui
-                .add(
-                    IconButton::new(Icon::ChevronUp)
-                        .size(24.0)
-                        .flat()
-                        .enabled(!locked && i > 0),
-                )
-                .on_hover_text(t("Higher priority"))
-                .clicked()
-            {
-                swap = Some((i - 1, i));
-            }
-            if ui
-                .add(
-                    IconButton::new(Icon::ChevronDown)
-                        .size(24.0)
-                        .flat()
-                        .enabled(!locked && i + 1 < n),
-                )
-                .on_hover_text(t("Lower priority"))
-                .clicked()
-            {
-                swap = Some((i, i + 1));
-            }
-            if ui
-                .add(
-                    IconButton::new(Icon::Trash)
-                        .size(24.0)
-                        .flat()
-                        .enabled(!locked),
-                )
-                .on_hover_text(t("Remove from the group"))
-                .clicked()
-            {
-                remove = Some(i);
-            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .add(
+                        IconButton::new(Icon::Trash)
+                            .size(24.0)
+                            .flat()
+                            .enabled(!locked),
+                    )
+                    .on_hover_text(t("Remove from the group"))
+                    .clicked()
+                {
+                    remove = Some(i);
+                }
+                if ui
+                    .add(
+                        IconButton::new(Icon::ChevronDown)
+                            .size(24.0)
+                            .flat()
+                            .enabled(!locked && i + 1 < n),
+                    )
+                    .on_hover_text(t("Lower priority"))
+                    .clicked()
+                {
+                    swap = Some((i, i + 1));
+                }
+                if ui
+                    .add(
+                        IconButton::new(Icon::ChevronUp)
+                            .size(24.0)
+                            .flat()
+                            .enabled(!locked && i > 0),
+                    )
+                    .on_hover_text(t("Higher priority"))
+                    .clicked()
+                {
+                    swap = Some((i - 1, i));
+                }
+                let mut off = m.offset_ms.min(u64::from(u32::MAX)) as u32;
+                if time_field_compact(
+                    ui,
+                    &format!("grp_off_{id}_{i}"),
+                    &mut off,
+                    !locked,
+                    GROUP_COLOR,
+                ) {
+                    m.offset_ms = u64::from(off);
+                }
+                // name in the remaining space (cut off if needed)
+                let (nr, _) = ui.allocate_exact_size(
+                    Vec2::new(ui.available_width().max(0.0), 24.0),
+                    Sense::hover(),
+                );
+                ui.painter_at(nr).text(
+                    pos2(nr.left(), nr.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    sname,
+                    theme::body(),
+                    theme::text(),
+                );
+            });
         });
+        // Line 2: bar over the whole width – drag it to move the scene in time
+        let (bar, br) = ui.allocate_exact_size(
+            Vec2::new(ui.available_width(), 14.0),
+            if locked {
+                Sense::hover()
+            } else {
+                Sense::drag()
+            },
+        );
+        let p = ui.painter();
+        p.rect_filled(bar, 3.0, theme::bg());
+        let x = |ms: u64| bar.left() + bar.width() * (ms as f32 / len as f32).min(1.0);
+        let seg = Rect::from_min_max(
+            pos2(x(m.offset_ms), bar.top() + 2.0),
+            pos2(
+                x(m.offset_ms + dur).max(x(m.offset_ms) + 3.0),
+                bar.bottom() - 2.0,
+            ),
+        );
+        p.rect_filled(seg, 2.0, *color);
+        if br.dragged() {
+            let d = br.drag_delta().x / bar.width().max(1.0) * len as f32;
+            let v = (m.offset_ms as f32 + d).max(0.0);
+            m.offset_ms = (v / 10.0).round() as u64 * 10;
+        }
+        if br.hovered() || br.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        }
+        ui.add_space(theme::SP_XS);
     }
     if let Some((a, b)) = swap {
         members.swap(a, b);
