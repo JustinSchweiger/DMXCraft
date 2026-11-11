@@ -215,11 +215,11 @@
 
         <Property Id='ARPHELPLINK' Value='https://github.com/JustinSchweiger/DMXCraft'/>
         
-        <!-- DMXCraft: about/help/update links and comments in "Installed apps" -->
+        <!-- DMXCraft: about/help/update links and comments in "Installed apps"
+             (WixUI_InstallDir already sets ARPNOMODIFY) -->
         <Property Id='ARPURLINFOABOUT' Value='https://github.com/JustinSchweiger/DMXCraft'/>
         <Property Id='ARPURLUPDATEINFO' Value='https://github.com/JustinSchweiger/DMXCraft/releases'/>
         <Property Id='ARPCOMMENTS' Value='DMX lighting control'/>
-        <Property Id='ARPNOMODIFY' Value='yes'/>
 
         <!--
           DMXCraft: branded wizard - welcome, license, install folder, ready,
