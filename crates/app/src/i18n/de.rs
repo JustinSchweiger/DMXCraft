@@ -1181,7 +1181,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Point {n}", "Punkt {n}"),
     ("Delete point (Del)", "Punkt löschen (Entf)"),
     ("Rounding", "Rundung"),
-    ("Double-click: add point", "Doppelklick: Punkt hinzufügen"),
     ("Normal view", "Normale Ansicht"),
     ("Compact view (names only)", "Kompaktansicht (nur Namen)"),
     ("Midnight", "Mitternacht"),
@@ -1360,4 +1359,5 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Length of the scene", "Länge der Szene"),
     ("Fade curve", "Blendkurve"),
     ("Smooth", "Weich"),
+    ("Double-click: add point\nPoints snap into line with each other and to the center – hold Alt to move freely", "Doppelklick: Punkt hinzufügen\nPunkte rasten in einer Linie mit anderen Punkten und an der Mitte ein – mit Alt frei verschieben"),
 ];

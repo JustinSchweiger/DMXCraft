@@ -677,12 +677,42 @@ fn move_editor(
     if m.editable() {
         bg.clone()
             .union(r.clone())
-            .on_hover_text(t("Double-click: add point"));
+            .on_hover_text(t(
+                "Double-click: add point\nPoints snap into line with each other and to the center – hold Alt to move freely",
+            ));
+    }
+    // Snapping (Alt held: free). Guide lines are drawn at the end.
+    let snapping = !ui.input(|i| i.modifiers.alt);
+    let mut guides: Vec<(bool, f32)> = Vec::new();
+    if r.drag_started() {
+        ui.data_mut(|d| d.insert_temp(id.with("raw_center"), m.center));
     }
     if r.dragged() {
+        // unsnapped position follows the mouse, the frame center snaps to
+        // the middle of the field
         let d = r.drag_delta();
-        m.center[0] = (m.center[0] + d.x / rect.width()).clamp(0.0, 1.0);
-        m.center[1] = (m.center[1] + d.y / rect.height()).clamp(0.0, 1.0);
+        let mut raw: [f32; 2] = ui
+            .data(|dd| dd.get_temp(id.with("raw_center")))
+            .unwrap_or(m.center);
+        raw[0] = (raw[0] + d.x / rect.width()).clamp(0.0, 1.0);
+        raw[1] = (raw[1] + d.y / rect.height()).clamp(0.0, 1.0);
+        ui.data_mut(|dd| dd.insert_temp(id.with("raw_center"), raw));
+        let at = to(raw);
+        let (sx, sy) = if snapping {
+            (
+                snap_to(at.x, &[rect.center().x]),
+                snap_to(at.y, &[rect.center().y]),
+            )
+        } else {
+            (None, None)
+        };
+        if let Some(x) = sx {
+            guides.push((true, x));
+        }
+        if let Some(y) = sy {
+            guides.push((false, y));
+        }
+        m.center = from(pos2(sx.unwrap_or(at.x), sy.unwrap_or(at.y)));
     }
     // Corners scale
     for c in corners {
@@ -753,6 +783,36 @@ fn move_editor(
             }
             if r.dragged() {
                 if let Some(q) = r.interact_pointer_pos() {
+                    let mut q = q;
+                    if snapping {
+                        // align with the other points (same line horizontally
+                        // or vertically), the middle of the frame and of the field
+                        let others: Vec<Pos2> = pts
+                            .iter()
+                            .enumerate()
+                            .filter(|(j, _)| *j != i)
+                            .map(|(_, o)| to(m.to_field(*o)))
+                            .collect();
+                        let mid = to(m.center);
+                        let xs: Vec<f32> = others
+                            .iter()
+                            .map(|o| o.x)
+                            .chain([mid.x, rect.center().x])
+                            .collect();
+                        let ys: Vec<f32> = others
+                            .iter()
+                            .map(|o| o.y)
+                            .chain([mid.y, rect.center().y])
+                            .collect();
+                        if let Some(x) = snap_to(q.x, &xs) {
+                            q.x = x;
+                            guides.push((true, x));
+                        }
+                        if let Some(y) = snap_to(q.y, &ys) {
+                            q.y = y;
+                            guides.push((false, y));
+                        }
+                    }
                     let l = m.to_local(from(q));
                     m.points[i] = [l[0].clamp(-1.0, 1.0), l[1].clamp(-1.0, 1.0)];
                 }
@@ -790,10 +850,34 @@ fn move_editor(
         }
     }
     select_point(ui, id, sel);
+    // Guide lines of the active snap
+    for (vertical, v) in guides {
+        let (a, b) = if vertical {
+            (pos2(v, rect.top()), pos2(v, rect.bottom()))
+        } else {
+            (pos2(rect.left(), v), pos2(rect.right(), v))
+        };
+        p.add(Shape::dashed_line(
+            &[a, b],
+            Stroke::new(1.0, accent.gamma_multiply(0.8)),
+            4.0,
+            3.0,
+        ));
+    }
     // current position of the beams
     for (i, q) in positions.iter().enumerate() {
         p.circle_filled(to(*q), if i == 0 { 4.5 } else { 3.0 }, theme::handle());
     }
+}
+
+/// Nearest candidate within the snap distance (screen pixels).
+fn snap_to(v: f32, candidates: &[f32]) -> Option<f32> {
+    const SNAP_PX: f32 = 6.0;
+    candidates
+        .iter()
+        .copied()
+        .filter(|c| (c - v).abs() <= SNAP_PX)
+        .min_by(|a, b| (a - v).abs().total_cmp(&(b - v).abs()))
 }
 
 /// List of the assigned channels with value range; “+” adds one.
