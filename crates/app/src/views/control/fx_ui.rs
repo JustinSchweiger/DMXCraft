@@ -5,7 +5,7 @@
 use crate::i18n::t;
 use dmxcraft_core::fx::feature::{ChaserPreset, CurveFx, CurveShape, Feature};
 use dmxcraft_core::fx::mapping::{MapPreset, MappingFx};
-use dmxcraft_core::fx::motion::{MoveFx, MoveShape};
+use dmxcraft_core::fx::motion::{EaseScope, Easing, MoveFx, MoveShape};
 use dmxcraft_core::fx::Transform;
 use dmxcraft_core::{ChannelKind, Effect, EffectKind};
 use eframe::egui::{self, pos2, Color32, Pos2, Rect, Sense, Shape, Stroke, Vec2};
@@ -29,6 +29,8 @@ pub struct BodyCtx<'a> {
     pub accent: Color32,
     pub enabled: bool,
     pub palettes: &'a mut PaletteStore,
+    /// MOVE FX: the selected control point (pan/tilt) – the beams stay there.
+    pub hold: &'a mut Option<[f32; 2]>,
 }
 
 /// Content of an effect; `true` if something changed.
@@ -43,6 +45,7 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
         accent,
         enabled,
         palettes,
+        hold,
     } = cx;
     match fx.kind {
         EffectKind::ColorFx | EffectKind::ValueFx => {
@@ -186,9 +189,18 @@ pub fn effect_body(ui: &mut egui::Ui, fx: &mut Effect, cx: BodyCtx<'_>) -> bool 
                 }
                 move_editor(ui, id("editor"), m, positions, accent, enabled);
                 point_row(ui, id("editor"), m, accent, enabled);
+                if enabled {
+                    *hold = selected_point(ui, id("editor"))
+                        .and_then(|i| m.points.get(i).copied())
+                        .map(|q| m.to_field(q));
+                }
                 if m.shape == MoveShape::Points {
                     toggle_row(ui, t("Jump"), &mut m.jump, enabled);
                 }
+                if m.shape == MoveShape::Line {
+                    toggle_row(ui, t("Back and forth"), &mut m.line_return, enabled);
+                }
+                speed_ui(ui, id("speed"), m, cycles, accent, enabled);
                 slider_row(
                     ui,
                     id("phasing"),
@@ -603,6 +615,13 @@ fn move_editor(
         .map(|i| to(m.to_field(m.local_at(i as f32 / 160.0))))
         .collect();
     p.add(Shape::line(path, Stroke::new(1.5, theme::canvas_dim())));
+    // Equal time steps along the way: close together = slow
+    if m.speed.easing != Easing::Linear {
+        for k in 0..32 {
+            let q = to(m.to_field(m.local_at(k as f32 / 32.0)));
+            p.circle_filled(q, 1.6, accent.gamma_multiply(0.8));
+        }
+    }
     // Frame
     let corners = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]].map(|c| to(m.to_field(c)));
     for i in 0..4 {
@@ -924,4 +943,112 @@ fn range_bar(
     };
     let r = ui.interact(rect, id.with("hover"), Sense::hover());
     r.on_hover_text(format!("{} – {}", label(f.min), label(f.max)));
+}
+
+/// Speed curve of the MOVE FX: type, strength, restart per leg and the curve
+/// (time → way; with “Custom” the points can be dragged, added by
+/// double-click and removed by right-click).
+fn speed_ui(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    m: &mut MoveFx,
+    cycles: f64,
+    accent: Color32,
+    enabled: bool,
+) {
+    let sp = &mut m.speed;
+    label_row(ui, t("Speed"), |ui| {
+        combo(ui, id.with("easing"), t(sp.easing.label()), enabled, |ui| {
+            for e in Easing::ALL {
+                ui.selectable_value(&mut sp.easing, e, t(e.label()));
+            }
+        });
+    });
+    if sp.easing == Easing::Linear {
+        return;
+    }
+    if sp.easing != Easing::Custom {
+        let mut pct = sp.strength * 100.0;
+        slider_row(
+            ui,
+            id.with("strength"),
+            t("Strength"),
+            &mut pct,
+            (0.0, 100.0),
+            0,
+            enabled,
+            accent,
+        );
+        sp.strength = (pct / 100.0).clamp(0.0, 1.0);
+    }
+    let mut per_leg = sp.scope == EaseScope::Leg;
+    toggle_row(ui, t("Restart at every point"), &mut per_leg, enabled);
+    sp.scope = if per_leg {
+        EaseScope::Leg
+    } else {
+        EaseScope::Cycle
+    };
+    // Graph: x = time, y = way
+    let w = ui.available_width();
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 110.0), Sense::click());
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, theme::R_S, theme::canvas());
+    grid(&p, rect, 4, 4);
+    let inner = rect.shrink(6.0);
+    let to = |x: f32, y: f32| {
+        pos2(
+            inner.left() + x * inner.width(),
+            inner.bottom() - y * inner.height(),
+        )
+    };
+    let pts: Vec<Pos2> = (0..=100)
+        .map(|i| {
+            let x = i as f32 / 100.0;
+            to(x, sp.ease(x))
+        })
+        .collect();
+    p.add(Shape::line(pts, Stroke::new(1.5, theme::canvas_dim())));
+    let x = cycles.rem_euclid(1.0) as f32;
+    p.circle_filled(to(x, sp.ease(x)), 4.0, theme::handle());
+    if sp.easing != Easing::Custom || !enabled {
+        return;
+    }
+    let from = |q: Pos2| {
+        [
+            ((q.x - inner.left()) / inner.width()).clamp(0.0, 1.0),
+            ((inner.bottom() - q.y) / inner.height()).clamp(0.0, 1.0),
+        ]
+    };
+    let mut remove = None;
+    for (i, pt) in sp.custom.iter_mut().enumerate() {
+        let at = to(pt[0], pt[1]);
+        let r = ui.interact(
+            Rect::from_center_size(at, Vec2::splat(12.0)),
+            id.with(("pt", i)),
+            Sense::click_and_drag(),
+        );
+        if r.dragged() {
+            if let Some(q) = r.interact_pointer_pos() {
+                *pt = from(q);
+            }
+        }
+        if r.secondary_clicked() {
+            remove = Some(i);
+        }
+        let hot = r.hovered() || r.dragged();
+        p.circle_stroke(
+            at,
+            if hot { 6.0 } else { 4.5 },
+            Stroke::new(1.5, if hot { accent } else { theme::handle() }),
+        );
+    }
+    if let Some(i) = remove.filter(|_| sp.custom.len() > 1) {
+        sp.custom.remove(i);
+    }
+    if resp.double_clicked() {
+        if let Some(q) = resp.interact_pointer_pos() {
+            sp.custom.push(from(q));
+        }
+    }
+    resp.on_hover_text(t("Double-click: add point · right-click a point: remove"));
 }

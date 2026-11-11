@@ -433,6 +433,17 @@ pub fn apply_effect(
     cycles: f64,
     out: &mut HashMap<ChannelRef, u8>,
 ) {
+    apply_effect_hold(show, fx, cycles, None, out);
+}
+
+/// As [`apply_effect`]; `hold` keeps the beams of a MOVE FX on a point.
+pub fn apply_effect_hold(
+    show: &Show,
+    fx: &crate::show::Effect,
+    cycles: f64,
+    hold: Option<[f32; 2]>,
+    out: &mut HashMap<ChannelRef, u8>,
+) {
     use crate::show::EffectKind;
     match fx.kind {
         EffectKind::ColorFx => {
@@ -453,7 +464,7 @@ pub fn apply_effect(
         EffectKind::MoveFx => {
             if let Some(m) = &fx.motion {
                 let beams = feature::fixture_beams(show, &fx.fixtures);
-                motion::apply(show, m, &beams, cycles, out);
+                motion::apply(show, m, &beams, cycles, hold, out);
             }
         }
         k if k.uses_features() => {

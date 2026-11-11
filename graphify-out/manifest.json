@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "crates/app/Cargo.toml": {
-    "mtime": 1794308839.3196795,
-    "seen": 1794314621.6519175,
-    "ast_hash": "8f2d559f68060918f75817d77e0f7b1a",
+    "mtime": 1794395618.562556,
+    "seen": 1794396529.3013277,
+    "ast_hash": "6b9dcd82bb7f5981f54eed69d6882b4c",
     "semantic_hash": ""
   },
   "crates/app/build.rs": {
@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/app.rs": {
-    "mtime": 1794347755.9126716,
-    "seen": 1794351231.7149563,
-    "ast_hash": "db8b973cc8a42cd3bec4fb8d7453af3b",
+    "mtime": 1794396259.3221724,
+    "seen": 1794396529.3013327,
+    "ast_hash": "df155634a7c3a9199997f1ce66d0c127",
     "semantic_hash": ""
   },
   "crates/app/src/demo.rs": {
@@ -84,9 +84,9 @@
     "semantic_hash": ""
   },
   "crates/core/src/engine.rs": {
-    "mtime": 1794393603.2473023,
-    "seen": 1794393688.97472,
-    "ast_hash": "91e9ea3f1170c89b6d5a32c5bfd0a6b2",
+    "mtime": 1794396169.845095,
+    "seen": 1794396529.301546,
+    "ast_hash": "db7e6cda035eb5d8541e45d66f6fa138",
     "semantic_hash": ""
   },
   "crates/core/src/fixture.rs": {
@@ -180,15 +180,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/state.rs": {
-    "mtime": 1794322132.8762562,
-    "seen": 1794347735.3665445,
-    "ast_hash": "c984be07d3080b5b9b4cea480445d00d",
+    "mtime": 1794396259.3213708,
+    "seen": 1794396529.3013914,
+    "ast_hash": "728c7898ae525cff8033f580119b8deb",
     "semantic_hash": ""
   },
   "crates/app/src/ui/mod.rs": {
-    "mtime": 1794306408.5868287,
-    "seen": 1794306733.572893,
-    "ast_hash": "b5524987fb62f341f42b7516892c01fb",
+    "mtime": 1794395618.559586,
+    "seen": 1794396529.3013983,
+    "ast_hash": "6a37f9e5079e2446e24a55711f8e01d4",
     "semantic_hash": ""
   },
   "crates/app/src/ui/theme.rs": {
@@ -480,9 +480,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/scene_props.rs": {
-    "mtime": 1794393602.9033022,
-    "seen": 1794393688.974645,
-    "ast_hash": "b21bc36400f4ce98a65b6588c568b8cb",
+    "mtime": 1794396301.9185228,
+    "seen": 1794396529.3014896,
+    "ast_hash": "ec572766906c96a7cc2ac3ef2e1eb504",
     "semantic_hash": ""
   },
   "crates/app/assets/fonts/Phosphor-LICENSE.txt": {
@@ -510,15 +510,15 @@
     "semantic_hash": ""
   },
   "crates/core/src/fx.rs": {
-    "mtime": 1794306525.2836714,
-    "seen": 1794306733.572987,
-    "ast_hash": "ae4c5710d5c7c01f55f3e1a6d1e76fa1",
+    "mtime": 1794396169.8441536,
+    "seen": 1794396529.3015492,
+    "ast_hash": "538fc588bce8e345f773f3e2c42918d9",
     "semantic_hash": ""
   },
   "crates/app/src/views/control/fx_ui.rs": {
-    "mtime": 1794306525.2718303,
-    "seen": 1794306733.5729315,
-    "ast_hash": "32977021b3e05e1c4f760e42c1d17907",
+    "mtime": 1794396310.9081588,
+    "seen": 1794396529.3014824,
+    "ast_hash": "44488daa68f0b5b40b5df5df3166a9a2",
     "semantic_hash": ""
   },
   "crates/core/src/fx/feature.rs": {
@@ -534,9 +534,9 @@
     "semantic_hash": ""
   },
   "crates/core/src/fx/motion.rs": {
-    "mtime": 1794306525.2984157,
-    "seen": 1794306733.572991,
-    "ast_hash": "9bbbead97efd610e09a940f3eeb1c24d",
+    "mtime": 1794396169.843595,
+    "seen": 1794396529.3015542,
+    "ast_hash": "12fd4141f4ead31f6519739d0b0cfb73",
     "semantic_hash": ""
   },
   "crates/app/src/audio.rs": {
@@ -894,9 +894,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/i18n/de.rs": {
-    "mtime": 1794393462.7333252,
-    "seen": 1794393688.9745247,
-    "ast_hash": "c3a33eda01b7d42d2bdbcff86bd7c9a7",
+    "mtime": 1794396354.0918264,
+    "seen": 1794396529.3013537,
+    "ast_hash": "8297341131e445c6b8e38e7d91bb6bac",
     "semantic_hash": ""
   },
   "scripts/dev.ps1": {
@@ -975,6 +975,12 @@
     "mtime": 1794389730.042382,
     "seen": 1794389873.411474,
     "ast_hash": "4fa297327aa221e4adb1ab2beac7d9b4",
+    "semantic_hash": ""
+  },
+  "crates/app/src/ui/keyboard_focus.rs": {
+    "mtime": 1794395668.2440827,
+    "seen": 1794396529.3013964,
+    "ast_hash": "66a21ce6a1cee3437a4fd4cb208f3782",
     "semantic_hash": ""
   }
 }

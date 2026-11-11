@@ -79,6 +79,9 @@ pub struct Engine {
     speed: f32,
     /// Preview position in timelines (SUPER SCENE, ms).
     timeline_cursor: f64,
+    /// MOVE FX being edited: its beams stay on this point (scene, effect,
+    /// pan/tilt 0..1).
+    move_hold: Option<(SceneId, u32, [f32; 2])>,
 }
 
 impl Engine {
@@ -96,6 +99,7 @@ impl Engine {
             blackout: false,
             speed: 1.0,
             timeline_cursor: 0.0,
+            move_hold: None,
         }
     }
 
@@ -661,7 +665,7 @@ impl Engine {
                 }
             }
         }
-        Self::apply_effects(show, scene, self.fx_cycles_of(scene, p.fx_ms), &mut out);
+        self.apply_effects(show, scene, self.fx_cycles_of(scene, p.fx_ms), &mut out);
         out
     }
 
@@ -852,14 +856,25 @@ impl Engine {
 
     /// Put the scene's effects over the step values.
     fn apply_effects(
+        &self,
         show: &Show,
         scene: &crate::show::Scene,
         cycles: f64,
         out: &mut HashMap<ChannelRef, u8>,
     ) {
         for fx in &scene.effects {
-            crate::fx::apply_effect(show, fx, cycles, out);
+            let hold = self
+                .move_hold
+                .filter(|(s, f, _)| *s == scene.id && *f == fx.id)
+                .map(|h| h.2);
+            crate::fx::apply_effect_hold(show, fx, cycles, hold, out);
         }
+    }
+
+    /// Hold the beams of a MOVE FX on a point (preview while editing a
+    /// control point); `None` lets it run again.
+    pub fn set_move_hold(&mut self, hold: Option<(SceneId, u32, [f32; 2])>) {
+        self.move_hold = hold;
     }
 
     /// Computes the current DMX frame for the output. In blind mode without edit
@@ -985,7 +1000,7 @@ impl Engine {
                 continue;
             };
             let mut fx = HashMap::new();
-            Self::apply_effects(show, scene, self.fx_cycles(*id), &mut fx);
+            self.apply_effects(show, scene, self.fx_cycles(*id), &mut fx);
             for (ch, v) in fx {
                 touched.insert(ch);
                 if let Some(slot) = values.get_mut(&ch) {

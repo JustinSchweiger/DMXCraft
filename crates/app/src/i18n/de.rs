@@ -1335,4 +1335,12 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Only while dark", "Nur wenn dunkel"),
     ("Focus/Zoom", "Fokus/Zoom"),
     ("Pan/Tilt", "Pan/Tilt"),
+    ("Back and forth", "Hin und zurück"),
+    ("Restart at every point", "An jedem Punkt neu beginnen"),
+    ("Double-click: add point · right-click a point: remove", "Doppelklick: Punkt hinzufügen · Rechtsklick auf einen Punkt: entfernen"),
+    ("Linear", "Linear"),
+    ("Fast to slow", "Schnell zu langsam"),
+    ("Slow to fast", "Langsam zu schnell"),
+    ("Slow – fast – slow", "Langsam – schnell – langsam"),
+    ("Fast – slow – fast", "Schnell – langsam – schnell"),
 ];

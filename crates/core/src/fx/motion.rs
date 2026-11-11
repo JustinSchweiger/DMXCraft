@@ -52,6 +52,131 @@ impl MoveShape {
     }
 }
 
+/// How the speed changes along the way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Easing {
+    /// Same speed everywhere.
+    #[default]
+    Linear,
+    /// Fast at first, then slower.
+    EaseOut,
+    /// Slow at first, then faster.
+    EaseIn,
+    /// Slow – fast – slow.
+    EaseInOut,
+    /// Fast – slow – fast.
+    EaseOutIn,
+    /// Own curve (time → way).
+    Custom,
+}
+
+impl Easing {
+    pub const ALL: [Easing; 6] = [
+        Easing::Linear,
+        Easing::EaseOut,
+        Easing::EaseIn,
+        Easing::EaseInOut,
+        Easing::EaseOutIn,
+        Easing::Custom,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Easing::Linear => "Linear",
+            Easing::EaseOut => "Fast to slow",
+            Easing::EaseIn => "Slow to fast",
+            Easing::EaseInOut => "Slow – fast – slow",
+            Easing::EaseOutIn => "Fast – slow – fast",
+            Easing::Custom => "Custom",
+        }
+    }
+}
+
+/// Where the speed curve starts again.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EaseScope {
+    /// Once over the whole cycle.
+    #[default]
+    Cycle,
+    /// For each leg: from control point to control point (line: each
+    /// direction).
+    Leg,
+}
+
+/// Speed curve of a MOVE FX.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Speed {
+    pub easing: Easing,
+    /// How strong the curve bends (0 = linear, 1 = very strong).
+    pub strength: f32,
+    pub scope: EaseScope,
+    /// Own curve: points (time, way) in 0..1, sorted by time.
+    pub custom: Vec<[f32; 2]>,
+}
+
+impl Default for Speed {
+    fn default() -> Self {
+        Self {
+            easing: Easing::Linear,
+            strength: 0.5,
+            scope: EaseScope::Cycle,
+            custom: vec![[0.0, 0.0], [0.25, 0.7], [1.0, 1.0]],
+        }
+    }
+}
+
+impl Speed {
+    /// Share of the way at share `u` of the time (both 0..1).
+    pub fn ease(&self, u: f32) -> f32 {
+        let u = u.clamp(0.0, 1.0);
+        let e = 1.0 + 4.0 * self.strength.clamp(0.0, 1.0);
+        match self.easing {
+            Easing::Linear => u,
+            Easing::EaseOut => 1.0 - (1.0 - u).powf(e),
+            Easing::EaseIn => u.powf(e),
+            Easing::EaseInOut => {
+                if u < 0.5 {
+                    0.5 * (2.0 * u).powf(e)
+                } else {
+                    1.0 - 0.5 * (2.0 - 2.0 * u).powf(e)
+                }
+            }
+            Easing::EaseOutIn => {
+                if u < 0.5 {
+                    0.5 * (1.0 - (1.0 - 2.0 * u).powf(e))
+                } else {
+                    0.5 + 0.5 * (2.0 * u - 1.0).powf(e)
+                }
+            }
+            Easing::Custom => {
+                let mut pts = self.custom.clone();
+                pts.sort_by(|a, b| a[0].total_cmp(&b[0]));
+                if pts.first().is_none_or(|p| p[0] > 0.0) {
+                    pts.insert(0, [0.0, 0.0]);
+                }
+                if pts.last().is_none_or(|p| p[0] < 1.0) {
+                    pts.push([1.0, 1.0]);
+                }
+                for w in pts.windows(2) {
+                    let (a, b) = (w[0], w[1]);
+                    if u <= b[0] {
+                        let k = if b[0] - a[0] < 1e-6 {
+                            1.0
+                        } else {
+                            (u - a[0]) / (b[0] - a[0])
+                        };
+                        return (a[1] + (b[1] - a[1]) * k).clamp(0.0, 1.0);
+                    }
+                }
+                1.0
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MoveFx {
@@ -77,6 +202,12 @@ pub struct MoveFx {
     pub symmetry: bool,
     /// Relative to the position from the steps instead of absolute.
     pub relative: bool,
+    /// Speed along the way.
+    pub speed: Speed,
+    /// Line: back again in the second half of the cycle (otherwise one way
+    /// over the whole cycle).
+    #[serde(default = "jump_default")]
+    pub line_return: bool,
 }
 
 fn jump_default() -> bool {
@@ -102,6 +233,8 @@ impl MoveFx {
             phasing: 0.0,
             symmetry: false,
             relative: false,
+            speed: Speed::default(),
+            line_return: true,
         }
     }
 
@@ -253,20 +386,72 @@ impl MoveFx {
         [x / self.size[0].max(1e-4), y / self.size[1].max(1e-4)]
     }
 
+    /// Boundaries of the legs (time 0..1 of the cycle) for the speed curve.
+    fn legs(&self) -> Vec<f32> {
+        let whole = vec![0.0, 1.0];
+        if self.speed.scope == EaseScope::Cycle {
+            return whole;
+        }
+        let p = &self.points;
+        match self.shape {
+            MoveShape::Circle => whole,
+            MoveShape::Points if self.jump => whole,
+            MoveShape::Line if self.line_return => vec![0.0, 0.5, 1.0],
+            MoveShape::Curve => {
+                let n = p.len().max(1);
+                (0..=n).map(|i| i as f32 / n as f32).collect()
+            }
+            MoveShape::Line | MoveShape::Points | MoveShape::Polygon => {
+                // by the length of the straight edges between control points
+                let mut edges: Vec<f32> = p.windows(2).map(|w| dist(w[0], w[1])).collect();
+                if self.shape != MoveShape::Line && p.len() > 2 {
+                    edges.push(dist(p[p.len() - 1], p[0]));
+                }
+                let total: f32 = edges.iter().sum::<f32>().max(1e-5);
+                let mut out = vec![0.0];
+                let mut acc = 0.0;
+                for e in edges {
+                    acc += e;
+                    out.push((acc / total).min(1.0));
+                }
+                out
+            }
+        }
+    }
+
+    /// Time in the cycle → position on the way, with the speed curve.
+    pub fn eased(&self, t: f32) -> f32 {
+        if self.speed.easing == Easing::Linear {
+            return t;
+        }
+        let legs = self.legs();
+        for w in legs.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            if t <= b || b >= 1.0 {
+                if b - a < 1e-6 {
+                    return t;
+                }
+                return a + self.speed.ease((t - a) / (b - a)) * (b - a);
+            }
+        }
+        t
+    }
+
     /// Local point of the shape at position `t` (0..1 cycle).
     pub fn local_at(&self, t: f32) -> [f32; 2] {
-        let t = t.rem_euclid(1.0);
+        let t = self.eased(t.rem_euclid(1.0));
         let p = &self.points;
         match self.shape {
             MoveShape::Circle => [(TAU * t).cos(), (TAU * t).sin()],
             _ if p.is_empty() => [0.0, 0.0],
             MoveShape::Points if self.jump => p[((t * p.len() as f32) as usize).min(p.len() - 1)],
             MoveShape::Points | MoveShape::Polygon => along(&self.path(), false, t),
-            MoveShape::Line => {
+            MoveShape::Line if self.line_return => {
                 // back and forth
                 let u = if t < 0.5 { t * 2.0 } else { 2.0 - t * 2.0 };
                 along(&self.path(), false, u)
             }
+            MoveShape::Line => along(&self.path(), false, t),
             MoveShape::Curve => {
                 let n = p.len();
                 let f = t * n as f32;
@@ -354,12 +539,14 @@ fn catmull(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f
     [f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]
 }
 
-/// Write pan/tilt (including fine channels) of the beams.
+/// Write pan/tilt (including fine channels) of the beams. `hold`: all beams
+/// stay on this point of the field (preview while editing).
 pub fn apply(
     show: &Show,
     fx: &MoveFx,
     beams: &[FixtureBeam],
     cycles: f64,
+    hold: Option<[f32; 2]>,
     out: &mut HashMap<ChannelRef, u8>,
 ) {
     let n = beams.len();
@@ -367,7 +554,9 @@ pub fn apply(
         let Some(ty) = show.fixture(b.fixture).and_then(|f| show.type_of(f)) else {
             continue;
         };
-        let q = fx.position(i, n, cycles);
+        let q = hold
+            .map(|h| [h[0].clamp(0.0, 1.0), h[1].clamp(0.0, 1.0)])
+            .unwrap_or_else(|| fx.position(i, n, cycles));
         let find = |k: ChannelKind| {
             ty.channels
                 .iter()
@@ -401,6 +590,29 @@ pub fn apply(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn speed_curve_fast_then_slow() {
+        let mut fx = MoveFx::new(MoveShape::Line);
+        fx.line_return = false;
+        fx.speed.easing = Easing::EaseOut;
+        // halfway in time is clearly more than halfway on the line
+        let start = fx.local_at(0.0);
+        let mid = fx.local_at(0.5);
+        let end = fx.local_at(0.999);
+        let way = |p: [f32; 2]| (p[1] - start[1]) / (end[1] - start[1]);
+        assert!(way(mid) > 0.8, "{}", way(mid));
+        // per leg: line back and forth eases in each direction
+        fx.line_return = true;
+        fx.speed.scope = EaseScope::Leg;
+        assert!((fx.eased(0.5) - 0.5).abs() < 1e-5);
+        assert!(fx.eased(0.25) > 0.4);
+        // custom curve and limits
+        fx.speed.easing = Easing::Custom;
+        fx.speed.custom = vec![[0.5, 0.9]];
+        assert!((fx.speed.ease(0.5) - 0.9).abs() < 1e-5);
+        assert!((fx.speed.ease(1.0) - 1.0).abs() < 1e-5);
+    }
 
     #[test]
     fn circle_goes_round() {

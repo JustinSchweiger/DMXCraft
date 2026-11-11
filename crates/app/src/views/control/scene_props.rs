@@ -674,6 +674,7 @@ impl ScenePropsView {
             ui.ctx().request_repaint();
         }
         let mut color_changes: Vec<dmxcraft_core::Effect> = Vec::new();
+        let mut move_hold: Option<(u32, [f32; 2])> = None;
         let palettes = &mut self.palettes;
         // SUPER SCENE: selected block and its name
         let block = (cx.state.timeline_sel.len() == 1)
@@ -783,10 +784,12 @@ impl ScenePropsView {
                                         }
                                     } else if let Some(pv) = previews.get(&fx.id) {
                                         let mut e = fx.clone();
+                                        let mut hold = None;
                                         let changed = super::fx_ui::effect_body(
                                             ui,
                                             &mut e,
                                             super::fx_ui::BodyCtx {
+                                                hold: &mut hold,
                                                 preview: &pv.colors,
                                                 positions: &pv.positions,
                                                 cycles,
@@ -796,6 +799,9 @@ impl ScenePropsView {
                                                 palettes,
                                             },
                                         );
+                                        if let Some(h) = hold {
+                                            move_hold = Some((e.id, h));
+                                        }
                                         if changed {
                                             color_changes.push(e);
                                         }
@@ -835,6 +841,9 @@ impl ScenePropsView {
         }
         if !locked {
             if let Some(sc) = cx.engine.show_mut().scene_mut(id) {
+                if cx.state.programmer_mode != crate::state::ProgrammerMode::Live {
+                    cx.state.move_hold = move_hold.map(|(fx, h)| (id, fx, h));
+                }
                 for changed in color_changes {
                     if let Some(fx) = sc.effects.iter_mut().find(|e| e.id == changed.id) {
                         *fx = changed;

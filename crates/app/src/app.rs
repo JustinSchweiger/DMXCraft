@@ -849,6 +849,11 @@ impl eframe::App for DmxCraftApp {
                 self.updater.check(ctx.clone(), false);
             }
         }
+        // MOVE FX point preview: what the effect editor set in the last frame
+        {
+            let hold = self.state.move_hold.take();
+            Self::lock(&self.engine).set_move_hold(hold);
+        }
         if let Some((msg, err)) = self.updater.take_notice() {
             if err {
                 self.state.error(msg);
