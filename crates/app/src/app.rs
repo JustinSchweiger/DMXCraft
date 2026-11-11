@@ -835,6 +835,7 @@ impl eframe::App for DmxCraftApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame_: &mut eframe::Frame) {
         let rs = frame_.wgpu_render_state().cloned();
         let ctx = ui.ctx().clone();
+        crate::ui::keyboard_focus::keep();
         // Show running scenes and live colors smoothly.
         ctx.request_repaint_after(Duration::from_millis(33));
         if !self.started {
