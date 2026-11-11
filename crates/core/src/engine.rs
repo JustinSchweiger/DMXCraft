@@ -908,17 +908,23 @@ impl Engine {
         cycles: f64,
         out: &mut HashMap<ChannelRef, u8>,
     ) {
+        // the editor hold is a preview: a playing scene keeps moving
+        let playing = self
+            .playing
+            .iter()
+            .any(|p| p.scene == scene.id && p.releasing.is_none());
         for fx in &scene.effects {
             let hold = self
                 .move_hold
-                .filter(|(s, f, _)| *s == scene.id && *f == fx.id)
+                .filter(|(s, f, _)| !playing && *s == scene.id && *f == fx.id)
                 .map(|h| h.2);
             crate::fx::apply_effect_hold(show, fx, cycles, hold, out);
         }
     }
 
     /// Hold the beams of a MOVE FX on a point (preview while editing a
-    /// control point); `None` lets it run again.
+    /// control point of a scene that is not playing); `None` lets it run
+    /// again.
     pub fn set_move_hold(&mut self, hold: Option<(SceneId, u32, [f32; 2])>) {
         self.move_hold = hold;
     }
@@ -1723,6 +1729,29 @@ mod tests {
         assert!(e.progress(id).unwrap().finished);
         let c = e.fx_cycles(id);
         assert!(c < 1.0 && c > 0.999, "held just before the wrap: {c}");
+    }
+
+    #[test]
+    fn move_hold_does_not_stop_a_playing_scene() {
+        let (mut s, _, _) = setup();
+        let mh = s
+            .add_fixture("MH", "generic/moving-head-spot-11ch", 0, 100)
+            .unwrap();
+        let id = s.add_scene("Hold", None, vec![Step::new(Vec::new())]);
+        let sc = s.scene_mut(id).unwrap();
+        let fx = sc.add_effect(crate::show::EffectKind::MoveFx);
+        sc.effects[0].fixtures = vec![mh];
+        let mut e = Engine::new(s);
+        e.set_move_hold(Some((id, fx, [0.1, 0.1])));
+        let scene = e.show().scene(id).unwrap().clone();
+        let fx_of = |e: &Engine| {
+            let mut out = HashMap::new();
+            e.apply_effects(e.show(), &scene, 0.25, &mut out);
+            out
+        };
+        let held = fx_of(&e);
+        e.activate(id);
+        assert_ne!(fx_of(&e), held, "playing: the hold is ignored");
     }
 
     #[test]
