@@ -1340,6 +1340,7 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
                 load_step(e, id, st.edit_step);
             }
         }
+        st.edit_programmer = None;
         return;
     }
     if st.selected_scenes != st.scene_selection_seen {
@@ -1375,6 +1376,7 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
             if let Some(id) = target {
                 load_step(e, id, 0);
             }
+            st.edit_programmer = None;
             return;
         }
     }
@@ -1393,8 +1395,23 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
     let step = &mut scene.steps[i];
     let mut current = step.values.clone();
     current.sort_by_key(|c| (c.fixture, c.channel));
-    if current != values {
-        step.values = values;
+    if current == values {
+        st.edit_programmer = Some(values);
+        return;
+    }
+    let edited = st
+        .edit_programmer
+        .as_ref()
+        .is_none_or(|seen| *seen != values);
+    if edited {
+        // the programmer was changed: save it in the step
+        step.values = values.clone();
+        st.edit_programmer = Some(values);
+    } else {
+        // the step was changed elsewhere (MCP, remote): reload the programmer
+        e.clear_programmer();
+        load_step(e, id, i);
+        st.edit_programmer = Some(crate::views::control::programmer::programmer_values(e));
     }
 }
 

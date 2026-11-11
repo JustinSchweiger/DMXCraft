@@ -112,6 +112,10 @@ pub struct AppState {
     pub programmer_mode_seen: ProgrammerMode,
     /// Reload the edit values from the scene (after undo/redo).
     pub edit_reload: bool,
+    /// Programmer values at the last edit sync: only a change against these
+    /// is written into the scene, so changes from elsewhere (MCP, remote)
+    /// are not overwritten by stale programmer values.
+    pub edit_programmer: Option<Vec<dmxcraft_core::ChannelValue>>,
     /// Edited step of the selected scene (edit mode).
     pub edit_step: usize,
     pub edit_step_seen: usize,
@@ -238,6 +242,7 @@ impl AppState {
             scene_selection_seen: BTreeSet::new(),
             programmer_mode_seen: ProgrammerMode::default(),
             edit_reload: false,
+            edit_programmer: None,
             edit_step: 0,
             edit_step_seen: 0,
             fx_target: None,
