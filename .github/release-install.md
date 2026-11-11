@@ -12,13 +12,9 @@
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/JustinSchweiger/DMXCraft/releases/download/{TAG}/dmxcraft-installer.sh | sh
 ```
 
-**Windows** via PowerShell instead of the MSI:
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/JustinSchweiger/DMXCraft/releases/download/{TAG}/dmxcraft-installer.ps1 | iex"
-```
-
 > [!NOTE]
+> **Windows:** if SmartScreen shows *“Windows protected your PC”*, click *More info → Run anyway*. The installer is not code-signed yet, so Windows does not know the publisher – it is the same MSI that GitHub Actions builds from this repository.
+>
 > **macOS:** the app is not notarized by Apple. On first launch go to *System Settings → Privacy & Security → Open Anyway*, or run `xattr -dr com.apple.quarantine /Applications/DMXCraft.app`.
 >
 > **Already installed?** DMXCraft checks for updates on startup and offers this version in the title bar.

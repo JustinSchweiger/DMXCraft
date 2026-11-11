@@ -9,6 +9,14 @@ fn main() {
             res.set_icon("assets/icon.ico");
             res.set("ProductName", "DMXCraft");
             res.set("FileDescription", "DMXCraft – DMX lighting control");
+            // complete version info: missing publisher/copyright data is one of
+            // the signals heuristic scanners treat as suspicious
+            res.set("CompanyName", "Justin Schweiger");
+            res.set(
+                "LegalCopyright",
+                "Copyright (C) 2026 Justin Schweiger, GPL-3.0",
+            );
+            res.set("Comments", "https://github.com/JustinSchweiger/DMXCraft");
             if let Err(e) = res.compile() {
                 println!("cargo:warning=Could not embed icon: {e}");
             }

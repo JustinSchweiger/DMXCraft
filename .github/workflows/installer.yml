@@ -1,0 +1,31 @@
+# Builds the Windows MSI (same steps as a release) whenever the installer
+# definition changes, so a broken installer shows up before a release tag.
+# The MSI is attached to the run as an artifact for a manual test install.
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "crates/app/wix/**"
+      - "crates/app/build.rs"
+      - "dist-workspace.toml"
+      - ".github/workflows/installer.yml"
+
+jobs:
+  msi:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install dist
+        shell: pwsh
+        run: irm https://github.com/axodotdev/cargo-dist/releases/download/v0.34.0/cargo-dist-installer.ps1 | iex
+      - name: Build MSI
+        run: dist build --artifacts=local --target=x86_64-pc-windows-msvc
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dmxcraft-msi
+          path: target/distrib/*.msi
