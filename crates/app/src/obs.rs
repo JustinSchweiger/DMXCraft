@@ -69,7 +69,17 @@ struct VideoPlay {
     /// Last query of the media state and whether its answer has been evaluated.
     asked: Instant,
     checked: bool,
+    /// After a jump OBS needs time (large files, few keyframes): no drift
+    /// correction before this moment.
+    settle_until: Instant,
+    /// Measurements in a row that were too far off.
+    strikes: u8,
 }
+
+/// Drift that is corrected (ms) – smaller deviations stay (no visible jumps).
+const DRIFT_MS: f64 = 600.0;
+/// Time OBS gets after a jump before the position is checked again.
+const SETTLE: Duration = Duration::from_secs(4);
 
 #[derive(Default)]
 pub struct Obs {
@@ -287,6 +297,8 @@ impl Obs {
                             pos: w.pos,
                             asked: Instant::now(),
                             checked: true,
+                            settle_until: Instant::now() + SETTLE,
+                            strikes: 0,
                         },
                     );
                 }
@@ -304,8 +316,10 @@ impl Obs {
                             }),
                         ));
                         seek(&mut out, &v.source, w.pos);
+                        v.settle_until = Instant::now() + SETTLE;
                     } else if jumped {
                         seek(&mut out, &v.source, w.pos);
+                        v.settle_until = Instant::now() + SETTLE;
                     }
                     if playing != v.playing {
                         v.playing = playing;
@@ -314,6 +328,7 @@ impl Obs {
                         } else {
                             seek(&mut out, &v.source, w.pos);
                             media_action(&mut out, &v.source, "PLAY");
+                            v.settle_until = Instant::now() + SETTLE;
                         }
                     }
                     if (w.volume - v.volume).abs() > 0.02 {
@@ -331,8 +346,15 @@ impl Obs {
                                 v.checked = true;
                                 let now_cursor =
                                     cursor + at.elapsed().as_secs_f64() * 1000.0 * v.rate as f64;
-                                if (now_cursor - w.pos).abs() > 350.0 {
+                                // only correct a real drift: not while OBS is still
+                                // seeking, and only when two measurements in a row are
+                                // off – every correction is a visible jump
+                                let off = (now_cursor - w.pos).abs() > DRIFT_MS;
+                                v.strikes = if off { v.strikes + 1 } else { 0 };
+                                if off && v.strikes >= 2 && Instant::now() >= v.settle_until {
                                     seek(&mut out, &v.source, w.pos);
+                                    v.settle_until = Instant::now() + SETTLE;
+                                    v.strikes = 0;
                                 }
                             }
                         }
