@@ -841,13 +841,18 @@ impl Engine {
                 *a = a.max(f64::from(*v) / 255.0);
             }
         }
+        // fixtures the lower tracks set (before this block adds its values –
+        // otherwise the result would depend on the order of the values)
+        let below: std::collections::HashSet<crate::FixtureId> =
+            out.keys().map(|c| c.fixture).collect();
         for (ch, v) in values {
             let v = if intensity(ch) {
                 let own = (f64::from(v) * k).round() as u8;
                 // below without a virtual dimmer value: its colors are full
-                let base = out.get(&ch).copied().or_else(|| {
-                    (ch.is_virtual() && out.keys().any(|c| c.fixture == ch.fixture)).then_some(255)
-                });
+                let base = out
+                    .get(&ch)
+                    .copied()
+                    .or_else(|| (ch.is_virtual() && below.contains(&ch.fixture)).then_some(255));
                 base.map_or(own, |base| base.max(own))
             } else {
                 let a = lit.get(&ch.fixture).copied().unwrap_or(1.0) * k;
@@ -1443,6 +1448,25 @@ mod tests {
         let lc = tl2.clip_mut(l).unwrap();
         lc.start_ms = 800;
         assert_eq!(e.timeline_values(&s, &tl2, 1000.0, 0).get(&ch(pan)), None);
+    }
+
+    #[test]
+    fn blending_does_not_depend_on_the_order_of_values() {
+        let (s, _, b) = setup();
+        let vd = ChannelRef::virtual_dimmer(b);
+        let red = ChannelRef {
+            fixture: b,
+            channel: 0,
+        };
+        // nothing below, the block fades: the virtual dimmer follows the fade
+        // every time (each map has its own random order)
+        for _ in 0..64 {
+            let mut out = HashMap::new();
+            let values: HashMap<ChannelRef, u8> = [(vd, 255), (red, 255)].into_iter().collect();
+            Engine::layer(&s, &mut out, values, 0.5, true);
+            assert_eq!(out[&vd], 128);
+            assert_eq!(out[&red], 255);
+        }
     }
 
     #[test]
