@@ -1,6 +1,6 @@
 <div align="center">
 
-# DMXCraft
+<h1><img src="docs/images/logo.png" alt="DMXCraft logo" width="64" valign="middle">&nbsp;DMXCraft</h1>
 
 **DMX lighting control for Linux, Windows and macOS, written in Rust.**
 
