@@ -93,6 +93,8 @@ enum BankAction {
     SelectScenes(ZoneId),
     /// Delete the bank together with its scenes.
     Delete(ZoneId),
+    /// Move the bank to this position (index in all banks).
+    Move(ZoneId, usize),
 }
 
 #[derive(Default)]
@@ -354,6 +356,10 @@ impl SceneGridView {
                     hidden_banks_menu(ui, show, actions);
                 });
             }
+            // Drag a bank chip: marker at the gap, dropping moves the bank
+            let dragging = egui::DragAndDrop::payload::<BankDrag>(ui.ctx()).map(|d| d.0);
+            let pointer = ui.ctx().pointer_interact_pos();
+            let mut gap: Option<(usize, f32)> = None;
             for z in show.zones.iter().filter(|z| !z.hidden) {
                 let c = theme::zone_color(show, Some(z.id));
                 // Rename directly in the chip
@@ -386,6 +392,20 @@ impl SceneGridView {
                 if mapping::target(ui, resp.rect, Control::ShowBank { zone: Some(z.id) }) {
                     continue;
                 }
+                if !locked {
+                    resp.dnd_set_drag_payload(BankDrag(z.id));
+                }
+                // gap left or right of this chip, depending on the pointer
+                if let (Some(_), Some(q)) = (dragging, pointer) {
+                    let idx = show.zones.iter().position(|x| x.id == z.id).unwrap_or(0);
+                    if q.x >= resp.rect.left() - 4.0 && q.x < resp.rect.right() + 4.0 {
+                        gap = Some(if q.x < resp.rect.center().x {
+                            (idx, resp.rect.left() - 2.0)
+                        } else {
+                            (idx + 1, resp.rect.right() + 2.0)
+                        });
+                    }
+                }
                 if resp.clicked() {
                     actions.push(Action::FocusBank(z.id));
                 }
@@ -406,6 +426,20 @@ impl SceneGridView {
                     });
                 }
             }
+            if let (Some(id), Some((to, x))) = (dragging, gap) {
+                let r = ui.min_rect();
+                ui.painter().line_segment(
+                    [
+                        egui::pos2(x, r.top() + 4.0),
+                        egui::pos2(x, r.bottom() - 4.0),
+                    ],
+                    Stroke::new(2.0, theme::accent()),
+                );
+                if ui.input(|i| i.pointer.any_released()) {
+                    actions.push(Action::Bank(BankAction::Move(id, to)));
+                    egui::DragAndDrop::clear_payload(ui.ctx());
+                }
+            }
             if !locked
                 && ui
                     .add(IconButton::new(Icon::Plus).flat())
@@ -417,6 +451,10 @@ impl SceneGridView {
         });
     }
 }
+
+/// Drag payload: a bank chip (to rearrange the banks).
+#[derive(Clone, Copy, Debug)]
+struct BankDrag(ZoneId);
 
 /// Submenu “Hidden banks” with one entry each to show it again.
 fn hidden_banks_menu(ui: &mut egui::Ui, show: &Show, actions: &mut Vec<Action>) {
@@ -464,6 +502,27 @@ fn bank_menu(ui: &mut egui::Ui, show: &Show, zone: ZoneId) -> Option<BankAction>
         MenuItem::new(t("Rename")).icon(Icon::Edit),
         BankAction::Rename(zone),
     );
+    let idx = show.zones.iter().position(|x| x.id == zone).unwrap_or(0);
+    // neighbours among the visible banks
+    let prev = show.zones[..idx].iter().rposition(|x| !x.hidden);
+    let next = show.zones[idx + 1..]
+        .iter()
+        .position(|x| !x.hidden)
+        .map(|i| idx + 1 + i);
+    if let Some(p) = prev {
+        act(
+            ui,
+            MenuItem::new(t("Move left")).icon(Icon::ChevronLeft),
+            BankAction::Move(zone, p),
+        );
+    }
+    if let Some(n) = next {
+        act(
+            ui,
+            MenuItem::new(t("Move right")).icon(Icon::ChevronRight),
+            BankAction::Move(zone, n + 1),
+        );
+    }
     act(
         ui,
         MenuItem::new(t("Duplicate")).icon(Icon::Copy),
@@ -578,7 +637,7 @@ fn chip(
         .painter()
         .layout_no_wrap(label.to_string(), theme::body(), color);
     let w = galley.size().x + 2.0 * theme::SP_M + if live { 12.0 } else { 0.0 };
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 30.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 30.0), Sense::click_and_drag());
     let p = ui.painter();
     if selected || resp.hovered() {
         p.rect_filled(
@@ -1290,6 +1349,16 @@ fn apply_bank(
             if let Some(z) = e.show().zone(id) {
                 *rename = Some((id, z.name.clone()));
             }
+        }
+        BankAction::Move(id, to) => {
+            // automatic colors depend on the position: keep them as they are
+            let show = e.show_mut();
+            for (i, z) in show.zones.iter_mut().enumerate() {
+                if z.color.is_none() {
+                    z.color = Some(theme::ZONE_PALETTE[i % theme::ZONE_PALETTE.len()]);
+                }
+            }
+            show.move_zone(id, to);
         }
         BankAction::Duplicate(id) => {
             let Some(name) = e.show().zone(id).map(|z| z.name.clone()) else {

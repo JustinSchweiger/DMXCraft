@@ -1346,6 +1346,17 @@ impl Show {
     }
 
     /// Deletes a bank together with its scenes.
+    /// Move a bank to position `to` (index in the bank list, before the
+    /// bank currently there; `zones.len()` = at the end).
+    pub fn move_zone(&mut self, id: ZoneId, to: usize) {
+        let Some(from) = self.zones.iter().position(|z| z.id == id) else {
+            return;
+        };
+        let z = self.zones.remove(from);
+        let to = if to > from { to - 1 } else { to };
+        self.zones.insert(to.min(self.zones.len()), z);
+    }
+
     pub fn remove_zone_with_scenes(&mut self, id: ZoneId) {
         self.zones.retain(|z| z.id != id);
         let gone: Vec<SceneId> = self
@@ -1632,6 +1643,21 @@ mod tests {
         assert_eq!(Show::new("u", 1).plan_axes(), [[1.0, 0.0], [0.0, -1.0]]);
     }
     use crate::library::builtin_fixture_types;
+
+    #[test]
+    fn move_zone_reorders_banks() {
+        let mut s = Show::new("t", 1);
+        let a = s.add_zone("A");
+        let b = s.add_zone("B");
+        let c = s.add_zone("C");
+        let order = |s: &Show| s.zones.iter().map(|z| z.id).collect::<Vec<_>>();
+        s.move_zone(c, 0);
+        assert_eq!(order(&s), vec![c, a, b]);
+        s.move_zone(c, 3);
+        assert_eq!(order(&s), vec![a, b, c]);
+        s.move_zone(a, 2);
+        assert_eq!(order(&s), vec![b, a, c]);
+    }
 
     #[test]
     fn aim_moving_head_respects_limits() {
