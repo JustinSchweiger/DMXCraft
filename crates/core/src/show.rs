@@ -1077,6 +1077,51 @@ impl Show {
         out
     }
 
+    /// Programmer pan/tilt (16 bit) that point a moving head at `target`
+    /// (room coordinates, m), with its output limits and inversion taken
+    /// into account. `None` if the fixture has no pan/tilt or the point is
+    /// out of reach.
+    pub fn aim_moving_head(&self, id: FixtureId, target: [f32; 3]) -> Option<(u16, u16)> {
+        let f = self.fixture(id)?;
+        let ty = self.type_of(f)?;
+        if !ty.has_kind(crate::ChannelKind::Pan) || !ty.has_kind(crate::ChannelKind::Tilt) {
+            return None;
+        }
+        let ph = ty.physical.unwrap_or_default();
+        let p = self.placement3d(id);
+        // the head turns about 33 cm below the mounting point (as drawn)
+        let k = if ph.size_mm[1] > 100.0 {
+            (ph.size_mm[1] / 420.0).clamp(0.6, 1.6)
+        } else {
+            1.0
+        };
+        let r = crate::venue::rotation(p.rotation);
+        let origin = [0, 1, 2].map(|i| p.position[i] - r[1][i] * 0.33 * k);
+        let lim = f.limits;
+        // output value back to the programmer value (inverse of map16)
+        let inv = |out: f32, min: u8, max: u8, invert: bool| -> Option<u16> {
+            let o = out * 65535.0;
+            let (lo, hi) = (f32::from(min) * 256.0, f32::from(max) * 256.0 + 255.0);
+            let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
+            if o < lo - 1.0 || o > hi + 1.0 || hi - lo < 1.0 {
+                return None;
+            }
+            let v = ((o - lo) / (hi - lo) * 65535.0).round().clamp(0.0, 65535.0) as u16;
+            Some(if invert { u16::MAX - v } else { v })
+        };
+        crate::venue::moving_head_aim(p.rotation, origin, target, ph.pan_range, ph.tilt_range)
+            .into_iter()
+            .find_map(|(pan, tilt)| {
+                let po = inv(pan, lim.pan_min, lim.pan_max, lim.invert_pan)?;
+                let to = inv(tilt, lim.tilt_min, lim.tilt_max, lim.invert_tilt)?;
+                Some(if lim.swap_pan_tilt {
+                    (to, po)
+                } else {
+                    (po, to)
+                })
+            })
+    }
+
     /// Position in the stage plan (own or automatic).
     /// Placement of a fixture in 3D space: stored or derived from the stage plan
     /// (below the ceiling, pointing down).
@@ -1568,6 +1613,45 @@ mod tests {
         assert_eq!(Show::new("u", 1).plan_axes(), [[1.0, 0.0], [0.0, -1.0]]);
     }
     use crate::library::builtin_fixture_types;
+
+    #[test]
+    fn aim_moving_head_respects_limits() {
+        let mut s = Show::new("t", 1);
+        s.fixture_types = builtin_fixture_types();
+        let id = s
+            .add_fixture("MH", "generic/moving-head-spot-11ch", 0, 1)
+            .unwrap();
+        let f = s.fixture_mut(id).unwrap();
+        f.place3d = Some(crate::venue::Placement {
+            position: [0.0, 4.0, 0.0],
+            rotation: [0.0, -90.0, 0.0],
+        });
+        f.limits.pan_min = 30;
+        f.limits.pan_max = 220;
+        f.limits.invert_tilt = true;
+        let target = [2.0, 0.0, 3.0];
+        let (p, t) = s.aim_moving_head(id, target).unwrap();
+        let lim = s.fixture(id).unwrap().limits;
+        let po = FixtureLimits::map16(p, lim.pan_min, lim.pan_max, lim.invert_pan);
+        let to = FixtureLimits::map16(t, lim.tilt_min, lim.tilt_max, lim.invert_tilt);
+        let ph = s
+            .type_of(s.fixture(id).unwrap())
+            .unwrap()
+            .physical
+            .unwrap_or_default();
+        let d = crate::venue::moving_head_direction(
+            [0.0, -90.0, 0.0],
+            f32::from(po) / 65535.0,
+            f32::from(to) / 65535.0,
+            ph.pan_range,
+            ph.tilt_range,
+        );
+        // head center 33 cm below the mounting point
+        let w = [2.0f32, -3.67, 3.0];
+        let n = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
+        let dot: f32 = (0..3).map(|i| d[i] * w[i] / n).sum();
+        assert!(dot > 0.999, "{dot}");
+    }
 
     #[test]
     fn steps_insert_remove_and_normalize() {

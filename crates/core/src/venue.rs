@@ -283,6 +283,48 @@ pub fn moving_head_direction(
     [0, 1, 2].map(|i| r[0][i] * l[0] + r[1][i] * l[1] + r[2][i] * l[2])
 }
 
+/// Pan/tilt (0–1, output values) that point a moving head with this
+/// placement rotation from `origin` (center of the head) at `target`. All
+/// solutions within the ranges, the one closest to the center first.
+pub fn moving_head_aim(
+    rotation_deg: [f32; 3],
+    origin: [f32; 3],
+    target: [f32; 3],
+    pan_range: f32,
+    tilt_range: f32,
+) -> Vec<(f32, f32)> {
+    let d = [0, 1, 2].map(|i| target[i] - origin[i]);
+    let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+    if len < 1e-4 || pan_range <= 0.0 || tilt_range <= 0.0 {
+        return Vec::new();
+    }
+    let r = rotation(rotation_deg);
+    // into the fixture: inverse of the rotation (orthonormal)
+    let l = [0, 1, 2].map(|j| (0..3).map(|i| r[j][i] * d[i]).sum::<f32>() / len);
+    // l = (−sin t·sin p, −cos t, −sin t·cos p)
+    let t = (-l[1]).clamp(-1.0, 1.0).acos();
+    let p = (-l[0]).atan2(-l[2]);
+    let (pr, tr) = (pan_range.to_radians(), tilt_range.to_radians());
+    let mut out = Vec::new();
+    for (p, t) in [(p, t), (p + std::f32::consts::PI, -t)] {
+        let tf = 0.5 - t / tr;
+        if !(-1e-4..=1.0 + 1e-4).contains(&tf) {
+            continue;
+        }
+        for k in -2..=2 {
+            let pf = 0.5 - (p + k as f32 * std::f32::consts::TAU) / pr;
+            if (-1e-4..=1.0 + 1e-4).contains(&pf) {
+                out.push((pf.clamp(0.0, 1.0), tf.clamp(0.0, 1.0)));
+            }
+        }
+    }
+    out.sort_by(|a, b| {
+        let c = |v: &(f32, f32)| (v.0 - 0.5).abs() + (v.1 - 0.5).abs();
+        c(a).total_cmp(&c(b))
+    });
+    out
+}
+
 /// Hanging point on a truss.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrussHang {
@@ -680,6 +722,28 @@ impl Transform {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn aiming_a_moving_head_inverts_its_direction() {
+        let rot = [10.0, -90.0, 5.0];
+        let o = [1.0, 4.0, -2.0];
+        for target in [
+            [-0.9, 0.1, 3.35],
+            [3.25, 1.65, 4.5],
+            [-1.4, 4.45, -8.5],
+            [1.0, 0.0, -2.0],
+        ] {
+            let sols = super::moving_head_aim(rot, o, target, 540.0, 200.0);
+            assert!(!sols.is_empty(), "{target:?}");
+            for (p, t) in sols {
+                let d = super::moving_head_direction(rot, p, t, 540.0, 200.0);
+                let w = [0, 1, 2].map(|i| target[i] - o[i]);
+                let n = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
+                let dot: f32 = (0..3).map(|i| d[i] * w[i] / n).sum();
+                assert!(dot > 0.9999, "{target:?} {dot}");
+            }
+        }
+    }
+
     use super::*;
 
     fn apply(m: [[f32; 4]; 4], v: [f32; 3]) -> [f32; 3] {

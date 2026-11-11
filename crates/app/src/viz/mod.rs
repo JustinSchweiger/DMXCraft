@@ -11,6 +11,7 @@ pub mod library;
 pub mod mesh;
 mod outline;
 mod panels;
+mod props;
 pub mod render;
 pub mod rig;
 pub mod textures;
@@ -76,9 +77,9 @@ impl Quality {
         };
         match self {
             Quality::Low => p(0.6, 1, 32, 0, 0, 0.0),
-            Quality::Medium => p(1.0, 4, 96, 8, 512, 0.6),
-            Quality::High => p(1.0, 4, 256, 16, 1024, 0.8),
-            Quality::Ultra => p(1.5, 4, 256, 32, 1024, 0.8),
+            Quality::Medium => p(1.0, 4, 96, 8, 512, 0.3),
+            Quality::High => p(1.0, 4, 256, 16, 1024, 0.35),
+            Quality::Ultra => p(1.5, 4, 256, 32, 1024, 0.35),
         }
     }
 }
@@ -662,10 +663,14 @@ impl VizView {
         }
         if self.gizmo.is_some() {
             // A handle is being dragged – the camera stays put
-        } else if resp.dragged_by(egui::PointerButton::Secondary)
-            || resp.dragged_by(egui::PointerButton::Middle)
-        {
+        } else if resp.dragged_by(egui::PointerButton::Secondary) {
             cam.pan(Vec2::new(delta.x, delta.y), rect.height());
+        } else if resp.dragged_by(egui::PointerButton::Middle)
+            || (resp.dragged_by(egui::PointerButton::Primary) && mods.alt)
+        {
+            // always orbit, even on the selection (large objects)
+            self.drag = None;
+            cam.rotate(Vec2::new(delta.x, delta.y));
         } else if resp.dragged_by(egui::PointerButton::Primary) {
             // Building: move the selected object/fixture on the floor (Shift: height)
             if let (true, Some(sel), Some(p)) = (building, self.selected, ptr) {
@@ -732,9 +737,10 @@ impl VizView {
             self.aim_pick = false;
             if let Some(p) = ptr {
                 let (o, d) = cam.ray(uv(p), aspect);
-                if let Some(h) = hit_y(o, d, 0.0) {
+                if let Some(h) = surface_hit(cx.engine.show(), o, d) {
                     self.aim = (h * 100.0).round().to_array().map(|v| v / 100.0);
-                    aim_selected(cx, self.selected, self.aim);
+                    let ids = targets(cx, self.selected);
+                    self.aim_now(cx, &ids);
                 }
             }
         } else if resp.clicked() {
@@ -779,7 +785,7 @@ impl VizView {
             (rect.height() * ppp * scale).round() as u32,
         ];
         let time = self.start.elapsed().as_secs_f32();
-        let frame = self.frame3d(cx, &cam, aspect, time, q, building);
+        let frame = self.frame3d(cx, &cam, aspect, time, q);
         let gpu = self.gpu.get_or_insert_with(|| Gpu::new(rs));
         upload_assets(gpu, rs, cx.engine.show());
         gpu.render(rs, px, msaa, &frame);
@@ -813,6 +819,9 @@ impl VizView {
             Color32::from_black_alpha(140),
         );
         painter.galley(at, galley, theme::text_dim());
+        if building {
+            self.paint_selection(&painter, cx, vp, rect);
+        }
         if let Some(g) = &gizmo {
             g.paint(&painter, self.gizmo.as_ref().map(|g| g.handle), gizmo_hover);
         }
@@ -820,13 +829,13 @@ impl VizView {
             painter.text(
                 rect.center_top() + vec2(0.0, 12.0),
                 egui::Align2::CENTER_TOP,
-                t("Click the target point on the floor"),
+                t("Click the target point"),
                 theme::body(),
                 theme::accent(),
             );
         }
         if building {
-            let hint = t("Left mouse: orbit · on the selection: move · Handles: axis or rotation (Ctrl: no grid) · Right/middle: pan · Wheel: zoom");
+            let hint = t("Left mouse: orbit, on the selection: move · Alt + left or middle mouse: orbit · Handles: axis or rotation (Ctrl: no grid) · Right mouse: pan · Wheel: zoom");
             let galley = painter.layout(
                 hint.to_string(),
                 egui::FontId::proportional(theme::FS_CAPTION - 1.0),
@@ -851,6 +860,46 @@ impl VizView {
         let _ = Stroke::NONE;
     }
 
+    /// Selected objects (and everything inside selected folders) as outlines
+    /// in the accent color, so their own color and image stay visible.
+    fn paint_selection(&self, painter: &egui::Painter, cx: &ViewCtx<'_>, vp: Mat4, rect: Rect) {
+        let show = cx.engine.show();
+        let mut ids: std::collections::BTreeSet<u32> = self.sel_objects.clone();
+        if let Some(Pick::Object(id)) = self.selected {
+            ids.insert(id);
+        }
+        if ids.is_empty() {
+            return;
+        }
+        fn add(o: &dmxcraft_core::venue::Object, ids: &mut std::collections::BTreeSet<u32>) {
+            ids.insert(o.id);
+            for c in &o.children {
+                add(c, ids);
+            }
+        }
+        let roots: Vec<u32> = ids.iter().copied().collect();
+        for id in roots {
+            if let Some(o) = show.venue.find(id) {
+                add(o, &mut ids);
+            }
+        }
+        let stroke = Stroke::new(1.5, theme::accent());
+        let painter = painter.with_clip_rect(rect);
+        let mut n = 0;
+        for (ob, m) in show.venue.flatten() {
+            if !ids.contains(&ob.id) {
+                continue;
+            }
+            if let Some(b) = object_box(show, ob, m) {
+                paint_box(&painter, vp * b, rect, stroke);
+                n += 1;
+                if n > 400 {
+                    break;
+                }
+            }
+        }
+    }
+
     /// Nearest object or fixture under a ray.
     fn pick(show: &Show, o: Vec3, d: Vec3) -> Option<Pick> {
         let mut best: Option<(f32, Pick)> = None;
@@ -866,29 +915,11 @@ impl VizView {
             }
         }
         for (ob, m) in show.venue.flatten() {
-            if let Shape::Model { model } = &ob.shape {
-                if let Some(md) = show.venue.models.get(model) {
-                    let s = Vec3::from(md.size).max(Vec3::splat(0.02));
-                    let world = Mat4::from_cols_array_2d(&m)
-                        * Mat4::from_translation(Vec3::new(0.0, s.y * 0.5, 0.0))
-                        * Mat4::from_scale(s);
-                    if let Some(t) = ray_box(o, d, world) {
-                        take(t, Pick::Object(ob.id));
-                    }
-                }
-                continue;
-            }
-            let Some((key_scale, _)) = shape_mesh(&ob.shape) else {
+            let Some(world) = object_box(show, ob, m) else {
                 continue;
             };
-            // Planes a bit thicker for clicking
-            let s = match ob.shape {
-                Shape::Plane { .. } => key_scale * Mat4::from_scale(Vec3::new(1.0, 0.02, 1.0)),
-                _ => key_scale,
-            };
-            // only click the room shell (large planes) when nothing else is hit
-            let world = Mat4::from_cols_array_2d(&m) * s;
             if let Some(t) = ray_box(o, d, world) {
+                // only click the room shell (large planes) when nothing else is hit
                 let penalty = if matches!(ob.shape, Shape::Plane { .. }) {
                     1000.0
                 } else {
@@ -907,7 +938,6 @@ impl VizView {
         aspect: f32,
         time: f32,
         q: QualityParams,
-        building: bool,
     ) -> Frame3d {
         let show = cx.engine.show();
         let venue = &show.venue;
@@ -922,9 +952,6 @@ impl VizView {
                 let Some(md) = venue.models.get(model) else {
                     continue;
                 };
-                let sel = building
-                    && (self.sel_objects.contains(&ob.id)
-                        || self.selected == Some(Pick::Object(ob.id)));
                 let mat = ob.material;
                 for (i, part) in md.parts.iter().enumerate() {
                     let mut inst = Instance::new(
@@ -932,7 +959,7 @@ impl VizView {
                         rig::linear(part.color),
                         mat.opacity,
                         mat.gloss,
-                        if sel { 0.12 } else { mat.emissive },
+                        mat.emissive,
                     );
                     let tex = match part.texture {
                         Some(img) if part.uv.is_some() => {
@@ -954,9 +981,6 @@ impl VizView {
             let Some((scale, key)) = shape_mesh(&ob.shape) else {
                 continue;
             };
-            let sel = building
-                && (self.sel_objects.contains(&ob.id)
-                    || self.selected == Some(Pick::Object(ob.id)));
             let mat = ob.material;
             let color = rig::linear(mat.color);
             let mut inst = Instance::new(
@@ -964,7 +988,7 @@ impl VizView {
                 color,
                 mat.opacity,
                 mat.gloss,
-                if sel { 0.12 } else { mat.emissive },
+                mat.emissive,
             );
             // Projected image (trusses without)
             let tex = if mat.texture != 0
@@ -1033,7 +1057,7 @@ impl VizView {
                 // The same light in a narrow beam is brighter than in a wide one
                 // (intensity ∝ 1 / solid angle; reference: 26° beam)
                 let solid = 1.0 - b.half_angle.max(1.0).to_radians().cos();
-                let conc = ((1.0 - 13f32.to_radians().cos()) / solid).clamp(0.2, 8.0);
+                let conc = ((1.0 - 13f32.to_radians().cos()) / solid).clamp(0.3, 4.0);
                 let mut inst = Instance::new(m, b.color * conc.sqrt(), 1.0, 0.0, 0.0);
                 inst.params[2] = b.gobo;
                 inst.params[3] = gobo_sharp;
@@ -1309,6 +1333,71 @@ pub fn decode_texture(bytes: &[u8]) -> Option<image::RgbaImage> {
 }
 
 /// Mesh and scale of a shape (`None` = group).
+/// Edges of the unit cube transformed by `m` (clip space) on the screen;
+/// edges behind the camera are cut at the near plane.
+fn paint_box(painter: &egui::Painter, m: Mat4, rect: Rect, stroke: Stroke) {
+    let c = |i: usize| {
+        let p = Vec3::new(
+            if i & 1 == 0 { -0.5 } else { 0.5 },
+            if i & 2 == 0 { -0.5 } else { 0.5 },
+            if i & 4 == 0 { -0.5 } else { 0.5 },
+        );
+        m * p.extend(1.0)
+    };
+    let screen = |v: glam::Vec4| {
+        let n = v.truncate() / v.w;
+        pos2(
+            rect.left() + (n.x * 0.5 + 0.5) * rect.width(),
+            rect.top() + (0.5 - n.y * 0.5) * rect.height(),
+        )
+    };
+    const NEAR: f32 = 0.01;
+    for (a, b) in [
+        (0, 1),
+        (2, 3),
+        (4, 5),
+        (6, 7),
+        (0, 2),
+        (1, 3),
+        (4, 6),
+        (5, 7),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ] {
+        let (mut p, mut q) = (c(a), c(b));
+        if p.w < NEAR && q.w < NEAR {
+            continue;
+        }
+        if p.w < NEAR {
+            p = q + (p - q) * ((q.w - NEAR) / (q.w - p.w));
+        } else if q.w < NEAR {
+            q = p + (q - p) * ((p.w - NEAR) / (p.w - q.w));
+        }
+        painter.line_segment([screen(p), screen(q)], stroke);
+    }
+}
+
+/// Box around an object (unit cube transformed into the room): for clicking
+/// and the selection outline.
+fn object_box(show: &Show, ob: &dmxcraft_core::venue::Object, m: [[f32; 4]; 4]) -> Option<Mat4> {
+    let world = Mat4::from_cols_array_2d(&m);
+    Some(match &ob.shape {
+        Shape::Group => return None,
+        Shape::Model { model } => {
+            let md = show.venue.models.get(model)?;
+            let s = Vec3::from(md.size).max(Vec3::splat(0.02));
+            world * Mat4::from_translation(Vec3::new(0.0, s.y * 0.5, 0.0)) * Mat4::from_scale(s)
+        }
+        Shape::Plane { size } => world * Mat4::from_scale(Vec3::new(size[0], 0.02, size[1])),
+        Shape::Truss { length, width, .. } => {
+            world * Mat4::from_scale(Vec3::new(*length, width + 0.06, width + 0.06))
+        }
+        s => world * shape_mesh(s)?.0,
+    })
+}
+
 fn shape_mesh(s: &Shape) -> Option<(Mat4, MeshKey)> {
     Some(match *s {
         Shape::Group | Shape::Model { .. } => return None,
@@ -1341,18 +1430,6 @@ fn renumber(v: &mut Venue, o: &mut Object) {
     for c in &mut o.children {
         renumber(v, c);
     }
-}
-
-fn vec3_row(ui: &mut egui::Ui, label: &str, v: &mut [f32; 3], speed: f64) {
-    ui.horizontal(|ui| {
-        ui.label(label);
-        for c in v.iter_mut() {
-            if *c == 0.0 {
-                *c = 0.0; // do not show “-0.0”
-            }
-            ui.add(egui::DragValue::new(c).speed(speed).max_decimals(3));
-        }
-    });
 }
 
 impl VizView {
@@ -1444,12 +1521,20 @@ fn targets(cx: &ViewCtx<'_>, sel: Option<Pick>) -> Vec<FixtureId> {
     ids
 }
 
-fn aim_selected(cx: &mut ViewCtx<'_>, sel: Option<Pick>, target: [f32; 3]) {
-    for id in targets(cx, sel) {
-        let mut p = rig::placement(cx.engine.show(), id);
-        p.aim_at(target);
-        apply_placement(cx, Pick::Fixture(id), p);
+/// First surface (structure or floor) a ray hits: target points for aiming.
+fn surface_hit(show: &Show, o: Vec3, d: Vec3) -> Option<Vec3> {
+    let mut best = hit_y(o, d, 0.0).map(|h| h.distance(o));
+    for (ob, m) in show.venue.flatten() {
+        if matches!(ob.shape, Shape::Truss { .. }) || ob.hidden {
+            continue;
+        }
+        if let Some(t) = object_box(show, ob, m).and_then(|b| ray_box(o, d, b)) {
+            if best.is_none_or(|b| t < b) {
+                best = Some(t);
+            }
+        }
     }
+    best.map(|t| o + d * t)
 }
 
 // ---------- Ray tests ----------

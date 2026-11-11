@@ -57,11 +57,23 @@ second screen; fullscreen via the button at the top right).
   folder”, sort by name. The fixture list has its own folders (only for
   sorting, saved in the venue), drag into a folder, sort by address or name.
 * **Multi-selection** (Ctrl/Shift): handles and dragging act on all selected
-  objects and fixtures; rotating turns each one in place.
+  objects and fixtures; rotating turns each one in place. Fields in the
+  properties apply to all selected ones: dragging a position value moves all
+  by the same amount, a typed value and every other field (rotation, scale,
+  size, material) is set on all of them.
+* **Selection** is drawn as an outline in the accent color, so the object
+  keeps its own color and image while you edit it.
+* **Lock/hide**: the lock and eye icons in the object tree (or in the header
+  of the properties) act on the whole folder and, for a selected row, on all
+  selected objects. Locked objects can't be moved, edited or deleted.
+* **Mouse**: left drag orbits, or moves the selection when it starts on it;
+  **Alt + left drag or the middle mouse button always orbits** (e.g. around a
+  large selected floor); right drag pans; wheel zooms.
 * **Library**: bundled objects (riser, stage, stairs, DJ booth, speaker,
   subwoofer, truss tower and frame, screen, tables, bar, person) and your
-  own: select an object or folder, “Save selection as custom object”
+  own: right-click an object or folder in the tree, “Save to library”
   (including models and images, in the config folder under `objects/`).
+  Right-click a custom object to remove it from the library.
 * **Images (textures)**: choose a bundled image in the material (wooden
   planks, stage floor, concrete, carpet, bricks, tiles, molton) or your own
   PNG/JPEG; tile size in meters; for folders it applies to everything inside.
@@ -72,8 +84,13 @@ second screen; fullscreen via the button at the top right).
 * **Import custom 3D models** (glTF/GLB): geometry with all node transforms,
   the base colors and images of the materials are embedded in the show; the
   model stands with its bottom edge on the floor. Up to 2 million triangles.
-* **Aiming fixtures**: aim at a target point (numbers or click in the image),
-  straight down, hang on the nearest truss – each for all selected fixtures.
+* **Aiming fixtures** (for all selected fixtures): enter a target point or
+  pick it with the arrow button and a click on any surface in the image.
+  *Aim at target* turns **moving heads with pan/tilt** in the programmer
+  (respecting their pan/tilt range, mounting and output limits) and other
+  fixtures with their housing (placement rotation). *Down/Up/Front/Back*
+  turn the housing. *Hang on nearest truss* moves them below the closest
+  truss; *From the stage plan* makes the placement automatic again.
 * Fixtures without their own 3D placement are placed automatically below the
   ceiling according to the stage plan.
 

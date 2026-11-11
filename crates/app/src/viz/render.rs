@@ -939,7 +939,7 @@ impl Gpu {
             params.push(b);
             g
         };
-        let mut down = vec![group(&resolve, dims(0), 1.0)];
+        let mut down = vec![group(&resolve, dims(0), 4.0)];
         for k in 1..BLOOM_LEVELS {
             down.push(group(&views[k - 1], dims(k), 0.0));
         }

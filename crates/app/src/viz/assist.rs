@@ -88,7 +88,7 @@ impl VizView {
                 let (w, h) = (dim("width", 1280, 320, 2560), dim("height", 720, 240, 1600));
                 let q = cx.state.viz_quality.params();
                 let time = self.start.elapsed().as_secs_f32();
-                let frame = self.frame3d(cx, &cam, w as f32 / h as f32, time, q, false);
+                let frame = self.frame3d(cx, &cam, w as f32 / h as f32, time, q);
                 let gpu = self.gpu.get_or_insert_with(|| Gpu::new(rs));
                 upload_assets(gpu, rs, cx.engine.show());
                 gpu.render(rs, [w, h], q.msaa, &frame);

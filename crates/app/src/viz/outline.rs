@@ -8,9 +8,10 @@ use dmxcraft_core::FixtureId;
 use eframe::egui;
 use glam::{Mat4, Vec3};
 
-use super::{deg_quat, renumber, Pick, VizView};
+use super::{deg_quat, Pick, VizView};
 use crate::i18n::t;
 use crate::ui::theme;
+use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::{Icon, IconButton};
 use crate::views::ViewCtx;
 
@@ -52,6 +53,7 @@ enum TreeAction {
     Sort(Option<u32>),
     Duplicate(u32),
     Delete(u32),
+    SaveToLibrary(u32),
 }
 
 struct Tree<'a> {
@@ -153,9 +155,18 @@ impl Tree<'_> {
             {
                 self.acts.push(TreeAction::ToggleHidden(o.id));
             }
+            let lock = if o.locked {
+                Icon::Locked
+            } else {
+                Icon::Unlocked
+            };
+            let r = ui.add(IconButton::new(lock).size(18.0).flat().active(o.locked));
+            if r.clicked() {
+                self.acts.push(TreeAction::ToggleLock(o.id));
+            }
             if let Some(Renaming::Object(rid, text)) = self.renaming.as_mut() {
                 if *rid == o.id {
-                    let r = ui.add(egui::TextEdit::singleline(text).desired_width(150.0));
+                    let r = ui.add(crate::ui::widgets::text_field(text).desired_width(150.0));
                     if std::mem::take(self.focus) {
                         r.request_focus();
                     } else if r.lost_focus() || !r.has_focus() {
@@ -199,41 +210,60 @@ impl Tree<'_> {
                     self.acts.push(TreeAction::StartRename(o.id));
                 }
             }
-            label.context_menu(|ui| {
-                ui.set_min_width(200.0);
-                if ui.button(t("Rename")).clicked() {
+            menu::context(&label, |ui| {
+                menu::begin(ui);
+                if menu::item(ui, MenuItem::new(t("Rename")).icon(Icon::Edit)) {
                     self.acts.push(TreeAction::StartRename(o.id));
-                    ui.close();
                 }
                 let here = if is_group { Some(o.id) } else { parent };
-                if ui.button(t("New folder")).clicked() {
+                if menu::item(ui, MenuItem::new(t("New folder")).icon(Icon::Plus)) {
                     self.acts.push(TreeAction::NewFolder(here));
-                    ui.close();
                 }
-                if ui.button(t("Selection into new folder")).clicked() {
+                if menu::item(
+                    ui,
+                    MenuItem::new(t("Selection into new folder")).icon(Icon::Group),
+                ) {
                     if !active {
                         self.acts.push(TreeAction::Select(o.id));
                     }
                     self.acts.push(TreeAction::GroupSelection(parent));
-                    ui.close();
                 }
-                if is_group && ui.button(t("Sort contents by name")).clicked() {
+                if is_group
+                    && menu::item(
+                        ui,
+                        MenuItem::new(t("Sort contents by name")).icon(Icon::TextAa),
+                    )
+                {
                     self.acts.push(TreeAction::Sort(Some(o.id)));
-                    ui.close();
                 }
-                ui.separator();
-                let lock = if o.locked { t("Unlock") } else { t("Lock") };
-                if ui.button(lock).clicked() {
+                if menu::item(ui, MenuItem::new(t("Save to library")).icon(Icon::Save)) {
+                    self.acts.push(TreeAction::SaveToLibrary(o.id));
+                }
+                menu::separator(ui);
+                let (lock, icon) = if o.locked {
+                    (t("Unlock"), Icon::Unlocked)
+                } else {
+                    (t("Lock"), Icon::Locked)
+                };
+                if menu::item(ui, MenuItem::new(lock).icon(icon)) {
                     self.acts.push(TreeAction::ToggleLock(o.id));
-                    ui.close();
                 }
-                if ui.button(t("Duplicate")).clicked() {
+                if menu::item(
+                    ui,
+                    MenuItem::new(t("Duplicate"))
+                        .icon(Icon::Copy)
+                        .enabled(!o.locked),
+                ) {
                     self.acts.push(TreeAction::Duplicate(o.id));
-                    ui.close();
                 }
-                if ui.button(t("Delete")).clicked() {
+                if menu::item(
+                    ui,
+                    MenuItem::new(t("Delete"))
+                        .icon(Icon::Trash)
+                        .danger()
+                        .enabled(!o.locked),
+                ) {
                     self.acts.push(TreeAction::Delete(o.id));
-                    ui.close();
                 }
             });
         }
@@ -316,6 +346,15 @@ pub fn move_objects(v: &mut Venue, ids: &[u32], parent: Option<u32>, before: Opt
 }
 
 impl VizView {
+    /// The object and, if it is selected, all other selected objects.
+    fn with_selection(&self, id: u32) -> Vec<u32> {
+        if self.sel_objects.contains(&id) {
+            self.sel_objects.iter().copied().collect()
+        } else {
+            vec![id]
+        }
+    }
+
     /// Object tree with folders (groups).
     pub(super) fn object_tree(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         ui.horizontal(|ui| {
@@ -337,7 +376,7 @@ impl VizView {
                 self.rename_focus = true;
             }
             if ui
-                .button(t("A–Z"))
+                .add(IconButton::new(Icon::TextAa).size(22.0))
                 .on_hover_text(t("Sort top level by name"))
                 .clicked()
             {
@@ -395,13 +434,32 @@ impl VizView {
             match a {
                 TreeAction::Select(id) => self.select_object_in(&mut cx.state.selected, id, add),
                 TreeAction::ToggleHidden(id) => {
-                    if let Some(o) = v.find_mut(id) {
-                        o.hidden = !o.hidden;
+                    // a selected row: all selected ones
+                    let on = !v.find(id).is_some_and(|o| o.hidden);
+                    for x in self.with_selection(id) {
+                        if let Some(o) = v.find_mut(x) {
+                            o.hidden = on;
+                        }
                     }
                 }
                 TreeAction::ToggleLock(id) => {
-                    if let Some(o) = v.find_mut(id) {
-                        o.locked = !o.locked;
+                    let on = !v.find(id).is_some_and(|o| o.locked);
+                    for x in self.with_selection(id) {
+                        if let Some(o) = v.find_mut(x) {
+                            super::props::set_locked(o, on);
+                        }
+                    }
+                }
+                TreeAction::SaveToLibrary(id) => {
+                    if let Some(p) = super::library::Prefab::from_venue(v, id) {
+                        match super::library::save_user(&p) {
+                            Ok(_) => {
+                                cx.state
+                                    .info(crate::tr!("Saved to library: {n}", n = p.name));
+                                self.library = None;
+                            }
+                            Err(e) => cx.state.error(e),
+                        }
                     }
                 }
                 TreeAction::Drop {
@@ -448,27 +506,27 @@ impl VizView {
                 }
                 TreeAction::Sort(parent) => v.sort_by_name(parent),
                 TreeAction::Duplicate(id) => {
-                    if let Some(mut copy) = v.find(id).cloned() {
-                        renumber(v, &mut copy);
-                        let parent = v.parent_of(id);
-                        if let Some(list) = v.list_mut(parent) {
-                            let at = list
-                                .iter()
-                                .position(|x| x.id == id)
-                                .map_or(list.len(), |i| i + 1);
-                            self.selected = Some(Pick::Object(copy.id));
-                            self.sel_objects = [copy.id].into();
-                            list.insert(at, copy);
-                        }
+                    let new: Vec<u32> = self
+                        .with_selection(id)
+                        .into_iter()
+                        .filter_map(|x| super::props::duplicate_object(v, x))
+                        .collect();
+                    if !new.is_empty() {
+                        self.selected = Some(Pick::Object(new[0]));
+                        self.sel_objects = new.into_iter().collect();
                     }
                 }
                 TreeAction::Delete(id) => {
-                    v.remove(id);
-                    v.prune_models();
-                    self.sel_objects.remove(&id);
-                    if self.selected == Some(Pick::Object(id)) {
-                        self.selected = None;
+                    for x in self.with_selection(id) {
+                        if v.find(x).is_some_and(|o| !o.locked) {
+                            v.remove(x);
+                            self.sel_objects.remove(&x);
+                            if self.selected == Some(Pick::Object(x)) {
+                                self.selected = None;
+                            }
+                        }
                     }
+                    v.prune_models();
                 }
             }
         }
@@ -546,7 +604,7 @@ impl VizView {
                 }
                 match (folder, self.renaming.as_mut()) {
                     (Some((id, _)), Some(Renaming::Folder(rid, text))) if rid == id => {
-                        let r = ui.add(egui::TextEdit::singleline(text).desired_width(150.0));
+                        let r = ui.add(crate::ui::widgets::text_field(text).desired_width(150.0));
                         if std::mem::take(&mut self.rename_focus) {
                             r.request_focus();
                         } else if r.lost_focus() || !r.has_focus() {
@@ -576,21 +634,23 @@ impl VizView {
                 if r.clicked() {
                     state.toggle(ui);
                 }
-                r.context_menu(|ui| {
-                    ui.set_min_width(180.0);
-                    if ui.button(t("Select all")).clicked() {
+                menu::context(&r, |ui| {
+                    menu::begin(ui);
+                    if menu::item(ui, MenuItem::new(t("Select all")).icon(Icon::ListChecks)) {
                         select_folder = Some(ids_here.clone());
-                        ui.close();
                     }
                     if let Some((id, name)) = folder {
-                        if ui.button(t("Rename")).clicked() {
+                        if menu::item(ui, MenuItem::new(t("Rename")).icon(Icon::Edit)) {
                             self.renaming = Some(Renaming::Folder(*id, name.clone()));
                             self.rename_focus = true;
-                            ui.close();
                         }
-                        if ui.button(t("Dissolve folder")).clicked() {
+                        if menu::item(
+                            ui,
+                            MenuItem::new(t("Dissolve folder"))
+                                .icon(Icon::Trash)
+                                .danger(),
+                        ) {
                             delete_folder = Some(*id);
-                            ui.close();
                         }
                     }
                 });
@@ -643,27 +703,27 @@ impl VizView {
                 if r.clicked() {
                     clicked = Some(*id);
                 }
-                r.context_menu(|ui| {
-                    ui.set_min_width(200.0);
+                menu::context(&r, |ui| {
+                    menu::begin(ui);
                     let ids: Vec<FixtureId> = if sel {
                         selected.iter().copied().collect()
                     } else {
                         vec![*id]
                     };
-                    if ui.button(t("New folder with selection")).clicked() {
+                    if menu::item(
+                        ui,
+                        MenuItem::new(t("New folder with selection")).icon(Icon::Group),
+                    ) {
                         new_folder_with = Some(ids.clone());
-                        ui.close();
                     }
-                    ui.menu_button(t("Move to"), |ui| {
+                    menu::sub(ui, MenuItem::new(t("Move to")), |ui| {
                         for (fid, fname, _) in &folders {
-                            if ui.button(fname).clicked() {
+                            if menu::item(ui, MenuItem::new(fname)) {
                                 moves.push((ids.clone(), Some(*fid)));
-                                ui.close();
                             }
                         }
-                        if ui.button(t("No folder")).clicked() {
+                        if menu::item(ui, MenuItem::new(t("No folder"))) {
                             moves.push((ids.clone(), None));
-                            ui.close();
                         }
                     });
                 });
