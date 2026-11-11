@@ -1176,6 +1176,20 @@ fn block_props(
             });
         });
     }
+    if dmxcraft_core::timeline::Timeline::is_light(c) {
+        row(ui, t("Layer"), |ui| {
+            ui.add_enabled_ui(enabled, |ui| {
+                egui::ComboBox::from_id_salt("blk_layer")
+                    .selected_text(t(c.layer.label()))
+                    .width(160.0)
+                    .show_ui(ui, |ui| {
+                        for l in dmxcraft_core::timeline::Layer::ALL {
+                            ui.selectable_value(&mut c.layer, l, t(l.label()));
+                        }
+                    });
+            });
+        });
+    }
     c.start_ms = u64::from(start);
     c.duration_ms = u64::from(dur).max(40);
     row(ui, t("Fit to tempo"), |ui| {

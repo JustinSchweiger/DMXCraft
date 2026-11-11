@@ -34,12 +34,12 @@ a sound player and a live 3D visualizer. Output goes through inexpensive USB-DMX
 |---|---|
 | 🎛️ **Scenes & banks** | Static scenes, step sequences, fades, zones and a programmer with live/edit mode |
 | 🌈 **Effects** | Color, movement and curve effects across any fixture group, with presets and palettes |
-| 🎬 **SUPER SCENES** | Timeline with light and media tracks, beat grid from audio analysis, audio triggers, pre-positioning of moving heads before a block (move in black), scene groups as reusable blocks |
+| 🎬 **SUPER SCENES** | Timeline with light and media tracks, beat grid from audio analysis, audio triggers, pre-positioning of moving heads before a block (move in black), scene groups as reusable blocks, blocks that blend over the tracks below (a fading flash returns to the color below) or cover them |
 | 🔊 **Sound player** | Two decks with playlists, crossfade and a configurable grid of jingle pads |
 | 🧊 **3D visualizer** | Build your venue with trusses and objects, see beams, fog and gobos live |
 | 🧩 **Fixture library** | 2,400+ fixtures from the Open Fixture Library and QLC+, plus your own in the Profile Builder |
 | 🎹 **Control** | Keyboard, MIDI and a freely designed touch surface |
-| 📺 **OBS** | Play videos from SUPER SCENES through OBS and switch OBS scenes |
+| 📺 **OBS** | Play videos from SUPER SCENES in an OBS browser source in sync with sound and light, and switch OBS scenes |
 | 🤖 **AI assistant** | Built-in MCP server: let an AI assistant patch fixtures and program scenes |
 | 🔌 **Output** | Up to 8 universes over USB-DMX (Open DMX / FTDI), one cable per universe, or simulation |
 | 💾 **Safe** | Auto-save and recovery of unsaved changes after a crash |

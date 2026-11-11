@@ -371,6 +371,36 @@ pub struct Clip {
     /// e.g. a video and its sound.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<u32>,
+    /// How the block lies over the tracks below.
+    #[serde(default, skip_serializing_if = "Layer::is_blend")]
+    pub layer: Layer,
+}
+
+/// How a scene block lies over the tracks below.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Layer {
+    /// Brightness adds up; color and position go over as far as the block
+    /// lights a fixture (a fading flash returns to what lies below).
+    #[default]
+    Blend,
+    /// The block's channels replace the ones below (also dark values).
+    Cover,
+}
+
+impl Layer {
+    pub const ALL: [Layer; 2] = [Layer::Blend, Layer::Cover];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Layer::Blend => "Blend over lower tracks",
+            Layer::Cover => "Cover lower tracks",
+        }
+    }
+
+    fn is_blend(&self) -> bool {
+        *self == Layer::Blend
+    }
 }
 
 /// Course of the fades of a block.
@@ -746,6 +776,7 @@ impl Timeline {
             prepare: None,
             fade_curve: FadeCurve::Linear,
             link: None,
+            layer: Layer::Blend,
         });
         id
     }

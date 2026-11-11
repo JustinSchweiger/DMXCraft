@@ -698,21 +698,10 @@ impl Engine {
         // Lower tracks first, so the upper ones (track 1 = highest priority)
         // are applied last and win.
         let clips: Vec<_> = tl.active_at(now).collect();
-        let put = |out: &mut HashMap<ChannelRef, u8>, values: HashMap<ChannelRef, u8>, k: f64| {
-            for (ch, v) in values {
-                let v = if k >= 1.0 {
-                    v
-                } else if Self::is_intensity(show, ch) {
-                    (f64::from(v) * k).round() as u8
-                } else {
-                    out.get(&ch).map_or(v, |&base| lerp(base, v, k))
-                };
-                out.insert(ch, v);
-            }
-        };
         for (_, clip) in clips.into_iter().rev() {
             let k = f64::from(clip.fade_at(now) * clip.level.clamp(0.0, 1.0));
             let mut local = (t - clip.start_ms as f64) * f64::from(clip.speed.max(0.01));
+            let blend = clip.layer == crate::timeline::Layer::Blend;
             // SCENE GROUP: each scene from its offset on, the first one wins
             if let Some(members) = show.group_members(&clip.content) {
                 let len = crate::scene_group::members_length(show, members).max(1) as f64;
@@ -721,6 +710,7 @@ impl Engine {
                 } else {
                     local.min(len - 1.0)
                 };
+                let mut block: HashMap<ChannelRef, u8> = HashMap::new();
                 for m in members.iter().rev() {
                     let Some(scene) = show.scene(m.scene) else {
                         continue;
@@ -734,8 +724,15 @@ impl Engine {
                     let dur = scene.duration_ms().max(1) as f64;
                     let p = Self::virtual_play(scene, l.rem_euclid(dur));
                     let values = self.scene_values_d(show, &p, depth + 1);
-                    put(&mut out, values, k * f64::from(m.fade_at(show, l)));
+                    Self::layer(
+                        show,
+                        &mut block,
+                        values,
+                        f64::from(m.fade_at(show, l)),
+                        false,
+                    );
                 }
+                Self::layer(show, &mut out, block, k, blend);
                 continue;
             }
             let Some(id) = clip.scene() else {
@@ -752,7 +749,7 @@ impl Engine {
             };
             let p = Self::virtual_play(scene, local);
             let values = self.scene_values_d(show, &p, depth + 1);
-            put(&mut out, values, k);
+            Self::layer(show, &mut out, values, k, blend);
         }
         // Pre-position (“move in black”) before upcoming blocks: only channels
         // no running block sets, only the chosen channel groups
@@ -787,6 +784,77 @@ impl Engine {
             }
         }
         out
+    }
+
+    /// Lay the values of a block over what the lower tracks give, with the
+    /// block's fade `k` (0–1). The block's fade always crosses to what lies
+    /// below, never to black.
+    ///
+    /// * cover: the block's channels replace the lower ones.
+    /// * blend: brightness adds up (highest wins) and the other channels of
+    ///   a fixture (color, position …) go over as far as the block lights the
+    ///   fixture – a fading flash returns to the color below.
+    fn layer(
+        show: &Show,
+        out: &mut HashMap<ChannelRef, u8>,
+        values: HashMap<ChannelRef, u8>,
+        k: f64,
+        blend: bool,
+    ) {
+        let k = k.clamp(0.0, 1.0);
+        if !blend {
+            for (ch, v) in values {
+                let v = if k >= 1.0 {
+                    v
+                } else {
+                    match out.get(&ch) {
+                        Some(&base) => lerp(base, v, k),
+                        None if Self::is_intensity(show, ch) => (f64::from(v) * k).round() as u8,
+                        None => v,
+                    }
+                };
+                out.insert(ch, v);
+            }
+            return;
+        }
+        // with a virtual dimmer it gives the brightness, the colors are color
+        let virt: std::collections::HashSet<crate::FixtureId> = values
+            .keys()
+            .filter(|c| c.is_virtual())
+            .map(|c| c.fixture)
+            .collect();
+        let intensity = |ch: ChannelRef| {
+            if ch.is_virtual() {
+                true
+            } else if virt.contains(&ch.fixture) {
+                Self::is_htp(show, ch)
+            } else {
+                Self::is_intensity(show, ch)
+            }
+        };
+        // how far the block lights each fixture (fixtures it gives no
+        // brightness – e.g. only a position – are taken over fully)
+        let mut lit: HashMap<crate::FixtureId, f64> = HashMap::new();
+        for (ch, v) in &values {
+            if intensity(*ch) {
+                let a = lit.entry(ch.fixture).or_insert(0.0);
+                *a = a.max(f64::from(*v) / 255.0);
+            }
+        }
+        for (ch, v) in values {
+            let v = if intensity(ch) {
+                let own = (f64::from(v) * k).round() as u8;
+                // below without a virtual dimmer value: its colors are full
+                let base = out.get(&ch).copied().or_else(|| {
+                    (ch.is_virtual() && out.keys().any(|c| c.fixture == ch.fixture)).then_some(255)
+                });
+                base.map_or(own, |base| base.max(own))
+            } else {
+                let a = lit.get(&ch.fixture).copied().unwrap_or(1.0) * k;
+                out.get(&ch).map_or(v, |&base| lerp(base, v, a))
+            };
+            out.insert(ch, v);
+        }
     }
 
     /// Does the fixture give light with these values (any intensity > 0)?
@@ -1318,8 +1386,16 @@ mod tests {
         sc.add_effect(crate::show::EffectKind::SuperScene);
         let tl = sc.timeline_mut().unwrap();
         tl.add_clip(1, crate::timeline::ClipContent::Scene(below), 0, 2000);
-        tl.add_clip(0, crate::timeline::ClipContent::Scene(top), 0, 2000);
+        let id = tl.add_clip(0, crate::timeline::ClipContent::Scene(top), 0, 2000);
         sc.sync_timeline_length();
+        let mut e = Engine::new(s.clone());
+        e.activate(sup);
+        e.tick(Duration::from_millis(500));
+        // blending: the brighter value wins
+        assert_eq!(e.render_frame().get(0, 1), Some(200));
+        // covering: track 1 has priority
+        let sc = s.scene_mut(sup).unwrap();
+        sc.timeline_mut().unwrap().clip_mut(id).unwrap().layer = crate::timeline::Layer::Cover;
         let mut e = Engine::new(s);
         e.activate(sup);
         e.tick(Duration::from_millis(500));
@@ -1367,6 +1443,77 @@ mod tests {
         let lc = tl2.clip_mut(l).unwrap();
         lc.start_ms = 800;
         assert_eq!(e.timeline_values(&s, &tl2, 1000.0, 0).get(&ch(pan)), None);
+    }
+
+    #[test]
+    fn fading_flash_returns_to_the_color_below() {
+        let (mut s, a, b) = setup();
+        // a: dimmer + RGB, b: RGB without dimmer
+        let blue = s.add_scene(
+            "Blue",
+            None,
+            vec![Step::new(vec![
+                cv(a, 0, 255),
+                cv(a, 1, 0),
+                cv(a, 2, 0),
+                cv(a, 3, 255),
+                cv(b, 0, 0),
+                cv(b, 1, 0),
+                cv(b, 2, 255),
+            ])],
+        );
+        // flash: white, then dark (the scene fades out by itself)
+        let white = |lvl: u8| {
+            vec![
+                cv(a, 0, lvl),
+                cv(a, 1, 255),
+                cv(a, 2, 255),
+                cv(a, 3, 255),
+                cv(b, 0, lvl),
+                cv(b, 1, lvl),
+                cv(b, 2, lvl),
+            ]
+        };
+        let flash = s.add_scene(
+            "Flash",
+            None,
+            vec![Step::new(white(255)), Step::new(white(0))],
+        );
+        let sup = s.add_scene("S", None, vec![Step::new(Vec::new())]);
+        let sc = s.scene_mut(sup).unwrap();
+        sc.add_effect(crate::show::EffectKind::SuperScene);
+        let tl = sc.timeline_mut().unwrap();
+        tl.add_clip(1, crate::timeline::ClipContent::Scene(blue), 0, 10_000);
+        let top = tl.add_clip(0, crate::timeline::ClipContent::Scene(flash), 0, 10_000);
+        tl.clip_mut(top).unwrap().looped = false;
+        let mut tl = s.scene(sup).unwrap().timeline().unwrap().clone();
+        let e = Engine::new(s.clone());
+        let ch = |f: FixtureId, c: u16| ChannelRef {
+            fixture: f,
+            channel: c,
+        };
+        let at = |tl: &crate::timeline::Timeline, t: f64| e.timeline_values(&s, tl, t, 0);
+        // the flash is white
+        let v = at(&tl, 10.0);
+        assert_eq!((v[&ch(a, 0)], v[&ch(a, 1)], v[&ch(a, 3)]), (255, 255, 255));
+        assert_eq!((v[&ch(b, 0)], v[&ch(b, 2)]), (255, 255));
+        // after the flash: blue again, not dark
+        let v = at(&tl, 9_000.0);
+        assert_eq!(
+            (v[&ch(a, 0)], v[&ch(a, 1)], v[&ch(a, 2)], v[&ch(a, 3)]),
+            (255, 0, 0, 255)
+        );
+        assert_eq!((v[&ch(b, 0)], v[&ch(b, 1)], v[&ch(b, 2)]), (0, 0, 255));
+        // covering: dark covers the blue
+        tl.clip_mut(top).unwrap().layer = crate::timeline::Layer::Cover;
+        assert_eq!(at(&tl, 9_000.0)[&ch(a, 0)], 0);
+        // the block's own fade out goes back to the blue as well
+        let c = tl.clip_mut(top).unwrap();
+        c.looped = true;
+        c.fade_out_ms = 1000;
+        c.duration_ms = 1000;
+        let v = at(&tl, 990.0);
+        assert!(v[&ch(a, 0)] > 240 && v[&ch(a, 1)] < 20, "{v:?}");
     }
 
     #[test]

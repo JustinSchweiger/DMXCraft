@@ -3,7 +3,7 @@
 
 use dmxcraft_core::fixture::ChannelKind;
 use dmxcraft_core::obs::ObsAction;
-use dmxcraft_core::timeline::{ClipContent, FadeCurve, Prepare, Timeline, TrackKind};
+use dmxcraft_core::timeline::{ClipContent, FadeCurve, Layer, Prepare, Timeline, TrackKind};
 use dmxcraft_core::{
     ChannelRef, ChannelValue, Effect, EffectKind, Engine, FixtureId, FixtureType, GroupId,
     LoopMode, SceneId, Show, Step, ZoneId, UNIVERSE_SIZE,
@@ -151,6 +151,7 @@ fn clip_schema() -> Value {
             "level": { "type": "number", "description": "Level 0–1 (dimmer or volume)" },
             "speed": { "type": "number", "description": "Speed of the block (1 = normal)" },
             "fade_curve": { "type": "string", "description": "Course of the fades: linear, fast_slow (quick change first), slow_fast, smooth" },
+            "layer": { "type": "string", "description": "Scene blocks: blend (default – brightness adds up, color/position go over as far as the block lights a fixture, a fading block returns to the tracks below) or cover (replaces the lower tracks, also with dark values)" },
             "prepare": prepare_schema()
         },
         "required": ["start_ms"]
@@ -428,6 +429,7 @@ const TOOLS: &[Tool] = &[
                     "level": { "type": "number" },
                     "speed": { "type": "number" },
                     "fade_curve": { "type": "string", "description": "linear, fast_slow, slow_fast or smooth" },
+                    "layer": { "type": "string", "description": "blend or cover" },
                     "prepare": prepare_schema()
                 },
                 "required": ["id"]
@@ -1416,6 +1418,7 @@ fn timeline_json(show: &Show, tl: &Timeline) -> Value {
                     "fade_in_ms": c.fade_in_ms, "fade_out_ms": c.fade_out_ms,
                     "level": c.level, "speed": c.speed, "content": content,
                     "fade_curve": serde_json::to_value(c.fade_curve).unwrap_or_default(),
+                    "layer": serde_json::to_value(c.layer).unwrap_or_default(),
                     "prepare": c.prepare.map(|p| json!({
                         "lead_ms": p.lead_ms, "only_dark": p.only_dark, "position": p.position,
                         "beam": p.beam, "gobo": p.gobo, "color_wheel": p.color_wheel,
@@ -1926,6 +1929,13 @@ fn apply_clip_fields(cl: &mut dmxcraft_core::timeline::Clip, c: &Value) -> Resul
             "slow_fast" => FadeCurve::SlowFast,
             "smooth" => FadeCurve::Smooth,
             _ => return Err("fade_curve: linear, fast_slow, slow_fast or smooth".into()),
+        };
+    }
+    if let Some(v) = opt_str(c, "layer") {
+        cl.layer = match v.as_str() {
+            "blend" => Layer::Blend,
+            "cover" => Layer::Cover,
+            _ => return Err("layer: blend or cover".into()),
         };
     }
     if let Some(v) = c.get("prepare") {

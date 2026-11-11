@@ -190,6 +190,13 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Something new was created: edit it right away (Blind stays Blind).
+    pub fn start_editing(&mut self) {
+        if !self.programmer_mode.is_edit() {
+            self.programmer_mode = ProgrammerMode::Edit;
+        }
+    }
+
     /// Adapt the selection order to the selection: deselected ones drop out,
     /// newly selected ones are appended (several at once in patch order).
     pub fn sync_selection_order(&mut self, show: &dmxcraft_core::Show) {

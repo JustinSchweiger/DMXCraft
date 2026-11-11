@@ -66,6 +66,7 @@ pub fn strip(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
             let n = e.show().scene_groups.len() + 1;
             let id = e.show_mut().add_scene_group(tr!("Group {n}", n = n));
             st.selected_group = Some(id);
+            st.start_editing();
         }
     });
     if let Some(id) = delete {

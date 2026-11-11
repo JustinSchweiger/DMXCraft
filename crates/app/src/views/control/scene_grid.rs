@@ -1185,6 +1185,7 @@ fn apply(
                 st.selected_scenes.clear();
                 st.selected_scenes.insert(id);
                 st.focus = crate::state::Focus::Scenes;
+                st.start_editing();
                 *scene_rename = Some((id, name));
             }
             Action::RenameScene(id) => {
@@ -1344,6 +1345,8 @@ fn apply_bank(
             let id = e.show_mut().add_zone(tr!("Bank {n}", n = n));
             // let the user rename it right away
             *rename = Some((id, tr!("Bank {n}", n = n)));
+            st.focus = crate::state::Focus::Bank(id);
+            st.start_editing();
         }
         BankAction::Rename(id) => {
             if let Some(z) = e.show().zone(id) {
