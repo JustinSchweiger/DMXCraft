@@ -356,6 +356,56 @@ pub struct Clip {
     /// Pre-position before the block (scene blocks).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prepare: Option<Prepare>,
+    /// How fade in and fade out run.
+    #[serde(default, skip_serializing_if = "FadeCurve::is_linear")]
+    pub fade_curve: FadeCurve,
+}
+
+/// Course of the fades of a block.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FadeCurve {
+    #[default]
+    Linear,
+    /// Quick change at first, then slower.
+    FastSlow,
+    /// Slow at first, then quicker.
+    SlowFast,
+    /// Soft at both ends.
+    Smooth,
+}
+
+impl FadeCurve {
+    pub const ALL: [FadeCurve; 4] = [
+        FadeCurve::Linear,
+        FadeCurve::FastSlow,
+        FadeCurve::SlowFast,
+        FadeCurve::Smooth,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            FadeCurve::Linear => "Linear",
+            FadeCurve::FastSlow => "Fast to slow",
+            FadeCurve::SlowFast => "Slow to fast",
+            FadeCurve::Smooth => "Smooth",
+        }
+    }
+
+    fn is_linear(&self) -> bool {
+        *self == FadeCurve::Linear
+    }
+
+    /// Share of the change after share `u` of the fade time.
+    fn change(self, u: f32) -> f32 {
+        let u = u.clamp(0.0, 1.0);
+        match self {
+            FadeCurve::Linear => u,
+            FadeCurve::FastSlow => 1.0 - (1.0 - u).powi(3),
+            FadeCurve::SlowFast => u.powi(3),
+            FadeCurve::Smooth => u * u * (3.0 - 2.0 * u),
+        }
+    }
 }
 
 fn yes() -> bool {
@@ -383,12 +433,15 @@ impl Clip {
         let since = t.saturating_sub(self.start_ms) as f32;
         let until = self.end_ms().saturating_sub(t) as f32;
         let a = if self.fade_in_ms > 0 {
-            (since / self.fade_in_ms as f32).min(1.0)
+            self.fade_curve
+                .change((since / self.fade_in_ms as f32).min(1.0))
         } else {
             1.0
         };
+        // fade out: the level drops by the same course
         let b = if self.fade_out_ms > 0 {
-            (until / self.fade_out_ms as f32).min(1.0)
+            let done = 1.0 - (until / self.fade_out_ms as f32).min(1.0);
+            1.0 - self.fade_curve.change(done)
         } else {
             1.0
         };
@@ -456,7 +509,7 @@ impl Timeline {
             .filter(|tr| !tr.muted)
             .flat_map(|tr| tr.clips.iter())
             .filter(|c| {
-                c.scene().is_some()
+                Self::is_light(c)
                     && c.prepare
                         .is_some_and(|p| t < c.start_ms && c.start_ms - t <= u64::from(p.lead_ms))
             })
@@ -555,6 +608,7 @@ impl Timeline {
             level: 1.0,
             content,
             prepare: None,
+            fade_curve: FadeCurve::Linear,
         });
         id
     }
@@ -914,6 +968,19 @@ mod tests {
         assert_eq!(t.clip(b).unwrap().1.duration_ms, 3000);
         assert!(t.overlaps(0, 2500, 2600, 0));
         assert!(!t.overlaps(1, 2500, 2600, 0));
+    }
+
+    #[test]
+    fn fade_curve_fast_then_slow() {
+        let mut t = Timeline::default();
+        let a = t.add_clip(0, ClipContent::Scene(SceneId(1)), 0, 1000);
+        let c = t.clip_mut(a).unwrap();
+        c.fade_in_ms = 400;
+        c.fade_out_ms = 400;
+        c.fade_curve = FadeCurve::FastSlow;
+        // halfway through the fade in: clearly more than half; fade out drops fast
+        assert!(c.fade_at(200) > 0.8);
+        assert!(c.fade_at(800) < 0.2);
     }
 
     #[test]

@@ -1393,6 +1393,22 @@ mod tests {
         let v = e.timeline_values(&s, &tl, 300.0, 0);
         assert_eq!(v.get(&ch(1)), Some(&50), "channel 1 is no intensity");
         assert_eq!(e.timeline_values(&s, &tl, 450.0, 0).get(&ch(0)), None);
+        // pre-position of a group block: the starting values of its scenes
+        let mut s2 = s.clone();
+        s2.scene_group_mut(g).unwrap().members[0].offset_ms = 0;
+        let mut tl2 = tl.clone();
+        let cid = tl2.tracks[0].clips[0].id;
+        let c = tl2.clip_mut(cid).unwrap();
+        c.start_ms = 3000;
+        c.prepare = Some(crate::timeline::Prepare {
+            position: false,
+            beam: false,
+            ..Default::default()
+        });
+        assert!(
+            !tl2.preparing_at(2000).is_empty(),
+            "group blocks prepare too"
+        );
         // deleting a scene removes it from the group
         s.remove_scene(two);
         assert_eq!(s.scene_group(g).unwrap().members.len(), 1);

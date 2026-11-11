@@ -1162,6 +1162,20 @@ fn block_props(
     time_row(ui, t("Duration"), "blk_dur", &mut dur);
     time_row(ui, t("Fade in"), "blk_fin", &mut c.fade_in_ms);
     time_row(ui, t("Fade out"), "blk_fout", &mut c.fade_out_ms);
+    if c.fade_in_ms > 0 || c.fade_out_ms > 0 {
+        row(ui, t("Fade curve"), |ui| {
+            ui.add_enabled_ui(enabled, |ui| {
+                egui::ComboBox::from_id_salt("blk_fade_curve")
+                    .selected_text(t(c.fade_curve.label()))
+                    .width(160.0)
+                    .show_ui(ui, |ui| {
+                        for f in dmxcraft_core::timeline::FadeCurve::ALL {
+                            ui.selectable_value(&mut c.fade_curve, f, t(f.label()));
+                        }
+                    });
+            });
+        });
+    }
     c.start_ms = u64::from(start);
     c.duration_ms = u64::from(dur).max(40);
     row(ui, t("Fit to tempo"), |ui| {
@@ -1211,14 +1225,15 @@ fn block_props(
             row(ui, t("Only while dark"), |ui| {
                 ui.add(crate::ui::widgets::Toggle::new(&mut p.only_dark, "").enabled(enabled));
             });
-            row(ui, t("Channels"), |ui| {
-                ui.spacing_mut().item_spacing.x = theme::SP_XS;
-                // right to left: last chip first
+            // label above, chips below (they wrap in narrow sidebars)
+            ui.label(egui::RichText::new(t("Channels")).color(theme::text_dim()));
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(theme::SP_XS, theme::SP_XS);
                 for (v, label) in [
-                    (&mut p.color_wheel, t("Color wheel")),
-                    (&mut p.gobo, t("Gobo")),
-                    (&mut p.beam, t("Focus/Zoom")),
                     (&mut p.position, t("Pan/Tilt")),
+                    (&mut p.beam, t("Focus/Zoom")),
+                    (&mut p.gobo, t("Gobo")),
+                    (&mut p.color_wheel, t("Color wheel")),
                 ] {
                     if chip(ui, label, *v, accent, enabled).clicked() {
                         *v = !*v;

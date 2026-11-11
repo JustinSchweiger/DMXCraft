@@ -3,7 +3,7 @@
 
 use dmxcraft_core::fixture::ChannelKind;
 use dmxcraft_core::obs::ObsAction;
-use dmxcraft_core::timeline::{ClipContent, Prepare, Timeline, TrackKind};
+use dmxcraft_core::timeline::{ClipContent, FadeCurve, Prepare, Timeline, TrackKind};
 use dmxcraft_core::{
     ChannelRef, ChannelValue, Effect, EffectKind, Engine, FixtureId, FixtureType, GroupId,
     LoopMode, SceneId, Show, Step, ZoneId, UNIVERSE_SIZE,
@@ -150,6 +150,7 @@ fn clip_schema() -> Value {
             "fade_out_ms": { "type": "integer" },
             "level": { "type": "number", "description": "Level 0–1 (dimmer or volume)" },
             "speed": { "type": "number", "description": "Speed of the block (1 = normal)" },
+            "fade_curve": { "type": "string", "description": "Course of the fades: linear, fast_slow (quick change first), slow_fast, smooth" },
             "prepare": prepare_schema()
         },
         "required": ["start_ms"]
@@ -426,6 +427,7 @@ const TOOLS: &[Tool] = &[
                     "fade_out_ms": { "type": "integer" },
                     "level": { "type": "number" },
                     "speed": { "type": "number" },
+                    "fade_curve": { "type": "string", "description": "linear, fast_slow, slow_fast or smooth" },
                     "prepare": prepare_schema()
                 },
                 "required": ["id"]
@@ -1413,6 +1415,7 @@ fn timeline_json(show: &Show, tl: &Timeline) -> Value {
                     "id": c.id, "start_ms": c.start_ms, "duration_ms": c.duration_ms,
                     "fade_in_ms": c.fade_in_ms, "fade_out_ms": c.fade_out_ms,
                     "level": c.level, "speed": c.speed, "content": content,
+                    "fade_curve": serde_json::to_value(c.fade_curve).unwrap_or_default(),
                     "prepare": c.prepare.map(|p| json!({
                         "lead_ms": p.lead_ms, "only_dark": p.only_dark, "position": p.position,
                         "beam": p.beam, "gobo": p.gobo, "color_wheel": p.color_wheel,
@@ -1915,6 +1918,15 @@ fn apply_clip_fields(cl: &mut dmxcraft_core::timeline::Clip, c: &Value) -> Resul
     }
     if let Some(v) = c.get("speed").and_then(Value::as_f64) {
         cl.speed = v.clamp(0.05, 20.0) as f32;
+    }
+    if let Some(v) = opt_str(c, "fade_curve") {
+        cl.fade_curve = match v.as_str() {
+            "linear" => FadeCurve::Linear,
+            "fast_slow" => FadeCurve::FastSlow,
+            "slow_fast" => FadeCurve::SlowFast,
+            "smooth" => FadeCurve::Smooth,
+            _ => return Err("fade_curve: linear, fast_slow, slow_fast or smooth".into()),
+        };
     }
     if let Some(v) = c.get("prepare") {
         if !Timeline::is_light(cl) && !matches!(v, Value::Bool(false) | Value::Null) {

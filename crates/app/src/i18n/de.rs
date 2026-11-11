@@ -1358,4 +1358,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Drag scenes here", "Szenen hierher ziehen"),
     ("SUPER SCENES cannot be in a group", "SUPER SCENES können nicht in einer Gruppe sein"),
     ("Length of the scene", "Länge der Szene"),
+    ("Fade curve", "Blendkurve"),
+    ("Smooth", "Weich"),
 ];
