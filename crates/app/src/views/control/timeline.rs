@@ -161,6 +161,13 @@ impl TimelineView {
             return;
         };
         let before = tl.clone();
+        // a linked block (video + its sound) is always selected together
+        if !st.timeline_sel.is_empty() {
+            let all = tl.with_linked(&st.timeline_sel);
+            if all != st.timeline_sel {
+                st.timeline_sel = all;
+            }
+        }
         // Live: only view the timeline (play, navigate), do not edit
         let live = st.programmer_mode == crate::state::ProgrammerMode::Live;
         let locked = st.locked || live;
@@ -489,6 +496,7 @@ impl TimelineView {
         let mut clip_rects: Vec<(u32, Rect)> = Vec::new();
         let mut clip_menu: Option<(u32, ClipAction)> = None;
         let mut ungroup: Option<u32> = None;
+        let mut unlink: Option<u32> = None;
         let mut pointer_track = None;
         let mut double: Option<SceneId> = None;
         let snap_targets: Vec<u64> = tl
@@ -742,6 +750,15 @@ impl TimelineView {
                         && menu::item(ui, MenuItem::new(t("Edit scene")).icon(Icon::Edit))
                     {
                         clip_menu = Some((cid, ClipAction::EditScene));
+                    }
+                    if c.link.is_some()
+                        && tl.with_linked(&[cid].into()).len() > 1
+                        && menu::item(
+                            ui,
+                            MenuItem::new(t("Unlink video and sound")).icon(Icon::Stack),
+                        )
+                    {
+                        unlink = Some(cid);
                     }
                     if let ClipContent::Group { group, .. } = c.content {
                         if menu::item(ui, MenuItem::new(t("Edit group")).icon(Icon::Edit)) {
@@ -1076,6 +1093,18 @@ impl TimelineView {
         if let Some(id) = double {
             st.selected_scenes = [id].into();
         }
+        // Unlink: the sound becomes a block of its own; the video keeps its
+        // mark so that no new sound block is added
+        if let Some(cid) = unlink.filter(|_| !locked) {
+            for id in tl.with_linked(&[cid].into()) {
+                if let Some(c) = tl.clip_mut(id) {
+                    if matches!(c.content, ClipContent::Audio { .. }) {
+                        c.link = None;
+                    }
+                }
+            }
+            st.timeline_sel = [cid].into();
+        }
         if let Some(cid) = ungroup.filter(|_| !locked) {
             ungroup_clip(&mut tl, e.show(), cid);
             st.timeline_sel.clear();
@@ -1189,8 +1218,25 @@ impl TimelineView {
             }
         }
 
+        // Linked blocks (video + sound) stay together
+        tl.sync_links(&before);
+        // Videos with sound get their sound block (also older shows; also in
+        // LIVE – it is no edit of the user)
+        let mut auto_sound = false;
+        if !st.locked {
+            let videos: Vec<u32> = tl
+                .tracks
+                .iter()
+                .flat_map(|t| &t.clips)
+                .filter(|c| c.link.is_none() && matches!(c.content, ClipContent::Video { .. }))
+                .map(|c| c.id)
+                .collect();
+            for v in videos {
+                auto_sound |= add_video_sound(&mut tl, v);
+            }
+        }
         // Apply changes
-        if tl != before && !locked {
+        if tl != before && (!locked || auto_sound && !st.locked) {
             if let Some(sc) = e.show_mut().scene_mut(scene) {
                 if let Some(t) = sc.timeline_mut() {
                     *t = tl;
@@ -2517,7 +2563,83 @@ pub(crate) fn obs_label(a: &dmxcraft_core::obs::ObsAction) -> String {
 }
 
 /// Create a block from a video file (OBS plays it); returns ID and length.
+/// Video block plus – if the file has sound – a linked sound block on the
+/// media track below (DMXCraft plays the sound, OBS only the picture).
 fn add_video(tl: &mut Timeline, track: usize, at: u64, path: &str) -> (u32, u64) {
+    let (id, len) = add_video_only(tl, track, at, path);
+    let _ = add_video_sound(tl, id);
+    (id, len)
+}
+
+/// Sound block for a video block (linked); nothing if the video has no
+/// sound or already has one.
+fn add_video_sound(tl: &mut Timeline, video: u32) -> bool {
+    let Some((ti, c)) = tl.clip(video).map(|(t, c)| (t, c.clone())) else {
+        return false;
+    };
+    let ClipContent::Video {
+        path,
+        offset_ms,
+        length_ms,
+        ..
+    } = &c.content
+    else {
+        return false;
+    };
+    if c.link.is_some() || !has_sound_cached(path) {
+        return false;
+    }
+    // media track right below, free at that time – otherwise a new one
+    let free = |t: &dmxcraft_core::timeline::Track| {
+        t.kind == TrackKind::Media
+            && t.clips
+                .iter()
+                .all(|x| x.end_ms() <= c.start_ms || x.start_ms >= c.end_ms())
+    };
+    let track = if tl.tracks.get(ti + 1).is_some_and(free) {
+        ti + 1
+    } else {
+        tl.add_track_of(Some(ti + 1), TrackKind::Media);
+        ti + 1
+    };
+    let a = tl.add_clip(
+        track,
+        ClipContent::Audio {
+            path: path.clone(),
+            offset_ms: *offset_ms,
+            length_ms: *length_ms,
+            grid: None,
+            segment_grids: Vec::new(),
+            triggers: Vec::new(),
+        },
+        c.start_ms,
+        c.duration_ms,
+    );
+    if let Some(n) = tl.clip_mut(a) {
+        n.speed = c.speed;
+        n.looped = c.looped;
+    }
+    tl.link_clips(&[video, a]);
+    true
+}
+
+/// `audio::has_sound`, remembered per file (opening a video takes a moment).
+fn has_sound_cached(path: &str) -> bool {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().ok().and_then(|c| c.get(path).copied()) {
+        return v;
+    }
+    let v = crate::audio::has_sound(path);
+    if let Ok(mut c) = cache.lock() {
+        c.insert(path.to_string(), v);
+    }
+    v
+}
+
+fn add_video_only(tl: &mut Timeline, track: usize, at: u64, path: &str) -> (u32, u64) {
     let len = std::fs::File::open(path)
         .ok()
         .and_then(|mut f| dmxcraft_core::obs::mp4_duration_ms(&mut f))

@@ -178,7 +178,12 @@ impl Obs {
                                 obs_scene: obs_scene.clone(),
                                 pos: (offset_ms + (now - clip.start_ms)) as f64,
                                 rate,
-                                volume: (clip.level * clip.fade_at(now)).clamp(0.0, 1.0),
+                                // its sound plays in DMXCraft (linked sound block)
+                                volume: if clip.link.is_some() {
+                                    0.0
+                                } else {
+                                    (clip.level * clip.fade_at(now)).clamp(0.0, 1.0)
+                                },
                             },
                         );
                     }

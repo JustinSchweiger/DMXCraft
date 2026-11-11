@@ -340,6 +340,11 @@ pub(crate) fn open_decoder(path: &str) -> Option<Decoder<BufReader<File>>> {
     Decoder::try_from(File::open(path).ok()?).ok()
 }
 
+/// Does the file have a sound track DMXCraft can play (also videos)?
+pub fn has_sound(path: &str) -> bool {
+    open_decoder(path).is_some()
+}
+
 /// Start a player at position `pos`.
 pub(crate) fn start_player(stream: &OutputStream, path: &str, pos: Duration) -> Option<Player> {
     let sink = Sink::connect_new(stream.mixer());
@@ -527,6 +532,38 @@ mod tests {
         assert!(dec.try_seek(Duration::from_millis(100)).is_ok());
         let _ = std::fs::remove_file(w);
         let _ = std::fs::remove_file(mp3);
+    }
+
+    /// Video files: the sound track of an MP4 (AAC) is read directly.
+    #[test]
+    fn sound_from_mp4_video() {
+        let mp4 = std::env::temp_dir().join("dmxcraft_video.mp4");
+        let silent = std::env::temp_dir().join("dmxcraft_video_silent.mp4");
+        let made = std::process::Command::new("ffmpeg")
+            .args(["-y", "-loglevel", "quiet", "-f", "lavfi", "-i"])
+            .arg("testsrc=duration=1:size=64x48:rate=10")
+            .args(["-f", "lavfi", "-i", "sine=frequency=440:duration=1"])
+            .args(["-c:v", "mpeg4", "-c:a", "aac", "-shortest"])
+            .arg(&mp4)
+            .status()
+            .is_ok_and(|s| s.success())
+            && std::process::Command::new("ffmpeg")
+                .args(["-y", "-loglevel", "quiet", "-f", "lavfi", "-i"])
+                .arg("testsrc=duration=1:size=64x48:rate=10")
+                .args(["-c:v", "mpeg4"])
+                .arg(&silent)
+                .status()
+                .is_ok_and(|s| s.success());
+        if !made {
+            return;
+        }
+        assert!(has_sound(&mp4.to_string_lossy()));
+        assert!(!has_sound(&silent.to_string_lossy()));
+        let w = analyze_file(&mp4.to_string_lossy()).unwrap();
+        assert!((900..=1100).contains(&w.duration_ms), "{}", w.duration_ms);
+        assert!(w.peaks.iter().any(|p| *p > 10));
+        let _ = std::fs::remove_file(mp4);
+        let _ = std::fs::remove_file(silent);
     }
 
     #[test]

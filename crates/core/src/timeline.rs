@@ -1,7 +1,7 @@
 //! Timeline of a SUPER SCENE: tracks with blocks (scenes or audio), as in a
 //! video editor. The engine plays the scene blocks; the UI plays the audio.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -211,6 +211,14 @@ impl Prepare {
 
 impl ClipContent {
     /// Start within the file (audio/video).
+    /// Start within the file (audio/video).
+    pub fn offset(&self) -> Option<u64> {
+        match self {
+            Self::Audio { offset_ms, .. } | Self::Video { offset_ms, .. } => Some(*offset_ms),
+            _ => None,
+        }
+    }
+
     pub fn offset_mut(&mut self) -> Option<&mut u64> {
         match self {
             Self::Audio { offset_ms, .. } | Self::Video { offset_ms, .. } => Some(offset_ms),
@@ -359,6 +367,10 @@ pub struct Clip {
     /// How fade in and fade out run.
     #[serde(default, skip_serializing_if = "FadeCurve::is_linear")]
     pub fade_curve: FadeCurve,
+    /// Linked blocks (same number) move, trim, split and go together –
+    /// e.g. a video and its sound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<u32>,
 }
 
 /// Course of the fades of a block.
@@ -561,6 +573,130 @@ impl Timeline {
         id
     }
 
+    /// Link blocks: from now on they move, trim, split and go together.
+    pub fn link_clips(&mut self, ids: &[u32]) -> u32 {
+        let l = self.next_link();
+        for id in ids {
+            if let Some(c) = self.clip_mut(*id) {
+                c.link = Some(l);
+            }
+        }
+        l
+    }
+
+    fn next_link(&self) -> u32 {
+        self.tracks
+            .iter()
+            .flat_map(|t| &t.clips)
+            .filter_map(|c| c.link)
+            .max()
+            .unwrap_or(0)
+            + 1
+    }
+
+    /// The blocks plus all blocks linked with them.
+    pub fn with_linked(&self, ids: &BTreeSet<u32>) -> BTreeSet<u32> {
+        let links: BTreeSet<u32> = self
+            .tracks
+            .iter()
+            .flat_map(|t| &t.clips)
+            .filter(|c| ids.contains(&c.id))
+            .filter_map(|c| c.link)
+            .collect();
+        let mut out = ids.clone();
+        out.extend(
+            self.tracks
+                .iter()
+                .flat_map(|t| &t.clips)
+                .filter(|c| c.link.is_some_and(|l| links.contains(&l)))
+                .map(|c| c.id),
+        );
+        out
+    }
+
+    /// Keep linked blocks together after an edit (`before` = state before):
+    /// a changed block passes its timing on to its partners, a deleted one
+    /// takes them along, split-off parts become a pair of their own.
+    pub fn sync_links(&mut self, before: &Timeline) {
+        let old: HashMap<u32, Clip> = before
+            .tracks
+            .iter()
+            .flat_map(|t| &t.clips)
+            .map(|c| (c.id, c.clone()))
+            .collect();
+        let mut links: Vec<u32> = self
+            .tracks
+            .iter()
+            .flat_map(|t| &t.clips)
+            .filter_map(|c| c.link)
+            .collect();
+        links.sort_unstable();
+        links.dedup();
+        // deleted partners: the others go too
+        let removed: BTreeSet<u32> = old
+            .values()
+            .filter(|c| c.link.is_some() && self.clip(c.id).is_none())
+            .filter_map(|c| c.link)
+            .collect();
+        for t in &mut self.tracks {
+            t.clips
+                .retain(|c| !c.link.is_some_and(|l| removed.contains(&l)));
+        }
+        for l in links {
+            if removed.contains(&l) {
+                continue;
+            }
+            let ids: Vec<u32> = self
+                .tracks
+                .iter()
+                .flat_map(|t| &t.clips)
+                .filter(|c| c.link == Some(l))
+                .map(|c| c.id)
+                .collect();
+            // new parts (split): a link of their own
+            let new: Vec<u32> = ids
+                .iter()
+                .copied()
+                .filter(|id| !old.contains_key(id))
+                .collect();
+            if !new.is_empty() && new.len() < ids.len() {
+                let nl = self.next_link();
+                for id in &new {
+                    if let Some(c) = self.clip_mut(*id) {
+                        c.link = Some(nl);
+                    }
+                }
+            }
+            let ids: Vec<u32> = if new.len() < ids.len() {
+                ids.into_iter().filter(|id| !new.contains(id)).collect()
+            } else {
+                ids
+            };
+            // the changed block leads
+            let lead = ids.iter().find_map(|id| {
+                let (now, was) = (self.clip(*id)?.1, old.get(id)?);
+                (now.start_ms != was.start_ms
+                    || now.duration_ms != was.duration_ms
+                    || now.content.offset() != was.content.offset()
+                    || now.speed != was.speed)
+                    .then(|| now.clone())
+            });
+            if let Some(lead) = lead {
+                for id in ids.iter().filter(|id| **id != lead.id) {
+                    if let Some(c) = self.clip_mut(*id) {
+                        c.start_ms = lead.start_ms;
+                        c.duration_ms = lead.duration_ms;
+                        c.speed = lead.speed;
+                        if let (Some(o), Some(lo)) = (c.content.offset_mut(), lead.content.offset())
+                        {
+                            *o = lo;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Insert a SCENE GROUP block (linked) with the length of the group.
     pub fn add_group_clip(
         &mut self,
@@ -609,6 +745,7 @@ impl Timeline {
             content,
             prepare: None,
             fade_curve: FadeCurve::Linear,
+            link: None,
         });
         id
     }
@@ -968,6 +1105,58 @@ mod tests {
         assert_eq!(t.clip(b).unwrap().1.duration_ms, 3000);
         assert!(t.overlaps(0, 2500, 2600, 0));
         assert!(!t.overlaps(1, 2500, 2600, 0));
+    }
+
+    #[test]
+    fn linked_blocks_stay_together() {
+        let video = ClipContent::Video {
+            path: "v.mp4".into(),
+            offset_ms: 0,
+            length_ms: 4000,
+            obs_scene: String::new(),
+            source: String::new(),
+        };
+        let sound = ClipContent::Audio {
+            path: "v.mp4".into(),
+            offset_ms: 0,
+            length_ms: 4000,
+            grid: None,
+            segment_grids: Vec::new(),
+            triggers: Vec::new(),
+        };
+        let mut t = Timeline::default();
+        let v = t.add_clip(0, video, 0, 4000);
+        let a = t.add_clip(1, sound, 0, 4000);
+        t.link_clips(&[v, a]);
+        assert_eq!(t.with_linked(&[v].into()), [v, a].into());
+        // trimming the video trims the sound
+        let before = t.clone();
+        let c = t.clip_mut(v).unwrap();
+        c.start_ms = 500;
+        c.duration_ms = 3000;
+        *c.content.offset_mut().unwrap() = 500;
+        t.sync_links(&before);
+        let s = t.clip(a).unwrap().1;
+        assert_eq!(
+            (s.start_ms, s.duration_ms, s.content.offset()),
+            (500, 3000, Some(500))
+        );
+        // split both: the right parts are a pair of their own
+        let before = t.clone();
+        let parts: Vec<u32> = [v, a]
+            .iter()
+            .filter_map(|id| t.split_clip(*id, 2000))
+            .collect();
+        t.sync_links(&before);
+        let l = |id: u32| t.clip(id).unwrap().1.link;
+        assert_eq!(parts.len(), 2);
+        assert_eq!(l(parts[0]), l(parts[1]));
+        assert_ne!(l(parts[0]), l(v));
+        // deleting the video takes the sound along
+        let before = t.clone();
+        t.remove_clip(v);
+        t.sync_links(&before);
+        assert!(t.clip(a).is_none());
     }
 
     #[test]

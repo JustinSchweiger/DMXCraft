@@ -45,3 +45,15 @@ playback):
   *Fullscreen Projector*.
 * The video's sound runs through OBS's audio mixer and therefore also ends up
   in the recording. For silent videos pull the block's level down to 0.
+
+## Sound of videos
+
+When a video block is added (or a SUPER SCENE with older video blocks is
+shown), DMXCraft checks the file for a sound track (MP4/MOV with AAC and
+other formats the audio decoder reads). If there is one, a linked sound
+block is put on the media track below: DMXCraft plays the sound (sound
+master, mute, fade out, MIDI faders, beat analysis and audio triggers work
+as for any sound block) and OBS plays the picture muted. Linked blocks move,
+trim, split, select and delete together; “Unlink video and sound” in the
+block menu separates them (the video stays muted in OBS, the sound block
+keeps playing in DMXCraft and can be moved or deleted on its own).

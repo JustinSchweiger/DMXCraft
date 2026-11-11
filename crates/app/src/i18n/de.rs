@@ -1360,4 +1360,5 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Fade curve", "Blendkurve"),
     ("Smooth", "Weich"),
     ("Double-click: add point\nPoints snap into line with each other and to the center – hold Alt to move freely", "Doppelklick: Punkt hinzufügen\nPunkte rasten in einer Linie mit anderen Punkten und an der Mitte ein – mit Alt frei verschieben"),
+    ("Unlink video and sound", "Video und Ton trennen"),
 ];
