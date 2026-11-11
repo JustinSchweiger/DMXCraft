@@ -1064,6 +1064,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("optional, e.g. Fresnel", "optional, z. B. Fresnel"),
     ("Beam angle", "Abstrahlwinkel"),
     ("from", "von"),
+    ("at DMX 0", "bei DMX 0"),
+    ("at DMX 255", "bei DMX 255"),
     ("to", "bis"),
     ("Leave unknown values at 0 – they are not exported. The 3D visualizer uses the beam angle and dimensions.", "Unbekannte Werte auf 0 lassen – sie werden nicht exportiert. Abstrahlwinkel und Abmessungen nutzt der 3D-Visualisierer."),
     ("How DMXCraft uses this range", "So verwendet DMXCraft diesen Bereich"),

@@ -1428,7 +1428,7 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
             );
         });
         f.row(t("Beam angle"), |ui| {
-            ui.label(egui::RichText::new(t("from")).color(theme::text_faint()));
+            ui.label(egui::RichText::new(t("at DMX 0")).color(theme::text_faint()));
             ui.add(
                 egui::DragValue::new(&mut ph.beam_angle[0])
                     .range(0.0..=360.0)
@@ -1436,7 +1436,7 @@ fn physical(ui: &mut Ui, p: &mut Profile) {
                     .suffix(" °"),
             );
             ui.add_space(theme::SP_S);
-            ui.label(egui::RichText::new(t("to")).color(theme::text_faint()));
+            ui.label(egui::RichText::new(t("at DMX 255")).color(theme::text_faint()));
             ui.add(
                 egui::DragValue::new(&mut ph.beam_angle[1])
                     .range(0.0..=360.0)

@@ -1443,6 +1443,14 @@ impl Profile {
             .zip(&self.modes)
             .map(|(mut ty, m)| {
                 ty.key = format!("{KEY_PREFIX}{key}/{}", m.id);
+                // Beam angle at DMX 0 and at 255: the order gives the zoom
+                // (or focus) direction, which OFL itself can't express.
+                let [a, b] = self.physical.beam_angle;
+                if a > 0.0 && b > 0.0 && a != b {
+                    if let Some(ph) = ty.physical.as_mut() {
+                        ph.zoom_reversed = a > b;
+                    }
+                }
                 ty
             })
             .collect())
@@ -1690,6 +1698,23 @@ mod tests {
             ],
             ..Profile::default()
         }
+    }
+
+    #[test]
+    fn beam_angle_order_gives_the_zoom_direction() {
+        let mut p = spot();
+        p.physical.beam_angle = [45.0, 5.0];
+        let ty = &p.fixture_types().unwrap()[0];
+        let ph = ty.physical.unwrap();
+        assert!(ph.zoom_reversed);
+        assert_eq!(ph.beam_angle, [5.0, 45.0]);
+        p.physical.beam_angle = [5.0, 45.0];
+        assert!(
+            !p.fixture_types().unwrap()[0]
+                .physical
+                .unwrap()
+                .zoom_reversed
+        );
     }
 
     #[test]
