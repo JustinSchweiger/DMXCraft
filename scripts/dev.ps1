@@ -18,4 +18,8 @@ Get-Process dmxcraft, dmxcraft-mcp -ErrorAction SilentlyContinue |
         $_.WaitForExit(5000) | Out-Null
     }
 
+# Build both programs: dmxcraft and the small dmxcraft-mcp bridge (DMXCraft
+# copies the bridge into its config folder for Claude Desktop).
+cargo build --release -p dmxcraft --bins
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 cargo run --release -p dmxcraft -- @args
