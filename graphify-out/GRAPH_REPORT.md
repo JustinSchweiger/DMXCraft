@@ -1,7 +1,7 @@
 # Graph Report - dmxcraft-src  (2026-11-11)
 
 ## Corpus Check
-- 151 files · ~237,118 words
+- 151 files · ~237,209 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 5, .ttf 3, .ico 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `76ab867c`
+- Built from commit: `164ff844`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -200,29 +200,29 @@
 10. `text_dim()` - 54 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `VizView` --references--> `Model`  [INFERRED]
-  crates/app/src/viz/mod.rs → crates/app/src/viz/render.rs
 - `SceneEdit` --references--> `Value`  [INFERRED]
   crates/app/src/views/control/scene_props.rs → crates/app/src/remote/mod.rs
-- `release_modes_and_protection()` --calls--> `one()`  [INFERRED]
-  crates/core/src/engine.rs → crates/core/src/timeline.rs
+- `VizView` --references--> `Model`  [INFERRED]
+  crates/app/src/viz/mod.rs → crates/app/src/viz/render.rs
 - `placeholders_match()` --calls--> `names()`  [INFERRED]
   crates/app/src/i18n/mod.rs → crates/app/src/obs.rs
+- `release_modes_and_protection()` --calls--> `one()`  [INFERRED]
+  crates/core/src/engine.rs → crates/core/src/timeline.rs
 - `lamp()` --calls--> `full()`  [INFERRED]
   crates/app/src/ui/theme.rs → crates/core/src/fx/feature.rs
 
 ## Import Cycles
 - 1-file cycle: `crates/core/src/fixture.rs -> crates/core/src/fixture.rs`
 - 1-file cycle: `crates/app/src/views/fixture_menu.rs -> crates/app/src/views/fixture_menu.rs`
-- 2-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/convert.rs`
-- 2-file cycle: `crates/ofl/src/lib.rs -> crates/ofl/src/qxf.rs -> crates/ofl/src/lib.rs`
+- 2-file cycle: `crates/app/src/viz/panels.rs -> crates/app/src/viz/props.rs -> crates/app/src/viz/panels.rs`
+- 2-file cycle: `crates/output/src/backends.rs -> crates/output/src/lib.rs -> crates/output/src/backends.rs`
 - 2-file cycle: `crates/output/src/lib.rs -> crates/output/src/runtime.rs -> crates/output/src/lib.rs`
 - 2-file cycle: `crates/output/src/lib.rs -> crates/output/src/open_dmx.rs -> crates/output/src/lib.rs`
-- 2-file cycle: `crates/output/src/backends.rs -> crates/output/src/lib.rs -> crates/output/src/backends.rs`
-- 2-file cycle: `crates/app/src/viz/panels.rs -> crates/app/src/viz/props.rs -> crates/app/src/viz/panels.rs`
+- 2-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/convert.rs`
+- 2-file cycle: `crates/ofl/src/lib.rs -> crates/ofl/src/qxf.rs -> crates/ofl/src/lib.rs`
+- 3-file cycle: `crates/output/src/backends.rs -> crates/output/src/lib.rs -> crates/output/src/runtime.rs -> crates/output/src/backends.rs`
 - 3-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/profile.rs -> crates/ofl/src/convert.rs`
 - 3-file cycle: `crates/ofl/src/convert.rs -> crates/ofl/src/lib.rs -> crates/ofl/src/qxf.rs -> crates/ofl/src/convert.rs`
-- 3-file cycle: `crates/output/src/backends.rs -> crates/output/src/lib.rs -> crates/output/src/runtime.rs -> crates/output/src/backends.rs`
 
 ## Communities (281 total, 124 thin omitted)
 
@@ -855,7 +855,7 @@ Cohesion: 0.29
 Nodes (7): with, merge-multiple, name, path, pattern, persist-credentials, submodules
 
 ## Knowledge Gaps
-- **553 isolated node(s):** `Low`, `Medium`, `High`, `Ultra`, `Live` (+548 more)
+- **553 isolated node(s):** `Dimmer`, `Red`, `Green`, `Blue`, `White` (+548 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1350 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **124 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -863,15 +863,15 @@ Nodes (7): with, merge-multiple, name, path, pattern, persist-credentials, submo
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Engine` connect `Engine` to `ProfileBuilder`, `library_panel.rs`, `app/src/obs.rs`, `runtime.rs`, `programmer.rs`, `control/timeline.rs`, `OutputError`, `ViewCtx`, `mcp/src/venue.rs`, `text_dim`, `rig.rs`, `show.rs`, `app/src/audio.rs`, `profile_builder.rs`, `mcp/src/profiles.rs`, `views/touch.rs`, `FixtureAction`, `scene_grid.rs`, `DmxCraftApp`, `settings_window.rs`, `tools.rs`, `Snapshot`, `remote/mod.rs`, `scene_props.rs`, `Mapper`, `window.rs`, `stage.rs`, `mcp.rs`, `Show`, `audio_trigger_ui.rs`, `engine.rs`, `.ui`, `fire`, `ChannelKind`, `audio_triggers.rs`, `hashmap`, `View`, `AudioPlayer`, `Host`?**
-  _High betweenness centrality (0.141) - this node is a cross-community bridge._
+  _High betweenness centrality (0.122) - this node is a cross-community bridge._
 - **Are the 181 inferred relationships involving `t()` (e.g. with `.apply_menu()` and `.autosave_tick()`) actually correct?**
   _`t()` has 181 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Low`, `Medium`, `High` to the rest of the system?**
+- **What connects `Dimmer`, `Red`, `Green` to the rest of the system?**
   _553 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `SoundPlayer` be split into smaller, more focused modules?**
   _Cohesion score 0.13675213675213677 - nodes in this community are weakly interconnected._
-- **Why does `Show` connect `Show` to `app/src/obs.rs`, `fx.rs`, `theme.rs`, `stage_canvas.rs`, `missing_audio.rs`, `TouchView`, `rig.rs`, `Control`, `show.rs`, `EffectKind`, `views/touch.rs`, `FixtureAction`, `scene_grid.rs`, `DmxCraftApp`, `tools.rs`, `Snapshot`, `TouchLayout`, `scene_props.rs`, `Engine`, `Mapper`, `feature.rs`, `motion.rs`, `engine.rs`, `Scene`, `fire`, `viz/mod.rs`, `autosave.rs`, `look.rs`, `SoundBoard`, `Venue`?**
-  _High betweenness centrality (0.108) - this node is a cross-community bridge._
+- **Why does `t()` connect `profile_builder.rs` to `ProfileBuilder`, `show`, `app/src/obs.rs`, `library_panel.rs`, `programmer.rs`, `control/timeline.rs`, `i18n/mod.rs`, `ViewCtx`, `DialogKind`, `viz/library.rs`, `missing_audio.rs`, `titlebar.rs`, `TouchView`, `text_dim`, `.ui`, `profile_builder.rs`, `fx_ui.rs`, `show.rs`, `Problem`, `views/touch.rs`, `FixtureAction`, `scene_grid.rs`, `menu.rs`, `DmxCraftApp`, `settings_window.rs`, `palettes.rs`, `Fader`, `scene_props.rs`, `app/src/profiles.rs`, `window.rs`, `stage.rs`, `Purpose`, `audio_trigger_ui.rs`, `.ui`, `egui`, `fire`, `viz/mod.rs`, `textures.rs`, `OrbitCamera`, `views/sound.rs`, `View`, `stage_editor.rs`, `.row`?**
+  _High betweenness centrality (0.114) - this node is a cross-community bridge._
 - **Are the 5 inferred relationships involving `Show` (e.g. with `Mappings` and `ObsSettings`) actually correct?**
   _`Show` has 5 INFERRED edges - model-reasoned connections that need verification._
 - **Should `library_panel.rs` be split into smaller, more focused modules?**

@@ -90,9 +90,9 @@
     "semantic_hash": ""
   },
   "crates/core/src/fixture.rs": {
-    "mtime": 1794354023.7687454,
-    "seen": 1794354290.9363477,
-    "ast_hash": "63dbd3a86527f34f379518cf5d61e9d7",
+    "mtime": 1794391446.6500282,
+    "seen": 1794391537.9972827,
+    "ast_hash": "713573ce8e87618d26258e513dd461bb",
     "semantic_hash": ""
   },
   "crates/core/src/lib.rs": {

@@ -331,9 +331,19 @@ impl ChannelDef {
     /// `Some(hz)` flashing. Without ranges: below 10 open, above that 1–20 Hz.
     pub fn strobe(&self, v: u8) -> Option<f32> {
         if !self.ranges.is_empty() {
+            // Without any “open” range the channel is a pure strobe channel:
+            // its “closed” range really means “no strobe” (light on), as in
+            // several fixture files (e.g. LED PAR 56 with 0–15 “closed”).
+            let has_open = self
+                .ranges
+                .iter()
+                .any(|r| matches!(r.effect, RangeEffect::Open | RangeEffect::WheelOpen));
             return self
                 .range_at(v)
-                .and_then(|r| r.effect.shutter(r, v))
+                .and_then(|r| match r.effect {
+                    RangeEffect::Closed if !has_open => Some(None),
+                    _ => r.effect.shutter(r, v),
+                })
                 .unwrap_or(None);
         }
         (v >= 10).then(|| 1.0 + f32::from(v - 10) / 245.0 * 19.0)
@@ -519,6 +529,20 @@ mod refine_tests {
         assert_eq!(c.strobe(16), Some(1.0));
         assert_eq!(c.strobe(131), Some(20.0));
         assert_eq!(c.strobe(255), None);
+        // pure strobe channel: “closed” without any “open” range = light on
+        c.ranges = vec![
+            ChannelRange::new(0, 15, RangeEffect::Closed),
+            ChannelRange::new(
+                16,
+                255,
+                RangeEffect::Strobe {
+                    from_hz: 1.0,
+                    to_hz: 20.0,
+                },
+            ),
+        ];
+        assert_eq!(c.strobe(0), None);
+        assert_eq!(c.strobe(16), Some(1.0));
     }
 
     #[test]
