@@ -29,3 +29,9 @@ jobs:
         with:
           name: dmxcraft-msi
           path: target/distrib/*.msi
+      # dist hides the WiX output – on failure, rerun WiX verbosely
+      - name: WiX details (on failure)
+        if: failure()
+        run: |
+          cargo install cargo-wix --locked
+          cargo wix --package dmxcraft --no-build --nocapture --target x86_64-pc-windows-msvc --profile dist
