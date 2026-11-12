@@ -540,9 +540,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/audio.rs": {
-    "mtime": 1794523099.5532167,
-    "seen": 1794523430.5401325,
-    "ast_hash": "178f0463e748fc1f2bd96d348841b202",
+    "mtime": 1794525301.3514204,
+    "seen": 1794525345.8285275,
+    "ast_hash": "0d3d279db0d2b2588a4795878f1f4a47",
     "semantic_hash": ""
   },
   "crates/app/src/views/control/timeline.rs": {
@@ -858,9 +858,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/sound.rs": {
-    "mtime": 1794306525.2472532,
-    "seen": 1794306733.5728862,
-    "ast_hash": "b1b02f4b32b2bce480208805eaed8256",
+    "mtime": 1794525262.7760956,
+    "seen": 1794525345.828561,
+    "ast_hash": "6e4ccb358408059e80c2d7154fbc0f43",
     "semantic_hash": ""
   },
   "crates/app/src/views/sound.rs": {

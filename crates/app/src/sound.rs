@@ -221,7 +221,10 @@ impl SoundPlayer {
         let Some(stream) = self.stream() else {
             return;
         };
-        let player = start_player(stream, &path, Duration::from_millis(from_ms));
+        let player = start_player(stream, &path, Duration::from_millis(from_ms), 1.0);
+        if let Some(p) = &player {
+            p.sink.play();
+        }
         let rt = self.deck(d);
         rt.player = player;
         rt.paused = false;

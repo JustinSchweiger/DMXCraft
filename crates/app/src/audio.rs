@@ -286,8 +286,9 @@ impl AudioPlayer {
             // play slower/faster like a turntable (the pitch changes too) so the
             // sound stays in sync with the scene
             let running = rate > 0.01;
+            let fresh = !self.sinks.contains_key(&key);
             if let std::collections::hash_map::Entry::Vacant(slot) = self.sinks.entry(key) {
-                let Some(p) = start_player(stream, &path, pos) else {
+                let Some(p) = start_player(stream, &path, pos, vol) else {
                     continue;
                 };
                 slot.insert(p);
@@ -306,15 +307,16 @@ impl AudioPlayer {
             // playback drifts (ruler, jump, resume after pause): seek; if that is
             // not possible, restart at the position
             let drift = p.pos().as_secs_f64() - pos.as_secs_f64();
-            if p.sink.is_paused() || drift.abs() > 0.15 {
+            // a new player already stands at the position
+            if !fresh && (p.sink.is_paused() || drift.abs() > 0.15) {
                 let seeked = p.base.is_zero() && p.sink.try_seek(pos).is_ok();
                 if !seeked {
                     self.sinks.remove(&key);
-                    let Some(n) = start_player(stream, &path, pos) else {
+                    let Some(n) = start_player(stream, &path, pos, vol) else {
                         continue;
                     };
-                    n.sink.set_volume(vol);
                     n.sink.set_speed(rate.clamp(0.05, 8.0));
+                    n.sink.play();
                     self.sinks.insert(key, n);
                     continue;
                 }
@@ -345,10 +347,28 @@ pub fn has_sound(path: &str) -> bool {
     open_decoder(path).is_some()
 }
 
-/// Start a player at position `pos`.
-pub(crate) fn start_player(stream: &OutputStream, path: &str, pos: Duration) -> Option<Player> {
-    let sink = Sink::connect_new(stream.mixer());
-    sink.append(open_decoder(path)?);
+/// Soft start of every player: a cut in the middle of a wave would
+/// otherwise click.
+const DECLICK: Duration = Duration::from_millis(30);
+
+/// Prepare a player at position `pos` with volume `vol` – paused, so not a
+/// single sample sounds before it stands at the position with the right
+/// volume (otherwise the start of the file plays at full volume for a
+/// moment: a click at the start of cut, faded-in blocks). Call `play()`.
+pub(crate) fn start_player(
+    stream: &OutputStream,
+    path: &str,
+    pos: Duration,
+    vol: f32,
+) -> Option<Player> {
+    let new_sink = || {
+        let sink = Sink::connect_new(stream.mixer());
+        sink.pause();
+        sink.set_volume(vol);
+        sink
+    };
+    let sink = new_sink();
+    sink.append(open_decoder(path)?.fade_in(DECLICK));
     if pos.is_zero() || sink.try_seek(pos).is_ok() {
         return Some(Player {
             sink,
@@ -356,8 +376,8 @@ pub(crate) fn start_player(stream: &OutputStream, path: &str, pos: Duration) -> 
         });
     }
     // Format cannot seek: skip ahead to the position
-    let sink = Sink::connect_new(stream.mixer());
-    sink.append(open_decoder(path)?.skip_duration(pos));
+    let sink = new_sink();
+    sink.append(open_decoder(path)?.skip_duration(pos).fade_in(DECLICK));
     Some(Player { sink, base: pos })
 }
 
@@ -478,6 +498,24 @@ mod tests {
         assert!(a.fading());
         a.set_master(0.5);
         assert!(!a.fading(), "Intervention ends the fade-out");
+    }
+
+    /// Started in the middle of the tone (a cut block), the sound comes up
+    /// softly instead of jumping into the wave – no click.
+    #[test]
+    fn start_in_the_middle_does_not_click() {
+        let w = std::env::temp_dir().join("dmxcraft_declick.wav");
+        wav(&w);
+        let mut src = open_decoder(w.to_str().unwrap()).unwrap().fade_in(DECLICK);
+        src.try_seek(Duration::from_millis(200)).unwrap();
+        let mut src = src.map(f32::abs);
+        let first: Vec<f32> = src.by_ref().take(8).collect();
+        // 8 kHz: the declick lasts 240 samples
+        let later: f32 = src.skip(300).take(40).fold(0.0, f32::max);
+        assert!(first[0] < 0.01, "first sample {}", first[0]);
+        assert!(first.iter().all(|v| *v < 0.05), "{first:?}");
+        assert!(later > 0.3, "full tone afterwards ({later})");
+        let _ = std::fs::remove_file(&w);
     }
 
     /// Small WAV file (mono, 8 kHz, 16 bit): 0.5 s tone, 0.5 s silence.
