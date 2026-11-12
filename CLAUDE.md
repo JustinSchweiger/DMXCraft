@@ -28,6 +28,7 @@ crates/app     user interface
   src/obs.rs     OBS integration (obs-websocket 5): video blocks, OBS actions – docs/OBS.md
   src/video_out.rs  video output page for an OBS browser source (follows the timeline clock)
   src/app.rs     frame: header, mode, layout, runtime
+  src/ui/system_fonts.rs  system font fallback (color emoji first)
 docs/UI-GUIDELINES.md  binding UI rules – read before UI work
 ```
 

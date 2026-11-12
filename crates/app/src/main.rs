@@ -76,7 +76,10 @@ fn main() -> eframe::Result {
     let result = eframe::run_native(
         "DMXCraft",
         options,
-        Box::new(move |_cc| Ok(Box::new(app::DmxCraftApp::new(show_path, settings)))),
+        Box::new(move |cc| {
+            ui::system_fonts::install(&cc.egui_ctx);
+            Ok(Box::new(app::DmxCraftApp::new(show_path, settings)))
+        }),
     );
     // Window is closed and everything is saved: end the process safely, even
     // if background threads (MCP connections, audio, output) are still running

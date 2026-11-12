@@ -200,7 +200,11 @@ the app state – only their input values.
   every text also gets a German translation.
 * Only characters the built-in font renders reliably: Latin letters, digits,
   common punctuation, `·`, `–`, `“”`, `„“`. **No emojis or arrow/symbol
-  characters** (▶ ❚ ● … etc.) in text.
+  characters** (▶ ❚ ● … etc.) in UI texts. User content (scene names …) may
+  contain them: a subset of DejaVu Sans (`assets/fonts/DejaVuSans-Symbols.ttf`)
+  is the fallback for arrows, check marks, stars and math; anything else
+  (emoji in color, other scripts) comes from the system fonts
+  (`ui/system_fonts.rs`).
 * **Icons** come uniformly from the Phosphor icon font (MIT,
   `assets/fonts/Phosphor*.ttf`) via `widgets::Icon` – add new icons there as
   a variant with the matching glyph. Icons must fit their function (e.g. a

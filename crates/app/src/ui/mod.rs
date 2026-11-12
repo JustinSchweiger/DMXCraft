@@ -2,5 +2,6 @@
 
 pub mod file_drop;
 pub mod keyboard_focus;
+pub mod system_fonts;
 pub mod theme;
 pub mod widgets;

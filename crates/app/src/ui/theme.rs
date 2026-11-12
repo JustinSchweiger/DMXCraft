@@ -579,6 +579,9 @@ pub fn heading_text(title: &str) -> egui::RichText {
         .color(text())
 }
 
+/// Fallback font for symbols (subset of DejaVu Sans).
+const SYMBOLS_FONT: &str = "dejavu-symbols";
+
 fn install_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
     fonts.font_data.insert(
@@ -587,6 +590,21 @@ fn install_fonts(ctx: &egui::Context) {
             "../../assets/fonts/NotoSans-SemiBold.ttf"
         ))),
     );
+    // Symbols the default fonts lack (arrows, check marks, stars, math …):
+    // the last fallback, so emoji keep their emoji glyphs
+    fonts.font_data.insert(
+        SYMBOLS_FONT.into(),
+        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+            "../../assets/fonts/DejaVuSans-Symbols.ttf"
+        ))),
+    );
+    for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        fonts
+            .families
+            .entry(fam)
+            .or_default()
+            .push(SYMBOLS_FONT.to_string());
+    }
     let mut family = vec![HEADING_FAMILY.to_string()];
     // Fallback for characters the heading font does not have
     family.extend(

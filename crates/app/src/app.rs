@@ -46,6 +46,14 @@ struct LockDialog {
 }
 
 pub struct DmxCraftApp {
+    /// Share of the lower area (programmer + stage) in the height, and of the
+    /// programmer in its width – kept when the window changes its size in
+    /// points (other screen, other scaling).
+    live_split: Option<[f32; 2]>,
+    /// Size (points) the split was measured in, and the screen (scaling,
+    /// monitor size) it was on.
+    live_area: egui::Vec2,
+    live_screen: (f32, Option<egui::Vec2>),
     engine: Arc<Mutex<Engine>>,
     runtime: Runtime,
     output_kind: OutputKind,
@@ -148,6 +156,9 @@ impl DmxCraftApp {
             settings_open: false,
             settings_window: SettingsWindow::default(),
             about_open: false,
+            live_split: None,
+            live_area: egui::Vec2::ZERO,
+            live_screen: (0.0, None),
             file_dialog: None,
             lock_dialog: None,
             lock_hash: None,
@@ -1074,22 +1085,52 @@ impl eframe::App for DmxCraftApp {
                     Mode::Control | Mode::Touch => {
                         let touch_mode = cx.state.mode == Mode::Touch;
                         let control = &mut self.control;
-                        egui::Panel::bottom("live_bottom")
+                        // Other size in points (screen with other scaling or
+                        // resolution): keep the shares instead of the sizes
+                        let full = ui.available_rect_before_wrap().size();
+                        let screen = (
+                            ctx.pixels_per_point(),
+                            ctx.input(|i| i.viewport().monitor_size),
+                        );
+                        let (ppp, monitor) = self.live_screen;
+                        let moved = (screen.0 - ppp).abs() > 0.001
+                            || matches!((monitor, screen.1), (Some(a), Some(b)) if a != b);
+                        let rescale = self.live_split.filter(|_| {
+                            ppp > 0.0 && moved && (full - self.live_area).length() > 2.0
+                        });
+                        let mut bottom = egui::Panel::bottom("live_bottom")
                             .resizable(true)
                             .default_size(400.0)
                             .min_size(220.0)
-                            .frame(egui::Frame::new().fill(theme::surface()))
-                            .show(ui, |ui| {
-                                egui::Panel::right("programmer_panel")
-                                    .resizable(true)
-                                    .default_size(640.0)
-                                    .min_size(320.0)
-                                    .frame(area)
-                                    .show(ui, |ui| control.programmer.ui(ui, &mut cx));
-                                egui::CentralPanel::default_margins()
-                                    .frame(area)
-                                    .show(ui, |ui| control.stage.ui(ui, &mut cx));
-                            });
+                            .frame(egui::Frame::new().fill(theme::surface()));
+                        if let Some([h, _]) = rescale {
+                            bottom = bottom.exact_size((h * full.y).round());
+                        }
+                        let mut prog_w = 0.0;
+                        let lower = bottom.show(ui, |ui| {
+                            let mut prog = egui::Panel::right("programmer_panel")
+                                .resizable(true)
+                                .default_size(640.0)
+                                .min_size(320.0)
+                                .frame(area);
+                            if let Some([_, w]) = rescale {
+                                prog = prog.exact_size((w * full.x).round());
+                            }
+                            prog_w = prog
+                                .show(ui, |ui| control.programmer.ui(ui, &mut cx))
+                                .response
+                                .rect
+                                .width();
+                            egui::CentralPanel::default_margins()
+                                .frame(area)
+                                .show(ui, |ui| control.stage.ui(ui, &mut cx));
+                        });
+                        if full.x > 1.0 && full.y > 1.0 {
+                            self.live_split =
+                                Some([lower.response.rect.height() / full.y, prog_w / full.x]);
+                            self.live_area = full;
+                            self.live_screen = screen;
+                        }
                         if touch_mode {
                             egui::CentralPanel::default_margins()
                                 .frame(area)

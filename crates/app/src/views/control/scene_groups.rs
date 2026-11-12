@@ -26,7 +26,7 @@ const CHIP_H: f32 = 26.0;
 pub fn strip(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
     let locked = st.locked;
     let mut delete = None;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.set_min_height(CHIP_H);
         ui.spacing_mut().item_spacing.x = theme::SP_XS;
         ui.label(theme::heading_text(t("Scene groups")));
