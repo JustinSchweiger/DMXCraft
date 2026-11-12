@@ -54,6 +54,10 @@ pub struct DmxCraftApp {
     /// monitor size) it was on.
     live_area: egui::Vec2,
     live_screen: (f32, Option<egui::Vec2>),
+    /// Tab before the 3D tab, and whether the 3D window was open in the last
+    /// frame: moving the visualizer into its own window returns to that tab.
+    mode_before_viz: Mode,
+    viz_window_was: bool,
     engine: Arc<Mutex<Engine>>,
     runtime: Runtime,
     output_kind: OutputKind,
@@ -159,6 +163,8 @@ impl DmxCraftApp {
             live_split: None,
             live_area: egui::Vec2::ZERO,
             live_screen: (0.0, None),
+            mode_before_viz: Mode::Control,
+            viz_window_was: false,
             file_dialog: None,
             lock_dialog: None,
             lock_hash: None,
@@ -859,6 +865,14 @@ impl eframe::App for DmxCraftApp {
             if self.settings.check_updates {
                 self.updater.check(ctx.clone(), false);
             }
+        }
+        // 3D visualizer moved into its own window: back to the tab before
+        if self.state.viz_window && !self.viz_window_was && self.state.mode == Mode::Visualizer {
+            self.state.mode = self.mode_before_viz;
+        }
+        self.viz_window_was = self.state.viz_window;
+        if self.state.mode != Mode::Visualizer {
+            self.mode_before_viz = self.state.mode;
         }
         // MOVE FX point preview: what the effect editor set in the last frame
         {

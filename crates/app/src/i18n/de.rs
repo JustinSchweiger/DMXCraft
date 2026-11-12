@@ -607,6 +607,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Source", "Quelle"),
     ("OBS", "OBS"),
     ("Connect to OBS", "Mit OBS verbinden"),
+    ("Snapping when moving and rotating – hold Ctrl to move freely", "Einrasten beim Verschieben und Drehen – Strg gedrückt halten für freies Bewegen"),
+    ("To objects and fixtures", "An Objekten und Geräten"),
     ("Own light", "Eigenes Licht"),
     ("Dimmer, color and zoom from the target instead of the scenes", "Dimmer, Farbe und Zoom vom Ziel statt aus den Szenen"),
     ("Live tracking: moving heads follow points", "Live-Verfolgung: Moving Heads folgen Punkten"),

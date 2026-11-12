@@ -82,6 +82,8 @@ impl VizView {
                 cx.state.history_request = Some(false);
             }
             ui.spacing_mut().item_spacing.x = theme::SP_S;
+            divider(ui);
+            self.snap_chip(ui);
         }
         divider(ui);
         let env = &mut cx.engine.show_mut().venue.environment;
@@ -135,6 +137,49 @@ impl VizView {
                 self.open_dialog(ui.ctx(), kind);
             }
         }
+    }
+
+    /// Snapping when moving and rotating (Ctrl: free).
+    fn snap_chip(&mut self, ui: &mut egui::Ui) {
+        use super::snap;
+        let sn = self.snap;
+        let value = match (sn.objects, sn.grid > 0.0) {
+            (true, true) => format!("{} · {}", t("Objects"), snap::grid_label(sn.grid)),
+            (true, false) => t("Objects").to_string(),
+            (false, _) => snap::grid_label(sn.grid),
+        };
+        let r = chip(ui, t("Snap"), &value, true).on_hover_text(t(
+            "Snapping when moving and rotating – hold Ctrl to move freely",
+        ));
+        menu::dropdown(&r, |ui| {
+            menu::begin(ui);
+            if menu::item(
+                ui,
+                MenuItem::new(t("To objects and fixtures")).checked(sn.objects),
+            ) {
+                self.snap.objects = !sn.objects;
+            }
+            menu::separator(ui);
+            menu::title(ui, t("Grid"));
+            for g in snap::GRIDS {
+                if menu::item(
+                    ui,
+                    MenuItem::new(&snap::grid_label(g)).checked(sn.grid == g),
+                ) {
+                    self.snap.grid = g;
+                }
+            }
+            menu::separator(ui);
+            menu::title(ui, t("Rotation"));
+            for a in snap::ANGLES {
+                if menu::item(
+                    ui,
+                    MenuItem::new(&snap::angle_label(a)).checked(sn.angle == a),
+                ) {
+                    self.snap.angle = a;
+                }
+            }
+        });
     }
 
     fn fullscreen_button(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, window: bool) {

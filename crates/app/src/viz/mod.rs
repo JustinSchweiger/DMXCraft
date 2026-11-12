@@ -14,6 +14,7 @@ mod panels;
 mod props;
 pub mod render;
 pub mod rig;
+mod snap;
 pub mod textures;
 mod toolbar;
 
@@ -166,6 +167,11 @@ pub struct VizView {
     /// notice when it is opened again or another show is loaded.
     last_frame: Option<u64>,
     last_show: String,
+    /// Snapping in the builder, what is being moved, and the boxes snapped
+    /// to in this frame (drawn as guides).
+    snap: snap::Snap,
+    snap_start: Option<snap::SnapStart>,
+    snap_guides: Vec<snap::Aabb>,
 }
 
 /// Fixture from an import without a counterpart in the patch, with a
@@ -466,6 +472,9 @@ impl Default for VizView {
             fps: (Instant::now(), 0, 0.0),
             missing: Vec::new(),
             gizmo: None,
+            snap: snap::Snap::default(),
+            snap_start: None,
+            snap_guides: Vec::new(),
             sel_objects: Default::default(),
             drag_frames: Vec::new(),
             aim: [0.0; 3],
@@ -624,26 +633,36 @@ impl VizView {
                 .zip(origin)
                 .and_then(|(g, o)| g.hit(o).map(|i| (i, o)));
             if let (Some((i, o)), Some(f)) = (hit, sel_place) {
+                let frames = Self::group_frames(self.selected, &self.sel_objects, cx);
+                let picks: Vec<Pick> = frames.iter().map(|x| x.0).collect();
+                self.snap_start = snap::SnapStart::new(cx.engine.show(), &picks, f.world);
                 self.gizmo = Some(GizmoDrag {
                     handle: i,
                     primary: f,
-                    frames: Self::group_frames(self.selected, &self.sel_objects, cx),
+                    frames,
                     start: o,
                 });
             }
         }
+        self.snap_guides.clear();
+        // closer objects snap within a smaller distance
+        let tolerance = |at: Vec3| (cam.eye() - at).length() * 0.012;
         if let (Some(gd), Some(g), Some(p)) = (self.gizmo.as_ref(), gizmo.as_ref(), ptr) {
             let f0 = gd.primary;
             if gd.handle < 3 {
                 if let Some((a, b)) = g.axes[gd.handle] {
                     let s = b - a;
                     let along = (p - gd.start).dot(s) / s.length_sq().max(1.0) * g.len;
-                    let mut w = f0.world;
-                    w[gd.handle] += along;
-                    if !mods.command {
-                        w[gd.handle] = (w[gd.handle] * 20.0).round() / 20.0;
+                    let mut delta = Vec3::ZERO;
+                    delta[gd.handle] = along;
+                    if let (false, Some(st)) = (mods.command, self.snap_start.as_ref()) {
+                        let mut axes = [false; 3];
+                        axes[gd.handle] = true;
+                        let (d, guides) = st.apply(delta, axes, self.snap, tolerance(f0.world));
+                        delta = d;
+                        self.snap_guides = guides;
                     }
-                    move_all(cx, &gd.frames, w - f0.world);
+                    move_all(cx, &gd.frames, delta);
                 }
             } else {
                 let axis = [Vec3::X, Vec3::Y, Vec3::Z][gd.handle - 3];
@@ -656,7 +675,7 @@ impl VizView {
                 }
                 let mut deg = d.to_degrees();
                 if !mods.command {
-                    deg = (deg / 5.0).round() * 5.0;
+                    deg = snap::angle(deg, self.snap);
                 }
                 rotate_all(cx, &gd.frames, axis, deg);
             }
@@ -686,6 +705,14 @@ impl VizView {
                 };
                 if resp.drag_started() {
                     self.drag_frames = Self::group_frames(self.selected, &self.sel_objects, cx);
+                    let picks: Vec<Pick> = self.drag_frames.iter().map(|x| x.0).collect();
+                    let origin = self
+                        .drag_frames
+                        .iter()
+                        .find(|f| f.0 == sel)
+                        .map(|f| f.1.world);
+                    self.snap_start =
+                        origin.and_then(|o| snap::SnapStart::new(cx.engine.show(), &picks, o));
                     self.drag = pos.and_then(|pos| hit_y(o, d, pos[1]).map(|h| (h, pos)));
                     // only drag when it started on/near the selection
                     if let (Some((h, p0)), Some(pick)) =
@@ -702,14 +729,6 @@ impl VizView {
                         let dv = h - h0;
                         [p0[0] + dv.x, p0[1], p0[2] + dv.z]
                     });
-                    let snap = |v: f32| {
-                        if mods.command {
-                            v
-                        } else {
-                            (v * 20.0).round() / 20.0
-                        }
-                    };
-                    let new = [snap(new[0]), new[1], snap(new[2])];
                     // Transfer the movement of the main selection to all selected ones (in
                     // world coordinates, also in rotated groups)
                     let parent = self
@@ -717,7 +736,13 @@ impl VizView {
                         .iter()
                         .find(|f| f.0 == sel)
                         .map_or(Mat4::IDENTITY, |f| f.1.parent);
-                    let dw = parent.transform_vector3(Vec3::from(new) - Vec3::from(p0));
+                    let mut dw = parent.transform_vector3(Vec3::from(new) - Vec3::from(p0));
+                    if let (false, Some(st)) = (mods.command, self.snap_start.as_ref()) {
+                        let (d, guides) =
+                            st.apply(dw, [true, false, true], self.snap, tolerance(st.origin));
+                        dw = d;
+                        self.snap_guides = guides;
+                    }
                     let frames = std::mem::take(&mut self.drag_frames);
                     move_all(cx, &frames, dw);
                     self.drag_frames = frames;
@@ -731,6 +756,8 @@ impl VizView {
         if !resp.dragged() {
             self.drag = None;
             self.gizmo = None;
+            self.snap_start = None;
+            self.snap_guides.clear();
         }
         let cam = *self.camera.as_ref().expect("camera");
         if resp.clicked() && self.aim_pick {
@@ -821,6 +848,15 @@ impl VizView {
         painter.galley(at, galley, theme::text_dim());
         if building {
             self.paint_selection(&painter, cx, vp, rect);
+        }
+        // boxes the selection snapped to
+        for b in &self.snap_guides {
+            paint_box(
+                &painter,
+                vp * b.matrix(),
+                rect,
+                Stroke::new(1.5, theme::accent()),
+            );
         }
         if let Some(g) = &gizmo {
             g.paint(&painter, self.gizmo.as_ref().map(|g| g.handle), gizmo_hover);
@@ -1381,7 +1417,11 @@ fn paint_box(painter: &egui::Painter, m: Mat4, rect: Rect, stroke: Stroke) {
 
 /// Box around an object (unit cube transformed into the room): for clicking
 /// and the selection outline.
-fn object_box(show: &Show, ob: &dmxcraft_core::venue::Object, m: [[f32; 4]; 4]) -> Option<Mat4> {
+pub(crate) fn object_box(
+    show: &Show,
+    ob: &dmxcraft_core::venue::Object,
+    m: [[f32; 4]; 4],
+) -> Option<Mat4> {
     let world = Mat4::from_cols_array_2d(&m);
     Some(match &ob.shape {
         Shape::Group => return None,

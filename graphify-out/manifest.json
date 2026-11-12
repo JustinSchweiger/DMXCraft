@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/app.rs": {
-    "mtime": 1794475102.9105122,
-    "seen": 1794475251.138677,
-    "ast_hash": "2239f9f1cbcdd535849d25d6a3de93fc",
+    "mtime": 1794488843.426394,
+    "seen": 1794489172.903845,
+    "ast_hash": "246f2a4e535895607da8ffe252981e62",
     "semantic_hash": ""
   },
   "crates/app/src/demo.rs": {
@@ -618,9 +618,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/viz/mod.rs": {
-    "mtime": 1794480558.7937126,
-    "seen": 1794480751.539587,
-    "ast_hash": "56b0c91f2e4f1e917843f0ba3a9b1ba7",
+    "mtime": 1794488942.5203187,
+    "seen": 1794489172.903964,
+    "ast_hash": "70604b05ac0b7b90688246cd723cd358",
     "semantic_hash": ""
   },
   "crates/app/src/viz/render.rs": {
@@ -648,9 +648,9 @@
     "semantic_hash": ""
   },
   "docs/VISUALIZER.md": {
-    "mtime": 1794389728.9777205,
-    "seen": 1794389873.411568,
-    "ast_hash": "60256260ef4fa1908a6688361903090a",
+    "mtime": 1794489142.9837441,
+    "seen": 1794489172.904055,
+    "ast_hash": "78a2a6a84950aa079a467a820cc657aa",
     "semantic_hash": ""
   },
   "crates/app/src/profiles.rs": {
@@ -834,9 +834,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/viz/toolbar.rs": {
-    "mtime": 1794306525.2767847,
-    "seen": 1794306733.5729766,
-    "ast_hash": "8252a9cd29afcd1aa389487f02e08960",
+    "mtime": 1794488987.1283214,
+    "seen": 1794489172.903975,
+    "ast_hash": "1bf01d81ce2761d6f4982127643dc354",
     "semantic_hash": ""
   },
   "crates/app/src/obs.rs": {
@@ -894,9 +894,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/i18n/de.rs": {
-    "mtime": 1794480610.954114,
-    "seen": 1794480751.5394027,
-    "ast_hash": "2feb3322c87bf4a139cb3a2727cbad25",
+    "mtime": 1794489013.9995582,
+    "seen": 1794489172.9038618,
+    "ast_hash": "dee683d8bdb0e92775d99977c2ef69c8",
     "semantic_hash": ""
   },
   "scripts/dev.ps1": {
@@ -1047,6 +1047,12 @@
     "mtime": 1794480316.6980743,
     "seen": 1794480751.5396523,
     "ast_hash": "4e2a6e60730460c7afc5e047c6a65d1e",
+    "semantic_hash": ""
+  },
+  "crates/app/src/viz/snap.rs": {
+    "mtime": 1794488942.5963187,
+    "seen": 1794489172.9039721,
+    "ast_hash": "e8bc78db07965e64c25486cdd1973808",
     "semantic_hash": ""
   }
 }

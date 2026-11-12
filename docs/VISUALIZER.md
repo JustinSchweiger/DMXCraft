@@ -44,7 +44,14 @@ second screen; fullscreen via the button at the top right).
 * Shapes: box, plane, cylinder, truss (three-/four-point), groups.
 * **Build**: add objects, select them in the object tree, change
   placement/size/color/opacity/gloss/glow; move objects and fixtures on the
-  floor with the mouse (5 cm grid, Ctrl: free).
+  floor with the mouse (snapping, Ctrl: free).
+* **Snapping** (SNAP in the toolbar): grid (off, 1 cm … 1 m, default 5 cm),
+  rotation steps (off, 1° … 90°, default 5°) and *to objects and fixtures*:
+  while moving, the box around the selection aligns with the boxes of
+  nearby objects and fixtures – edge to edge, center to center, edge to
+  center – e.g. a table against a wall or a fixture under a truss. The
+  boxes it snaps to are outlined; the snap distance grows with the camera
+  distance. Hold Ctrl to move freely.
 * **Layout**: on the left room, add and the object tree (groups can be
   expanded; a click in the image expands down to the object) or, in the
   *Fixtures* tab, the fixture list with search (Ctrl/Shift for
@@ -79,8 +86,8 @@ second screen; fullscreen via the button at the top right).
   PNG/JPEG; tile size in meters; for folders it applies to everything inside.
   The color tints the image. glTF models bring their images (base color).
 * **Handles** on the selection: the red/green/blue axis moves along the
-  room's x/y/z, the three rings rotate around the room's x/y/z (5 cm or 5°
-  grid, Ctrl: free) – also for objects in rotated groups and for fixtures.
+  room's x/y/z, the three rings rotate around the room's x/y/z (snapping,
+  Ctrl: free) – also for objects in rotated groups and for fixtures.
 * **Import custom 3D models** (glTF/GLB): geometry with all node transforms,
   the base colors and images of the materials are embedded in the show; the
   model stands with its bottom edge on the floor. Up to 2 million triangles.
