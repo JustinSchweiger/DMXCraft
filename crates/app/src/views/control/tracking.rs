@@ -555,6 +555,26 @@ impl TrackingView {
         }
         if resp.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+            // mouse wheel: height of the target under the cursor, otherwise
+            // of the current one (one notch = 10 cm)
+            let wheel = ui.input(|i| i.smooth_scroll_delta.y);
+            if wheel != 0.0 {
+                let under = resp.hover_pos().and_then(|pos| {
+                    e.show()
+                        .trackers
+                        .iter()
+                        .map(|tr| (tr.id, to_screen(tr.target[0], tr.target[2]).distance(pos)))
+                        .filter(|(_, d)| *d < 20.0)
+                        .min_by(|a, b| a.1.total_cmp(&b.1))
+                        .map(|(id, _)| id)
+                });
+                if let Some(id) = under.or(self.current) {
+                    edit(e, id, |t| {
+                        t.target[1] = (t.target[1] + wheel * 0.00125).clamp(0.0, MAX_HEIGHT);
+                    });
+                }
+                ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
+            }
         }
     }
 }
