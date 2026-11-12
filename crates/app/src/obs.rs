@@ -254,7 +254,7 @@ impl Obs {
                         let volume = if clip.link.is_some() {
                             0.0
                         } else {
-                            (clip.level * clip.fade_at(now)).clamp(0.0, 1.0)
+                            (clip.level_at(now) * clip.fade_at(now)).clamp(0.0, 1.0)
                         };
                         out_clips.push(OutClip {
                             key: format!("{}-{}", scene.id.0, clip.id),

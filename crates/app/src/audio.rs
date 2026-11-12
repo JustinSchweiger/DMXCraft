@@ -257,7 +257,7 @@ impl AudioPlayer {
                 } = &clip.content
                 {
                     let pos = offset_ms + (now - clip.start_ms);
-                    let vol = clip.level * clip.fade_at(now) * gain;
+                    let vol = clip.level_at(now) * clip.fade_at(now) * gain;
                     wanted.insert(
                         (scene.id, clip.id),
                         (path.clone(), Duration::from_millis(pos), vol, rate),

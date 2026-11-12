@@ -453,6 +453,7 @@ const TOOLS: &[Tool] = &[
                     "fade_in_ms": { "type": "integer" },
                     "fade_out_ms": { "type": "integer" },
                     "level": { "type": "number" },
+                    "levels": { "type": "array", "items": { "type": "array", "items": { "type": "number" } }, "description": "Level points [[ms from the block start, level 0–1], …] – the dimmer/volume course (e.g. a fade); empty array = none, then `level` throughout" },
                     "speed": { "type": "number" },
                     "fade_curve": { "type": "string", "description": "linear, fast_slow, slow_fast or smooth" },
                     "layer": { "type": "string", "description": "blend or cover" },
@@ -1533,6 +1534,7 @@ fn timeline_json(show: &Show, tl: &Timeline) -> Value {
                     "id": c.id, "start_ms": c.start_ms, "duration_ms": c.duration_ms,
                     "fade_in_ms": c.fade_in_ms, "fade_out_ms": c.fade_out_ms,
                     "level": c.level, "speed": c.speed, "content": content,
+                    "levels": c.levels.iter().map(|p| json!([p.at_ms, p.level])).collect::<Vec<_>>(),
                     "fade_curve": serde_json::to_value(c.fade_curve).unwrap_or_default(),
                     "layer": serde_json::to_value(c.layer).unwrap_or_default(),
                     "prepare": c.prepare.map(|p| json!({
@@ -2034,6 +2036,21 @@ fn apply_clip_fields(cl: &mut dmxcraft_core::timeline::Clip, c: &Value) -> Resul
     }
     if let Some(v) = c.get("level").and_then(Value::as_f64) {
         cl.level = v.clamp(0.0, 1.0) as f32;
+    }
+    if let Some(list) = c.get("levels").and_then(Value::as_array) {
+        let mut pts: Vec<dmxcraft_core::timeline::LevelPoint> = list
+            .iter()
+            .filter_map(|p| {
+                let p = p.as_array()?;
+                Some(dmxcraft_core::timeline::LevelPoint {
+                    at_ms: p.first()?.as_i64()?,
+                    level: p.get(1)?.as_f64()?.clamp(0.0, 1.0) as f32,
+                })
+            })
+            .collect();
+        pts.sort_by_key(|p| p.at_ms);
+        pts.dedup_by_key(|p| p.at_ms);
+        cl.levels = pts;
     }
     if let Some(v) = c.get("speed").and_then(Value::as_f64) {
         cl.speed = v.clamp(0.05, 20.0) as f32;

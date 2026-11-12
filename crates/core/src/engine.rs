@@ -740,7 +740,7 @@ impl Engine {
         // are applied last and win.
         let clips: Vec<_> = tl.active_at(now).collect();
         for (_, clip) in clips.into_iter().rev() {
-            let k = f64::from(clip.fade_at(now) * clip.level.clamp(0.0, 1.0));
+            let k = f64::from(clip.fade_at(now) * clip.level_at(now));
             let mut local = (t - clip.start_ms as f64) * f64::from(clip.speed.max(0.01));
             let blend = clip.layer == crate::timeline::Layer::Blend;
             // SCENE GROUP: each scene from its offset on, the first one wins

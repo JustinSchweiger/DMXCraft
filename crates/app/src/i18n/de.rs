@@ -797,7 +797,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Allow block overlap", "Block-Überlappung erlauben"),
     ("File not readable: {e}", "Datei nicht lesbar: {e}"),
     ("Fit to tempo", "Dem Tempo anpassen"),
-    ("Dimmer/Volume", "Dimmer/Volume"),
+    ("Volume", "Volume"),
     ("Paste", "Einfügen"),
     ("Collapse", "Einklappen"),
     ("Endless loop", "Endlosschleife (Loop)"),

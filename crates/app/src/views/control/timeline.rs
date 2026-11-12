@@ -5,7 +5,9 @@
 
 use crate::i18n::t;
 use crate::ui::widgets::color_picker::color_swatches;
-use dmxcraft_core::timeline::{Clip, ClipContent, GridMode, Prepare, Timeline, TrackKind};
+use dmxcraft_core::timeline::{
+    Clip, ClipContent, GridMode, LevelPoint, Prepare, Timeline, TrackKind,
+};
 use dmxcraft_core::{Engine, SceneId};
 use eframe::egui::{self, pos2, Color32, Rect, Sense, Shape, Stroke, StrokeKind, Vec2};
 
@@ -26,6 +28,27 @@ const EDGE: f32 = 6.0;
 const DEFAULT_CLIP_MS: u64 = 5000;
 
 /// Ongoing drag on a block.
+/// What is dragged in the dimmer/volume sub-track.
+#[derive(Clone, Copy, Debug)]
+enum LaneGrab {
+    /// The whole level (block without points).
+    Level,
+    /// One point (time and level).
+    Point(usize),
+    /// The line between two points (both go up/down).
+    Segment(usize, usize),
+}
+
+/// Drag in a sub-track: block, what, pointer height at the start and the
+/// state before.
+struct LaneDrag {
+    clip: u32,
+    grab: LaneGrab,
+    y0: f32,
+    levels: Vec<LevelPoint>,
+    level: f32,
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum Drag {
     Move {
@@ -71,6 +94,10 @@ pub struct TimelineView {
     clipboard: Vec<(usize, Clip)>,
     /// State before dragging (for “no overlap”).
     before_drag: Option<Clip>,
+    /// Dragging in a dimmer/volume sub-track.
+    lane_drag: Option<LaneDrag>,
+    /// Selected level point (block, index) – Del removes it.
+    lane_sel: Option<(u32, usize)>,
     /// First audio block: take over the grid as soon as the analysis is done.
     pending_grid: Option<u32>,
     /// Beats of the audio blocks in the visible range (grid follows the audio).
@@ -111,6 +138,8 @@ impl Default for TimelineView {
             drag: None,
             clipboard: Vec::new(),
             before_drag: None,
+            lane_drag: None,
+            lane_sel: None,
             pending_grid: None,
             marks: Vec::new(),
             menu_clip_ms: None,
@@ -594,33 +623,13 @@ impl TimelineView {
                         gp.rect_filled(bar, 2.0, mc);
                     }
                 }
-                // Sub-track: dimmer or volume as a line
+                // Sub-track: dimmer or volume as a line with level points
                 if expanded {
                     let lane = Rect::from_min_max(
                         pos2(r.left(), ty + th + 2.0),
                         pos2(r.right(), ty + th + LANE_H - 4.0),
                     );
-                    lp.rect_filled(lane, 2.0, color.gamma_multiply(0.18));
-                    let ly = lane.bottom() - lane.height() * c.level;
-                    lp.line_segment(
-                        [pos2(lane.left(), ly), pos2(lane.right(), ly)],
-                        Stroke::new(2.0, color),
-                    );
-                    let lr = ui.interact(
-                        lane,
-                        ui.scope_id().with(("lane", cid)),
-                        if tr_locked {
-                            Sense::hover()
-                        } else {
-                            Sense::drag()
-                        },
-                    );
-                    if let Some(q) = lr.interact_pointer_pos().filter(|_| lr.dragged()) {
-                        if let Some(cm) = tl.clip_mut(cid) {
-                            cm.level = ((lane.bottom() - q.y) / lane.height()).clamp(0.0, 1.0);
-                        }
-                    }
-                    lr.on_hover_text(format!("{:.0} %", c.level * 100.0));
+                    self.level_lane(ui, &lp, &mut tl, &c, lane, lanes, color, tr_locked, st);
                 }
                 if tr_locked {
                     continue;
@@ -856,6 +865,8 @@ impl TimelineView {
                         let delta = s as i64 - c.start_ms as i64;
                         n.start_ms = s;
                         n.duration_ms = end - s;
+                        // level points stay at their place in time
+                        n.shift_levels(delta);
                         if let Some(offset_ms) = n.content.offset_mut() {
                             *offset_ms = (*offset_ms as i64 + delta).max(0) as u64;
                         }
@@ -1134,7 +1145,9 @@ impl TimelineView {
                 )
             });
             let first = st.timeline_sel.iter().next().copied();
-            if let Some(cid) = first {
+            if del && self.delete_level_point(&mut tl) {
+                // Del removed a level point, not the block
+            } else if let Some(cid) = first {
                 if del {
                     self.clip_action(&mut tl, st, ClipAction::Delete, cid);
                 } else if cut {
@@ -2022,6 +2035,183 @@ fn grid_options(ui: &mut egui::Ui, tl: &mut Timeline, locked: bool) {
     });
 }
 
+impl TimelineView {
+    /// Dimmer/volume sub-track of a block: the course as a line with its
+    /// points. Double click adds a point, a point can be dragged (time and
+    /// level), the line between two points goes up/down as a whole, without
+    /// points the line is the level of the whole block.
+    #[allow(clippy::too_many_arguments)]
+    fn level_lane(
+        &mut self,
+        ui: &mut egui::Ui,
+        lp: &egui::Painter,
+        tl: &mut Timeline,
+        c: &Clip,
+        lane: Rect,
+        lanes: Rect,
+        color: Color32,
+        locked: bool,
+        st: &mut AppState,
+    ) {
+        let cid = c.id;
+        let (scroll_ms, zoom) = (self.scroll_ms, self.zoom);
+        let x_at = move |ms: f64| lanes.left() + ((ms - scroll_ms) as f32) * zoom;
+        let ms_at = move |x: f32| scroll_ms + f64::from((x - lanes.left()) / zoom);
+        lp.rect_filled(lane, 2.0, color.gamma_multiply(0.18));
+        let start = c.start_ms as i64;
+        let x_of = |at: i64| x_at((start + at).max(0) as f64).clamp(lane.left(), lane.right());
+        let y_of = |v: f32| lane.bottom() - lane.height() * v.clamp(0.0, 1.0);
+        let level_at_x = |x: f32| c.level_at(ms_at(x).max(0.0) as u64);
+        // the course
+        let mut line = vec![pos2(lane.left(), y_of(level_at_x(lane.left())))];
+        line.extend(c.levels.iter().map(|p| pos2(x_of(p.at_ms), y_of(p.level))));
+        line.push(pos2(lane.right(), y_of(level_at_x(lane.right()))));
+        lp.add(Shape::line(line, Stroke::new(2.0, color)));
+        let sel = self.lane_sel.filter(|(id, _)| *id == cid).map(|(_, i)| i);
+        for (i, p) in c.levels.iter().enumerate() {
+            let at = pos2(x_of(p.at_ms), y_of(p.level));
+            if sel == Some(i) {
+                lp.circle_filled(at, 4.5, Color32::WHITE);
+                lp.circle_stroke(at, 4.5, Stroke::new(1.5, color));
+            } else {
+                lp.circle_filled(at, 3.5, color);
+            }
+        }
+        let resp = ui.interact(
+            lane,
+            ui.scope_id().with(("lane", cid)),
+            if locked {
+                Sense::hover()
+            } else {
+                Sense::click_and_drag()
+            },
+        );
+        let hit = |q: egui::Pos2| {
+            c.levels
+                .iter()
+                .position(|p| (pos2(x_of(p.at_ms), y_of(p.level)) - q).length() < 7.0)
+        };
+        let hover = resp.hover_pos();
+        if let Some(q) = hover {
+            ui.ctx().set_cursor_icon(if hit(q).is_some() {
+                egui::CursorIcon::Grab
+            } else {
+                egui::CursorIcon::ResizeVertical
+            });
+        }
+        let value = hover
+            .or(resp.interact_pointer_pos())
+            .map_or(c.level_at(c.start_ms), |q| level_at_x(q.x));
+        if locked {
+            resp.on_hover_text(format!("{:.0} %", value * 100.0));
+            return;
+        }
+        let at_of = |x: f32| {
+            (ms_at(x) - c.start_ms as f64)
+                .round()
+                .clamp(0.0, c.duration_ms as f64) as i64
+        };
+        if resp.clicked() || resp.drag_started() || resp.double_clicked() {
+            st.focus = crate::state::Focus::Timeline;
+        }
+        if resp.double_clicked() {
+            if let Some(q) = resp.interact_pointer_pos().filter(|q| hit(*q).is_none()) {
+                if let Some(cm) = tl.clip_mut(cid) {
+                    let i = cm.add_level_point(at_of(q.x));
+                    self.lane_sel = Some((cid, i));
+                }
+            }
+        } else if resp.clicked() {
+            self.lane_sel = resp.interact_pointer_pos().and_then(hit).map(|i| (cid, i));
+        }
+        if resp.drag_started() {
+            if let Some(q) = ui.input(|i| i.pointer.press_origin()) {
+                let grab = match hit(q) {
+                    Some(i) => {
+                        self.lane_sel = Some((cid, i));
+                        LaneGrab::Point(i)
+                    }
+                    None if c.levels.is_empty() => LaneGrab::Level,
+                    None => {
+                        let at = at_of(q.x);
+                        let n = c.levels.len();
+                        let i = c.levels.partition_point(|p| p.at_ms <= at);
+                        if i == 0 {
+                            LaneGrab::Segment(0, 0)
+                        } else if i == n {
+                            LaneGrab::Segment(n - 1, n - 1)
+                        } else {
+                            LaneGrab::Segment(i - 1, i)
+                        }
+                    }
+                };
+                self.lane_drag = Some(LaneDrag {
+                    clip: cid,
+                    grab,
+                    y0: q.y,
+                    levels: c.levels.clone(),
+                    level: c.level,
+                });
+            }
+        }
+        if resp.dragged() {
+            if let (Some(d), Some(q)) = (
+                self.lane_drag.as_ref().filter(|d| d.clip == cid),
+                resp.interact_pointer_pos(),
+            ) {
+                let dy = (d.y0 - q.y) / lane.height().max(1.0);
+                if let Some(cm) = tl.clip_mut(cid) {
+                    match d.grab {
+                        LaneGrab::Level => cm.level = (d.level + dy).clamp(0.0, 1.0),
+                        LaneGrab::Point(i) => {
+                            // between its neighbours and inside the block
+                            let lo = if i == 0 { 0 } else { d.levels[i - 1].at_ms + 1 };
+                            let hi = d
+                                .levels
+                                .get(i + 1)
+                                .map_or(c.duration_ms as i64, |p| p.at_ms - 1);
+                            if let Some(p) = cm.levels.get_mut(i) {
+                                p.at_ms = at_of(q.x).clamp(lo.min(hi), hi.max(lo));
+                                p.level = ((lane.bottom() - q.y) / lane.height()).clamp(0.0, 1.0);
+                            }
+                        }
+                        LaneGrab::Segment(a, b) => {
+                            for j in [a, b] {
+                                if let (Some(p), Some(o)) = (cm.levels.get_mut(j), d.levels.get(j))
+                                {
+                                    p.level = (o.level + dy).clamp(0.0, 1.0);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if resp.drag_stopped() {
+            self.lane_drag = None;
+        }
+        resp.on_hover_text(format!("{:.0} %", value * 100.0));
+    }
+
+    /// Remove the selected level point (Del). True if there was one.
+    fn delete_level_point(&mut self, tl: &mut Timeline) -> bool {
+        let Some((cid, i)) = self.lane_sel.take() else {
+            return false;
+        };
+        match tl.clip_mut(cid) {
+            Some(cm) if i < cm.levels.len() => {
+                let p = cm.levels.remove(i);
+                // the last point gone: its level stays for the whole block
+                if cm.levels.is_empty() {
+                    cm.level = p.level;
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Header of a track: arrow (sub-tracks), number, eye (mute), lock.
 /// Header of a track: color strip, expand, name (double-click: rename),
 /// show/hide; right-click: menu with color.
@@ -2160,7 +2350,11 @@ fn track_header(
         p.text(
             pos2(head.left() + 12.0, head.top() + th + LANE_H / 2.0),
             egui::Align2::LEFT_CENTER,
-            t("Dimmer/Volume"),
+            if tr.kind == TrackKind::Media {
+                t("Volume")
+            } else {
+                t("Dimmer")
+            },
             egui::FontId::proportional(theme::FS_CAPTION - 1.0),
             theme::text_faint(),
         );

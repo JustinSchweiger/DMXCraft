@@ -357,9 +357,14 @@ pub struct Clip {
     /// Playback speed of the scene (stretching).
     #[serde(default = "one")]
     pub speed: f32,
-    /// Dimmer (scene) or volume (audio), 0..=1.
+    /// Dimmer (scene) or volume (audio), 0..=1 – used when the block has no
+    /// level points.
     #[serde(default = "one")]
     pub level: f32,
+    /// Level points (dimmer/volume course within the block, e.g. a fade);
+    /// times from the start of the block. Empty = `level` throughout.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub levels: Vec<LevelPoint>,
     pub content: ClipContent,
     /// Pre-position before the block (scene blocks).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -374,6 +379,15 @@ pub struct Clip {
     /// How the block lies over the tracks below.
     #[serde(default, skip_serializing_if = "Layer::is_blend")]
     pub layer: Layer,
+}
+
+/// Point of the dimmer/volume course of a block.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LevelPoint {
+    /// Time from the start of the block (ms; may lie outside after trimming).
+    pub at_ms: i64,
+    /// Level 0..=1.
+    pub level: f32,
 }
 
 /// How a scene block lies over the tracks below.
@@ -467,6 +481,48 @@ impl Clip {
         match self.content {
             ClipContent::Scene(id) => Some(id),
             _ => None,
+        }
+    }
+
+    /// Dimmer/volume at time `t` (timeline ms): the level points connected
+    /// by straight lines (before the first and after the last one their
+    /// level), without points `level`. Fades are not included.
+    pub fn level_at(&self, t: u64) -> f32 {
+        let pts = &self.levels;
+        let (Some(first), Some(last)) = (pts.first(), pts.last()) else {
+            return self.level.clamp(0.0, 1.0);
+        };
+        let x = t as i64 - self.start_ms as i64;
+        let v = if x <= first.at_ms {
+            first.level
+        } else if x >= last.at_ms {
+            last.level
+        } else {
+            let i = pts.partition_point(|p| p.at_ms <= x);
+            let (a, b) = (pts[i - 1], pts[i]);
+            let span = (b.at_ms - a.at_ms).max(1) as f32;
+            a.level + (b.level - a.level) * (x - a.at_ms) as f32 / span
+        };
+        v.clamp(0.0, 1.0)
+    }
+
+    /// Add a level point at block time `at_ms` on the current course (the
+    /// shape does not change). Returns its index.
+    pub fn add_level_point(&mut self, at_ms: i64) -> usize {
+        let level = self.level_at((self.start_ms as i64 + at_ms).max(0) as u64);
+        if let Some(i) = self.levels.iter().position(|p| p.at_ms == at_ms) {
+            return i;
+        }
+        let i = self.levels.partition_point(|p| p.at_ms < at_ms);
+        self.levels.insert(i, LevelPoint { at_ms, level });
+        i
+    }
+
+    /// Keep the level points at their place in time when the start of the
+    /// block moves by `delta` ms (trimming at the front).
+    pub fn shift_levels(&mut self, delta: i64) {
+        for p in &mut self.levels {
+            p.at_ms -= delta;
         }
     }
 
@@ -772,6 +828,7 @@ impl Timeline {
             tempo_sync: false,
             speed: 1.0,
             level: 1.0,
+            levels: Vec::new(),
             content,
             prepare: None,
             fade_curve: FadeCurve::Linear,
@@ -816,9 +873,35 @@ impl Timeline {
         if let Some(offset_ms) = second.content.offset_mut() {
             *offset_ms += first;
         }
+        // level points: each part keeps its own, the cut gets a point on both
+        // sides so the course stays the same
+        if !c.levels.is_empty() {
+            let cut = LevelPoint {
+                at_ms: first as i64,
+                level: c.level_at(at),
+            };
+            second.levels = std::iter::once(LevelPoint { at_ms: 0, ..cut })
+                .chain(
+                    c.levels
+                        .iter()
+                        .filter(|p| p.at_ms > cut.at_ms)
+                        .map(|p| LevelPoint {
+                            at_ms: p.at_ms - cut.at_ms,
+                            level: p.level,
+                        }),
+                )
+                .collect();
+        }
         if let Some(a) = self.clip_mut(id) {
             a.duration_ms = first;
             a.fade_out_ms = 0;
+            if !a.levels.is_empty() {
+                a.levels.retain(|p| p.at_ms < first as i64);
+                a.levels.push(LevelPoint {
+                    at_ms: first as i64,
+                    level: c.level_at(at),
+                });
+            }
         }
         self.tracks[track].clips.push(second);
         Some(new_id)
@@ -1123,6 +1206,34 @@ mod tests {
         // Track 1 was occupied at 0..1000 -> the group has to move back far enough
         // that the second block (track 1, +1500) is free: first start 0 works
         assert_eq!(ca.start_ms, 0);
+    }
+
+    #[test]
+    fn level_points_shape_the_course() {
+        let mut t = Timeline::default();
+        let a = t.add_clip(0, ClipContent::Scene(SceneId(1)), 1000, 4000);
+        let c = t.clip_mut(a).unwrap();
+        c.level = 0.8;
+        assert_eq!(c.level_at(3000), 0.8);
+        // a point on the course does not change it
+        c.add_level_point(0);
+        c.add_level_point(2000);
+        assert!((c.level_at(2000) - 0.8).abs() < 1e-6);
+        // fade in: first point down
+        c.levels[0].level = 0.0;
+        assert!((c.level_at(2000) - 0.4).abs() < 1e-3);
+        assert!((c.level_at(3000) - 0.8).abs() < 1e-6);
+        assert_eq!(c.level_at(500), 0.0);
+        // trimming at the front keeps the points in place
+        c.start_ms += 500;
+        c.duration_ms -= 500;
+        c.shift_levels(500);
+        assert!((c.level_at(2000) - 0.4).abs() < 1e-3);
+        // splitting keeps the course on both sides
+        let b = t.split_clip(a, 2000).unwrap();
+        let (ca, cb) = (t.clip(a).unwrap().1.clone(), t.clip(b).unwrap().1.clone());
+        assert!((ca.level_at(1999) - cb.level_at(2000)).abs() < 0.01);
+        assert!((cb.level_at(2500) - 0.6).abs() < 1e-3);
     }
 
     #[test]
