@@ -88,6 +88,22 @@ second screen; fullscreen via the button at the top right).
 * **Handles** on the selection: the red/green/blue axis moves along the
   room's x/y/z, the three rings rotate around the room's x/y/z (snapping,
   Ctrl: free) – also for objects in rotated groups and for fixtures.
+* **Calibrate a moving head** (properties of a single selected moving head,
+  *Calibrate*): makes the venue match the real room.
+  1. *Start calibration* – the real head lights up (white, narrow, shutter
+     open) and points down.
+  2. Click a mark in the 3D view that you can also find in the room (stage
+     corner, edge of a table, a tape mark on the floor). The head turns
+     roughly towards it.
+  3. Steer the real head with *Pan*/*Tilt* (slider, − / + fine, −− / ++
+     coarse) until its beam hits the real mark, then *save point*.
+  4. Repeat for 3–4 marks spread over the room (the further apart, the
+     better), then *Compute*: position and rotation of the head that fit
+     the points best, with the deviation per point. *Apply* moves the head
+     in the venue. Without *Also position* only the rotation is computed
+     (position as measured, 2 points are enough).
+  The head returns to the scenes with *End* or when another fixture is
+  selected.
 * **Pull a side**: small squares sit on the sides of a single selected
   object. Dragging one moves only that side – the object gets longer or
   shorter in that direction, the opposite side stays (boxes, planes,

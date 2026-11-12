@@ -5,6 +5,7 @@
 //! on a second screen).
 
 mod assist;
+mod calibrate;
 pub mod camera;
 mod faces;
 pub mod gltf_import;
@@ -175,6 +176,8 @@ pub struct VizView {
     snap_guides: Vec<snap::Aabb>,
     /// Side of the selected object being pulled.
     face_drag: Option<faces::FaceDrag>,
+    /// Calibration of a moving head against marks in the room.
+    calibrate: calibrate::Calibrate,
 }
 
 /// Fixture from an import without a counterpart in the patch, with a
@@ -479,6 +482,7 @@ impl Default for VizView {
             snap_start: None,
             snap_guides: Vec::new(),
             face_drag: None,
+            calibrate: calibrate::Calibrate::default(),
             sel_objects: Default::default(),
             drag_frames: Vec::new(),
             aim: [0.0; 3],
@@ -627,6 +631,13 @@ impl VizView {
             None
         };
         let gizmo = sel_place.and_then(|f| handles(vp, cam.eye(), rect, f.world));
+        // calibration ends when its head is no longer selected (or outside
+        // build mode): the head goes back to the scenes
+        if let Some(f) = self.calibrate.fixture {
+            if !building || self.selected != Some(Pick::Fixture(f)) {
+                self.calibrate.stop(cx.engine);
+            }
+        }
         // sides of a single selected object to pull
         let face_list = match (building, self.selected) {
             (true, Some(Pick::Object(id))) if self.sel_objects.len() <= 1 => {
@@ -801,7 +812,15 @@ impl VizView {
             self.face_drag = None;
         }
         let cam = *self.camera.as_ref().expect("camera");
-        if resp.clicked() && self.aim_pick {
+        if resp.clicked() && self.calibrate.picking {
+            if let Some(p) = ptr {
+                let (o, d) = cam.ray(uv(p), aspect);
+                if let Some(h) = surface_hit(cx.engine.show(), o, d) {
+                    let mark = (h * 100.0).round().to_array().map(|v| v / 100.0);
+                    self.calibrate.set_mark(cx.engine, mark);
+                }
+            }
+        } else if resp.clicked() && self.aim_pick {
             self.aim_pick = false;
             if let Some(p) = ptr {
                 let (o, d) = cam.ray(uv(p), aspect);
@@ -906,6 +925,7 @@ impl VizView {
             let active = self.face_drag.as_ref().map(|f| (f.axis, f.sign));
             faces::paint(&painter, &face_list, face_hover, active);
         }
+        self.calibrate.paint(&painter, vp, rect, cx.engine);
         if self.aim_pick {
             painter.text(
                 rect.center_top() + vec2(0.0, 12.0),

@@ -804,6 +804,19 @@ impl VizView {
                 self.aim_now(cx, &ids);
             }
         });
+
+        // Calibrate a single moving head against marks in the room
+        if let [id] = ids[..] {
+            let moving = cx
+                .engine
+                .show()
+                .fixture(id)
+                .and_then(|f| cx.engine.show().type_of(f))
+                .is_some_and(|ty| ty.has_kind(ChannelKind::Pan) && ty.has_kind(ChannelKind::Tilt));
+            if moving {
+                self.calibrate_section(ui, cx, id);
+            }
+        }
     }
 
     /// Aim the selected fixtures at the target point.

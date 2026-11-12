@@ -6,6 +6,7 @@
 //! * [`dmx`]     – DMX frame (several universes of 512 channels each)
 
 pub mod audio;
+pub mod calibrate;
 pub mod dip;
 pub mod dmx;
 pub mod engine;
