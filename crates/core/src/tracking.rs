@@ -29,6 +29,13 @@ pub struct Tracker {
     /// Zoom / focus 0–1.
     #[serde(default = "half")]
     pub zoom: f32,
+    /// The target sets the zoom (independent of its own light).
+    #[serde(default = "yes")]
+    pub own_zoom: bool,
+    /// Color cells (rings, segments) the color goes to – bit n = cell n;
+    /// the others stay dark.
+    #[serde(default = "all_cells")]
+    pub cells: u32,
     /// Following now (live state, not saved).
     #[serde(skip)]
     pub active: bool,
@@ -42,6 +49,9 @@ fn one() -> f32 {
 }
 fn half() -> f32 {
     0.5
+}
+fn all_cells() -> u32 {
+    u32::MAX
 }
 fn white() -> [u8; 3] {
     [255, 255, 255]
@@ -71,6 +81,8 @@ impl Show {
             dimmer: 1.0,
             color: white(),
             zoom: 0.5,
+            own_zoom: true,
+            cells: all_cells(),
             active: false,
         });
         id
@@ -78,6 +90,25 @@ impl Show {
 
     pub fn remove_tracker(&mut self, id: u32) {
         self.trackers.retain(|t| t.id != id);
+    }
+
+    /// Number of color cells (rings, segments) of the tracker's fixtures:
+    /// how many red channels the fixture with the most has.
+    pub fn tracker_cells(&self, id: u32) -> usize {
+        let Some(t) = self.tracker(id) else {
+            return 0;
+        };
+        t.fixtures
+            .iter()
+            .filter_map(|f| self.fixture(*f).and_then(|x| self.type_of(x)))
+            .map(|ty| {
+                ty.channels
+                    .iter()
+                    .filter(|c| c.kind == crate::ChannelKind::Red)
+                    .count()
+            })
+            .max()
+            .unwrap_or(0)
     }
 
     /// Room extent (x and z, m) the targets can be moved in.

@@ -288,7 +288,9 @@ const TOOLS: &[Tool] = &[
             "fixtures": ids("Moving heads that follow"),
             "target": json!({ "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3, "description": "[x, height, z] in m" }),
             "active": json!({ "type": "boolean", "description": "Follow now" }),
-            "light": json!({ "type": "boolean", "description": "Own light: dimmer, color, zoom and shutter open from the target (default true)" }),
+            "light": json!({ "type": "boolean", "description": "Own light: dimmer, color and shutter open from the target (default true); the dimmer waits until the heads have arrived" }),
+            "own_zoom": json!({ "type": "boolean", "description": "The target sets the zoom (default true)" }),
+            "cells": json!({ "type": "array", "items": { "type": "integer" }, "description": "Color cells (rings) that get the color, from 1; the others stay dark. Empty/missing = all" }),
             "dimmer": json!({ "type": "number", "description": "0–1" }),
             "color": string("#rrggbb"),
             "zoom": json!({ "type": "number", "description": "Zoom/focus 0–1" }),
@@ -850,6 +852,17 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
             if let Some(v) = a.get("dimmer").and_then(Value::as_f64) {
                 t.dimmer = (v as f32).clamp(0.0, 1.0);
             }
+            if let Some(on) = a.get("own_zoom").and_then(Value::as_bool) {
+                t.own_zoom = on;
+            }
+            if let Some(list) = a.get("cells").and_then(Value::as_array) {
+                let mask = list
+                    .iter()
+                    .filter_map(Value::as_u64)
+                    .filter(|n| (1..=32).contains(n))
+                    .fold(0u32, |m, n| m | 1 << (n - 1));
+                t.cells = if mask == 0 { u32::MAX } else { mask };
+            }
             if let Some(v) = a.get("zoom").and_then(Value::as_f64) {
                 t.zoom = (v as f32).clamp(0.0, 1.0);
             }
@@ -867,6 +880,13 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
                 "dimmer": t.dimmer,
                 "color": format!("#{:02x}{:02x}{:02x}", t.color[0], t.color[1], t.color[2]),
                 "zoom": t.zoom,
+                "own_zoom": t.own_zoom,
+                // empty = all cells
+                "cells": if t.cells == u32::MAX {
+                    Vec::new()
+                } else {
+                    (0..32u32).filter(|n| t.cells & (1 << n) != 0).map(|n| n + 1).collect()
+                },
             }))
         }
         "delete_tracker" => {

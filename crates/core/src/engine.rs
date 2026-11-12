@@ -93,22 +93,35 @@ pub struct Track {
     pub pan: u16,
     pub tilt: u16,
     pub weight: f32,
-    /// Own light of the target (dimmer, color, zoom) – `None`: from the
-    /// other sources.
+    /// Own light of the target (dimmer, color) – `None`: from the other
+    /// sources.
     pub light: Option<TrackLight>,
+    /// Own zoom of the target – `None`: from the other sources.
+    pub zoom: Option<u8>,
+    /// Time (ms) until the head has arrived; the own dimmer waits for it.
+    pub wait_ms: f32,
+    /// How far the own dimmer is up (0–1).
+    pub light_weight: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrackLight {
     pub dimmer: u8,
     pub color: [u8; 3],
-    pub zoom: u8,
+    /// Color cells that get the color (bit n = cell n), the others stay dark.
+    pub cells: u32,
 }
 
 /// LIVE TRACKING: fade in on start …
 const TRACK_IN_MS: f64 = 300.0;
 /// … and back to the scenes on release.
 const TRACK_OUT_MS: f64 = 1000.0;
+/// Assumed speed of a moving head (degrees per second) to estimate when it
+/// has arrived – the own dimmer only comes up then.
+const PAN_DEG_PER_S: f32 = 180.0;
+const TILT_DEG_PER_S: f32 = 150.0;
+/// Extra settling time after the estimated move (ms).
+const SETTLE_MS: f32 = 250.0;
 
 impl Engine {
     pub fn new(show: Show) -> Self {
@@ -1297,20 +1310,27 @@ impl Engine {
     /// LIVE TRACKING: aim the fixtures of following trackers at their
     /// points; released ones fade back to the other sources.
     fn update_tracking(&mut self, real_ms: f64) {
-        let mut wanted: HashMap<FixtureId, ([f32; 3], Option<TrackLight>)> = HashMap::new();
+        type Wanted = ([f32; 3], Option<TrackLight>, Option<u8>);
+        let mut wanted: HashMap<FixtureId, Wanted> = HashMap::new();
         for t in self.show.trackers.iter().filter(|t| t.active) {
             let light = t.light.then(|| TrackLight {
                 dimmer: (t.dimmer.clamp(0.0, 1.0) * 255.0).round() as u8,
                 color: t.color,
-                zoom: (t.zoom.clamp(0.0, 1.0) * 255.0).round() as u8,
+                cells: t.cells,
             });
+            let zoom = t
+                .own_zoom
+                .then(|| (t.zoom.clamp(0.0, 1.0) * 255.0).round() as u8);
             for f in &t.fixtures {
-                wanted.entry(*f).or_insert((t.target, light));
+                wanted.entry(*f).or_insert((t.target, light, zoom));
             }
         }
         let step_in = (real_ms / TRACK_IN_MS) as f32;
         let step_out = (real_ms / TRACK_OUT_MS) as f32;
-        for (f, (target, light)) in &wanted {
+        // where the heads stand now (only needed when one starts to follow)
+        let starting = wanted.keys().any(|f| !self.tracking.contains_key(f));
+        let frame = starting.then(|| self.render_frame());
+        for (f, (target, light, zoom)) in &wanted {
             let prev = self.tracking.get(f).copied();
             let Some((pan, tilt)) =
                 self.show
@@ -1319,6 +1339,23 @@ impl Engine {
                 continue;
             };
             let weight = prev.map_or(0.0, |p| p.weight) + step_in;
+            let (wait_ms, light_weight) = match prev {
+                Some(p) => {
+                    let wait = (p.wait_ms - real_ms as f32).max(0.0);
+                    let lw = if wait > 0.0 {
+                        p.light_weight
+                    } else {
+                        p.light_weight + step_in
+                    };
+                    (wait, lw)
+                }
+                None => (
+                    frame
+                        .as_ref()
+                        .map_or(0.0, |fr| self.travel_ms(fr, *f, pan, tilt)),
+                    0.0,
+                ),
+            };
             self.tracking.insert(
                 *f,
                 Track {
@@ -1326,6 +1363,9 @@ impl Engine {
                     tilt,
                     weight: weight.min(1.0),
                     light: *light,
+                    zoom: *zoom,
+                    wait_ms,
+                    light_weight: light_weight.min(1.0),
                 },
             );
         }
@@ -1334,8 +1374,62 @@ impl Engine {
                 return true;
             }
             t.weight -= step_out;
+            t.light_weight = t.light_weight.min(t.weight);
             t.weight > 0.0
         });
+    }
+
+    /// Estimated time (ms) a moving head needs from its current output
+    /// position in `frame` to pan/tilt `to_pan`/`to_tilt` (programmer values).
+    fn travel_ms(&self, frame: &DmxFrame, f: FixtureId, to_pan: u16, to_tilt: u16) -> f32 {
+        use crate::fixture::ChannelKind as K;
+        let Some(fx) = self.show.fixture(f) else {
+            return 0.0;
+        };
+        let Some(ty) = self.show.type_of(fx) else {
+            return 0.0;
+        };
+        let ph = ty.physical.unwrap_or_default();
+        let lim = fx.limits;
+        let read = |k: K, kf: K| -> Option<u16> {
+            let i = ty.channels.iter().position(|c| c.kind == k)?;
+            let c = frame.get(usize::from(fx.universe), fx.address + i as u16)?;
+            let fine = ty
+                .channels
+                .iter()
+                .position(|c| c.kind == kf)
+                .and_then(|j| frame.get(usize::from(fx.universe), fx.address + j as u16))
+                .unwrap_or(0);
+            Some(u16::from(c) << 8 | u16::from(fine))
+        };
+        let (pan_to, tilt_to) = if lim.swap_pan_tilt {
+            (to_tilt, to_pan)
+        } else {
+            (to_pan, to_tilt)
+        };
+        let deg = |now: Option<u16>, to: u16, min: u8, max: u8, inv: bool, range: f32| {
+            now.map_or(range, |n| {
+                let to = crate::show::FixtureLimits::map16(to, min, max, inv);
+                f32::from(n.abs_diff(to)) / 65535.0 * range
+            })
+        };
+        let pan = deg(
+            read(K::Pan, K::PanFine),
+            pan_to,
+            lim.pan_min,
+            lim.pan_max,
+            lim.invert_pan,
+            ph.pan_range,
+        );
+        let tilt = deg(
+            read(K::Tilt, K::TiltFine),
+            tilt_to,
+            lim.tilt_min,
+            lim.tilt_max,
+            lim.invert_tilt,
+            ph.tilt_range,
+        );
+        (pan / PAN_DEG_PER_S).max(tilt / TILT_DEG_PER_S) * 1000.0 + SETTLE_MS
     }
 
     /// Fixtures that follow a tracker now (or are fading back).
@@ -1367,34 +1461,68 @@ impl Engine {
             // ease in and out
             let w = f64::from(t.weight.clamp(0.0, 1.0));
             let w = w * w * (3.0 - 2.0 * w);
+            if let Some(z) = t.zoom {
+                for (i, def) in ty.channels.iter().enumerate() {
+                    if matches!(def.kind, K::Zoom | K::Focus) {
+                        let ch = ChannelRef {
+                            fixture: *f,
+                            channel: i as u16,
+                        };
+                        let base = values.get(&ch).copied().unwrap_or(0);
+                        values.insert(ch, lerp(base, z, w));
+                        touched.insert(ch);
+                    }
+                }
+            }
             if let Some(l) = t.light {
-                let mut put = |ch: ChannelRef, to: u8| {
+                // the dimmer only comes up once the head has arrived
+                let lw = f64::from(t.light_weight.clamp(0.0, 1.0));
+                let lw = lw * lw * (3.0 - 2.0 * lw);
+                let mut put = |ch: ChannelRef, to: u8, k: f64| {
                     let base = values.get(&ch).copied().unwrap_or(0);
-                    let k = if def_is_strobe(show, ch) { 1.0 } else { w };
                     values.insert(ch, lerp(base, to, k));
                     touched.insert(ch);
                 };
                 let white = l.color.iter().copied().min().unwrap_or(0);
+                // n-th channel of a color = color cell n
+                let mut seen: HashMap<K, u32> = HashMap::new();
                 for (i, def) in ty.channels.iter().enumerate() {
                     let ch = ChannelRef {
                         fixture: *f,
                         channel: i as u16,
                     };
+                    let mut cell = |k: K| {
+                        let n = seen.entry(k).or_insert(0);
+                        let on = *n >= 32 || l.cells & (1 << *n) != 0;
+                        *n += 1;
+                        on
+                    };
                     match def.kind {
-                        K::Dimmer => put(ch, l.dimmer),
-                        K::Red => put(ch, l.color[0]),
-                        K::Green => put(ch, l.color[1]),
-                        K::Blue => put(ch, l.color[2]),
-                        K::White => put(ch, white),
-                        K::Amber | K::Uv => put(ch, 0),
-                        K::Zoom | K::Focus => put(ch, l.zoom),
+                        K::Dimmer => put(ch, l.dimmer, lw),
+                        K::Red => {
+                            let v = if cell(K::Red) { l.color[0] } else { 0 };
+                            put(ch, v, w);
+                        }
+                        K::Green => {
+                            let v = if cell(K::Green) { l.color[1] } else { 0 };
+                            put(ch, v, w);
+                        }
+                        K::Blue => {
+                            let v = if cell(K::Blue) { l.color[2] } else { 0 };
+                            put(ch, v, w);
+                        }
+                        K::White => {
+                            let v = if cell(K::White) { white } else { 0 };
+                            put(ch, v, w);
+                        }
+                        K::Amber | K::Uv => put(ch, 0, w),
                         // shutter open as soon as it follows
-                        K::Strobe if w > 0.0 => put(ch, def.open_value()),
+                        K::Strobe if w > 0.0 => put(ch, def.open_value(), 1.0),
                         _ => {}
                     }
                 }
                 if ty.needs_virtual_dimmer() {
-                    put(ChannelRef::virtual_dimmer(*f), l.dimmer);
+                    put(ChannelRef::virtual_dimmer(*f), l.dimmer, lw);
                 }
             }
             for (coarse, fine, to) in [(K::Pan, K::PanFine, t.pan), (K::Tilt, K::TiltFine, t.tilt)]
@@ -1430,11 +1558,6 @@ impl Engine {
         let f = self.show.fixture(ch.fixture)?;
         frame.get(usize::from(f.universe), f.address + ch.channel)
     }
-}
-
-fn def_is_strobe(show: &Show, ch: ChannelRef) -> bool {
-    show.channel_def(ch)
-        .is_some_and(|d| d.kind == ChannelKind::Strobe)
 }
 
 fn lerp(from: u8, to: u8, t: f64) -> u8 {
@@ -1663,6 +1786,11 @@ mod tests {
                 .get(usize::from(f.universe), f.address + i)
                 .unwrap()
         };
+        // the own dimmer waits until the heads have arrived
+        assert_eq!(dim(&e), 0);
+        assert!(e.tracking()[&heads[0]].wait_ms > 0.0);
+        e.tick(MS(5000));
+        e.tick(MS(400));
         assert_eq!(dim(&e), 255);
         e.show_mut().tracker_mut(tr).unwrap().light = false;
         e.tick(MS(10));

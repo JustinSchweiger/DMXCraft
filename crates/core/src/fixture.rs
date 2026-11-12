@@ -335,7 +335,14 @@ impl ChannelDef {
     /// ranges 0.
     pub fn open_value(&self) -> u8 {
         let find = |f: fn(&RangeEffect) -> bool| self.ranges.iter().find(|r| f(&r.effect));
-        if let Some(r) = find(|e| matches!(e, RangeEffect::Open | RangeEffect::WheelOpen)) {
+        // Of several “open” ranges the highest: on many heads (e.g. SkyWash)
+        // the lower ones sit between strobe ranges and some units strobe there.
+        if let Some(r) = self
+            .ranges
+            .iter()
+            .rev()
+            .find(|r| matches!(r.effect, RangeEffect::Open | RangeEffect::WheelOpen))
+        {
             return r.from;
         }
         find(|e| matches!(e, RangeEffect::Closed)).map_or(0, |r| r.from)
@@ -516,6 +523,24 @@ impl FixtureType {
 #[cfg(test)]
 mod refine_tests {
     use super::ChannelKind as K;
+
+    #[test]
+    fn open_value_takes_the_highest_open_range() {
+        use crate::{ChannelDef, ChannelKind, ChannelRange, RangeEffect};
+        let strobe = RangeEffect::Strobe {
+            from_hz: 1.0,
+            to_hz: 20.0,
+        };
+        let mut c = ChannelDef::new("Strobo", ChannelKind::Strobe);
+        c.ranges = vec![
+            ChannelRange::new(0, 3, RangeEffect::Closed),
+            ChannelRange::new(4, 103, strobe),
+            ChannelRange::new(104, 107, RangeEffect::Open),
+            ChannelRange::new(108, 207, strobe),
+            ChannelRange::new(252, 255, RangeEffect::Open),
+        ];
+        assert_eq!(c.open_value(), 252);
+    }
 
     #[test]
     fn strobe_ranges() {

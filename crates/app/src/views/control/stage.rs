@@ -51,6 +51,7 @@ impl View for StageView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut actions = Vec::new();
         // Group bar on the left, the FX and tracking buttons on the right
+        // (tracking outermost)
         let full = ui.available_rect_before_wrap();
         const FX_W: f32 = 76.0;
         let mut bar = ui.new_child(
@@ -60,12 +61,12 @@ impl View for StageView {
         );
         self.group_bar(&mut bar, cx.engine, cx.state, &mut actions);
         let bar_h = bar.min_rect().height().max(28.0);
-        let fx_rect = egui::Rect::from_min_size(
+        let track_rect = egui::Rect::from_min_size(
             egui::pos2(full.right() - 28.0, full.top()),
             Vec2::new(28.0, 28.0),
         );
+        let fx_rect = track_rect.translate(Vec2::new(-28.0 - theme::SP_S, 0.0));
         fx_button(ui, fx_rect, cx.engine, cx.state);
-        let track_rect = fx_rect.translate(Vec2::new(-28.0 - theme::SP_S, 0.0));
         let following = cx.engine.show().trackers.iter().any(|t| t.active);
         let r = ui
             .place(

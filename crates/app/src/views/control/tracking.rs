@@ -193,7 +193,7 @@ impl TrackingView {
             edit(e, id, |t| t.target[1] = v * MAX_HEIGHT);
         }
         ui.add_space(theme::SP_XS);
-        // own light: dimmer, color, zoom
+        // own light: dimmer, color
         ui.horizontal(|ui| {
             let mut light = tr.light;
             if ui
@@ -203,7 +203,7 @@ impl TrackingView {
                     label(t("Own light")),
                 ))
                 .on_hover_text(t(
-                    "Dimmer, color and zoom from the target instead of the scenes",
+                    "Dimmer and color from the target instead of the scenes – the dimmer comes up once the heads have arrived",
                 ))
                 .changed()
             {
@@ -246,6 +246,74 @@ impl TrackingView {
             ) {
                 edit(e, id, |t| t.dimmer = v);
             }
+            // color cells (rings): which ones get the color
+            let cells = e.show().tracker_cells(id).min(32);
+            if cells > 1 {
+                ui.horizontal(|ui| {
+                    ui.add_sized(
+                        vec2(LABEL_W, 20.0),
+                        egui::Label::new(
+                            egui::RichText::new(t("Color on"))
+                                .font(theme::caption())
+                                .color(theme::text_dim()),
+                        ),
+                    )
+                    .on_hover_text(t(
+                        "Color cells (rings) that get the color – the others stay dark",
+                    ));
+                    for n in 0..cells {
+                        let on = tr.cells & (1 << n) != 0;
+                        let r = ui.add(egui::Button::new((n + 1).to_string()).selected(on));
+                        let mapped = crate::mapping::button(
+                            ui,
+                            &r,
+                            &format!("tracking/{id}/cell{}", n + 1),
+                            on,
+                            || {
+                                (
+                                    t("Tracking").to_string(),
+                                    crate::tr!(
+                                        "{name}: cell {n}",
+                                        name = tr.name.clone(),
+                                        n = n + 1
+                                    ),
+                                )
+                            },
+                        );
+                        if r.clicked() || mapped {
+                            // only the used cells count; never all off
+                            let used = if cells >= 32 {
+                                u32::MAX
+                            } else {
+                                (1u32 << cells) - 1
+                            };
+                            let mask = (tr.cells & used) ^ (1 << n);
+                            if mask != 0 {
+                                edit(e, id, |t| {
+                                    t.cells = if mask == used { u32::MAX } else { mask }
+                                });
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        // zoom: independent of the own light
+        ui.horizontal(|ui| {
+            let mut own = tr.own_zoom;
+            if ui
+                .add(Toggle::new(&mut own, t("Own zoom")).map(
+                    format!("tracking/{id}/own_zoom"),
+                    t("Tracking").to_string(),
+                    label(t("Own zoom")),
+                ))
+                .on_hover_text(t("Zoom from the target instead of the scenes"))
+                .changed()
+            {
+                edit(e, id, |t| t.own_zoom = own);
+            }
+        });
+        if tr.own_zoom {
             if let Some(v) = bar_row(
                 ui,
                 t("Zoom"),

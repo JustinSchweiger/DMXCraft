@@ -35,7 +35,7 @@ a sound player and a live 3D visualizer. Output goes through inexpensive USB-DMX
 | 🎛️ **Scenes & banks** | Static scenes, step sequences, fades, zones and a programmer with live/edit mode |
 | 🌈 **Effects** | Color, movement and curve effects across any fixture group, with presets and palettes |
 | 🎬 **SUPER SCENES** | Timeline with light and media tracks, beat grid from audio analysis, audio triggers, pre-positioning of moving heads before a block (move in black), scene groups as reusable blocks, blocks that blend over the tracks below (a fading flash returns to the color below) or cover them |
-| 🎯 **Live tracking** | Moving heads follow points in the room – any number of targets, each with its own heads, dragged on a room plan or moved with MIDI faders; own light per target (dimmer, color, zoom); release fades back to the scenes |
+| 🎯 **Live tracking** | Moving heads follow points in the room – any number of targets, each with its own heads, dragged on a room plan or moved with MIDI faders; own light per target (dimmer once the heads have arrived, color on chosen rings/cells) and own zoom; release fades back to the scenes |
 | 🔊 **Sound player** | Two decks with playlists, crossfade and a configurable grid of jingle pads |
 | 🧊 **3D visualizer** | Build your venue with trusses and objects, see beams, fog and gobos live |
 | 🧩 **Fixture library** | 2,400+ fixtures from the Open Fixture Library and QLC+, plus your own in the Profile Builder |
