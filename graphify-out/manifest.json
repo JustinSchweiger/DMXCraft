@@ -1038,9 +1038,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/tracking.rs": {
-    "mtime": 1794480545.8382154,
-    "seen": 1794480751.5395417,
-    "ast_hash": "941c45546c72dd7cb0426c3558419c09",
+    "mtime": 1794482766.4642093,
+    "seen": 1794482876.9444382,
+    "ast_hash": "1faaa82933e387549fcb9e9f421a00d9",
     "semantic_hash": ""
   },
   "crates/core/src/tracking.rs": {

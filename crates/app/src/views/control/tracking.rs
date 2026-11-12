@@ -122,7 +122,15 @@ impl TrackingView {
                 self.header(ui, e, st, &tr, col, &mut delete);
                 self.controls(ui, e, &tr, col);
             });
-            if r.response.interact(Sense::click()).clicked() {
+            // a click on the card (not on its controls) picks the target;
+            // checked by position so the controls keep their own clicks
+            let clicked_card = ui.input(|i| {
+                i.pointer.primary_clicked()
+                    && i.pointer
+                        .interact_pos()
+                        .is_some_and(|p| r.response.rect.contains(p))
+            });
+            if clicked_card {
                 self.current = Some(id);
             }
             ui.add_space(theme::SP_XS);
