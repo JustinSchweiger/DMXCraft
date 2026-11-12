@@ -279,6 +279,26 @@ const TOOLS: &[Tool] = &[
         read_only: false,
     },
     Tool {
+        name: "set_tracker",
+        title: "Create/change LIVE TRACKING target",
+        description: "LIVE TRACKING: moving heads follow a point in the room – each gets its own pan/tilt so all beams meet there (above scenes, programmer and live values; only pan/tilt). Without `id` a new target is created. `target` [x, height, z] in meters like the 3D venue (x to the right, z towards the stage side as in get_venue). `active` starts/stops following (released heads fade back to the scenes in 1 s).",
+        schema: || obj(props! {
+            "id": int("Target ID (empty = new)"),
+            "name": string("Name"),
+            "fixtures": ids("Moving heads that follow"),
+            "target": json!({ "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3, "description": "[x, height, z] in m" }),
+            "active": json!({ "type": "boolean", "description": "Follow now" }),
+        }, &[]),
+        read_only: false,
+    },
+    Tool {
+        name: "delete_tracker",
+        title: "Delete LIVE TRACKING target",
+        description: "Deletes a LIVE TRACKING target; its moving heads go back to the scenes.",
+        schema: || obj(props! { "id": int("Target ID") }, &["id"]),
+        read_only: false,
+    },
+    Tool {
         name: "delete_group",
         title: "Delete group",
         description: "Deletes a group (the fixtures stay).",
@@ -778,6 +798,58 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
             }
             e.sync();
             Ok(json!({ "deleted": list }))
+        }
+        "set_tracker" => {
+            let fixtures = match a.get("fixtures") {
+                Some(_) => Some(existing_fixtures(e.show(), &id_list(a, "fixtures")?)?),
+                None => None,
+            };
+            let target = match a.get("target").and_then(Value::as_array) {
+                Some(v) if v.len() == 3 => {
+                    let n = |i: usize| v[i].as_f64().map(|x| x as f32).ok_or("target: numbers");
+                    Some([n(0)?, n(1)?, n(2)?])
+                }
+                Some(_) => return Err("target: [x, height, z]".into()),
+                None => None,
+            };
+            let show = e.show_mut();
+            let id = match opt_u64(a, "id") {
+                Some(id) => {
+                    show.tracker(id as u32).ok_or("Target not found")?;
+                    id as u32
+                }
+                None => show.add_tracker(
+                    opt_str(a, "name").unwrap_or_else(|| "Target".into()),
+                    Vec::new(),
+                ),
+            };
+            let t = show.tracker_mut(id).ok_or("Target not found")?;
+            if let Some(n) = opt_str(a, "name") {
+                t.name = n;
+            }
+            if let Some(f) = fixtures {
+                t.fixtures = f;
+            }
+            if let Some(p) = target {
+                t.target = p;
+            }
+            if let Some(on) = a.get("active").and_then(Value::as_bool) {
+                t.active = on;
+            }
+            let t = show.tracker(id).ok_or("Target not found")?;
+            Ok(json!({
+                "id": t.id,
+                "name": t.name,
+                "fixtures": t.fixtures.iter().map(|f| f.0).collect::<Vec<_>>(),
+                "target": t.target,
+                "active": t.active,
+            }))
+        }
+        "delete_tracker" => {
+            let id = req_u32(a, "id")?;
+            e.show().tracker(id).ok_or("Target not found")?;
+            e.show_mut().remove_tracker(id);
+            Ok(json!({ "deleted": id }))
         }
         "create_group" => {
             let name = req_str(a, "name")?;

@@ -484,7 +484,7 @@ fn time_text(ms: u64, hours: bool) -> String {
 }
 
 /// Horizontal bar slider 0..=1, optionally with text in the middle.
-fn bar_slider(
+pub(super) fn bar_slider(
     ui: &mut egui::Ui,
     id: &str,
     v: &mut f32,

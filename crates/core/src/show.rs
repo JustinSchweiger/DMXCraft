@@ -742,6 +742,9 @@ pub struct Show {
     /// SCENE GROUPS (scenes with offsets, used as blocks in SUPER SCENES).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scene_groups: Vec<crate::scene_group::SceneGroup>,
+    /// LIVE TRACKING: points that moving heads follow.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trackers: Vec<crate::tracking::Tracker>,
 }
 
 impl Default for Show {
@@ -768,6 +771,7 @@ impl Show {
             obs: Default::default(),
             sound: Default::default(),
             scene_groups: Vec::new(),
+            trackers: Vec::new(),
         }
     }
 
@@ -977,6 +981,9 @@ impl Show {
         for g in &mut self.groups {
             g.fixtures.retain(|f| *f != id);
         }
+        for t in &mut self.trackers {
+            t.fixtures.retain(|f| *f != id);
+        }
         for scene in &mut self.scenes {
             for step in &mut scene.steps {
                 step.values.retain(|v| v.fixture != id);
@@ -1089,6 +1096,17 @@ impl Show {
     /// into account. `None` if the fixture has no pan/tilt or the point is
     /// out of reach.
     pub fn aim_moving_head(&self, id: FixtureId, target: [f32; 3]) -> Option<(u16, u16)> {
+        self.aim_moving_head_near(id, target, None)
+    }
+
+    /// Like [`Show::aim_moving_head`]; of the possible pan/tilt pairs the one
+    /// closest to `near` (so a following head does not swing around).
+    pub fn aim_moving_head_near(
+        &self,
+        id: FixtureId,
+        target: [f32; 3],
+        near: Option<(u16, u16)>,
+    ) -> Option<(u16, u16)> {
         let f = self.fixture(id)?;
         let ty = self.type_of(f)?;
         if !ty.has_kind(crate::ChannelKind::Pan) || !ty.has_kind(crate::ChannelKind::Tilt) {
@@ -1116,17 +1134,26 @@ impl Show {
             let v = ((o - lo) / (hi - lo) * 65535.0).round().clamp(0.0, 65535.0) as u16;
             Some(if invert { u16::MAX - v } else { v })
         };
-        crate::venue::moving_head_aim(p.rotation, origin, target, ph.pan_range, ph.tilt_range)
-            .into_iter()
-            .find_map(|(pan, tilt)| {
-                let po = inv(pan, lim.pan_min, lim.pan_max, lim.invert_pan)?;
-                let to = inv(tilt, lim.tilt_min, lim.tilt_max, lim.invert_tilt)?;
-                Some(if lim.swap_pan_tilt {
-                    (to, po)
-                } else {
-                    (po, to)
-                })
-            })
+        let mut all =
+            crate::venue::moving_head_aim(p.rotation, origin, target, ph.pan_range, ph.tilt_range)
+                .into_iter()
+                .filter_map(|(pan, tilt)| {
+                    let po = inv(pan, lim.pan_min, lim.pan_max, lim.invert_pan)?;
+                    let to = inv(tilt, lim.tilt_min, lim.tilt_max, lim.invert_tilt)?;
+                    Some(if lim.swap_pan_tilt {
+                        (to, po)
+                    } else {
+                        (po, to)
+                    })
+                });
+        let Some((np, nt)) = near else {
+            return all.next();
+        };
+        all.min_by_key(|&(p, t)| {
+            let dp = i64::from(p) - i64::from(np);
+            let dt = i64::from(t) - i64::from(nt);
+            dp * dp + dt * dt
+        })
     }
 
     /// Position in the stage plan (own or automatic).

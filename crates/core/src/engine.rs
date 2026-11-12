@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use crate::dmx::DmxFrame;
 use crate::fixture::ChannelKind;
-use crate::show::{ChannelRef, FixtureLimits, LoopMode, SceneId, Show};
+use crate::show::{ChannelRef, FixtureId, FixtureLimits, LoopMode, SceneId, Show};
 
 /// Upper limit for step changes per tick (protection against endless loops
 /// in scenes with very short steps).
@@ -82,7 +82,23 @@ pub struct Engine {
     /// MOVE FX being edited: its beams stay on this point (scene, effect,
     /// pan/tilt 0..1).
     move_hold: Option<(SceneId, u32, [f32; 2])>,
+    /// LIVE TRACKING per fixture: pan/tilt (16 bit) and how far it covers
+    /// the other sources (fades in on start, out on release).
+    tracking: HashMap<FixtureId, Track>,
 }
+
+/// Pan/tilt of a following fixture.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Track {
+    pub pan: u16,
+    pub tilt: u16,
+    pub weight: f32,
+}
+
+/// LIVE TRACKING: fade in on start …
+const TRACK_IN_MS: f64 = 300.0;
+/// … and back to the scenes on release.
+const TRACK_OUT_MS: f64 = 1000.0;
 
 impl Engine {
     pub fn new(show: Show) -> Self {
@@ -100,6 +116,7 @@ impl Engine {
             speed: 1.0,
             timeline_cursor: 0.0,
             move_hold: None,
+            tracking: HashMap::new(),
         }
     }
 
@@ -462,6 +479,7 @@ impl Engine {
     pub fn tick(&mut self, dt: Duration) {
         let dt_ms = dt.as_secs_f64() * 1000.0 * f64::from(self.speed);
         let real_ms = dt.as_secs_f64() * 1000.0;
+        self.update_tracking(real_ms);
         // remove scenes that have faded out
         let show = &self.show;
         self.playing.retain_mut(|p| match &mut p.releasing {
@@ -1142,6 +1160,9 @@ impl Engine {
             }
         }
 
+        // 5a) LIVE TRACKING: pan/tilt of following fixtures
+        self.apply_tracking(show, &mut values, &mut touched);
+
         // 5b) Virtual dimmers: turn down the color channels proportionally. The
         // stored values stay unchanged, only the output is scaled.
         Self::apply_virtual_dimmers(show, &mut values);
@@ -1263,6 +1284,92 @@ impl Engine {
     }
 
     /// Convenience function: create a new frame.
+    /// LIVE TRACKING: aim the fixtures of following trackers at their
+    /// points; released ones fade back to the other sources.
+    fn update_tracking(&mut self, real_ms: f64) {
+        let mut wanted: HashMap<FixtureId, [f32; 3]> = HashMap::new();
+        for t in self.show.trackers.iter().filter(|t| t.active) {
+            for f in &t.fixtures {
+                wanted.entry(*f).or_insert(t.target);
+            }
+        }
+        let step_in = (real_ms / TRACK_IN_MS) as f32;
+        let step_out = (real_ms / TRACK_OUT_MS) as f32;
+        for (f, target) in &wanted {
+            let prev = self.tracking.get(f).copied();
+            let Some((pan, tilt)) =
+                self.show
+                    .aim_moving_head_near(*f, *target, prev.map(|p| (p.pan, p.tilt)))
+            else {
+                continue;
+            };
+            let weight = prev.map_or(0.0, |p| p.weight) + step_in;
+            self.tracking.insert(
+                *f,
+                Track {
+                    pan,
+                    tilt,
+                    weight: weight.min(1.0),
+                },
+            );
+        }
+        self.tracking.retain(|f, t| {
+            if wanted.contains_key(f) {
+                return true;
+            }
+            t.weight -= step_out;
+            t.weight > 0.0
+        });
+    }
+
+    /// Fixtures that follow a tracker now (or are fading back).
+    pub fn tracking(&self) -> &HashMap<FixtureId, Track> {
+        &self.tracking
+    }
+
+    /// Lay the pan/tilt of following fixtures over the other values.
+    fn apply_tracking(
+        &self,
+        show: &Show,
+        values: &mut HashMap<ChannelRef, u8>,
+        touched: &mut std::collections::HashSet<ChannelRef>,
+    ) {
+        use crate::fixture::ChannelKind as K;
+        for (f, t) in &self.tracking {
+            let Some(ty) = show.fixture(*f).and_then(|x| show.type_of(x)) else {
+                continue;
+            };
+            let find = |k: K| {
+                ty.channels
+                    .iter()
+                    .position(|c| c.kind == k)
+                    .map(|i| ChannelRef {
+                        fixture: *f,
+                        channel: i as u16,
+                    })
+            };
+            // ease in and out
+            let w = f64::from(t.weight.clamp(0.0, 1.0));
+            let w = w * w * (3.0 - 2.0 * w);
+            for (coarse, fine, to) in [(K::Pan, K::PanFine, t.pan), (K::Tilt, K::TiltFine, t.tilt)]
+            {
+                let Some(c) = find(coarse) else {
+                    continue;
+                };
+                let fine = find(fine);
+                let base = u16::from(values.get(&c).copied().unwrap_or(0)) << 8
+                    | u16::from(fine.and_then(|x| values.get(&x).copied()).unwrap_or(0));
+                let v = (f64::from(base) + (f64::from(to) - f64::from(base)) * w).round() as u16;
+                values.insert(c, (v >> 8) as u8);
+                touched.insert(c);
+                if let Some(fc) = fine {
+                    values.insert(fc, (v & 0xFF) as u8);
+                    touched.insert(fc);
+                }
+            }
+        }
+    }
+
     pub fn render_frame(&self) -> DmxFrame {
         let mut f = DmxFrame::new(usize::from(self.show.universes));
         self.render(&mut f);
@@ -1448,6 +1555,57 @@ mod tests {
         let lc = tl2.clip_mut(l).unwrap();
         lc.start_ms = 800;
         assert_eq!(e.timeline_values(&s, &tl2, 1000.0, 0).get(&ch(pan)), None);
+    }
+
+    #[test]
+    fn tracking_aims_heads_at_the_point_and_releases_softly() {
+        let mut s = Show::new("T", 1);
+        s.fixture_types = builtin_fixture_types();
+        let mut heads = Vec::new();
+        for (i, x) in [-2.0f32, 2.0].into_iter().enumerate() {
+            let id = s
+                .add_fixture("MH", "generic/moving-head-spot-11ch", 0, 1 + 20 * i as u16)
+                .unwrap();
+            s.fixture_mut(id).unwrap().place3d = Some(crate::venue::Placement {
+                position: [x, 4.0, 0.0],
+                rotation: [0.0, -90.0, 0.0],
+            });
+            heads.push(id);
+        }
+        let tr = s.add_tracker("A", heads.clone());
+        let target = [0.5, 1.0, 2.0];
+        s.tracker_mut(tr).unwrap().target = target;
+        let mut e = Engine::new(s);
+        let pan_tilt = |e: &Engine, id: FixtureId| {
+            let ty = e.show().type_of(e.show().fixture(id).unwrap()).unwrap();
+            let at = |k: ChannelKind| {
+                let i = ty.channels.iter().position(|c| c.kind == k).unwrap() as u16;
+                let f = e.show().fixture(id).unwrap();
+                e.render_frame()
+                    .get(usize::from(f.universe), f.address + i)
+                    .unwrap()
+            };
+            (at(ChannelKind::Pan), at(ChannelKind::Tilt))
+        };
+        let rest = pan_tilt(&e, heads[0]);
+        e.show_mut().tracker_mut(tr).unwrap().active = true;
+        e.tick(MS(500));
+        for id in &heads {
+            let want = e.show().aim_moving_head(*id, target).unwrap();
+            let lim = e.show().fixture(*id).unwrap().limits;
+            let p = FixtureLimits::map16(want.0, lim.pan_min, lim.pan_max, lim.invert_pan);
+            let t = FixtureLimits::map16(want.1, lim.tilt_min, lim.tilt_max, lim.invert_tilt);
+            assert_eq!(pan_tilt(&e, *id), ((p >> 8) as u8, (t >> 8) as u8));
+        }
+        // different heads, different angles for the same point
+        assert_ne!(pan_tilt(&e, heads[0]), pan_tilt(&e, heads[1]));
+        // released: halfway back after half the time, then back to the scenes
+        e.show_mut().tracker_mut(tr).unwrap().active = false;
+        e.tick(MS(500));
+        assert!(!e.tracking().is_empty());
+        e.tick(MS(600));
+        assert!(e.tracking().is_empty());
+        assert_eq!(pan_tilt(&e, heads[0]), rest);
     }
 
     #[test]

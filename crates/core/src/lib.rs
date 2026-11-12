@@ -21,6 +21,7 @@ pub mod show;
 pub mod sound;
 pub mod timeline;
 pub mod touch;
+pub mod tracking;
 pub mod venue;
 
 pub use dmx::{DmxFrame, UNIVERSE_SIZE};

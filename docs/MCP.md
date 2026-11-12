@@ -50,7 +50,7 @@ sessions).
 | Effects | `describe_effect`, `add_effect`, `update_effect`, `remove_effect` |
 | SUPER SCENE | `create_super_scene`, `set_scene_group`/`delete_scene_group` (SCENE GROUPS: scenes with offsets, as one block via `group` in `add_timeline_clips`), `add_timeline_clips`, `update_timeline` (block times, fades, `prepare` = pre-position before a block, `allow_overlap`), `remove_timeline_clips` (scene blocks only on light tracks, audio/video/OBS only on media tracks; blocks: scene, `audio_path`, `video_path` for OBS, `obs_scene`/`obs_source` for OBS actions, see `docs/OBS.md`) |
 | Playback | `play_scene`, `stop_scene`, `pause_scene`, `set_output` (master, blackout, tempo) |
-| Live | `set_live_values`, `clear_live_values` |
+| Live | `set_live_values`, `clear_live_values`, `set_tracker`/`delete_tracker` (LIVE TRACKING: moving heads follow a point) |
 | 3D venue | `get_venue`, `set_venue`, `add_venue_object`, `update_venue_object`, `delete_venue_objects`, `place_fixtures` (position, hang on a truss, aim at a point) |
 | 3D visualizer | `get_visualizer`, `set_visualizer` (window, quality, camera), `visualizer_screenshot` (PNG image of the view with the current DMX output) |
 | Profile Builder | `list_profiles`, `get_profile`, `describe_profile_format`, `save_profile`, `delete_profile` |

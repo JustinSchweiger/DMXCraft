@@ -32,6 +32,7 @@ a sound player and a live 3D visualizer. Output goes through inexpensive USB-DMX
 
 |  |  |
 |---|---|
+| 🎯 **Live tracking** | Moving heads follow points in the room – any number of targets, each with its own heads, dragged on a room plan or moved with MIDI faders; release fades back to the scenes |
 | 🎛️ **Scenes & banks** | Static scenes, step sequences, fades, zones and a programmer with live/edit mode |
 | 🌈 **Effects** | Color, movement and curve effects across any fixture group, with presets and palettes |
 | 🎬 **SUPER SCENES** | Timeline with light and media tracks, beat grid from audio analysis, audio triggers, pre-positioning of moving heads before a block (move in black), scene groups as reusable blocks, blocks that blend over the tracks below (a fading flash returns to the color below) or cover them |

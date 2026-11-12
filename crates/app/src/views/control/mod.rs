@@ -9,6 +9,7 @@ pub mod scene_groups;
 pub mod scene_props;
 pub mod stage;
 pub mod timeline;
+pub mod tracking;
 
 pub use programmer::ProgrammerView;
 pub use scene_grid::SceneGridView;

@@ -27,6 +27,9 @@ pub struct StageView {
     /// Ongoing rename of a group.
     rename: Option<(GroupId, String)>,
     rename_focus: bool,
+    /// LIVE TRACKING instead of the plan.
+    tracking: bool,
+    tracking_view: super::tracking::TrackingView,
 }
 
 /// Copy/paste of a fixture look (from the right-click menu or shortcuts).
@@ -47,9 +50,9 @@ enum GroupAction {
 impl View for StageView {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let mut actions = Vec::new();
-        // Group bar on the left, the FX button on the right
+        // Group bar on the left, the FX and tracking buttons on the right
         let full = ui.available_rect_before_wrap();
-        const FX_W: f32 = 40.0;
+        const FX_W: f32 = 76.0;
         let mut bar = ui.new_child(
             egui::UiBuilder::new()
                 .max_rect(full.with_max_x(full.right() - FX_W - theme::SP_S))
@@ -62,9 +65,29 @@ impl View for StageView {
             Vec2::new(28.0, 28.0),
         );
         fx_button(ui, fx_rect, cx.engine, cx.state);
+        let track_rect = fx_rect.translate(Vec2::new(-28.0 - theme::SP_S, 0.0));
+        let following = cx.engine.show().trackers.iter().any(|t| t.active);
+        let r = ui
+            .place(
+                track_rect,
+                IconButton::new(Icon::Center)
+                    .size(28.0)
+                    .active(self.tracking || following),
+            )
+            .on_hover_text(t("Live tracking: moving heads follow points"));
+        let mapped = crate::mapping::button(ui, &r, "stage/tracking", self.tracking, || {
+            (t("Stage").to_string(), t("Live tracking").to_string())
+        });
+        if r.clicked() || mapped {
+            self.tracking = !self.tracking;
+        }
         ui.allocate_exact_size(Vec2::new(full.width(), bar_h), Sense::hover());
         self.apply(cx.engine, cx.state, actions);
         ui.add_space(theme::SP_S);
+        if self.tracking {
+            self.tracking_view.ui(ui, cx.engine, cx.state);
+            return;
+        }
         let show = cx.engine.show();
         let order = cx.state.selection_order.clone();
         // clicked mapping: image below the fixtures, frame on top
