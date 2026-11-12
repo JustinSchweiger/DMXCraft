@@ -329,6 +329,18 @@ impl ChannelDef {
 
     /// Shutter/strobe for the value `v`: `None` open, `Some(0.0)` closed,
     /// `Some(hz)` flashing. Without ranges: below 10 open, above that 1–20 Hz.
+    /// Value with the shutter open and no strobe (for following moving
+    /// heads): start of an “open” range; a pure strobe channel (only
+    /// “closed” and strobe ranges) is on at its “closed” range; without
+    /// ranges 0.
+    pub fn open_value(&self) -> u8 {
+        let find = |f: fn(&RangeEffect) -> bool| self.ranges.iter().find(|r| f(&r.effect));
+        if let Some(r) = find(|e| matches!(e, RangeEffect::Open | RangeEffect::WheelOpen)) {
+            return r.from;
+        }
+        find(|e| matches!(e, RangeEffect::Closed)).map_or(0, |r| r.from)
+    }
+
     pub fn strobe(&self, v: u8) -> Option<f32> {
         if !self.ranges.is_empty() {
             // Without any “open” range the channel is a pure strobe channel:

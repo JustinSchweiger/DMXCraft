@@ -288,6 +288,10 @@ const TOOLS: &[Tool] = &[
             "fixtures": ids("Moving heads that follow"),
             "target": json!({ "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3, "description": "[x, height, z] in m" }),
             "active": json!({ "type": "boolean", "description": "Follow now" }),
+            "light": json!({ "type": "boolean", "description": "Own light: dimmer, color, zoom and shutter open from the target (default true)" }),
+            "dimmer": json!({ "type": "number", "description": "0–1" }),
+            "color": string("#rrggbb"),
+            "zoom": json!({ "type": "number", "description": "Zoom/focus 0–1" }),
         }, &[]),
         read_only: false,
     },
@@ -812,6 +816,10 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
                 Some(_) => return Err("target: [x, height, z]".into()),
                 None => None,
             };
+            let rgb = match opt_str(a, "color") {
+                Some(c) => Some(parse_hex(&c)?),
+                None => None,
+            };
             let show = e.show_mut();
             let id = match opt_u64(a, "id") {
                 Some(id) => {
@@ -836,6 +844,18 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
             if let Some(on) = a.get("active").and_then(Value::as_bool) {
                 t.active = on;
             }
+            if let Some(on) = a.get("light").and_then(Value::as_bool) {
+                t.light = on;
+            }
+            if let Some(v) = a.get("dimmer").and_then(Value::as_f64) {
+                t.dimmer = (v as f32).clamp(0.0, 1.0);
+            }
+            if let Some(v) = a.get("zoom").and_then(Value::as_f64) {
+                t.zoom = (v as f32).clamp(0.0, 1.0);
+            }
+            if let Some(c) = rgb {
+                t.color = c;
+            }
             let t = show.tracker(id).ok_or("Target not found")?;
             Ok(json!({
                 "id": t.id,
@@ -843,6 +863,10 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
                 "fixtures": t.fixtures.iter().map(|f| f.0).collect::<Vec<_>>(),
                 "target": t.target,
                 "active": t.active,
+                "light": t.light,
+                "dimmer": t.dimmer,
+                "color": format!("#{:02x}{:02x}{:02x}", t.color[0], t.color[1], t.color[2]),
+                "zoom": t.zoom,
             }))
         }
         "delete_tracker" => {

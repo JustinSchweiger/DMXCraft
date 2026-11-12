@@ -1593,6 +1593,48 @@ fn ray_aabb_exit(o: Vec3, d: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
     slab(o, d, min, max).map(|(_, t1)| t1)
 }
 
+/// An object of the venue seen from above (for plans outside the 3D view).
+pub struct FloorShape {
+    /// Outline in x/z (m).
+    pub outline: [[f32; 2]; 4],
+    /// Lowest and highest point (m).
+    pub bottom: f32,
+    pub top: f32,
+    pub truss: bool,
+}
+
+/// All visible objects of the venue from above.
+pub fn floor_plan(show: &Show) -> Vec<FloorShape> {
+    let mut out = Vec::new();
+    for (ob, m) in show.venue.flatten() {
+        let Some(b) = object_box(show, ob, m) else {
+            continue;
+        };
+        let corner = |x: f32, y: f32, z: f32| b * Vec3::new(x, y, z).extend(1.0);
+        let ys: Vec<f32> = (0..8)
+            .map(|i| {
+                corner(
+                    if i & 1 == 0 { -0.5 } else { 0.5 },
+                    if i & 2 == 0 { -0.5 } else { 0.5 },
+                    if i & 4 == 0 { -0.5 } else { 0.5 },
+                )
+                .y
+            })
+            .collect();
+        let xz = |x: f32, z: f32| {
+            let p = corner(x, -0.5, z);
+            [p.x, p.z]
+        };
+        out.push(FloorShape {
+            outline: [xz(-0.5, -0.5), xz(0.5, -0.5), xz(0.5, 0.5), xz(-0.5, 0.5)],
+            bottom: ys.iter().copied().fold(f32::MAX, f32::min),
+            top: ys.iter().copied().fold(f32::MIN, f32::max),
+            truss: matches!(ob.shape, Shape::Truss { .. }),
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,8 +1,9 @@
 //! LIVE TRACKING: moving heads follow points in the room. Each tracker has a
 //! target point (meters, like the 3D venue) and its fixtures; while it
 //! follows, every fixture gets its own pan/tilt so all beams meet in the
-//! point. It lies above scenes, programmer and live values and only takes
-//! pan/tilt – color, dimmer, focus … come from the scenes or the programmer.
+//! point. It lies above scenes, programmer and live values. Besides pan/tilt
+//! a target can also bring its own light (dimmer, color, zoom, shutter open)
+//! – otherwise that comes from the scenes or the programmer.
 
 use serde::{Deserialize, Serialize};
 
@@ -17,9 +18,33 @@ pub struct Tracker {
     pub fixtures: Vec<FixtureId>,
     /// Target in the room (m): x (left/right), y (height), z (front/back).
     pub target: [f32; 3],
+    /// The target brings its own light (dimmer, color, zoom, shutter open).
+    #[serde(default = "yes")]
+    pub light: bool,
+    /// Dimmer 0–1.
+    #[serde(default = "one")]
+    pub dimmer: f32,
+    #[serde(default = "white")]
+    pub color: [u8; 3],
+    /// Zoom / focus 0–1.
+    #[serde(default = "half")]
+    pub zoom: f32,
     /// Following now (live state, not saved).
     #[serde(skip)]
     pub active: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+fn one() -> f32 {
+    1.0
+}
+fn half() -> f32 {
+    0.5
+}
+fn white() -> [u8; 3] {
+    [255, 255, 255]
 }
 
 /// Default height of the target: chest height of a person.
@@ -42,6 +67,10 @@ impl Show {
             name: name.into(),
             fixtures,
             target: [0.0, DEFAULT_HEIGHT, 0.0],
+            light: true,
+            dimmer: 1.0,
+            color: white(),
+            zoom: 0.5,
             active: false,
         });
         id
