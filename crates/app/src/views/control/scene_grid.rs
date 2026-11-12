@@ -126,8 +126,11 @@ impl View for SceneGridView {
         let mut actions = Vec::new();
         self.bank_bar(ui, cx.engine, cx.state.locked, &mut actions);
         ui.add_space(theme::SP_XS);
-        super::scene_groups::strip(ui, cx.engine, cx.state);
-        ui.add_space(theme::SP_XS);
+        // scene groups are built in EDIT mode; in LIVE the bar stays hidden
+        if cx.state.programmer_mode != crate::state::ProgrammerMode::Live {
+            super::scene_groups::strip(ui, cx.engine, cx.state);
+            ui.add_space(theme::SP_XS);
+        }
         let sel_before = cx.state.selected_scenes.clone();
 
         // a hidden bank can no longer be selected as a filter

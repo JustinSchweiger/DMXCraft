@@ -264,9 +264,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/scene_grid.rs": {
-    "mtime": 1794438829.1816657,
-    "seen": 1794438926.4074533,
-    "ast_hash": "169bd0c19f94b34c0386575ae1c3acca",
+    "mtime": 1794526243.1084187,
+    "seen": 1794526278.6951864,
+    "ast_hash": "cc6c5c07525f82f24227962b41744f34",
     "semantic_hash": ""
   },
   "crates/app/src/views/control/stage.rs": {
