@@ -6,6 +6,7 @@
 
 mod assist;
 pub mod camera;
+mod faces;
 pub mod gltf_import;
 pub mod library;
 pub mod mesh;
@@ -172,6 +173,8 @@ pub struct VizView {
     snap: snap::Snap,
     snap_start: Option<snap::SnapStart>,
     snap_guides: Vec<snap::Aabb>,
+    /// Side of the selected object being pulled.
+    face_drag: Option<faces::FaceDrag>,
 }
 
 /// Fixture from an import without a counterpart in the patch, with a
@@ -475,6 +478,7 @@ impl Default for VizView {
             snap: snap::Snap::default(),
             snap_start: None,
             snap_guides: Vec::new(),
+            face_drag: None,
             sel_objects: Default::default(),
             drag_frames: Vec::new(),
             aim: [0.0; 3],
@@ -623,8 +627,36 @@ impl VizView {
             None
         };
         let gizmo = sel_place.and_then(|f| handles(vp, cam.eye(), rect, f.world));
-        let gizmo_hover = gizmo.as_ref().zip(ptr).and_then(|(g, p)| g.hit(p));
+        // sides of a single selected object to pull
+        let face_list = match (building, self.selected) {
+            (true, Some(Pick::Object(id))) if self.sel_objects.len() <= 1 => {
+                faces::faces(cx.engine.show(), id, vp, rect)
+            }
+            _ => Vec::new(),
+        };
+        let face_hover = ptr.and_then(|p| faces::hit(&face_list, p));
+        if face_hover.is_some() || self.face_drag.is_some() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+        }
+        let gizmo_hover = gizmo
+            .as_ref()
+            .zip(ptr)
+            .and_then(|(g, p)| g.hit(p))
+            .filter(|_| face_hover.is_none());
+        let mut face_started = false;
         if resp.drag_started_by(egui::PointerButton::Primary) {
+            let origin = ui.input(|i| i.pointer.press_origin());
+            if let (Some(o), Some(Pick::Object(id)), Some(f)) = (origin, self.selected, sel_place) {
+                if let Some(i) = faces::hit(&face_list, o) {
+                    if let Some(ob) = cx.engine.show().venue.find(id) {
+                        self.face_drag =
+                            Some(faces::FaceDrag::new(id, &face_list[i], o, ob.clone(), f));
+                        face_started = true;
+                    }
+                }
+            }
+        }
+        if resp.drag_started_by(egui::PointerButton::Primary) && !face_started {
             // check where the button was pressed (at a low frame rate the pointer has
             // moved on by the time the drag is recognized)
             let origin = ui.input(|i| i.pointer.press_origin());
@@ -680,7 +712,15 @@ impl VizView {
                 rotate_all(cx, &gd.frames, axis, deg);
             }
         }
-        if self.gizmo.is_some() {
+        if let (Some(fd), Some(p)) = (self.face_drag.as_ref(), ptr) {
+            let grid = if mods.command { 0.0 } else { self.snap.grid };
+            let new = fd.apply(p, grid);
+            if let Some(ob) = cx.engine.show_mut().venue.find_mut(fd.id) {
+                ob.shape = new.shape;
+                ob.transform = new.transform;
+            }
+        }
+        if self.gizmo.is_some() || self.face_drag.is_some() {
             // A handle is being dragged – the camera stays put
         } else if resp.dragged_by(egui::PointerButton::Secondary) {
             cam.pan(Vec2::new(delta.x, delta.y), rect.height());
@@ -758,6 +798,7 @@ impl VizView {
             self.gizmo = None;
             self.snap_start = None;
             self.snap_guides.clear();
+            self.face_drag = None;
         }
         let cam = *self.camera.as_ref().expect("camera");
         if resp.clicked() && self.aim_pick {
@@ -861,6 +902,10 @@ impl VizView {
         if let Some(g) = &gizmo {
             g.paint(&painter, self.gizmo.as_ref().map(|g| g.handle), gizmo_hover);
         }
+        {
+            let active = self.face_drag.as_ref().map(|f| (f.axis, f.sign));
+            faces::paint(&painter, &face_list, face_hover, active);
+        }
         if self.aim_pick {
             painter.text(
                 rect.center_top() + vec2(0.0, 12.0),
@@ -871,7 +916,7 @@ impl VizView {
             );
         }
         if building {
-            let hint = t("Left mouse: orbit, on the selection: move · Alt + left or middle mouse: orbit · Handles: axis or rotation (Ctrl: no grid) · Right mouse: pan · Wheel: zoom");
+            let hint = t("Left mouse: orbit, on the selection: move · Alt + left or middle mouse: orbit · Handles: axis or rotation, squares: pull a side (Ctrl: no snapping) · Right mouse: pan · Wheel: zoom");
             let galley = painter.layout(
                 hint.to_string(),
                 egui::FontId::proportional(theme::FS_CAPTION - 1.0),

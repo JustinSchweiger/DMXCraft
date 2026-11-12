@@ -88,6 +88,11 @@ second screen; fullscreen via the button at the top right).
 * **Handles** on the selection: the red/green/blue axis moves along the
   room's x/y/z, the three rings rotate around the room's x/y/z (snapping,
   Ctrl: free) – also for objects in rotated groups and for fixtures.
+* **Pull a side**: small squares sit on the sides of a single selected
+  object. Dragging one moves only that side – the object gets longer or
+  shorter in that direction, the opposite side stays (boxes, planes,
+  cylinders and trusses change their dimensions, models their scale; grid
+  snapping applies, Ctrl: free).
 * **Import custom 3D models** (glTF/GLB): geometry with all node transforms,
   the base colors and images of the materials are embedded in the show; the
   model stands with its bottom edge on the floor. Up to 2 million triangles.

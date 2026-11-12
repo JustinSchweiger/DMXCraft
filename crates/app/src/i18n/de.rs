@@ -1347,7 +1347,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{n} objects", "{n} Objekte"),
     ("{n} moving heads cannot reach the target (pan/tilt range or limits)", "{n} Moving Heads erreichen das Ziel nicht (Pan/Tilt-Bereich oder Grenzen)"),
     ("Click the target point", "Zielpunkt anklicken"),
-    ("Left mouse: orbit, on the selection: move · Alt + left or middle mouse: orbit · Handles: axis or rotation (Ctrl: no grid) · Right mouse: pan · Wheel: zoom", "Linke Maustaste: drehen, auf der Auswahl: verschieben · Alt + links oder mittlere Maustaste: drehen · Griffe: Achse bzw. Drehung (Strg: ohne Raster) · Rechte Maustaste: verschieben · Rad: zoomen"),
+    ("Left mouse: orbit, on the selection: move · Alt + left or middle mouse: orbit · Handles: axis or rotation, squares: pull a side (Ctrl: no snapping) · Right mouse: pan · Wheel: zoom", "Linke Maustaste: drehen, auf der Auswahl: verschieben · Alt + links oder mittlere Maustaste: drehen · Griffe: Achse bzw. Drehung, Quadrate: eine Seite ziehen (Strg: ohne Einrasten) · Rechte Maustaste: verschieben · Rad: zoomen"),
 
     ("Light track", "Lichtspur"),
     ("Media track", "Medienspur"),
