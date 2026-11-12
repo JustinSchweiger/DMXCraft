@@ -84,6 +84,18 @@ impl VizView {
             ui.spacing_mut().item_spacing.x = theme::SP_S;
             divider(ui);
             self.snap_chip(ui);
+            let r = ui
+                .add(egui::Button::new(t("Measure")).selected(self.measure.on))
+                .on_hover_text(t(
+                    "Measure distances – click two points; type a value to move one end",
+                ));
+            if r.clicked() {
+                self.measure.on = !self.measure.on;
+                if !self.measure.on {
+                    self.measure.a = None;
+                    self.measure.b = None;
+                }
+            }
         }
         divider(ui);
         let env = &mut cx.engine.show_mut().venue.environment;

@@ -10,6 +10,7 @@ pub mod camera;
 mod faces;
 pub mod gltf_import;
 pub mod library;
+mod measure;
 pub mod mesh;
 mod outline;
 mod panels;
@@ -178,6 +179,8 @@ pub struct VizView {
     face_drag: Option<faces::FaceDrag>,
     /// Calibration of a moving head against marks in the room.
     calibrate: calibrate::Calibrate,
+    /// Measuring distances.
+    measure: measure::Measure,
 }
 
 /// Fixture from an import without a counterpart in the patch, with a
@@ -483,6 +486,7 @@ impl Default for VizView {
             snap_guides: Vec::new(),
             face_drag: None,
             calibrate: calibrate::Calibrate::default(),
+            measure: measure::Measure::default(),
             sel_objects: Default::default(),
             drag_frames: Vec::new(),
             aim: [0.0; 3],
@@ -812,7 +816,16 @@ impl VizView {
             self.face_drag = None;
         }
         let cam = *self.camera.as_ref().expect("camera");
-        if resp.clicked() && self.calibrate.picking {
+        if !building {
+            self.measure.on = false;
+        }
+        if self.measure.on {
+            let ray = ptr.map(|p| cam.ray(uv(p), aspect));
+            self.measure.hover_at(cx.engine.show(), vp, rect, ptr, ray);
+        }
+        if resp.clicked() && self.measure.on {
+            self.measure.click();
+        } else if resp.clicked() && self.calibrate.picking {
             if let Some(p) = ptr {
                 let (o, d) = cam.ray(uv(p), aspect);
                 if let Some(h) = surface_hit(cx.engine.show(), o, d) {
@@ -926,6 +939,10 @@ impl VizView {
             faces::paint(&painter, &face_list, face_hover, active);
         }
         self.calibrate.paint(&painter, vp, rect, cx.engine);
+        self.measure.paint(&painter, vp, rect);
+        if self.measure.on {
+            self.measure.panel(ui, rect, cx);
+        }
         if self.aim_pick {
             painter.text(
                 rect.center_top() + vec2(0.0, 12.0),

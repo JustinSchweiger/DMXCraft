@@ -88,6 +88,14 @@ second screen; fullscreen via the button at the top right).
 * **Handles** on the selection: the red/green/blue axis moves along the
   room's x/y/z, the three rings rotate around the room's x/y/z (snapping,
   Ctrl: free) – also for objects in rotated groups and for fixtures.
+* **Measure** (toolbar in build mode): click two points – they snap to
+  corners, edge midpoints and face centers of objects and to fixtures,
+  otherwise any point on a surface. The distance is shown in the view with
+  its parts along x (red), z (blue) and y (green). In the panel the
+  distance and the x/y/z parts can be typed or dragged: the object or
+  fixture at the second (or first) point moves so the value fits – along
+  the line for the distance, along one axis for x/y/z. Example: measure
+  from the floor to a moving head and type the real height into Y.
 * **Calibrate a moving head** (properties of a single selected moving head,
   *Calibrate*): makes the venue match the real room.
   1. *Start calibration* – the real head lights up (white, narrow, shutter
