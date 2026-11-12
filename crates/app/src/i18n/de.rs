@@ -594,6 +594,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{n} audio files are missing", "{n} Audiodateien fehlen"),
     ("Add video…", "Video hinzufügen…"),
     ("Video", "Video"),
+    ("Music", "Musik"),
     ("Add OBS action", "OBS-Aktion hinzufügen"),
     ("OBS: {scene}", "OBS: {scene}"),
     ("OBS: {source} on", "OBS: {source} ein"),

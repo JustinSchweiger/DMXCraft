@@ -48,8 +48,9 @@ impl Default for Timeline {
             loop_resize: true,
             stretch_resize: false,
             allow_overlap: false,
-            auto_scroll: true,
-            snap: true,
+            // new SUPER SCENES: no snapping, the view does not scroll along
+            auto_scroll: false,
+            snap: false,
             grid: GridMode::Time,
             follow_audio: true,
             bpm: 120.0,

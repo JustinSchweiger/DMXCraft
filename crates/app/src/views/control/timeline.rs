@@ -564,7 +564,7 @@ impl TimelineView {
                         std::path::Path::new(path)
                             .file_name()
                             .map_or(path.clone(), |n| n.to_string_lossy().into_owned()),
-                        Color32::from_gray(150),
+                        MUSIC_COLOR,
                         0,
                     ),
                     ClipContent::Video { path, .. } => (
@@ -1794,9 +1794,10 @@ impl TimelineView {
             crate::audio::WaveState::Loading => {}
             crate::audio::WaveState::Failed(_) => self.pending_grid = None,
             crate::audio::WaveState::Ready(a) => {
-                // several pieces: the grid follows the audio; otherwise take over the tempo
+                // the display stays time based; the detected tempo is taken over
+                // for the beat grid (several pieces: it follows the audio)
                 let segs = a.effective_segments(*grid, &[]);
-                tl.grid = GridMode::Beat;
+                tl.grid = GridMode::Time;
                 if segs.len() > 1 {
                     tl.follow_audio = true;
                 } else if let Some(g) = segs.first().and_then(|s| s.grid) {
@@ -2227,7 +2228,8 @@ fn track_header(
     let head = Rect::from_min_max(row.min, pos2(row.left() + HEADER_W, row.bottom()));
     let th = track_h(tr);
     let top = Rect::from_min_size(head.min, Vec2::new(HEADER_W, th));
-    let color = tr.color.map(theme::rgb);
+    let role = media_role(tr);
+    let color = tr.color.map(theme::rgb).or(role.map(|r| r.1));
     p.rect_filled(head, 0.0, theme::surface());
     if let Some(c) = color {
         p.rect_filled(top, 0.0, c.gamma_multiply(0.14));
@@ -2328,7 +2330,9 @@ fn track_header(
             }
         }
     } else {
-        let label = if tr.name.is_empty() {
+        let label = if let Some((name, _)) = role.filter(|_| tr.name.is_empty()) {
+            name.to_string()
+        } else if tr.name.is_empty() {
             tr!("Track {n}", n = i + 1)
         } else {
             tr.name.clone()
@@ -2733,6 +2737,25 @@ fn paint_beats(
 }
 
 const VIDEO_COLOR: Color32 = Color32::from_rgb(130, 105, 190);
+const MUSIC_COLOR: Color32 = Color32::from_rgb(60, 160, 125);
+
+/// Media tracks get a name and color from what they hold (video, music,
+/// OBS), as long as none was set by hand.
+fn media_role(tr: &dmxcraft_core::timeline::Track) -> Option<(&'static str, Color32)> {
+    if tr.kind != TrackKind::Media {
+        return None;
+    }
+    let has = |f: fn(&ClipContent) -> bool| tr.clips.iter().any(|c| f(&c.content));
+    if has(|c| matches!(c, ClipContent::Video { .. })) {
+        Some((t("Video"), VIDEO_COLOR))
+    } else if has(|c| matches!(c, ClipContent::Audio { .. })) {
+        Some((t("Music"), MUSIC_COLOR))
+    } else if has(|c| matches!(c, ClipContent::Obs(_))) {
+        Some(("OBS", OBS_COLOR))
+    } else {
+        None
+    }
+}
 const OBS_COLOR: Color32 = Color32::from_rgb(70, 130, 190);
 const VIDEO_EXT: [&str; 6] = ["mp4", "mov", "m4v", "mkv", "webm", "avi"];
 

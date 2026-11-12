@@ -687,9 +687,10 @@ impl ScenePropsView {
         let groups = cx.engine.show().scene_groups.clone();
         let palettes = &mut self.palettes;
         // SUPER SCENE: selected block and its name
-        let block = (cx.state.timeline_sel.len() == 1)
-            .then(|| cx.state.timeline_sel.iter().next().copied())
-            .flatten()
+        // one block – or one linked group (video + its sound): then the video
+        let block = scene
+            .timeline()
+            .and_then(|tl| single_block(tl, &cx.state.timeline_sel))
             .and_then(|cid| {
                 let tl = scene.timeline()?;
                 let (_, c) = tl.clip(cid)?;
@@ -2219,8 +2220,57 @@ fn scope_row(ui: &mut egui::Ui, label: &str, id: (&str, u32), scope: &mut BankSc
     open
 }
 
+/// The block whose settings the panel shows: the only selected one, or of a
+/// selected linked group (video and its sound) the video.
+fn single_block(
+    tl: &dmxcraft_core::timeline::Timeline,
+    sel: &std::collections::BTreeSet<u32>,
+) -> Option<u32> {
+    use dmxcraft_core::timeline::ClipContent;
+    let clips: Vec<&dmxcraft_core::timeline::Clip> = sel
+        .iter()
+        .filter_map(|id| tl.clip(*id).map(|(_, c)| c))
+        .collect();
+    match clips.as_slice() {
+        [] => None,
+        [one] => Some(one.id),
+        [first, rest @ ..] => {
+            let link = first.link?;
+            if rest.iter().any(|c| c.link != Some(link)) {
+                return None;
+            }
+            clips
+                .iter()
+                .find(|c| matches!(c.content, ClipContent::Video { .. }))
+                .or(clips
+                    .iter()
+                    .find(|c| !matches!(c.content, ClipContent::Audio { .. })))
+                .or(clips.first())
+                .map(|c| c.id)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn linked_video_and_sound_show_the_video() {
+        use dmxcraft_core::timeline::{ClipContent, Timeline};
+        use dmxcraft_core::SceneId;
+        let mut tl = Timeline::default();
+        let content = |kind: &str| -> ClipContent {
+            serde_json::from_value(serde_json::json!({ kind: { "path": "v.mp4" } })).unwrap()
+        };
+        let v = tl.add_clip(0, content("Video"), 0, 4000);
+        let a = tl.add_clip(1, content("Audio"), 0, 4000);
+        let l = tl.add_clip(2, ClipContent::Scene(SceneId(1)), 0, 1000);
+        tl.clip_mut(v).unwrap().link = Some(7);
+        tl.clip_mut(a).unwrap().link = Some(7);
+        assert_eq!(super::single_block(&tl, &[a, v].into()), Some(v));
+        assert_eq!(super::single_block(&tl, &[a].into()), Some(a));
+        assert_eq!(super::single_block(&tl, &[a, v, l].into()), None);
+    }
+
     use super::*;
     use dmxcraft_core::{Show, Step};
 
