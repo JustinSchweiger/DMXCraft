@@ -1619,8 +1619,8 @@ impl Physical {
             ..Physical::default()
         };
         if let Some(d) = v.get("dimensions").and_then(Value::as_array) {
-            for i in 0..3 {
-                p.dimensions[i] = f(d.get(i));
+            for (i, slot) in p.dimensions.iter_mut().enumerate() {
+                *slot = f(d.get(i));
             }
         }
         if let Some(b) = v.get("bulb") {
