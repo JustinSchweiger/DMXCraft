@@ -588,7 +588,9 @@ impl Scene {
     }
 
     /// SUPER SCENE: set the only step to the length of the timeline so
-    /// repeat/release at the end work as for other scenes.
+    /// repeat/release at the end work as for other scenes. A SUPER SCENE
+    /// has no values of its own (its light comes only from the timeline
+    /// blocks), so the step is emptied.
     pub fn sync_timeline_length(&mut self) {
         let Some(len) = self.timeline().map(|t| t.length_ms()) else {
             return;
@@ -597,6 +599,7 @@ impl Scene {
             self.steps.push(Step::new(Vec::new()));
         }
         self.steps.truncate(1);
+        self.steps[0].values.clear();
         self.steps[0].fade_ms = 0;
         self.steps[0].hold_ms = len.clamp(100, u64::from(u32::MAX)) as u32;
     }
@@ -785,6 +788,9 @@ impl Show {
             fx.ensure_settings();
         }
         for sc in &mut self.scenes {
+            // SUPER SCENES: drop values of their own (older shows could store
+            // the programmer of the previously edited scene there)
+            sc.sync_timeline_length();
             if sc.steps.len() > 1 && !sc.has_steps() {
                 sc.effects.insert(
                     0,
@@ -1635,6 +1641,30 @@ mod zone_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn super_scene_has_no_values_of_its_own() {
+        let mut s = Show::new("t", 1);
+        let cv = |v| ChannelValue {
+            fixture: FixtureId(1),
+            channel: 0,
+            value: v,
+        };
+        // scene recorded with values, then turned into a SUPER SCENE
+        let id = s.add_scene("S", None, vec![Step::new(vec![cv(255)])]);
+        let sc = s.scene_mut(id).unwrap();
+        sc.add_effect(EffectKind::SuperScene);
+        sc.sync_timeline_length();
+        assert!(s.scene(id).unwrap().steps[0].values.is_empty());
+        // older shows: stray values are dropped when the show is loaded
+        s.scene_mut(id).unwrap().steps[0].values.push(cv(100));
+        s.normalize();
+        assert!(s.scene(id).unwrap().steps[0].values.is_empty());
+        // normal scenes keep their values
+        let plain = s.add_scene("P", None, vec![Step::new(vec![cv(7)])]);
+        s.normalize();
+        assert_eq!(s.scene(plain).unwrap().steps[0].values, vec![cv(7)]);
+    }
 
     #[test]
     fn plan_axes_follow_a_mirrored_plan() {

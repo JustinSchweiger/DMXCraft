@@ -1361,10 +1361,13 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
     if e.preview() != preview.as_slice() {
         e.set_preview(preview);
     }
+    // A SUPER SCENE is never an edit scene: it has no values of its own, its
+    // light comes only from the timeline blocks
     let target = match (edit, st.selected_scenes.len()) {
         (true, 1) => st.selected_scenes.iter().next().copied(),
         _ => None,
-    };
+    }
+    .filter(|id| e.show().scene(*id).is_some_and(|s| s.timeline().is_none()));
     // keep the edited step within the scene
     let steps = target
         .and_then(|id| e.show().scene(id))

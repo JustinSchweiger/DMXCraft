@@ -1177,8 +1177,14 @@ fn apply(
             Action::Pause(id) => e.toggle_pause(id),
             Action::Jump(id, d) => e.jump_step(id, d),
             Action::NewScene(zone) => {
-                // Take values from the programmer, otherwise an empty scene
-                let values = programmer_values(e);
+                // Edit mode: the programmer holds the values of the scene
+                // being edited, so a new scene starts empty. Otherwise take
+                // the values from the programmer (record).
+                let values = if st.programmer_mode.is_edit() {
+                    Vec::new()
+                } else {
+                    programmer_values(e)
+                };
                 let name = tr!("Scene {n}", n = e.show().scenes.len() + 1);
                 // new scenes last 5 s
                 let mut step = Step::new(values);
