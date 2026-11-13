@@ -1141,25 +1141,65 @@ impl Engine {
         });
         // Only stored channels of a scene take effect; channels not stored stay
         // free for other scenes.
-        for p in order {
+        let scenes: Vec<(&PlayingScene, HashMap<ChannelRef, u8>)> = order
+            .into_iter()
+            .map(|p| (p, self.scene_values(show, p)))
+            .collect();
+        for (i, (p, scene_values)) in scenes.iter().enumerate() {
             let Some(settings) = show.scene(p.scene).map(|s| &s.settings) else {
                 continue;
             };
             // Fade in/out of the whole scene (crossfade to what lies below)
-            let mut k = 1.0f64;
+            let mut k_in = 1.0f64;
             if settings.fade_in_ms > 0 {
-                k *= (p.age_ms / f64::from(settings.fade_in_ms)).clamp(0.0, 1.0);
+                k_in = (p.age_ms / f64::from(settings.fade_in_ms)).clamp(0.0, 1.0);
             }
+            let mut k_out = 1.0f64;
             if let Some(r) = p.releasing {
                 let out = f64::from(settings.fade_out_ms).max(1.0);
-                k *= 1.0 - (r / out).clamp(0.0, 1.0);
+                k_out = 1.0 - (r / out).clamp(0.0, 1.0);
             }
+            // Channels a later scene that stays takes over: the releasing scene
+            // holds them, the new one fades from its values (like a morph –
+            // equal values do not dip, different ones glide over)
+            let taken: std::collections::HashSet<ChannelRef> = if p.releasing.is_some() {
+                scenes[i + 1..]
+                    .iter()
+                    .filter(|(q, _)| q.releasing.is_none())
+                    .flat_map(|(_, v)| v.keys().copied())
+                    .collect()
+            } else {
+                std::collections::HashSet::new()
+            };
+            // Fixtures dark below: position, color, beam … stand at once,
+            // only the brightness fades (no swinging in or out)
+            // (decided before this scene writes, independent of the order)
+            let dark_below: std::collections::HashSet<crate::FixtureId> = scene_values
+                .keys()
+                .map(|c| c.fixture)
+                .filter(|f| !Self::lit_in(show, &values, *f))
+                .collect();
             let dim = f64::from(settings.dimmer) / 255.0;
-            for (ch, v) in self.scene_values(show, p) {
+            for (&ch, &v) in scene_values {
                 let v = if dim < 1.0 && Self::is_intensity(show, ch) {
                     (f64::from(v) * dim).round() as u8
                 } else {
                     v
+                };
+                let k = if taken.contains(&ch) {
+                    k_in
+                } else {
+                    k_in * k_out
+                };
+                let k = if k > 0.0
+                    && k < 1.0
+                    && !ch.is_virtual()
+                    && !Self::is_intensity(show, ch)
+                    && dark_below.contains(&ch.fixture)
+                {
+                    1.0
+                } else {
+                    k
                 };
                 touched.insert(ch);
                 if let Some(slot) = values.get_mut(&ch) {
@@ -2374,6 +2414,60 @@ mod tests {
         e.activate(id);
         e.tick(Duration::from_secs(3600)); // must not hang
         assert!(e.is_active(id));
+    }
+
+    #[test]
+    fn crossfade_is_a_morph() {
+        let (mut s, a, _) = setup();
+        let mh = s
+            .add_fixture("MH", "generic/moving-head-spot-11ch", 0, 100)
+            .unwrap();
+        let ty = s.type_of(s.fixture(mh).unwrap()).unwrap();
+        let idx = |k: ChannelKind| ty.channels.iter().position(|c| c.kind == k).unwrap() as u16;
+        let (dim, pan) = (idx(ChannelKind::Dimmer), idx(ChannelKind::Pan));
+        let addr = |c: u16| 100 + c;
+        // A: lamp a full; B: the same lamp the same + a moving head from dark
+        let sa = s.add_scene("A", None, vec![Step::new(vec![cv(a, 0, 255)])]);
+        let sb = s.add_scene(
+            "B",
+            None,
+            vec![Step::new(vec![
+                cv(a, 0, 255),
+                cv(mh, dim, 255),
+                cv(mh, pan, 200),
+            ])],
+        );
+        for id in [sa, sb] {
+            let st = &mut s.scene_mut(id).unwrap().settings;
+            st.fade_in_ms = 1000;
+            st.fade_out_ms = 1000;
+        }
+        let mut e = Engine::new(s);
+        e.activate(sa);
+        e.tick(Duration::from_millis(1500));
+        e.activate(sb);
+        e.tick(Duration::from_millis(500));
+        let f = e.render_frame();
+        assert_eq!(
+            f.get(0, 1),
+            Some(255),
+            "same value: no dip in the crossfade"
+        );
+        assert_eq!(f.get(0, addr(pan)), Some(200), "dark head stands at once");
+        assert!(
+            f.get(0, addr(dim)).unwrap() < 200,
+            "only its dimmer fades in"
+        );
+        // B goes: the head keeps its position while it fades out
+        e.release(sb);
+        e.tick(Duration::from_millis(500));
+        let f = e.render_frame();
+        assert_eq!(
+            f.get(0, addr(pan)),
+            Some(200),
+            "no swing back while fading out"
+        );
+        assert!(f.get(0, addr(dim)).unwrap() < 200);
     }
 
     #[test]
