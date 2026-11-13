@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/core", "crates/output", "crates/ofl", "crates/mcp", "crates/app"]
 
 [workspace.package]
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 license = "GPL-3.0-only"
 repository = "https://github.com/JustinSchweiger/DMXCraft"
