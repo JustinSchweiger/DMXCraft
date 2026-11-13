@@ -38,6 +38,20 @@ pub enum ChannelKind {
 }
 
 impl ChannelKind {
+    /// Channels whose values are switch positions (shutter/strobe, wheels,
+    /// macros, modes): they never fade, a value in between would trigger
+    /// another function (e.g. a strobe while a scene fades out).
+    pub fn snaps(self) -> bool {
+        matches!(
+            self,
+            ChannelKind::Strobe
+                | ChannelKind::ColorWheel
+                | ChannelKind::Gobo
+                | ChannelKind::Program
+                | ChannelKind::Control
+        )
+    }
+
     pub const ALL: [ChannelKind; 24] = [
         ChannelKind::Dimmer,
         ChannelKind::Red,

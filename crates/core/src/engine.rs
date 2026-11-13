@@ -656,6 +656,21 @@ impl Engine {
         !has_dimmer && def.kind.is_color_intensity()
     }
 
+    /// Crossfade of one channel: switch channels (strobe/shutter, wheels,
+    /// macros) do not fade but take the new value as soon as it fades in
+    /// at all, so a fading scene keeps its shutter open to the end.
+    fn mix(show: &Show, ch: ChannelRef, from: u8, to: u8, k: f64) -> u8 {
+        if show.channel_def(ch).is_some_and(|d| d.kind.snaps()) {
+            if k > 0.0 {
+                to
+            } else {
+                from
+            }
+        } else {
+            lerp(from, to, k)
+        }
+    }
+
     fn is_htp(show: &Show, ch: ChannelRef) -> bool {
         show.channel_def(ch).is_some_and(|d| d.kind.is_htp())
     }
@@ -707,7 +722,7 @@ impl Engine {
                 None if Self::is_htp(show, ch) => 0,
                 None => to,
             };
-            out.insert(ch, lerp(from, to, t));
+            out.insert(ch, Self::mix(show, ch, from, to, t));
         }
         // Intensities missing in the new step fade out.
         if let Some(prev) = previous {
@@ -849,7 +864,7 @@ impl Engine {
                     v
                 } else {
                     match out.get(&ch) {
-                        Some(&base) => lerp(base, v, k),
+                        Some(&base) => Self::mix(show, ch, base, v, k),
                         None if Self::is_intensity(show, ch) => (f64::from(v) * k).round() as u8,
                         None => v,
                     }
@@ -897,7 +912,8 @@ impl Engine {
                 base.map_or(own, |base| base.max(own))
             } else {
                 let a = lit.get(&ch.fixture).copied().unwrap_or(1.0) * k;
-                out.get(&ch).map_or(v, |&base| lerp(base, v, a))
+                out.get(&ch)
+                    .map_or(v, |&base| Self::mix(show, ch, base, v, a))
             };
             out.insert(ch, v);
         }
@@ -1114,7 +1130,11 @@ impl Engine {
                 };
                 touched.insert(ch);
                 if let Some(slot) = values.get_mut(&ch) {
-                    *slot = if k >= 1.0 { v } else { lerp(*slot, v, k) };
+                    *slot = if k >= 1.0 {
+                        v
+                    } else {
+                        Self::mix(show, ch, *slot, v, k)
+                    };
                 }
             }
         }
@@ -2291,6 +2311,39 @@ mod tests {
         e.activate(id);
         e.tick(Duration::from_secs(3600)); // must not hang
         assert!(e.is_active(id));
+    }
+
+    #[test]
+    fn strobe_channel_does_not_fade() {
+        let (mut s, _, _) = setup();
+        let mh = s
+            .add_fixture("MH", "generic/moving-head-spot-11ch", 0, 100)
+            .unwrap();
+        let ty = s.type_of(s.fixture(mh).unwrap()).unwrap();
+        let idx = |k: ChannelKind| ty.channels.iter().position(|c| c.kind == k).unwrap() as u16;
+        let (dim, strobe) = (idx(ChannelKind::Dimmer), idx(ChannelKind::Strobe));
+        let addr = |c: u16| 100 + c;
+        let id = s.add_scene(
+            "S",
+            None,
+            vec![Step::new(vec![cv(mh, dim, 255), cv(mh, strobe, 255)])],
+        );
+        s.scene_mut(id).unwrap().settings.fade_in_ms = 1000;
+        s.scene_mut(id).unwrap().settings.fade_out_ms = 1000;
+        let mut e = Engine::new(s);
+        e.activate(id);
+        e.tick(Duration::from_millis(300));
+        let f = e.render_frame();
+        assert_eq!(f.get(0, addr(strobe)), Some(255), "open from the start");
+        assert!(f.get(0, addr(dim)).unwrap() < 255, "dimmer fades in");
+        e.tick(Duration::from_millis(1000));
+        e.release(id);
+        e.tick(Duration::from_millis(700));
+        let f = e.render_frame();
+        assert_eq!(f.get(0, addr(strobe)), Some(255), "stays open");
+        assert!(f.get(0, addr(dim)).unwrap() < 255, "dimmer fades out");
+        e.tick(Duration::from_millis(400));
+        assert_eq!(e.render_frame().get(0, addr(dim)), Some(0));
     }
 
     #[test]
