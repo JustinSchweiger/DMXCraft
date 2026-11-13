@@ -23,8 +23,8 @@ const TABS_W: f32 = 40.0;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 enum Tab {
-    #[default]
     Properties,
+    #[default]
     Effects,
     Third,
 }
@@ -76,9 +76,12 @@ impl View for ScenePropsView {
         );
         // several scenes: properties apply to all, effects only one at a time
         let multi = cx.state.selected_scenes.len() > 1;
-        if multi && self.tab == Tab::Effects {
-            self.tab = Tab::Properties;
-        }
+        // only shown, not remembered: back to one scene, FX is open again
+        let shown = if multi && self.tab == Tab::Effects {
+            Tab::Properties
+        } else {
+            self.tab
+        };
         for (tab, icon, tip) in [
             (Tab::Properties, Icon::Sliders, t("Properties")),
             (Tab::Effects, Icon::Fx, t("Effects")),
@@ -90,12 +93,12 @@ impl View for ScenePropsView {
                     IconButton::new(icon)
                         .size(32.0)
                         .flat()
-                        .active(self.tab == tab)
+                        .active(shown == tab)
                         .enabled(enabled),
                 )
                 .on_hover_text(tip);
             let key = format!("scene/tab/{}", tab as u8);
-            let mapped = crate::mapping::button(&tab_ui, &r, &key, self.tab == tab, || {
+            let mapped = crate::mapping::button(&tab_ui, &r, &key, shown == tab, || {
                 (t("Sidebar").to_string(), tip.to_string())
             });
             if (r.clicked() || mapped) && enabled {
@@ -133,14 +136,14 @@ impl View for ScenePropsView {
         let before = SceneEdit::of(cx.engine, id);
         picker_window(ui.ctx(), cx.engine, &mut self.picker);
         self.poll_dialog(cx);
-        if self.tab == Tab::Effects {
+        if shown == Tab::Effects {
             self.effects_tab(ui, cx, id, locked);
             return;
         }
         egui::ScrollArea::vertical()
             .id_salt("scene_props")
             .auto_shrink([false, false])
-            .show(ui, |ui| match self.tab {
+            .show(ui, |ui| match shown {
                 Tab::Properties => properties(ui, cx.engine, id, locked),
                 Tab::Third => advanced(ui, cx.engine, id, locked, &mut self.picker),
                 Tab::Effects => {}
@@ -658,6 +661,21 @@ impl ScenePropsView {
         let area = ui.available_rect_before_wrap();
         let bar_rect = Rect::from_min_max(pos2(area.left(), area.bottom() - BAR_H), area.max);
         let list_h = (area.height() - BAR_H - theme::SP_XS).max(60.0);
+        // no effect of this scene selected yet: the first one
+        let current = self
+            .selected_fx
+            .filter(|(s, f)| *s == id && effects.iter().any(|e| e.id == *f));
+        if current.is_none() {
+            let first = &effects[0];
+            self.selected_fx = Some((id, first.id));
+            self.step_focus = false;
+            if first.kind == EffectKind::Steps {
+                cx.state.fx_target = None;
+            } else {
+                cx.state.fx_target = Some((id, first.id));
+                cx.state.select_ordered(&first.fixtures);
+            }
+        }
         let selected = self.selected_fx.filter(|(s, _)| *s == id).map(|(_, f)| f);
         let has_steps = scene.has_steps();
         let mut steps = scene.steps.clone();
