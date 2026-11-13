@@ -767,6 +767,7 @@ impl Engine {
                     local.min(len - 1.0)
                 };
                 let mut block: HashMap<ChannelRef, u8> = HashMap::new();
+                let mut floor: HashMap<crate::FixtureId, f64> = HashMap::new();
                 for m in members.iter().rev() {
                     let Some(scene) = show.scene(m.scene) else {
                         continue;
@@ -780,15 +781,14 @@ impl Engine {
                     let dur = scene.duration_ms().max(1) as f64;
                     let p = Self::virtual_play(scene, l.rem_euclid(dur));
                     let values = self.scene_values_d(show, &p, depth + 1);
-                    Self::layer(
-                        show,
-                        &mut block,
-                        values,
-                        f64::from(m.fade_at(show, l)),
-                        false,
-                    );
+                    let fade = f64::from(m.fade_at(show, l));
+                    for (f, v) in Self::step_lit(show, scene, &p) {
+                        let a = floor.entry(f).or_insert(0.0);
+                        *a = a.max(v * fade);
+                    }
+                    Self::layer(show, &mut block, values, fade, false, None);
                 }
-                Self::layer(show, &mut out, block, k, blend);
+                Self::layer(show, &mut out, block, k, blend, Some(&floor));
                 continue;
             }
             let Some(id) = clip.scene() else {
@@ -805,7 +805,11 @@ impl Engine {
             };
             let p = Self::virtual_play(scene, local);
             let values = self.scene_values_d(show, &p, depth + 1);
-            Self::layer(show, &mut out, values, k, blend);
+            // how far the block lights a fixture by its scene (step values,
+            // not the effects): a pulsing dimmer effect must not pull color
+            // and position back and forth to the tracks below
+            let floor = Self::step_lit(show, scene, &p);
+            Self::layer(show, &mut out, values, k, blend, Some(&floor));
         }
         // Pre-position (“move in black”) before upcoming blocks: only channels
         // no running block sets, only the chosen channel groups
@@ -856,6 +860,7 @@ impl Engine {
         values: HashMap<ChannelRef, u8>,
         k: f64,
         blend: bool,
+        floor: Option<&HashMap<crate::FixtureId, f64>>,
     ) {
         let k = k.clamp(0.0, 1.0);
         if !blend {
@@ -897,6 +902,14 @@ impl Engine {
                 *a = a.max(f64::from(*v) / 255.0);
             }
         }
+        // at least as far as the scene's own step lights it
+        if let Some(floor) = floor {
+            for (f, l) in floor {
+                if let Some(a) = lit.get_mut(f) {
+                    *a = a.max(*l);
+                }
+            }
+        }
         // fixtures the lower tracks set (before this block adds its values –
         // otherwise the result would depend on the order of the values)
         let below: std::collections::HashSet<crate::FixtureId> =
@@ -917,6 +930,26 @@ impl Engine {
             };
             out.insert(ch, v);
         }
+    }
+
+    /// How far the current step of a scene (without effects) lights each
+    /// fixture: its highest intensity value (0–1).
+    fn step_lit(
+        show: &Show,
+        scene: &crate::show::Scene,
+        p: &PlayingScene,
+    ) -> HashMap<crate::FixtureId, f64> {
+        let mut out: HashMap<crate::FixtureId, f64> = HashMap::new();
+        let Some(step) = scene.steps.get(p.step) else {
+            return out;
+        };
+        for (ch, v) in step.value_map() {
+            if ch.is_virtual() || Self::is_intensity(show, ch) {
+                let a = out.entry(ch.fixture).or_insert(0.0);
+                *a = a.max(f64::from(v) / 255.0);
+            }
+        }
+        out
     }
 
     /// Does the fixture give light with these values (any intensity > 0)?
@@ -1709,6 +1742,36 @@ mod tests {
     }
 
     #[test]
+    fn a_pulsing_dimmer_effect_does_not_pull_the_position_down() {
+        let (mut s, _, _) = setup();
+        let mh = s
+            .add_fixture("MH", "generic/moving-head-spot-11ch", 1, 100)
+            .unwrap();
+        let ty = s.type_of(s.fixture(mh).unwrap()).unwrap().clone();
+        let idx = |k: ChannelKind| ty.channels.iter().position(|c| c.kind == k).unwrap() as u16;
+        let ch = |k: ChannelKind| ChannelRef {
+            fixture: mh,
+            channel: idx(k),
+        };
+        let (pan, dim) = (ch(ChannelKind::Pan), ch(ChannelKind::Dimmer));
+        // below: static position, full light
+        let below: HashMap<ChannelRef, u8> = [(pan, 40), (dim, 255)].into_iter().collect();
+        // above: moving position, the dimmer effect is down at 30 just now,
+        // the scene's step has full dimmer
+        let above: HashMap<ChannelRef, u8> = [(pan, 200), (dim, 30)].into_iter().collect();
+        let step: HashMap<FixtureId, f64> = [(mh, 1.0)].into_iter().collect();
+        let mut out = HashMap::new();
+        Engine::layer(&s, &mut out, below.clone(), 1.0, false, None);
+        Engine::layer(&s, &mut out, above.clone(), 1.0, true, Some(&step));
+        assert_eq!(out[&pan], 200, "position of the upper block, not mixed");
+        // a fading block still crosses back to the position below
+        let mut out = HashMap::new();
+        Engine::layer(&s, &mut out, below, 1.0, false, None);
+        Engine::layer(&s, &mut out, above, 0.5, true, Some(&step));
+        assert_eq!(out[&pan], 120);
+    }
+
+    #[test]
     fn prepare_moves_heads_in_black_before_the_block() {
         let (mut s, _, _) = setup();
         let mh = s
@@ -1837,7 +1900,7 @@ mod tests {
         for _ in 0..64 {
             let mut out = HashMap::new();
             let values: HashMap<ChannelRef, u8> = [(vd, 255), (red, 255)].into_iter().collect();
-            Engine::layer(&s, &mut out, values, 0.5, true);
+            Engine::layer(&s, &mut out, values, 0.5, true, None);
             assert_eq!(out[&vd], 128);
             assert_eq!(out[&red], 255);
         }
