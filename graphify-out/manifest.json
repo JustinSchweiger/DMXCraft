@@ -84,9 +84,9 @@
     "semantic_hash": ""
   },
   "crates/core/src/engine.rs": {
-    "mtime": 1794529604.2297285,
-    "seen": 1794529694.1714811,
-    "ast_hash": "a4054d6edbb594ff152ab59200ba4385",
+    "mtime": 1794580904.06991,
+    "seen": 1794580946.961128,
+    "ast_hash": "d824d103d6d1cd9c557f26106c7c1ace",
     "semantic_hash": ""
   },
   "crates/core/src/fixture.rs": {

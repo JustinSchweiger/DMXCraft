@@ -102,6 +102,9 @@ pub struct Track {
     pub wait_ms: f32,
     /// How far the own dimmer is up (0–1).
     pub light_weight: f32,
+    /// On release: how far the intensity is pulled down (0–1) so the head
+    /// does not move back lit.
+    pub dark: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -122,6 +125,10 @@ const PAN_DEG_PER_S: f32 = 180.0;
 const TILT_DEG_PER_S: f32 = 150.0;
 /// Extra settling time after the estimated move (ms).
 const SETTLE_MS: f32 = 250.0;
+/// On release the light fades out before the head moves back …
+const RELEASE_DARK_MS: f64 = 400.0;
+/// … and fades back in once it has arrived.
+const RELEASE_LIGHT_MS: f64 = 600.0;
 
 impl Engine {
     pub fn new(show: Show) -> Self {
@@ -1459,17 +1466,47 @@ impl Engine {
                     zoom: *zoom,
                     wait_ms,
                     light_weight: light_weight.min(1.0),
+                    dark: prev.map_or(0.0, |p| (p.dark - step_in).max(0.0)),
                 },
             );
         }
+        // released: first dark, then back, then (arrived) the light again
+        let step_dark = (real_ms / RELEASE_DARK_MS) as f32;
+        let step_light = (real_ms / RELEASE_LIGHT_MS) as f32;
+        let mut arrived_back = Vec::new();
         self.tracking.retain(|f, t| {
             if wanted.contains_key(f) {
                 return true;
             }
-            t.weight -= step_out;
+            if t.weight > 0.0 && t.dark < 1.0 {
+                t.dark = (t.dark + step_dark).min(1.0);
+            } else if t.weight > 0.0 {
+                t.weight -= step_out;
+                if t.weight <= 0.0 {
+                    t.weight = 0.0;
+                    arrived_back.push(*f);
+                }
+            } else if t.wait_ms > 0.0 {
+                t.wait_ms = (t.wait_ms - real_ms as f32).max(0.0);
+            } else {
+                t.dark -= step_light;
+            }
             t.light_weight = t.light_weight.min(t.weight);
-            t.weight > 0.0
+            t.weight > 0.0 || t.wait_ms > 0.0 || t.dark > 0.0
         });
+        if !arrived_back.is_empty() {
+            // the output now shows the scenes' position: how far is that?
+            let frame = self.render_frame();
+            for f in arrived_back {
+                let Some(&t) = self.tracking.get(&f) else {
+                    continue;
+                };
+                let ms = self.travel_ms(&frame, f, t.pan, t.tilt);
+                if let Some(t) = self.tracking.get_mut(&f) {
+                    t.wait_ms = ms;
+                }
+            }
+        }
     }
 
     /// Estimated time (ms) a moving head needs from its current output
@@ -1616,6 +1653,30 @@ impl Engine {
                 }
                 if ty.needs_virtual_dimmer() {
                     put(ChannelRef::virtual_dimmer(*f), l.dimmer, lw);
+                }
+            }
+            // released: the intensity is down while the head moves back
+            if t.dark > 0.0 {
+                let d = f64::from(t.dark.clamp(0.0, 1.0));
+                let k = 1.0 - d * d * (3.0 - 2.0 * d);
+                let mut chans: Vec<ChannelRef> = ty
+                    .channels
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| c.kind == K::Dimmer)
+                    .map(|(i, _)| ChannelRef {
+                        fixture: *f,
+                        channel: i as u16,
+                    })
+                    .collect();
+                if ty.needs_virtual_dimmer() {
+                    chans.push(ChannelRef::virtual_dimmer(*f));
+                }
+                for ch in chans {
+                    let full = if ch.is_virtual() { 255 } else { 0 };
+                    let v = values.get(&ch).copied().unwrap_or(full);
+                    values.insert(ch, (f64::from(v) * k).round() as u8);
+                    touched.insert(ch);
                 }
             }
             for (coarse, fine, to) in [(K::Pan, K::PanFine, t.pan), (K::Tilt, K::TiltFine, t.tilt)]
@@ -1918,11 +1979,23 @@ mod tests {
         e.show_mut().tracker_mut(tr).unwrap().light = false;
         e.tick(MS(10));
         assert_eq!(dim(&e), 0);
-        // released: halfway back after half the time, then back to the scenes
+        // released: first dark, then back to the scenes, then lit again
+        e.show_mut().tracker_mut(tr).unwrap().light = true;
+        e.tick(MS(10));
         e.show_mut().tracker_mut(tr).unwrap().active = false;
-        e.tick(MS(500));
-        assert!(!e.tracking().is_empty());
-        e.tick(MS(600));
+        let held = pan_tilt(&e, heads[0]);
+        e.tick(MS(450));
+        assert_eq!(dim(&e), 0, "dark before it moves");
+        assert_eq!(pan_tilt(&e, heads[0]), held, "still at the target");
+        e.tick(MS(1100));
+        assert_eq!(pan_tilt(&e, heads[0]), rest);
+        assert!(
+            e.tracking()[&heads[0]].wait_ms > 0.0,
+            "waits for the way back"
+        );
+        for _ in 0..10 {
+            e.tick(MS(1000));
+        }
         assert!(e.tracking().is_empty());
         assert_eq!(pan_tilt(&e, heads[0]), rest);
     }
