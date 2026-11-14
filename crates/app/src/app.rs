@@ -406,6 +406,8 @@ impl DmxCraftApp {
                     }
                 }
             }
+            MenuAction::Visualizer if self.state.locked => {}
+            MenuAction::ProfileBuilder if self.state.locked => {}
             MenuAction::Visualizer => {
                 if self.settings.tab_visible(Mode::Visualizer) && !self.state.viz_window {
                     self.state.mode = Mode::Visualizer;
@@ -1284,8 +1286,9 @@ impl eframe::App for DmxCraftApp {
                 let _ = job.reply.send(r);
             }
         }
-        // 3D visualizer in its own window (e.g. on the second screen)
-        if self.state.viz_window {
+        // 3D visualizer in its own window (e.g. on the second screen);
+        // locked: not shown, it comes back after unlocking
+        if self.state.viz_window && !self.state.locked {
             let engine = self.engine.clone();
             let viz = &mut self.viz;
             let state = &mut self.state;

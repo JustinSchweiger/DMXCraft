@@ -57,7 +57,7 @@ impl Mode {
 
     /// Not available while the program is locked.
     pub fn needs_unlock(self) -> bool {
-        matches!(self, Mode::Setup | Mode::Builder)
+        matches!(self, Mode::Setup | Mode::Builder | Mode::Visualizer)
     }
 }
 

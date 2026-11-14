@@ -621,7 +621,11 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
         });
         menu::sub(ui, MenuItem::new(t("View")).plain(), |ui| {
             menu::title(ui, t("Tabs"));
-            for m in Mode::TABS {
+            // locked: tools that need unlocking do not appear at all
+            for m in Mode::TABS
+                .into_iter()
+                .filter(|m| !(info.locked && m.needs_unlock()))
+            {
                 let shown = info.tabs.contains(&m);
                 act(
                     ui,
@@ -663,11 +667,13 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
             );
         });
         menu::sub(ui, MenuItem::new(t("Tools")).plain(), |ui| {
-            act(
-                ui,
-                MenuItem::new(t("3D visualizer")).icon(Icon::Cube),
-                MenuAction::Visualizer,
-            );
+            if free {
+                act(
+                    ui,
+                    MenuItem::new(t("3D visualizer")).icon(Icon::Cube),
+                    MenuAction::Visualizer,
+                );
+            }
             act(
                 ui,
                 MenuItem::new(t("DMX levels"))
@@ -676,13 +682,13 @@ fn main_menu(ui: &mut egui::Ui, info: &TitleInfo<'_>, actions: &mut Vec<MenuActi
                     .enabled(free),
                 MenuAction::DmxLevels,
             );
-            act(
-                ui,
-                MenuItem::new(t("Profile Builder …"))
-                    .icon(Icon::Builder)
-                    .enabled(free),
-                MenuAction::ProfileBuilder,
-            );
+            if free {
+                act(
+                    ui,
+                    MenuItem::new(t("Profile Builder …")).icon(Icon::Builder),
+                    MenuAction::ProfileBuilder,
+                );
+            }
         });
         menu::sub(ui, MenuItem::new(t("Mappings")).plain(), |ui| {
             use dmxcraft_core::mapping::MapKind;
