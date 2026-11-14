@@ -2,7 +2,7 @@
 //! The shape lies in a field 0..=1 (x = pan, y = tilt) and is placed via
 //! center, size and rotation.
 
-use std::collections::HashMap;
+use crate::fasthash::FastMap as HashMap;
 use std::f32::consts::TAU;
 
 use serde::{Deserialize, Serialize};

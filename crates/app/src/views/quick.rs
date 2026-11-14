@@ -1,8 +1,6 @@
 //! Quick actions on selected fixtures (beams off/on, center) – used in
 //! SETUP (fixtures) and in the programmer.
 
-use std::collections::HashMap;
-
 use dmxcraft_core::{ChannelKind, ChannelRef, Engine, FixtureId};
 
 use crate::state::ProgrammerMode;
@@ -24,7 +22,7 @@ impl Layer {
         }
     }
 
-    pub fn map(self, e: &Engine) -> &HashMap<ChannelRef, u8> {
+    pub fn map(self, e: &Engine) -> &dmxcraft_core::fasthash::FastMap<ChannelRef, u8> {
         match self {
             Layer::Programmer => e.programmer(),
             Layer::Live => e.live(),

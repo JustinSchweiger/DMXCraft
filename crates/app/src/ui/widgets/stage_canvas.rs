@@ -153,7 +153,7 @@ pub struct StageCanvas<'a> {
     /// Draw below the fixtures (e.g. the image of a mapping).
     pub underlay: Option<&'a Underlay>,
     /// Live values: affected fixtures get a corner in the live color.
-    pub live: Option<&'a std::collections::HashMap<dmxcraft_core::ChannelRef, u8>>,
+    pub live: Option<&'a dmxcraft_core::fasthash::FastMap<dmxcraft_core::ChannelRef, u8>>,
 }
 
 /// Position of a fixture (saved or default by patch order).

@@ -7,7 +7,7 @@
 //! Time is measured in **cycles** (`cycles`, 1.0 = one scene duration); so
 //! duration, speed and phase of the scene work as usual.
 
-use std::collections::HashMap;
+use crate::fasthash::FastMap as HashMap;
 use std::f32::consts::TAU;
 
 use serde::{Deserialize, Serialize};

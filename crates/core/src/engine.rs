@@ -10,7 +10,7 @@
 //! * Master/blackout scale dimmer channels; fixtures without a dimmer channel
 //!   are dimmed via their color channels.
 
-use std::collections::HashMap;
+use crate::fasthash::{FastMap as HashMap, FastSet};
 use std::time::Duration;
 
 use crate::dmx::DmxFrame;
@@ -136,17 +136,17 @@ impl Engine {
             show,
             playing: Vec::new(),
             next_seq: 1,
-            programmer: HashMap::new(),
+            programmer: HashMap::default(),
             preview: Vec::new(),
             preview_step: 0,
-            live: HashMap::new(),
+            live: HashMap::default(),
             blind_show: None,
             master: 1.0,
             blackout: false,
             speed: 1.0,
             timeline_cursor: 0.0,
             move_hold: None,
-            tracking: HashMap::new(),
+            tracking: HashMap::default(),
         }
     }
 
@@ -689,7 +689,7 @@ impl Engine {
 
     /// Values of a scene; `depth` limits nested SUPER SCENES.
     fn scene_values_d(&self, show: &Show, p: &PlayingScene, depth: u8) -> HashMap<ChannelRef, u8> {
-        let mut out = HashMap::new();
+        let mut out = HashMap::default();
         let Some(scene) = show.scene(p.scene) else {
             return out;
         };
@@ -753,7 +753,7 @@ impl Engine {
         t: f64,
         depth: u8,
     ) -> HashMap<ChannelRef, u8> {
-        let mut out: HashMap<ChannelRef, u8> = HashMap::new();
+        let mut out: HashMap<ChannelRef, u8> = HashMap::default();
         if depth > 3 {
             return out;
         }
@@ -773,8 +773,8 @@ impl Engine {
                 } else {
                     local.min(len - 1.0)
                 };
-                let mut block: HashMap<ChannelRef, u8> = HashMap::new();
-                let mut floor: HashMap<crate::FixtureId, f64> = HashMap::new();
+                let mut block: HashMap<ChannelRef, u8> = HashMap::default();
+                let mut floor: HashMap<crate::FixtureId, f64> = HashMap::default();
                 for m in members.iter().rev() {
                     let Some(scene) = show.scene(m.scene) else {
                         continue;
@@ -834,6 +834,14 @@ impl Engine {
                 let p = Self::virtual_play(scene, 0.0);
                 values.extend(self.scene_values_d(show, &p, depth + 1));
             }
+            // fixtures lit by the running blocks (decided once, before
+            // anything is pre-positioned)
+            let lit = if prep.only_dark {
+                let fixtures = values.iter().map(|(c, _)| c.fixture).collect();
+                Self::lit_fixtures(show, &out, &fixtures)
+            } else {
+                Default::default()
+            };
             for (ch, v) in values {
                 if out.contains_key(&ch) {
                     continue;
@@ -844,7 +852,7 @@ impl Engine {
                 if !prep.includes(def.kind) {
                     continue;
                 }
-                if prep.only_dark && Self::lit_in(show, &out, ch.fixture) {
+                if lit.contains(&ch.fixture) {
                     continue;
                 }
                 out.insert(ch, v);
@@ -886,7 +894,7 @@ impl Engine {
             return;
         }
         // with a virtual dimmer it gives the brightness, the colors are color
-        let virt: std::collections::HashSet<crate::FixtureId> = values
+        let virt: FastSet<crate::FixtureId> = values
             .keys()
             .filter(|c| c.is_virtual())
             .map(|c| c.fixture)
@@ -902,7 +910,7 @@ impl Engine {
         };
         // how far the block lights each fixture (fixtures it gives no
         // brightness – e.g. only a position – are taken over fully)
-        let mut lit: HashMap<crate::FixtureId, f64> = HashMap::new();
+        let mut lit: HashMap<crate::FixtureId, f64> = HashMap::default();
         for (ch, v) in &values {
             if intensity(*ch) {
                 let a = lit.entry(ch.fixture).or_insert(0.0);
@@ -919,8 +927,7 @@ impl Engine {
         }
         // fixtures the lower tracks set (before this block adds its values –
         // otherwise the result would depend on the order of the values)
-        let below: std::collections::HashSet<crate::FixtureId> =
-            out.keys().map(|c| c.fixture).collect();
+        let below: FastSet<crate::FixtureId> = out.keys().map(|c| c.fixture).collect();
         for (ch, v) in values {
             let v = if intensity(ch) {
                 let own = (f64::from(v) * k).round() as u8;
@@ -946,7 +953,7 @@ impl Engine {
         scene: &crate::show::Scene,
         p: &PlayingScene,
     ) -> HashMap<crate::FixtureId, f64> {
-        let mut out: HashMap<crate::FixtureId, f64> = HashMap::new();
+        let mut out: HashMap<crate::FixtureId, f64> = HashMap::default();
         let Some(step) = scene.steps.get(p.step) else {
             return out;
         };
@@ -960,10 +967,23 @@ impl Engine {
     }
 
     /// Does the fixture give light with these values (any intensity > 0)?
-    fn lit_in(show: &Show, values: &HashMap<ChannelRef, u8>, fixture: crate::FixtureId) -> bool {
-        values
-            .iter()
-            .any(|(ch, v)| ch.fixture == fixture && *v > 0 && Self::is_intensity(show, *ch))
+    /// Which of `fixtures` give light in `values` (one pass over the values).
+    fn lit_fixtures(
+        show: &Show,
+        values: &HashMap<ChannelRef, u8>,
+        fixtures: &FastSet<crate::FixtureId>,
+    ) -> FastSet<crate::FixtureId> {
+        let mut lit = FastSet::default();
+        for (ch, v) in values {
+            if *v > 0
+                && fixtures.contains(&ch.fixture)
+                && !lit.contains(&ch.fixture)
+                && Self::is_intensity(show, *ch)
+            {
+                lit.insert(ch.fixture);
+            }
+        }
+        lit
     }
 
     /// Playback state of a scene at position `local` (ms) of its sequence.
@@ -1120,7 +1140,7 @@ impl Engine {
         frame.clear();
 
         // 1) Defaults
-        let mut values: HashMap<ChannelRef, u8> = HashMap::new();
+        let mut values: HashMap<ChannelRef, u8> = HashMap::default();
         for f in &show.fixtures {
             if let Some(ty) = show.type_of(f) {
                 for (i, def) in ty.channels.iter().enumerate() {
@@ -1138,7 +1158,7 @@ impl Engine {
 
         // Channels set by a source (scene, preview, programmer, effect, live) –
         // fixture limits only apply to these, not to base values
-        let mut touched: std::collections::HashSet<ChannelRef> = std::collections::HashSet::new();
+        let mut touched: FastSet<ChannelRef> = FastSet::default();
         // 2) Scenes in start order (LTP: later ones override)
         // Order: priority, then start order (later wins)
         let mut order: Vec<&PlayingScene> = self.playing.iter().collect();
@@ -1169,23 +1189,24 @@ impl Engine {
             // Channels a later scene that stays takes over: the releasing scene
             // holds them, the new one fades from its values (like a morph –
             // equal values do not dip, different ones glide over)
-            let taken: std::collections::HashSet<ChannelRef> = if p.releasing.is_some() {
+            let taken: FastSet<ChannelRef> = if p.releasing.is_some() {
                 scenes[i + 1..]
                     .iter()
                     .filter(|(q, _)| q.releasing.is_none())
                     .flat_map(|(_, v)| v.keys().copied())
                     .collect()
             } else {
-                std::collections::HashSet::new()
+                FastSet::default()
             };
             // Fixtures dark below: position, color, beam … stand at once,
             // only the brightness fades (no swinging in or out)
             // (decided before this scene writes, independent of the order)
-            let dark_below: std::collections::HashSet<crate::FixtureId> = scene_values
-                .keys()
-                .map(|c| c.fixture)
-                .filter(|f| !Self::lit_in(show, &values, *f))
-                .collect();
+            // (one pass over the scene's channels: lit fixtures among them)
+            let scene_fixtures: FastSet<crate::FixtureId> =
+                scene_values.keys().map(|c| c.fixture).collect();
+            let lit = Self::lit_fixtures(show, &values, &scene_fixtures);
+            let dark_below: FastSet<crate::FixtureId> =
+                scene_fixtures.difference(&lit).copied().collect();
             let dim = f64::from(settings.dimmer) / 255.0;
             for (&ch, &v) in scene_values {
                 let v = if dim < 1.0 && Self::is_intensity(show, ch) {
@@ -1265,7 +1286,7 @@ impl Engine {
             let Some(scene) = show.scene(*id).filter(|s| !s.effects.is_empty()) else {
                 continue;
             };
-            let mut fx = HashMap::new();
+            let mut fx = HashMap::default();
             self.apply_effects(show, scene, self.fx_cycles(*id), &mut fx);
             for (ch, v) in fx {
                 touched.insert(ch);
@@ -1411,7 +1432,7 @@ impl Engine {
     /// points; released ones fade back to the other sources.
     fn update_tracking(&mut self, real_ms: f64) {
         type Wanted = ([f32; 3], Option<TrackLight>, Option<u8>);
-        let mut wanted: HashMap<FixtureId, Wanted> = HashMap::new();
+        let mut wanted: HashMap<FixtureId, Wanted> = HashMap::default();
         for t in self.show.trackers.iter().filter(|t| t.active) {
             let light = t.light.then(|| TrackLight {
                 dimmer: (t.dimmer.clamp(0.0, 1.0) * 255.0).round() as u8,
@@ -1572,7 +1593,7 @@ impl Engine {
         &self,
         show: &Show,
         values: &mut HashMap<ChannelRef, u8>,
-        touched: &mut std::collections::HashSet<ChannelRef>,
+        touched: &mut FastSet<ChannelRef>,
     ) {
         use crate::fixture::ChannelKind as K;
         for (f, t) in &self.tracking {
@@ -1615,7 +1636,7 @@ impl Engine {
                 };
                 let white = l.color.iter().copied().min().unwrap_or(0);
                 // n-th channel of a color = color cell n
-                let mut seen: HashMap<K, u32> = HashMap::new();
+                let mut seen: HashMap<K, u32> = HashMap::default();
                 for (i, def) in ty.channels.iter().enumerate() {
                     let ch = ChannelRef {
                         fixture: *f,
@@ -1861,12 +1882,12 @@ mod tests {
         // the scene's step has full dimmer
         let above: HashMap<ChannelRef, u8> = [(pan, 200), (dim, 30)].into_iter().collect();
         let step: HashMap<FixtureId, f64> = [(mh, 1.0)].into_iter().collect();
-        let mut out = HashMap::new();
+        let mut out = HashMap::default();
         Engine::layer(&s, &mut out, below.clone(), 1.0, false, None);
         Engine::layer(&s, &mut out, above.clone(), 1.0, true, Some(&step));
         assert_eq!(out[&pan], 200, "position of the upper block, not mixed");
         // a fading block still crosses back to the position below
-        let mut out = HashMap::new();
+        let mut out = HashMap::default();
         Engine::layer(&s, &mut out, below, 1.0, false, None);
         Engine::layer(&s, &mut out, above, 0.5, true, Some(&step));
         assert_eq!(out[&pan], 120);
@@ -2011,7 +2032,7 @@ mod tests {
         // nothing below, the block fades: the virtual dimmer follows the fade
         // every time (each map has its own random order)
         for _ in 0..64 {
-            let mut out = HashMap::new();
+            let mut out = HashMap::default();
             let values: HashMap<ChannelRef, u8> = [(vd, 255), (red, 255)].into_iter().collect();
             Engine::layer(&s, &mut out, values, 0.5, true, None);
             assert_eq!(out[&vd], 128);
@@ -2466,7 +2487,7 @@ mod tests {
         e.set_move_hold(Some((id, fx, [0.1, 0.1])));
         let scene = e.show().scene(id).unwrap().clone();
         let fx_of = |e: &Engine| {
-            let mut out = HashMap::new();
+            let mut out = HashMap::default();
             e.apply_effects(e.show(), &scene, 0.25, &mut out);
             out
         };

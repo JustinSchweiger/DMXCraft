@@ -2,7 +2,7 @@
 //! CURVE FX and MAPPINGS. They return a level 0..=1 per beam that is mapped
 //! onto every assigned feature between its lower and upper bound.
 
-use std::collections::HashMap;
+use crate::fasthash::FastMap as HashMap;
 use std::f32::consts::TAU;
 
 use serde::{Deserialize, Serialize};

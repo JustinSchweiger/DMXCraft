@@ -10,6 +10,7 @@ pub mod calibrate;
 pub mod dip;
 pub mod dmx;
 pub mod engine;
+pub mod fasthash;
 pub mod fixture;
 pub mod fx;
 pub mod library;
