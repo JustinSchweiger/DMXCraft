@@ -7,6 +7,8 @@
 
 pub mod window;
 
+mod global;
+
 use std::collections::{HashMap, HashSet};
 
 use dmxcraft_core::mapping::{
@@ -1111,7 +1113,12 @@ impl Mapper {
                 .touch
                 .retain(|s| scenes.contains(&s), |f| fixtures.contains(&f));
         }
-        let fires = std::mem::take(&mut self.ui_fires);
+        let mut fires = std::mem::take(&mut self.ui_fires);
+        // controls that also work while their element is not shown
+        ctx.data_mut(|d| {
+            let states = d.get_temp_mut_or_default::<HashMap<u64, bool>>(states_id());
+            global::apply(&mut fires, states, e, st);
+        });
         if !fires.is_empty() {
             ctx.request_repaint();
         }

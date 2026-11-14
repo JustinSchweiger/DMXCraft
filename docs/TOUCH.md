@@ -83,5 +83,7 @@ The magnifiers change the view size (click the percentage: 100 %).
   (also in the web remote). Drag a target to move it, tap it to switch
   following on or off.
 
-Programmer or sidebar buttons only work while the respective element is
-shown.
+Controls of LIVE TRACKING, the SOUND tab, the programmer mode, “reset all”
+and the scene sidebar (play/pause, start/end, direction, loop of the selected
+scene) work whether they are shown or not. Other interface buttons (e.g.
+programmer quick buttons) only work while the respective element is shown.
