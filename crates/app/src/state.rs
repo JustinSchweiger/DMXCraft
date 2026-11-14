@@ -74,6 +74,9 @@ pub struct AppState {
     pub mode: Mode,
     /// Interface locked: control only, no changes to patch and scenes.
     pub locked: bool,
+    /// Lock also covers playback: scene grid, touch view, web remote,
+    /// keyboard and MIDI mappings do nothing.
+    pub lock_playback: bool,
     pub show_path: String,
     pub message: Option<(String, bool)>,
     /// Time of the last message (messages fade out after a few seconds).
@@ -194,6 +197,11 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Locked including playback: nothing may start, stop or change scenes.
+    pub fn playback_locked(&self) -> bool {
+        self.locked && self.lock_playback
+    }
+
     /// Something new was created: edit it right away (Blind stays Blind).
     pub fn start_editing(&mut self) {
         if !self.programmer_mode.is_edit() {
@@ -231,6 +239,7 @@ impl AppState {
         Self {
             mode: Mode::Control,
             locked: false,
+            lock_playback: false,
             show_path,
             message: None,
             message_time: None,

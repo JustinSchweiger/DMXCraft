@@ -244,6 +244,9 @@ impl RemoteLink {
 
 /// Execute a command – like operating the touch mode.
 fn apply(e: &mut Engine, st: &mut AppState, cmd: &Cmd) {
+    if st.playback_locked() {
+        return;
+    }
     let id = match cmd {
         Cmd::Press { item, .. }
         | Cmd::Value { item, .. }

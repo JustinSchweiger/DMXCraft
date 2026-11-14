@@ -5,6 +5,11 @@
 //! must have the same names in both columns.
 
 pub const ENTRIES: &[(&str, &str)] = &[
+    ("Also lock playback", "Auch die Wiedergabe sperren"),
+    (
+        "Scenes, touch view, web remote and keyboard/MIDI mappings do nothing while locked",
+        "Szenen, Touch-Ansicht, Web-Fernbedienung und Tastatur-/MIDI-Mappings reagieren während der Sperre nicht",
+    ),
     ("Hide sidebar", "Seitenleiste ausblenden"),
     ("Show sidebar", "Seitenleiste einblenden"),
     ("Hide programmer", "Programmer ausblenden"),

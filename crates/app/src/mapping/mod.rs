@@ -1083,10 +1083,13 @@ impl Mapper {
             }
         }
         self.clear_leds();
-        self.keyboard(ctx, e, st);
         let events = self.midi.drain();
-        for ev in events {
-            self.midi_event(&ev, e, st);
+        // locked including playback: keys and MIDI do nothing
+        if !st.playback_locked() {
+            self.keyboard(ctx, e, st);
+            for ev in events {
+                self.midi_event(&ev, e, st);
+            }
         }
         // Touch surface: buttons and faders trigger like keys
         for (m, pressed, value, cc) in std::mem::take(&mut st.touch_fire) {

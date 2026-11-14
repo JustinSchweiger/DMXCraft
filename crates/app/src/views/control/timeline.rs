@@ -226,7 +226,7 @@ impl TimelineView {
                 .on_hover_text(t("Play scene (Space: play/pause)"));
             let space = ui.input(|i| i.key_pressed(egui::Key::Space))
                 && ui.ctx().memory(|m| m.focused().is_none());
-            if play.clicked() || space {
+            if (play.clicked() || space) && !st.playback_locked() {
                 toggle_play(e, scene, st.timeline_cursor);
             }
             super::programmer::tool_separator(ui);

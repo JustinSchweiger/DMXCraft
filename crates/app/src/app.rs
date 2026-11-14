@@ -17,7 +17,7 @@ use crate::settings_window::{SettingsCx, SettingsWindow};
 use crate::state::{AppState, Mode, ProgrammerMode};
 use crate::titlebar::{self, MenuAction, TitleInfo, UpdateBadge};
 use crate::ui::theme;
-use crate::ui::widgets::{form, text_field, Dialog};
+use crate::ui::widgets::{form, text_field, Dialog, Toggle};
 use crate::updater::{UpdateState, Updater};
 use crate::views::control::{ProgrammerView, SceneGridView, ScenePropsView, StageView};
 use crate::views::setup::SetupView;
@@ -42,6 +42,8 @@ struct LockDialog {
     set_password: bool,
     pw: String,
     pw2: String,
+    /// Also lock playback (scenes, touch, mappings).
+    playback: bool,
     error: Option<String>,
 }
 
@@ -473,6 +475,7 @@ impl DmxCraftApp {
                         set_password: false,
                         pw: String::new(),
                         pw2: String::new(),
+                        playback: false,
                         error: None,
                     });
                 } else {
@@ -480,6 +483,7 @@ impl DmxCraftApp {
                         set_password: true,
                         pw: String::new(),
                         pw2: String::new(),
+                        playback: self.settings.lock_playback,
                         error: None,
                     });
                 }
@@ -497,6 +501,7 @@ impl DmxCraftApp {
 
     fn unlock_ui(&mut self) {
         self.state.locked = false;
+        self.state.lock_playback = false;
         // The password is only valid for one lock – set a new one next time.
         self.lock_hash = None;
         self.state.info(t("Interface unlocked"));
@@ -542,6 +547,12 @@ impl DmxCraftApp {
                                     .desired_width(f32::INFINITY),
                             )
                         });
+                        f.row("", |ui| {
+                            ui.add(Toggle::new(&mut d.playback, t("Also lock playback")))
+                                .on_hover_text(t(
+                                    "Scenes, touch view, web remote and keyboard/MIDI mappings do nothing while locked",
+                                ))
+                        });
                     }
                     if let Some(e) = &d.error {
                         f.note(|ui| {
@@ -559,14 +570,15 @@ impl DmxCraftApp {
                     d.error = Some(t("Passwords do not match").into());
                 } else {
                     self.lock_hash = Some(crate::lock::hash_password(&d.pw));
+                    self.state.lock_playback = d.playback;
+                    if self.settings.lock_playback != d.playback {
+                        self.settings.lock_playback = d.playback;
+                        self.save_settings();
+                    }
                     self.lock_ui();
                     return;
                 }
-            } else if self
-                .lock_hash
-                .as_deref()
-                .is_some_and(|h| crate::lock::verify(h, &d.pw))
-            {
+            } else if crate::lock::unlocks(self.lock_hash.as_deref(), &d.pw) {
                 self.unlock_ui();
                 return;
             } else {
@@ -1179,7 +1191,10 @@ impl eframe::App for DmxCraftApp {
                         if touch_mode {
                             egui::CentralPanel::default_margins()
                                 .frame(area)
-                                .show(ui, |ui| control.touch.ui(ui, &mut cx));
+                                .show(ui, |ui| {
+                                    control.touch.ui(ui, &mut cx);
+                                    block_input(ui, cx.state, "touch");
+                                });
                         } else {
                             // Sidebar with the settings of the selected scene
                             let props = egui::Panel::right("scene_props")
@@ -1213,7 +1228,10 @@ impl eframe::App for DmxCraftApp {
                             }
                             egui::CentralPanel::default_margins()
                                 .frame(area)
-                                .show(ui, |ui| control.grid.ui(ui, &mut cx));
+                                .show(ui, |ui| {
+                                    control.grid.ui(ui, &mut cx);
+                                    block_input(ui, cx.state, "grid");
+                                });
                         }
                     }
                 }
@@ -1536,6 +1554,19 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
         e.clear_programmer();
         load_step(e, id, i);
         st.edit_programmer = Some(crate::views::control::programmer::programmer_values(e));
+    }
+}
+
+/// Locked including playback: a layer over the area takes every click and
+/// drag, so nothing in it reacts.
+fn block_input(ui: &mut egui::Ui, st: &AppState, key: &str) {
+    if st.playback_locked() {
+        let rect = ui.max_rect();
+        ui.interact(
+            rect,
+            ui.scope_id().with(("lock_block", key)),
+            egui::Sense::click_and_drag(),
+        );
     }
 }
 

@@ -91,7 +91,7 @@ impl View for ScenePropsView {
         if scenes.len() > 1 {
             multi_header(ui, cx.engine, id, scenes.len());
         } else {
-            header(ui, cx.engine, id);
+            header(ui, cx.engine, id, cx.state.playback_locked());
         }
         ui.add_space(theme::SP_S);
         let locked = cx.state.locked;
@@ -243,7 +243,7 @@ fn multi_header(ui: &mut egui::Ui, e: &Engine, first: SceneId, n: usize) {
 }
 
 /// Name and color of the scene, play/pause on the right, a divider below.
-fn header(ui: &mut egui::Ui, e: &mut Engine, id: SceneId) {
+fn header(ui: &mut egui::Ui, e: &mut Engine, id: SceneId, frozen: bool) {
     let Some(scene) = e.show().scene(id) else {
         return;
     };
@@ -274,7 +274,7 @@ fn header(ui: &mut egui::Ui, e: &mut Engine, id: SceneId) {
                 crate::mapping::button(ui, &r, "scene/play_pause", active && !paused, || {
                     (t("Scene").to_string(), t("Play / pause").to_string())
                 });
-            if r.clicked() || mapped {
+            if (r.clicked() || mapped) && !frozen {
                 if active {
                     e.toggle_pause(id);
                 } else {

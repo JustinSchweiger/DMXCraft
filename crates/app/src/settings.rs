@@ -43,6 +43,9 @@ pub struct Settings {
     /// Programmer hidden (only a narrow bar is shown).
     #[serde(default)]
     pub hide_programmer: bool,
+    /// Lock dialog: also lock playback (last choice).
+    #[serde(default)]
+    pub lock_playback: bool,
     /// Show the value ranges of the fixture file on the fader tracks.
     #[serde(default = "yes")]
     pub fader_ranges: bool,
@@ -99,6 +102,7 @@ impl Default for Settings {
             wrap_scenes: false,
             hide_scene_props: false,
             hide_programmer: false,
+            lock_playback: false,
             fader_ranges: true,
             mcp_enabled: false,
             mcp_port: dmxcraft_mcp::DEFAULT_PORT,
