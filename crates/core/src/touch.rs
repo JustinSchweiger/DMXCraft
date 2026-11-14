@@ -103,6 +103,16 @@ impl TouchLayout {
         id
     }
 
+    /// Move a page to position `to` (clamped).
+    pub fn move_page(&mut self, id: u32, to: usize) {
+        let Some(from) = self.pages.iter().position(|p| p.id == id) else {
+            return;
+        };
+        let page = self.pages.remove(from);
+        let to = to.min(self.pages.len());
+        self.pages.insert(to, page);
+    }
+
     pub fn page(&self, id: u32) -> Option<&TouchPage> {
         self.pages.iter().find(|p| p.id == id)
     }
@@ -265,6 +275,41 @@ pub struct TouchItem {
     pub flash: bool,
     /// Text size (points, 0 = automatic).
     pub text_size: f32,
+    /// Look of a button.
+    pub style: ButtonStyle,
+    /// Button only triggers after being held for [`LONG_PRESS_MS`] (against
+    /// accidental touches).
+    pub long_press: bool,
+}
+
+/// How long a long-press button has to be held (ms).
+pub const LONG_PRESS_MS: u64 = 600;
+
+/// Look of a touch button.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ButtonStyle {
+    /// Filled surface, white frame when on.
+    #[default]
+    Normal,
+    /// Only a frame in the element color, filled when on.
+    Outline,
+    /// Label with an on/off switch.
+    Switch,
+    /// Surface with a status light in the corner.
+    Led,
+    /// Round button.
+    Round,
+}
+
+impl ButtonStyle {
+    pub const ALL: [ButtonStyle; 5] = [
+        ButtonStyle::Normal,
+        ButtonStyle::Outline,
+        ButtonStyle::Switch,
+        ButtonStyle::Led,
+        ButtonStyle::Round,
+    ];
 }
 
 impl Default for TouchItem {
@@ -293,12 +338,26 @@ impl TouchItem {
             fixtures: Vec::new(),
             flash: false,
             text_size: 0.0,
+            style: ButtonStyle::Normal,
+            long_press: false,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn pages_can_be_reordered() {
+        let mut t = TouchLayout::default();
+        let a = t.add_page("A");
+        let b = t.add_page("B");
+        let c = t.add_page("C");
+        t.move_page(c, 0);
+        assert_eq!(t.pages.iter().map(|p| p.id).collect::<Vec<_>>(), [c, a, b]);
+        t.move_page(c, 99);
+        assert_eq!(t.pages.iter().map(|p| p.id).collect::<Vec<_>>(), [a, b, c]);
+    }
+
     use super::*;
 
     #[test]

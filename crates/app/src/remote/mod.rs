@@ -329,6 +329,8 @@ fn layout_json(e: &Engine, settings: &Settings) -> String {
                         "icon": i.icon.as_deref().and_then(icon_library::glyph).map(String::from),
                         "active": i.control.is_some() || !i.fixtures.is_empty(),
                         "text_size": i.text_size,
+                        "style": i.style,
+                        "long_press": i.long_press,
                     })
                 })
                 .collect();

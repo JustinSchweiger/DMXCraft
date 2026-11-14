@@ -49,7 +49,12 @@ and can also be operated from a phone or tablet via the touch remote
   * color (presets or a custom color),
   * icon from the icon library,
   * image,
-  * size, flash key, “Take over selection” (color wheel/XY).
+  * size, “Take over selection” (color wheel/XY),
+  * buttons: **style** (normal, outline, switch, status light, round),
+    **behaviour** (toggle or only while held) and **long press** (triggers
+    only after being held for 0.6 s, against accidental touches).
+* **Pages:** drag a page tab to reorder the pages (or “Move left/right” in
+  its context menu); double-click renames it.
 
 Elements can be
 

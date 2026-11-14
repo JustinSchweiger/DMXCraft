@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 
 use dmxcraft_core::mapping::{ButtonMode, Control, Mapping};
-use dmxcraft_core::touch::{TouchItem, TouchKind};
+use dmxcraft_core::touch::{ButtonStyle, TouchItem, TouchKind, LONG_PRESS_MS};
 use dmxcraft_core::{ChannelKind, ChannelRef, Engine, FixtureId, Show};
 use eframe::egui::{
     self, pos2, vec2, Align, Align2, Color32, Layout, Mesh, Pos2, Rect, Sense, Shape, Stroke,
@@ -89,6 +89,10 @@ pub struct TouchView {
     image_dialog: Option<(ImageTarget, Receiver<Option<PathBuf>>)>,
     /// LIVE TRACKING: the target being dragged (element, tracker).
     track_drag: Option<(u32, u32)>,
+    /// Page tab being dragged to a new position.
+    page_drag: Option<u32>,
+    /// Long-press buttons being held: element → start time (s).
+    holding: HashMap<u32, f64>,
 }
 
 impl Default for TouchView {
@@ -103,6 +107,8 @@ impl Default for TouchView {
             textures: HashMap::new(),
             image_dialog: None,
             track_drag: None,
+            page_drag: None,
+            holding: HashMap::new(),
         }
     }
 }
@@ -245,7 +251,9 @@ impl TouchView {
         editing: bool,
     ) {
         let mut delete = None;
-        for (id, name) in pages {
+        let mut moved: Option<(u32, usize)> = None;
+        let mut tabs: Vec<(u32, Rect)> = Vec::new();
+        for (index, (id, name)) in pages.iter().enumerate() {
             if let Some((_, text)) = self.rename_page.as_mut().filter(|(p, _)| p == id) {
                 let r = ui.add(text_field(text).desired_width(140.0));
                 if std::mem::take(&mut self.rename_focus) {
@@ -274,6 +282,23 @@ impl TouchView {
             }
             let selected = cx.state.touch_page == Some(*id);
             let r = ui.add(egui::Button::new(name.as_str()).selected(selected));
+            tabs.push((*id, r.rect));
+            if editing {
+                // drag a tab to reorder the pages
+                let d = r.interact(Sense::drag());
+                if d.drag_started() {
+                    self.page_drag = Some(*id);
+                }
+                if self.page_drag == Some(*id) {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                    ui.painter().rect_stroke(
+                        r.rect,
+                        theme::R_S,
+                        Stroke::new(1.5, theme::accent()),
+                        StrokeKind::Outside,
+                    );
+                }
+            }
             if r.clicked() {
                 cx.state.touch_page = Some(*id);
                 cx.state.touch_sel = None;
@@ -289,11 +314,36 @@ impl TouchView {
                         self.rename_page = Some((*id, name.clone()));
                         self.rename_focus = true;
                     }
+                    if index > 0 && menu::item(ui, MenuItem::new(t("Move left"))) {
+                        moved = Some((*id, index - 1));
+                    }
+                    if index + 1 < pages.len() && menu::item(ui, MenuItem::new(t("Move right"))) {
+                        moved = Some((*id, index + 1));
+                    }
                     if menu::item(ui, MenuItem::new(t("Delete page")).icon(Icon::Trash)) {
                         delete = Some(*id);
                     }
                 });
             }
+        }
+        if let Some(dragged) = self.page_drag {
+            let (pos, down) = ui.input(|i| (i.pointer.interact_pos(), i.pointer.primary_down()));
+            if !down || !editing {
+                self.page_drag = None;
+            } else if let Some(pos) = pos {
+                // new place: behind every other tab whose middle lies left of
+                // the pointer (stable with tabs of different widths)
+                let to = tabs
+                    .iter()
+                    .filter(|(id, r)| *id != dragged && r.center().x < pos.x)
+                    .count();
+                if tabs.iter().position(|(id, _)| *id == dragged) != Some(to) {
+                    moved = Some((dragged, to));
+                }
+            }
+        }
+        if let Some((id, to)) = moved {
+            cx.engine.show_mut().touch.move_page(id, to);
         }
         if editing
             && ui
@@ -778,8 +828,27 @@ impl TouchView {
             }
             TouchKind::Button => {
                 let resp = ui.interact(rect, id, Sense::click_and_drag());
-                let down = resp.is_pointer_button_down_on();
+                let pressed = resp.is_pointer_button_down_on();
                 let was = self.held.contains(&item.id);
+                // long press: only counts once held long enough
+                let mut hold = None;
+                let down = if item.long_press {
+                    let now = ui.input(|i| i.time);
+                    if pressed {
+                        let start = *self.holding.entry(item.id).or_insert(now);
+                        let k = ((now - start) * 1000.0 / LONG_PRESS_MS as f64) as f32;
+                        if k < 1.0 {
+                            hold = Some(k);
+                            ui.ctx().request_repaint();
+                        }
+                        k >= 1.0 || was
+                    } else {
+                        self.holding.remove(&item.id);
+                        false
+                    }
+                } else {
+                    pressed
+                };
                 if let Some(m) = mapping_of(item) {
                     if down && !was {
                         self.held.push(item.id);
@@ -789,7 +858,17 @@ impl TouchView {
                         cx.state.touch_fire.push((m, false, 0, false));
                     }
                 }
-                paint_item(p, cx.engine, cx.state, states, item, rect, 0.0, down, tex);
+                paint_item(
+                    p, cx.engine, cx.state, states, item, rect, 0.0, pressed, tex,
+                );
+                if let Some(k) = hold {
+                    // progress of the long press along the bottom edge
+                    let bar = Rect::from_min_size(
+                        pos2(rect.left() + 6.0, rect.bottom() - 7.0),
+                        vec2((rect.width() - 12.0) * k, 3.0),
+                    );
+                    p.rect_filled(bar, 1.5, Color32::WHITE);
+                }
             }
             TouchKind::Fader | TouchKind::Knob => {
                 let resp = ui.interact(rect, id, Sense::click_and_drag());
@@ -1189,8 +1268,30 @@ impl TouchView {
                 });
             }
             if item.kind == TouchKind::Button {
-                f.row(t("Flash button"), |ui| {
-                    ui.add(Toggle::new(&mut item.flash, ""));
+                f.row(t("Style"), |ui| {
+                    egui::ComboBox::from_id_salt(("touch_style", sel))
+                        .selected_text(style_name(item.style))
+                        .show_ui(ui, |ui| {
+                            for s in ButtonStyle::ALL {
+                                ui.selectable_value(&mut item.style, s, style_name(s));
+                            }
+                        });
+                });
+                f.row(t("Behaviour"), |ui| {
+                    egui::ComboBox::from_id_salt(("touch_behaviour", sel))
+                        .selected_text(if item.flash {
+                            t("While held")
+                        } else {
+                            t("Toggle")
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut item.flash, false, t("Toggle"));
+                            ui.selectable_value(&mut item.flash, true, t("While held"));
+                        });
+                });
+                f.row(t("Long press"), |ui| {
+                    ui.add(Toggle::new(&mut item.long_press, ""))
+                        .on_hover_text(t("Only triggers when held – against accidental touches"));
                 });
             }
         });
@@ -1573,6 +1674,16 @@ fn add_page(cx: &mut ViewCtx<'_>) {
     cx.state.touch_page = Some(id);
 }
 
+fn style_name(s: ButtonStyle) -> &'static str {
+    match s {
+        ButtonStyle::Normal => t("Normal"),
+        ButtonStyle::Outline => t("Outline"),
+        ButtonStyle::Switch => t("Switch"),
+        ButtonStyle::Led => t("Status light"),
+        ButtonStyle::Round => t("Round"),
+    }
+}
+
 fn kind_name(k: TouchKind) -> &'static str {
     match k {
         TouchKind::Label => t("Label"),
@@ -1680,19 +1791,54 @@ fn paint_item(
         TouchKind::Label | TouchKind::Button => {
             let on = item.kind == TouchKind::Button
                 && mapping_of(item).is_some_and(|m| crate::mapping::is_on(e, st, states, &m));
+            let style = if item.kind == TouchKind::Button {
+                item.style
+            } else {
+                ButtonStyle::Normal
+            };
             let fill = match (item.kind, base) {
+                (TouchKind::Button, _) if style == ButtonStyle::Outline => {
+                    if on {
+                        accent
+                    } else {
+                        Color32::TRANSPARENT
+                    }
+                }
                 (_, Some(b)) => b,
                 (TouchKind::Button, None) => theme::raised(),
                 _ => Color32::TRANSPARENT,
             };
-            let fill = if hot { fill.gamma_multiply(0.7) } else { fill };
+            let fill = if hot && fill != Color32::TRANSPARENT {
+                fill.gamma_multiply(0.7)
+            } else {
+                fill
+            };
+            // round: a circle in the middle of the element
+            let round = style == ButtonStyle::Round;
+            let shape = if round {
+                Rect::from_center_size(
+                    rect.center(),
+                    egui::Vec2::splat(rect.width().min(rect.height())),
+                )
+            } else {
+                rect
+            };
+            let radius = if round {
+                shape.width() / 2.0
+            } else {
+                f32::from(theme::R_M)
+            };
             if fill != Color32::TRANSPARENT {
-                p.rect_filled(rect, theme::R_M, fill);
+                p.rect_filled(shape, radius, fill);
+            } else if hot {
+                p.rect_filled(shape, radius, theme::raised());
             }
             if let Some(tex) = tex {
                 paint_cover(p, rect.shrink(1.0), tex, if hot { 0.7 } else { 1.0 });
             }
-            if item.kind == TouchKind::Button {
+            if item.kind == TouchKind::Button && style != ButtonStyle::Normal {
+                paint_style(p, item, shape, radius, style, on, accent);
+            } else if item.kind == TouchKind::Button {
                 p.rect_stroke(
                     rect,
                     theme::R_M,
@@ -1721,6 +1867,12 @@ fn paint_item(
                     text_on(fill)
                 }
             });
+            // Switch: the text sits next to / above the switch
+            let rect = if item.kind == TouchKind::Button && style == ButtonStyle::Switch {
+                switch_parts(rect).0
+            } else {
+                rect
+            };
             // Icon above the label (alone: centered and large)
             let mut text_center = rect.center();
             if let Some(icon) = &item.icon {
@@ -1992,6 +2144,115 @@ fn paint_item(
                 false,
             );
         }
+    }
+}
+
+/// Switch style: (area for icon and text, switch track).
+fn switch_parts(rect: Rect) -> (Rect, Rect) {
+    let size = vec2(
+        (rect.height() * 0.5).clamp(26.0, 46.0),
+        (rect.height() * 0.28).clamp(14.0, 24.0),
+    );
+    if rect.width() >= rect.height() * 1.4 {
+        // wide: switch on the right, text to its left
+        let track = Rect::from_center_size(
+            pos2(rect.right() - 10.0 - size.x / 2.0, rect.center().y),
+            size,
+        );
+        (rect.with_max_x(track.left() - 4.0), track)
+    } else {
+        // narrow: switch at the bottom, text above
+        let track = Rect::from_center_size(
+            pos2(rect.center().x, rect.bottom() - 8.0 - size.y / 2.0),
+            size,
+        );
+        (rect.with_max_y(track.top() - 2.0), track)
+    }
+}
+
+/// Frame and state display of the button styles other than “Normal”.
+fn paint_style(
+    p: &egui::Painter,
+    item: &TouchItem,
+    shape: Rect,
+    radius: f32,
+    style: ButtonStyle,
+    on: bool,
+    accent: Color32,
+) {
+    match style {
+        ButtonStyle::Normal => {}
+        ButtonStyle::Outline => {
+            p.rect_stroke(shape, radius, Stroke::new(2.0, accent), StrokeKind::Inside);
+        }
+        ButtonStyle::Round => {
+            p.rect_stroke(
+                shape,
+                radius,
+                if on {
+                    Stroke::new(3.0, Color32::WHITE)
+                } else {
+                    Stroke::new(1.0, theme::border())
+                },
+                StrokeKind::Inside,
+            );
+        }
+        ButtonStyle::Led => {
+            p.rect_stroke(
+                shape,
+                radius,
+                Stroke::new(1.0, theme::border()),
+                StrokeKind::Inside,
+            );
+            let c = shape.left_top() + vec2(12.0, 12.0);
+            if on {
+                p.circle_filled(c, 8.0, accent.gamma_multiply(0.35));
+                p.circle_filled(c, 5.0, led_color(item, accent));
+            } else {
+                p.circle_filled(c, 5.0, theme::bg());
+            }
+            p.circle_stroke(c, 5.0, Stroke::new(1.0, theme::border()));
+        }
+        ButtonStyle::Switch => {
+            p.rect_stroke(
+                shape,
+                radius,
+                Stroke::new(1.0, theme::border()),
+                StrokeKind::Inside,
+            );
+            let track = switch_parts(shape).1;
+            let r = track.height() / 2.0;
+            p.rect_filled(
+                track,
+                r,
+                if on {
+                    led_color(item, accent)
+                } else {
+                    theme::bg()
+                },
+            );
+            p.rect_stroke(
+                track,
+                r,
+                Stroke::new(1.0, theme::border()),
+                StrokeKind::Inside,
+            );
+            let knob = if on {
+                track.right() - r
+            } else {
+                track.left() + r
+            };
+            p.circle_filled(pos2(knob, track.center().y), r - 3.0, Color32::WHITE);
+        }
+    }
+}
+
+/// Color of the on state: the element color, on a colored surface the accent.
+fn led_color(item: &TouchItem, accent: Color32) -> Color32 {
+    if item.color.is_some() {
+        theme::OK
+    } else {
+        accent
     }
 }
 

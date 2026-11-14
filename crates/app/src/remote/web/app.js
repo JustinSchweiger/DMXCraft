@@ -2,7 +2,7 @@
 // Zeichnet wie die Desktop-Oberfläche (views/touch.rs, paint_item).
 "use strict";
 
-const UNIT = 72, GAP = 6;
+const UNIT = 72, GAP = 6, LONG_PRESS_MS = 600;
 const de = (navigator.language || "de").toLowerCase().startsWith("de");
 const T = de ? {
   connecting: "Verbinde …", offline: "Verbindung zu DMXCraft unterbrochen", since: "Seit {s} s – verbinde automatisch neu …",
@@ -559,6 +559,27 @@ function paintRoom(i, f) {
   g.restore();
 }
 
+// Schalter-Stil: Bereich für Text und Schalter (wie switch_parts in touch.rs)
+function switchParts(r) {
+  const w = clamp(r.h * 0.5, 26, 46), h = clamp(r.h * 0.28, 14, 24);
+  if (r.w >= r.h * 1.4) {
+    const track = { x: r.x + r.w - 10 - w, y: r.y + r.h / 2 - h / 2, w, h };
+    return { track, text: { x: r.x, y: r.y, w: track.x - 4 - r.x, h: r.h } };
+  }
+  const track = { x: r.x + r.w / 2 - w / 2, y: r.y + r.h - 8 - h, w, h };
+  return { track, text: { x: r.x, y: r.y, w: r.w, h: track.y - 2 - r.y } };
+}
+
+// Langes Drücken: Anteil 0–1, solange gehalten und noch nicht ausgelöst
+function holdOf(i) {
+  for (const p of pointers.values()) {
+    if (p.item.id === i.id && p.holdStart != null && !p.fired) {
+      return clamp((performance.now() - p.holdStart) / LONG_PRESS_MS, 0, 1);
+    }
+  }
+  return null;
+}
+
 function isHot(i) {
   for (const p of pointers.values()) if (p.item.id === i.id) return true;
   return false;
@@ -602,41 +623,82 @@ function paintItem(i, r, hot) {
     case "label":
     case "button": {
       const on = i.kind === "button" && state && state.on.includes(i.id);
+      const style = i.kind === "button" ? (i.style || "normal") : "normal";
       let fill = base || (i.kind === "button" ? th.raised : null);
+      if (style === "outline") fill = on ? accent : null;
+      // rund: Kreis in der Mitte des Elements
+      const round = style === "round";
+      const d = Math.min(r.w, r.h);
+      const sh = round ? { x: cx - d / 2, y: cy - d / 2, w: d, h: d } : r;
+      const rad = round ? d / 2 : 8;
       if (fill) {
         g.fillStyle = hot ? dim(fill, 0.7) : fill;
-        rr(r.x, r.y, r.w, r.h, 8);
+        rr(sh.x, sh.y, sh.w, sh.h, rad);
         g.fill();
+      } else if (hot) {
+        g.fillStyle = th.raised; rr(sh.x, sh.y, sh.w, sh.h, rad); g.fill();
       }
       const img = image(i.image);
       if (img) cover(img, { x: r.x + 1, y: r.y + 1, w: r.w - 2, h: r.h - 2 }, hot ? 0.7 : 1);
-      if (i.kind === "button") {
+      const ledColor = i.color ? "#3fb950" : accent;
+      if (i.kind === "button" && style === "outline") {
+        g.strokeStyle = accent; g.lineWidth = 2;
+        rr(sh.x + 1, sh.y + 1, sh.w - 2, sh.h - 2, rad); g.stroke();
+      } else if (i.kind === "button" && (style === "led" || style === "switch")) {
+        g.strokeStyle = th.border; g.lineWidth = 1;
+        rr(sh.x + 0.5, sh.y + 0.5, sh.w - 1, sh.h - 1, rad); g.stroke();
+        if (style === "led") {
+          const lx = sh.x + 12, ly = sh.y + 12;
+          if (on) { g.fillStyle = alpha(accent, 0.35); g.beginPath(); g.arc(lx, ly, 8, 0, Math.PI * 2); g.fill(); }
+          g.fillStyle = on ? ledColor : th.bg; g.beginPath(); g.arc(lx, ly, 5, 0, Math.PI * 2); g.fill();
+          g.strokeStyle = th.border; g.stroke();
+        } else {
+          const t = switchParts(r).track, tr = t.h / 2;
+          g.fillStyle = on ? ledColor : th.bg; rr(t.x, t.y, t.w, t.h, tr); g.fill();
+          g.strokeStyle = th.border; rr(t.x + 0.5, t.y + 0.5, t.w - 1, t.h - 1, tr); g.stroke();
+          g.fillStyle = "#ffffff"; g.beginPath();
+          g.arc(on ? t.x + t.w - tr : t.x + tr, t.y + tr, tr - 3, 0, Math.PI * 2); g.fill();
+        }
+      } else if (i.kind === "button") {
         if (on) {
           g.strokeStyle = "#ffffff"; g.lineWidth = 3;
-          rr(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3, 7);
+          rr(sh.x + 1.5, sh.y + 1.5, sh.w - 3, sh.h - 3, Math.max(rad - 1, 0));
           g.stroke();
-          g.fillStyle = "#ffffff";
-          rr(r.x + 8, r.y + 6, r.w - 16, 3, 1.5);
-          g.fill();
+          if (!round) {
+            g.fillStyle = "#ffffff";
+            rr(r.x + 8, r.y + 6, r.w - 16, 3, 1.5);
+            g.fill();
+          }
         } else {
           g.strokeStyle = th.border; g.lineWidth = 1;
-          rr(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 8);
+          rr(sh.x + 0.5, sh.y + 0.5, sh.w - 1, sh.h - 1, rad);
           g.stroke();
         }
       }
+      // Fortschritt beim langen Drücken
+      const hold = holdOf(i);
+      if (hold != null) {
+        g.fillStyle = "#ffffff";
+        rr(r.x + 6, r.y + r.h - 7, (r.w - 12) * hold, 3, 1.5); g.fill();
+      }
+      let tx = cx, tcy = cy, tw = r.w;
+      if (style === "switch") {
+        const a = switchParts(r).text;
+        tx = a.x + a.w / 2; tcy = a.y + a.h / 2; tw = a.w;
+      }
       const tc = i.text_color || (img ? "#ffffff" : fill ? textOn(fill) : th.text);
-      let ty = cy;
+      let ty = tcy;
       if (i.icon) {
         const isz = label ? Math.max(Math.min(r.w, r.h) * 0.32, 12) : Math.max(Math.min(r.w, r.h) * 0.5, 14);
-        const icy = label ? cy - isz * 0.45 : cy;
+        const icy = label ? tcy - isz * 0.45 : tcy;
         g.font = `${isz}px DMXIcons`;
         g.textAlign = "center";
         g.textBaseline = "middle";
         g.fillStyle = tc;
-        g.fillText(i.icon, cx, icy);
-        ty = cy + isz * 0.5;
+        g.fillText(i.icon, tx, icy);
+        ty = tcy + isz * 0.5;
       }
-      if (label) wrappedText(label, cx, ty, size, tc, r.w - 12, img && !i.text_color);
+      if (label) wrappedText(label, tx, ty, size, tc, tw - 12, img && !i.text_color);
       if (i.kind === "button" && !i.active) {
         g.fillStyle = th.danger;
         g.beginPath(); g.arc(r.x + r.w - 9, r.y + 9, 3.5, 0, Math.PI * 2); g.fill();
@@ -840,7 +902,19 @@ cv.addEventListener("pointerdown", (ev) => {
   pointers.set(ev.pointerId, ptr);
   switch (i.kind) {
     case "button":
-      if (scrollable()) {
+      if (i.long_press) {
+        // erst nach langem Drücken auslösen
+        ptr.holdStart = performance.now();
+        ptr.timer = setTimeout(() => {
+          if (pointers.get(ev.pointerId) === ptr) {
+            ptr.fired = true;
+            pressDown(i);
+            dirty = true;
+          }
+        }, LONG_PRESS_MS);
+        const tick = () => { if (pointers.get(ev.pointerId) === ptr && !ptr.fired) { dirty = true; requestAnimationFrame(tick); } };
+        requestAnimationFrame(tick);
+      } else if (scrollable()) {
         // erst kurz abwarten: Wischen über eine Schaltfläche scrollt die Seite
         ptr.pending = true;
         ptr.timer = setTimeout(() => {
@@ -944,7 +1018,10 @@ function release(ev) {
   if (!ptr) return;
   pointers.delete(ev.pointerId);
   const i = ptr.item;
-  if (i.kind === "button") {
+  if (i.kind === "button" && i.long_press) {
+    clearTimeout(ptr.timer);
+    if (ptr.fired) sendNow({ t: "press", item: i.id, down: false });
+  } else if (i.kind === "button") {
     if (ptr.pending) {
       // kurzer Tipp: Drücken und Loslassen zusammen senden
       clearTimeout(ptr.timer);
