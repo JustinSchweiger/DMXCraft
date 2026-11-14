@@ -827,7 +827,13 @@ impl Show {
         let mut tmp = path.as_os_str().to_owned();
         tmp.push(".tmp");
         let tmp = std::path::PathBuf::from(tmp);
-        std::fs::write(&tmp, self.to_json()?)?;
+        {
+            // on disk before the rename, so a power cut cannot leave an empty file
+            use std::io::Write;
+            let mut f = std::fs::File::create(&tmp)?;
+            f.write_all(self.to_json()?.as_bytes())?;
+            f.sync_all()?;
+        }
         if let Err(e) = std::fs::rename(&tmp, path) {
             let _ = std::fs::remove_file(&tmp);
             return Err(e.into());

@@ -70,7 +70,7 @@ impl TriggerEngine {
         ctx: &egui::Context,
     ) -> Option<Arc<Vec<u8>>> {
         let key = env_key(path, t);
-        let mut map = self.envs.lock().expect("Envelopes");
+        let mut map = self.envs.lock().unwrap_or_else(|p| p.into_inner());
         match map.get(&key) {
             Some(EnvState::Ready(v)) => return Some(v.clone()),
             Some(_) => return None,
@@ -85,7 +85,9 @@ impl TriggerEngine {
                 Some(v) => EnvState::Ready(Arc::new(v)),
                 None => EnvState::Failed,
             };
-            envs.lock().expect("Envelopes").insert(key, state);
+            envs.lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(key, state);
             ctx.request_repaint();
         });
         None
@@ -104,7 +106,12 @@ impl TriggerEngine {
                 t.hold_ms,
             ],
         );
-        if let Some(ev) = self.events.lock().expect("events").get(&key) {
+        if let Some(ev) = self
+            .events
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&key)
+        {
             return Some(ev.clone());
         }
         let env = self.envelope(path, t, ctx)?;
@@ -115,7 +122,7 @@ impl TriggerEngine {
             f64::from(t.min_gap_ms),
             f64::from(t.hold_ms),
         ));
-        let mut map = self.events.lock().expect("events");
+        let mut map = self.events.lock().unwrap_or_else(|p| p.into_inner());
         if map.len() > 256 {
             map.clear();
         }

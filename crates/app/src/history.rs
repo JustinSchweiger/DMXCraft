@@ -36,7 +36,18 @@ impl Snapshot {
 
     /// Apply the state to the engine.
     pub fn restore(self, e: &mut Engine) {
+        // following of LIVE TRACKING is a live state: undo keeps it
+        let following: Vec<u32> = e
+            .show()
+            .trackers
+            .iter()
+            .filter(|t| t.active)
+            .map(|t| t.id)
+            .collect();
         *e.show_mut() = self.show;
+        for t in &mut e.show_mut().trackers {
+            t.active = following.contains(&t.id);
+        }
         e.replace_live(self.live.into_iter().collect());
         e.sync();
     }
@@ -105,6 +116,23 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn following_is_no_undo_step() {
+        let mut h = History::default();
+        let mut e = Engine::new(Show::new("A", 8));
+        let tr = e.show_mut().add_tracker("T", Vec::new());
+        h.reset(&Snapshot::of(&e));
+        e.show_mut().tracker_mut(tr).unwrap().active = true;
+        h.track(&e, false);
+        assert!(!h.can_undo(), "switching following is not a change");
+        e.show_mut().name = "B".into();
+        h.track(&e, false);
+        let prev = h.undo(&Snapshot::of(&e)).unwrap();
+        prev.restore(&mut e);
+        assert_eq!(e.show().name, "A");
+        assert!(e.show().tracker(tr).unwrap().active, "undo keeps following");
+    }
 
     #[test]
     fn undo_redo_roundtrip() {

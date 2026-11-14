@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::show::{FixtureId, Show};
 
 /// A point that moving heads follow.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tracker {
     pub id: u32,
     pub name: String,
@@ -39,6 +39,23 @@ pub struct Tracker {
     /// Following now (live state, not saved).
     #[serde(skip)]
     pub active: bool,
+}
+
+/// Equality of the saved settings: following on/off is a live state, not a
+/// change of the show (no “unsaved changes”, no undo step).
+impl PartialEq for Tracker {
+    fn eq(&self, o: &Self) -> bool {
+        self.id == o.id
+            && self.name == o.name
+            && self.fixtures == o.fixtures
+            && self.target == o.target
+            && self.light == o.light
+            && self.dimmer == o.dimmer
+            && self.color == o.color
+            && self.zoom == o.zoom
+            && self.own_zoom == o.own_zoom
+            && self.cells == o.cells
+    }
 }
 
 fn yes() -> bool {
