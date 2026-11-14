@@ -98,13 +98,19 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) lastOk = performance.now();
 });
 
+// one pending command per element and kind – per target for live tracking,
+// so several fingers on one field do not overwrite each other
+function pendingKey(cmd) {
+  return cmd.item + ":" + cmd.t + (cmd.tracker != null ? ":" + cmd.tracker : "");
+}
+
 function send(cmd) {
-  pending.set(cmd.item + ":" + cmd.t, cmd);
+  pending.set(pendingKey(cmd), cmd);
   if (!flushTimer) flushTimer = setTimeout(flush, 35);
 }
 
 function sendNow(cmd) {
-  pending.set(cmd.item + ":" + cmd.t, cmd);
+  pending.set(pendingKey(cmd), cmd);
   flush();
 }
 
@@ -463,18 +469,41 @@ function roomMap(f) {
   };
 }
 
+// local positions per target (one finger each), until the server reports them
 function trackersOf(i) {
   const list = (state && state.trackers) || [];
   const l = local.get(i.id);
-  if (!l || !l.track || !(l.active || l.until > performance.now())) return list;
-  return list.map((t) => t.id === l.track.id ? Object.assign({}, t, { x: l.track.x, z: l.track.z }) : t);
+  if (!l || !l.tracks) return list;
+  const now = performance.now();
+  return list.map((t) => {
+    const o = l.tracks[t.id];
+    return o && (o.active || o.until > now) ? Object.assign({}, t, { x: o.x, z: o.z }) : t;
+  });
+}
+
+function setTrack(i, id, patch) {
+  const l = local.get(i.id) || {};
+  l.tracks = l.tracks || {};
+  if (patch === null) delete l.tracks[id];
+  else l.tracks[id] = Object.assign(l.tracks[id] || {}, patch);
+  local.set(i.id, l);
+  dirty = true;
+}
+
+// targets held by a finger right now
+function heldTargets(i) {
+  const held = new Set();
+  for (const p of pointers.values()) if (p.item.id === i.id && p.tracker != null) held.add(p.tracker);
+  return held;
 }
 
 function targetAt(i, pt) {
   const m = roomMap(contentRect(rectOf(i), i));
   if (!m) return null;
   let best = null, bestD = 28 / scale;
+  const held = heldTargets(i);
   for (const t of trackersOf(i)) {
+    if (held.has(t.id)) continue;
     const [x, y] = m.toScreen(t.x, t.z);
     const dd = Math.hypot(pt.x - x, pt.y - y);
     if (dd < bestD) { best = t; bestD = dd; }
@@ -997,7 +1026,8 @@ cv.addEventListener("pointerdown", (ev) => {
       const t = targetAt(i, pt);
       if (t) {
         ptr.tracker = t.id;
-        setLocal(i, { active: true, track: { id: t.id, x: t.x, z: t.z } });
+        setLocal(i, { active: true });
+        setTrack(i, t.id, { active: true, x: t.x, z: t.z });
       } else {
         pointers.delete(ev.pointerId);
         if (scrollable()) pan = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, px: panX, py: panY };
@@ -1055,7 +1085,7 @@ cv.addEventListener("pointermove", (ev) => {
       const m = roomMap(contentRect(r, i));
       if (!m) break;
       const [x, z] = m.toRoom(pt.x, pt.y);
-      setLocal(i, { track: { id: ptr.tracker, x, z } });
+      setTrack(i, ptr.tracker, { x, z });
       send({ t: "track", item: i.id, tracker: ptr.tracker, x, z });
       break;
     }
@@ -1068,7 +1098,19 @@ function release(ev) {
   if (!ptr) return;
   pointers.delete(ev.pointerId);
   const i = ptr.item;
-  if (i.kind === "button" && i.long_press) {
+  // another finger still on the same element: it stays active
+  const still = [...pointers.values()].some((p) => p.item.id === i.id);
+  if (i.kind === "tracking") {
+    if (ptr.moved) {
+      flush();
+      setTrack(i, ptr.tracker, { active: false, until: performance.now() + 600 });
+    } else {
+      if (navigator.vibrate) navigator.vibrate(8);
+      sendNow({ t: "track_toggle", item: i.id, tracker: ptr.tracker });
+      setTrack(i, ptr.tracker, null);
+    }
+    if (!still) setLocal(i, { active: false });
+  } else if (i.kind === "button" && i.long_press) {
     clearTimeout(ptr.timer);
     if (ptr.fired) sendNow({ t: "press", item: i.id, down: false });
   } else if (i.kind === "button") {
@@ -1080,20 +1122,18 @@ function release(ev) {
     } else {
       sendNow({ t: "press", item: i.id, down: false });
     }
-  } else if (i.kind === "tracking" && !ptr.moved) {
-    if (navigator.vibrate) navigator.vibrate(8);
-    sendNow({ t: "track_toggle", item: i.id, tracker: ptr.tracker });
-    setLocal(i, { active: false, track: null });
   } else {
     // letzten Wert sofort senden, Anzeige kurz halten bis der Server ihn meldet
     flush();
-    setLocal(i, { active: false, until: performance.now() + 600 });
+    setLocal(i, still ? {} : { active: false, until: performance.now() + 600 });
   }
   dirty = true;
 }
 cv.addEventListener("pointerup", release);
 cv.addEventListener("pointercancel", release);
 cv.addEventListener("contextmenu", (ev) => ev.preventDefault());
+// iOS ignores user-scalable=no: several fingers must not zoom the page
+document.addEventListener("gesturestart", (ev) => ev.preventDefault());
 
 function pressDown(i) {
   if (navigator.vibrate) navigator.vibrate(8);
