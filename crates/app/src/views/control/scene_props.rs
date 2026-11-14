@@ -64,7 +64,7 @@ impl View for ScenePropsView {
         ui.allocate_rect(full, Sense::hover());
 
         // Tab bar
-        let shown = self.tab_bar(ui, tabs, cx).0;
+        let shown = self.tab_bar(ui, tabs, cx, true).0;
 
         let mut ui = ui.new_child(
             egui::UiBuilder::new()
@@ -129,7 +129,7 @@ fn hide_button(ui: &mut egui::Ui, bar: Rect, st: &mut crate::state::AppState) {
             .layout(egui::Layout::left_to_right(egui::Align::Center)),
     );
     if left
-        .add(IconButton::new(Icon::ChevronRight).size(30.0).flat())
+        .add(IconButton::new(Icon::ChevronRight).size(SIDE_BTN).flat())
         .on_hover_text(t("Hide sidebar"))
         .clicked()
     {
@@ -157,6 +157,9 @@ fn child(ui: &mut egui::Ui, rect: Rect) -> egui::Ui {
             .layout(egui::Layout::top_down(egui::Align::Min)),
     )
 }
+
+/// Size of the buttons that hide and show the side areas.
+pub const SIDE_BTN: f32 = 32.0;
 
 /// Height of the bottom bar with the buttons.
 const BAR_H: f32 = 40.0;
@@ -548,11 +551,19 @@ pub(super) fn bar_slider(
 impl ScenePropsView {
     /// Tab bar in `rect` (vertical, icons from the top). Returns the shown
     /// tab and whether a tab was clicked.
-    fn tab_bar(&mut self, ui: &mut egui::Ui, rect: Rect, cx: &mut ViewCtx<'_>) -> (Tab, bool) {
-        ui.painter().line_segment(
-            [rect.left_top(), rect.left_bottom()],
-            Stroke::new(1.0, theme::border()),
-        );
+    fn tab_bar(
+        &mut self,
+        ui: &mut egui::Ui,
+        rect: Rect,
+        cx: &mut ViewCtx<'_>,
+        border: bool,
+    ) -> (Tab, bool) {
+        if border {
+            ui.painter().line_segment(
+                [rect.left_top(), rect.left_bottom()],
+                Stroke::new(1.0, theme::border()),
+            );
+        }
         let mut tab_ui = ui.new_child(
             egui::UiBuilder::new()
                 .max_rect(rect.shrink2(Vec2::new(3.0, 0.0)))
@@ -599,14 +610,18 @@ impl ScenePropsView {
     pub fn rail(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
         let full = ui.available_rect_before_wrap();
         ui.allocate_rect(full, Sense::hover());
-        let (_, clicked) = self.tab_bar(ui, full, cx);
+        let (_, clicked) = self.tab_bar(ui, full, cx, false);
+        // at the height of the hide button in the bottom bar
+        let bar = Rect::from_min_max(pos2(full.left(), full.bottom() - BAR_H), full.max);
         let mut bottom = ui.new_child(
             egui::UiBuilder::new()
-                .max_rect(full.shrink2(Vec2::new(3.0, 0.0)))
-                .layout(egui::Layout::bottom_up(egui::Align::Center)),
+                .max_rect(bar.with_min_y(bar.top() + 1.0))
+                .layout(egui::Layout::centered_and_justified(
+                    egui::Direction::TopDown,
+                )),
         );
         let show = bottom
-            .add(IconButton::new(Icon::ChevronLeft).size(32.0).flat())
+            .add(IconButton::new(Icon::ChevronLeft).size(SIDE_BTN).flat())
             .on_hover_text(t("Show sidebar"))
             .clicked();
         if clicked || show {

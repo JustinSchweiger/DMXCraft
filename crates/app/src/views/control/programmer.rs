@@ -825,7 +825,11 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
 /// Hides the programmer (a narrow bar on the right shows it again).
 pub(super) fn hide_button(ui: &mut egui::Ui, st: &mut AppState) {
     if ui
-        .add(IconButton::new(Icon::ChevronRight).size(34.0).flat())
+        .add(
+            IconButton::new(Icon::ChevronRight)
+                .size(super::scene_props::SIDE_BTN)
+                .flat(),
+        )
         .on_hover_text(t("Hide programmer"))
         .clicked()
     {

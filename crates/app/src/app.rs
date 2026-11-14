@@ -1138,6 +1138,7 @@ impl eframe::App for DmxCraftApp {
                                 .exact_size(RAIL_W)
                                 .frame(area);
                             let mut shown = !cx.state.programmer_hidden;
+                            let was = shown;
                             let r = egui::Panel::show_switched(
                                 ui,
                                 &mut shown,
@@ -1152,7 +1153,8 @@ impl eframe::App for DmxCraftApp {
                                     expanded
                                 },
                             );
-                            if !shown {
+                            // dragged closed past its minimum width
+                            if was && !shown {
                                 cx.state.programmer_hidden = true;
                             }
                             // only the open programmer gives its share
@@ -1189,6 +1191,7 @@ impl eframe::App for DmxCraftApp {
                                 .exact_size(RAIL_W)
                                 .frame(area);
                             let mut shown = !cx.state.props_hidden;
+                            let was = shown;
                             egui::Panel::show_switched(
                                 ui,
                                 &mut shown,
@@ -1202,7 +1205,8 @@ impl eframe::App for DmxCraftApp {
                                     }
                                 },
                             );
-                            if !shown {
+                            // dragged closed past its minimum width
+                            if was && !shown {
                                 cx.state.props_hidden = true;
                             }
                             egui::CentralPanel::default_margins()
@@ -1540,13 +1544,17 @@ fn programmer_rail(ui: &mut egui::Ui, st: &mut AppState) {
     use crate::ui::widgets::{Icon, IconButton};
     let full = ui.available_rect_before_wrap();
     ui.allocate_rect(full, egui::Sense::hover());
-    let mut bar = ui.new_child(
-        egui::UiBuilder::new()
-            .max_rect(full)
-            .layout(egui::Layout::top_down(egui::Align::Center)),
-    );
+    // at the height of the hide button in the programmer's top row
+    let row = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), 34.0));
+    let mut bar = ui.new_child(egui::UiBuilder::new().max_rect(row).layout(
+        egui::Layout::centered_and_justified(egui::Direction::TopDown),
+    ));
     if bar
-        .add(IconButton::new(Icon::ChevronLeft).size(34.0).flat())
+        .add(
+            IconButton::new(Icon::ChevronLeft)
+                .size(crate::views::control::scene_props::SIDE_BTN)
+                .flat(),
+        )
         .on_hover_text(t("Show programmer"))
         .clicked()
     {
