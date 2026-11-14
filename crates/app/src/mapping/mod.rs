@@ -993,6 +993,7 @@ impl Mapper {
     /// Every frame after the views: process clicks of the overlay, keyboard and
     /// MIDI, send feedback.
     pub fn end_frame(&mut self, ctx: &egui::Context, e: &mut Engine, st: &mut AppState) {
+        self.midi.set_waker(ctx);
         self.midi.scan();
         // Remove mappings of deleted scenes
         let show = e.show();

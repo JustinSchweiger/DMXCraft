@@ -197,6 +197,17 @@ impl Engine {
             .any(|p| p.scene == id && p.releasing.is_none())
     }
 
+    /// Does the output change by itself (running or fading scenes, previewed
+    /// effects, LIVE TRACKING)? Otherwise it stays as it is until something
+    /// is changed.
+    pub fn is_moving(&self) -> bool {
+        let preview_fx = self
+            .preview
+            .iter()
+            .any(|id| self.show.scene(*id).is_some_and(|s| !s.effects.is_empty()));
+        !self.playing.is_empty() || preview_fx || !self.tracking.is_empty()
+    }
+
     pub fn active_scenes(&self) -> Vec<SceneId> {
         self.playing
             .iter()

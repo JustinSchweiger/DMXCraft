@@ -50,6 +50,8 @@ pub struct MidiHub {
     last_scan: Option<Instant>,
     /// Outputs connected since the last collection (send feedback again).
     pub new_outputs: bool,
+    /// Wakes the interface on input (it only redraws when needed).
+    waker: std::sync::Arc<std::sync::OnceLock<eframe::egui::Context>>,
 }
 
 impl Default for MidiHub {
@@ -64,11 +66,17 @@ impl Default for MidiHub {
             input_names: Vec::new(),
             last_scan: None,
             new_outputs: false,
+            waker: Default::default(),
         }
     }
 }
 
 impl MidiHub {
+    /// Context to wake on MIDI input.
+    pub fn set_waker(&self, ctx: &eframe::egui::Context) {
+        let _ = self.waker.set(ctx.clone());
+    }
+
     /// Look for devices (at most every 3 s) and open new inputs.
     pub fn scan(&mut self) {
         if self
@@ -101,12 +109,16 @@ impl MidiHub {
                 };
                 let tx = self.tx.clone();
                 let dev = name.clone();
+                let waker = self.waker.clone();
                 if let Ok(conn) = input.connect(
                     &port,
                     "dmxcraft-in",
                     move |_, bytes, _| {
                         if let Some(e) = parse(&dev, bytes) {
                             let _ = tx.send(e);
+                            if let Some(ctx) = waker.get() {
+                                ctx.request_repaint();
+                            }
                         }
                     },
                     (),

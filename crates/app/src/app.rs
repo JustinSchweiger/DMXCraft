@@ -226,6 +226,14 @@ impl DmxCraftApp {
     }
 
     /// Remember the current state as saved.
+    /// Does the picture change by itself (redraw smoothly)?
+    fn animating(&self) -> bool {
+        Self::lock(&self.engine).is_moving()
+            || self.state.sound.any_running()
+            || self.state.mode == Mode::Visualizer
+            || self.state.viz_window
+    }
+
     fn mark_saved(&mut self) {
         let show = Self::lock(&self.engine).show().clone();
         self.mark_saved_as(show);
@@ -909,8 +917,13 @@ impl eframe::App for DmxCraftApp {
         let rs = frame_.wgpu_render_state().cloned();
         let ctx = ui.ctx().clone();
         crate::ui::keyboard_focus::keep();
-        // Show running scenes and live colors smoothly.
-        ctx.request_repaint_after(Duration::from_millis(33));
+        // Smooth while something moves; otherwise only a slow tick (clocks,
+        // auto-save, messages) – input, MIDI, remote and MCP wake it at once.
+        ctx.request_repaint_after(if self.animating() {
+            Duration::from_millis(33)
+        } else {
+            Duration::from_millis(250)
+        });
         if !self.started {
             self.started = true;
             theme::apply(&ctx);
