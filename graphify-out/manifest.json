@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/app.rs": {
-    "mtime": 1794618342.5264354,
-    "seen": 1794619202.8494866,
-    "ast_hash": "51db23da06e9dc359b79034941b41778",
+    "mtime": 1794647096.8987648,
+    "seen": 1794647122.7967093,
+    "ast_hash": "101c796f7722b1472f06ce88a7ca42bf",
     "semantic_hash": ""
   },
   "crates/app/src/demo.rs": {
@@ -54,9 +54,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/main.rs": {
-    "mtime": 1794474993.8018196,
-    "seen": 1794475251.1387033,
-    "ast_hash": "76e31f47fa1524277b65fbe2af77fe49",
+    "mtime": 1794647053.2979434,
+    "seen": 1794647122.7967284,
+    "ast_hash": "8537a89b21c61f0123eae633071af47a",
     "semantic_hash": ""
   },
   "crates/app/src/updater.rs": {
@@ -162,9 +162,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1794523402.5583894,
-    "seen": 1794523430.5404105,
-    "ast_hash": "13eb3ad60c441d61686c41592d5e32a2",
+    "mtime": 1794647096.499837,
+    "seen": 1794647122.7969084,
+    "ast_hash": "de4b0212a826d54e22463c872bf8101d",
     "semantic_hash": ""
   },
   "crates/app/assets/icon-256.png": {
@@ -894,9 +894,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/i18n/de.rs": {
-    "mtime": 1794646485.6267285,
-    "seen": 1794646887.636262,
-    "ast_hash": "32b073d8c4ea014d6eea48f1168f8ccf",
+    "mtime": 1794647091.7984521,
+    "seen": 1794647122.7967243,
+    "ast_hash": "c7a2d3c8cb329969e570d120a7d53675",
     "semantic_hash": ""
   },
   "scripts/dev.ps1": {
@@ -960,9 +960,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/autosave.rs": {
-    "mtime": 1794347755.9126716,
-    "seen": 1794351231.7149622,
-    "ast_hash": "fb291070b4bc11a62c6fbf3812ef9c58",
+    "mtime": 1794647053.2983644,
+    "seen": 1794647122.7967138,
+    "ast_hash": "6e41a7f021c4febc55245088dc960f40",
     "semantic_hash": ""
   },
   "crates/core/src/look.rs": {
@@ -1083,6 +1083,12 @@
     "mtime": 1794617896.1585803,
     "seen": 1794618340.9809053,
     "ast_hash": "51b1822bc1a276a2fffb09a680a968e0",
+    "semantic_hash": ""
+  },
+  "crates/app/src/crash.rs": {
+    "mtime": 1794647044.310762,
+    "seen": 1794647122.7967167,
+    "ast_hash": "2f339ca16d28cba3435c3c581efffea2",
     "semantic_hash": ""
   }
 }

@@ -106,6 +106,8 @@ pub struct DmxCraftApp {
     request_close: bool,
     /// Auto-save and crash recovery.
     autosave: crate::autosave::AutoSave,
+    /// Auto-save running in the background: (saved show, result).
+    autosave_job: Option<std::sync::mpsc::Receiver<(Show, Result<(), String>)>>,
     /// Recovery copy found at startup (question “Restore?” open).
     recovery: Option<crate::autosave::RecoveryInfo>,
 }
@@ -146,8 +148,19 @@ impl DmxCraftApp {
             output_kind.create(&settings.output_config()),
             OUTPUT_HZ,
         );
+        crate::crash::arm(engine.clone(), autosave.recovery_files());
         let mut state = AppState::new(show_path.unwrap_or_default());
         state.message = message;
+        if let Some(msg) = crate::crash::take_last_crash() {
+            let log = crate::crash::log_file()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
+            state.error(tr!(
+                "DMXCraft was ended by an error ({msg}). Details: {log}",
+                msg = msg,
+                log = log
+            ));
+        }
         state.props_hidden = settings.hide_scene_props;
         state.programmer_hidden = settings.hide_programmer;
         if settings.start_touch {
@@ -193,6 +206,7 @@ impl DmxCraftApp {
             request_close: false,
             recovery: autosave.pending(),
             autosave,
+            autosave_job: None,
         }
     }
 
@@ -213,7 +227,13 @@ impl DmxCraftApp {
 
     /// Remember the current state as saved.
     fn mark_saved(&mut self) {
-        self.saved_show = Self::lock(&self.engine).show().clone();
+        let show = Self::lock(&self.engine).show().clone();
+        self.mark_saved_as(show);
+    }
+
+    /// Saved state = `show` (the copy that was written).
+    fn mark_saved_as(&mut self, show: Show) {
+        self.saved_show = show;
         // saved, loaded or new: nothing left to recover
         self.autosave.clear();
     }
@@ -271,23 +291,41 @@ impl DmxCraftApp {
         }
         let dirty = self.dirty();
         let path = self.state.show_path.clone();
+        crate::crash::update(dirty, &path);
         self.autosave
             .recovery_tick(Self::lock(&self.engine).show(), dirty, &path);
         let has_path = !path.trim().is_empty();
+        // result of a finished background auto-save
+        if let Some(rx) = &self.autosave_job {
+            match rx.try_recv() {
+                Ok((show, Ok(()))) => {
+                    self.autosave_job = None;
+                    // only what was written counts as saved (later edits stay
+                    // unsaved)
+                    self.mark_saved_as(show);
+                    self.state.info(t("Show saved automatically"));
+                }
+                Ok((_, Err(err))) => {
+                    self.autosave_job = None;
+                    self.state.error(tr!("Auto-save failed: {e}", e = err));
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.autosave_job = None,
+            }
+        }
         if self
             .autosave
             .autosave_due(self.settings.autosave_minutes, dirty, has_path)
         {
-            let result = Self::lock(&self.engine).show().save(&path);
-            match result {
-                Ok(()) => {
-                    self.mark_saved();
-                    self.state.info(t("Show saved automatically"));
-                }
-                Err(err) => self
-                    .state
-                    .error(tr!("Auto-save failed: {e}", e = err.to_string())),
-            }
+            // copy under the lock (fast), write without it: the light keeps
+            // running while a large show is written
+            let show = Self::lock(&self.engine).show().clone();
+            let (tx, rx) = std::sync::mpsc::channel();
+            self.autosave_job = Some(rx);
+            std::thread::spawn(move || {
+                let result = show.save(&path).map_err(|e| e.to_string());
+                let _ = tx.send((show, result));
+            });
         }
     }
 
@@ -316,10 +354,12 @@ impl DmxCraftApp {
         if let Some(stem) = std::path::Path::new(path).file_stem() {
             Self::lock(&self.engine).show_mut().name = stem.to_string_lossy().into_owned();
         }
-        let result = Self::lock(&self.engine).show().save(path);
+        // copy under the lock, write without it (the output keeps running)
+        let show = Self::lock(&self.engine).show().clone();
+        let result = show.save(path);
         match result {
             Ok(()) => {
-                self.mark_saved();
+                self.mark_saved_as(show);
                 self.state.show_path = path.to_string();
                 self.state.info(tr!("Saved: {path}", path = path));
                 self.settings.remember(path);

@@ -1456,4 +1456,5 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Or Alt + click on a control", "Oder Alt + Klick auf ein Bedienelement"),
     ("Remove target", "Ziel entfernen"),
     ("Player {d}", "Player {d}"),
+    ("DMXCraft was ended by an error ({msg}). Details: {log}", "DMXCraft wurde durch einen Fehler beendet ({msg}). Details: {log}"),
 ];

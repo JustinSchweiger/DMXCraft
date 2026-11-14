@@ -6,6 +6,7 @@ mod app;
 mod audio;
 mod audio_triggers;
 mod autosave;
+mod crash;
 mod demo;
 mod desktop;
 mod file_dialog;
@@ -39,6 +40,7 @@ fn main() -> eframe::Result {
         dmxcraft_mcp::bridge::run(settings::Settings::load().mcp_port);
         return Ok(());
     }
+    crash::install();
     desktop::ensure_linux_menu_entry();
     let settings = settings::Settings::load();
     i18n::set_lang(i18n::Lang::from_key(&settings.language));

@@ -43,7 +43,7 @@ a sound player and a live 3D visualizer. Output goes through inexpensive USB-DMX
 | 📺 **OBS** | Play videos from SUPER SCENES in an OBS browser source in sync with sound and light, and switch OBS scenes |
 | 🤖 **AI assistant** | Built-in MCP server: let an AI assistant patch fixtures and program scenes |
 | 🔌 **Output** | Up to 8 universes over USB-DMX (Open DMX / FTDI), one cable per universe, or simulation |
-| 💾 **Safe** | Auto-save and recovery of unsaved changes after a crash |
+| 💾 **Safe** | Auto-save in the background, recovery of unsaved changes after a crash, crash log (`crash.log` in the settings folder) |
 | 🌍 **Everywhere** | English and German UI, installers and auto-update for all three systems |
 
 ## Screenshots

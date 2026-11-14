@@ -66,6 +66,11 @@ impl AutoSave {
         }
     }
 
+    /// Recovery copy and its info file (for the emergency save on a crash).
+    pub fn recovery_files(&self) -> Option<(PathBuf, PathBuf)> {
+        Some((self.show_file()?, self.info_file()?))
+    }
+
     fn show_file(&self) -> Option<PathBuf> {
         self.dir.as_ref().map(|d| d.join("recovery.dmxcraft"))
     }
@@ -162,7 +167,7 @@ impl AutoSave {
     }
 }
 
-fn now_secs() -> u64 {
+pub(crate) fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
