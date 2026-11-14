@@ -93,6 +93,18 @@ pub fn apply_levels(
                 };
                 out.insert(ch, v.round().clamp(0.0, 255.0) as u8);
             }
+            // fixtures without a dimmer channel (RGB only): their virtual
+            // dimmer, which scales the colors
+            if feat.kind == crate::fixture::ChannelKind::Dimmer && ty.needs_virtual_dimmer() {
+                let ch = ChannelRef::virtual_dimmer(b.fixture);
+                let v = if relative {
+                    let base = f32::from(out.get(&ch).copied().unwrap_or(255));
+                    base + (level - 0.5) * (hi - lo)
+                } else {
+                    lo + level.clamp(0.0, 1.0) * (hi - lo)
+                };
+                out.insert(ch, v.round().clamp(0.0, 255.0) as u8);
+            }
         }
     }
 }

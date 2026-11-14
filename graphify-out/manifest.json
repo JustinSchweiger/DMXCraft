@@ -522,9 +522,9 @@
     "semantic_hash": ""
   },
   "crates/core/src/fx/feature.rs": {
-    "mtime": 1794647371.4125395,
-    "seen": 1794647518.359319,
-    "ast_hash": "dd3f5b8cc7437c55e44282cfd08a7a8b",
+    "mtime": 1794659828.7579372,
+    "seen": 1794660075.4982715,
+    "ast_hash": "68de89d12dbc7b3f40e27ca614733e1d",
     "semantic_hash": ""
   },
   "crates/core/src/fx/mapping.rs": {
@@ -1146,9 +1146,9 @@
     "semantic_hash": ""
   },
   "crates/core/src/engine/tests.rs": {
-    "mtime": 1794649174.4948885,
-    "seen": 1794649218.1731215,
-    "ast_hash": "2bcac1d5c900edb125c4ba277dcb22ba",
+    "mtime": 1794659811.5786157,
+    "seen": 1794660075.4982665,
+    "ast_hash": "59d11ab3e900ed6ad066c5c024426d75",
     "semantic_hash": ""
   },
   "crates/core/src/engine/tracking.rs": {

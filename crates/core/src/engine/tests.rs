@@ -1203,3 +1203,45 @@ fn sync_drops_removed_scenes_and_fixtures() {
     assert!(e.active_scenes().is_empty());
     assert!(e.programmer().is_empty());
 }
+
+#[test]
+fn dimmer_effects_dim_rgb_only_fixtures_lit_by_another_scene() {
+    use crate::fx::feature::Feature;
+    use crate::show::EffectKind;
+    let mut show = Show::default();
+    for t in builtin_fixture_types() {
+        show.upsert_fixture_type(t);
+    }
+    let bar = show.add_fixture("Bar", "generic/rgb-3ch", 0, 1).unwrap();
+    let zone_a = show.add_zone("Farbe");
+    let zone_b = show.add_zone("Auto");
+    // color from one bank …
+    let color = show.add_scene(
+        "Rot",
+        Some(zone_a),
+        vec![Step::new(vec![ChannelValue {
+            fixture: bar,
+            channel: 0,
+            value: 255,
+        }])],
+    );
+    // … intensity from another: a dimmer effect with level 0 at the start
+    let pulse = show.add_scene("Puls", Some(zone_b), vec![Step::new(Vec::new())]);
+    let sc = show.scene_mut(pulse).unwrap();
+    sc.steps[0].hold_ms = 1000;
+    let fx = sc.add_effect(EffectKind::ValueFx);
+    let e = sc.effects.iter_mut().find(|e| e.id == fx).unwrap();
+    e.fixtures = vec![bar];
+    e.features = vec![Feature {
+        kind: crate::fixture::ChannelKind::Dimmer,
+        min: 0,
+        max: 0,
+    }];
+    let mut e = Engine::new(show);
+    e.activate(color);
+    e.activate(pulse);
+    e.tick(Duration::from_millis(100));
+    let mut f = DmxFrame::new(1);
+    e.render(&mut f);
+    assert_eq!(f.get(0, 1), Some(0), "the dimmer effect darkens the bar");
+}
