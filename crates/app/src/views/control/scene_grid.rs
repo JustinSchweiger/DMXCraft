@@ -32,11 +32,75 @@ use crate::views::{View, ViewCtx};
 const COLUMN_W: f32 = 176.0;
 
 /// Which bank columns are shown.
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Default)]
 enum PageFilter {
     #[default]
     All,
-    Zone(ZoneId),
+    /// One or more banks (Ctrl/Shift + click), never empty.
+    Zones(Vec<ZoneId>),
+}
+
+impl PageFilter {
+    fn shows(&self, zone: ZoneId) -> bool {
+        match self {
+            PageFilter::All => true,
+            PageFilter::Zones(z) => z.contains(&zone),
+        }
+    }
+
+    /// Click on a bank chip: alone, Ctrl toggles it, Shift adds the range
+    /// from the last clicked bank (`order` = visible banks).
+    fn click(
+        &mut self,
+        zone: ZoneId,
+        anchor: Option<ZoneId>,
+        m: egui::Modifiers,
+        order: &[ZoneId],
+    ) {
+        let mut current = match self {
+            PageFilter::All => Vec::new(),
+            PageFilter::Zones(z) => z.clone(),
+        };
+        let range = |a: ZoneId| {
+            let i = order.iter().position(|z| *z == a)?;
+            let j = order.iter().position(|z| *z == zone)?;
+            Some(order[i.min(j)..=i.max(j)].to_vec())
+        };
+        let next = if m.shift {
+            let r = anchor.and_then(range).unwrap_or_else(|| vec![zone]);
+            if m.command {
+                current.extend(r);
+                current
+            } else {
+                r
+            }
+        } else if m.command {
+            if let Some(i) = current.iter().position(|z| *z == zone) {
+                current.remove(i);
+            } else {
+                current.push(zone);
+            }
+            current
+        } else {
+            vec![zone]
+        };
+        *self = PageFilter::Zones(Vec::new());
+        self.set(next, order);
+    }
+
+    /// Banks in the order of the bar, without duplicates; none = all.
+    fn set(&mut self, zones: Vec<ZoneId>, order: &[ZoneId]) {
+        let z: Vec<ZoneId> = order
+            .iter()
+            .copied()
+            .filter(|o| zones.contains(o))
+            .collect();
+        *self = if z.is_empty() {
+            PageFilter::All
+        } else {
+            PageFilter::Zones(z)
+        };
+    }
 }
 
 enum Action {
@@ -100,6 +164,8 @@ enum BankAction {
 #[derive(Default)]
 pub struct SceneGridView {
     page: PageFilter,
+    /// Last bank clicked without Shift (start of a Shift range).
+    bank_anchor: Option<ZoneId>,
     /// Ongoing rename of a bank (directly in the chip).
     rename: Option<(ZoneId, String)>,
     /// Focus the field in the next frame (only once, otherwise it cannot be left
@@ -134,23 +200,25 @@ impl View for SceneGridView {
         let sel_before = cx.state.selected_scenes.clone();
 
         // a hidden bank can no longer be selected as a filter
-        if let PageFilter::Zone(z) = self.page {
-            if cx.engine.show().zone(z).is_none_or(|z| z.hidden) {
-                self.page = PageFilter::All;
-            }
+        let order: Vec<ZoneId> = cx
+            .engine
+            .show()
+            .zones
+            .iter()
+            .filter(|z| !z.hidden)
+            .map(|z| z.id)
+            .collect();
+        if let PageFilter::Zones(z) = &self.page {
+            let z = z.clone();
+            self.page.set(z, &order);
         }
         // Bank change via keyboard/MIDI; displayed bank for mappings
         if let Some(req) = cx.state.request_bank.take() {
-            self.page = match req {
-                Some(z) if cx.engine.show().zone(z).is_some_and(|z| !z.hidden) => {
-                    PageFilter::Zone(z)
-                }
-                _ => PageFilter::All,
-            };
+            self.page.set(req.into_iter().collect(), &order);
         }
-        cx.state.shown_bank = match self.page {
-            PageFilter::All => None,
-            PageFilter::Zone(z) => Some(z),
+        cx.state.shown_bank = match &self.page {
+            PageFilter::Zones(z) if z.len() == 1 => Some(z[0]),
+            _ => None,
         };
         let columns: Vec<(ZoneId, String)> = cx
             .engine
@@ -158,10 +226,7 @@ impl View for SceneGridView {
             .zones
             .iter()
             .filter(|z| !z.hidden)
-            .filter(|z| match self.page {
-                PageFilter::All => true,
-                PageFilter::Zone(id) => z.id == id,
-            })
+            .filter(|z| self.page.shows(z.id))
             .map(|z| (z.id, z.name.clone()))
             .collect();
 
@@ -346,12 +411,20 @@ impl SceneGridView {
         ui.horizontal(|ui| {
             let all = chip(
                 ui,
-                &mut self.page,
-                PageFilter::All,
+                self.page == PageFilter::All,
                 t("All"),
                 theme::text(),
                 false,
             );
+            if all.clicked() {
+                self.page = PageFilter::All;
+            }
+            let order: Vec<ZoneId> = show
+                .zones
+                .iter()
+                .filter(|z| !z.hidden)
+                .map(|z| z.id)
+                .collect();
             mapping::target(ui, all.rect, Control::ShowBank { zone: None });
             if !locked && show.zones.iter().any(|z| z.hidden) {
                 menu::context(&all, |ui| {
@@ -391,7 +464,15 @@ impl SceneGridView {
                     continue;
                 }
                 let live = e.active_in_zone(z.id).is_some();
-                let resp = chip(ui, &mut self.page, PageFilter::Zone(z.id), &z.name, c, live);
+                let on = matches!(&self.page, PageFilter::Zones(s) if s.contains(&z.id));
+                let resp = chip(ui, on, &z.name, c, live);
+                if resp.clicked() {
+                    let m = ui.input(|i| i.modifiers);
+                    self.page.click(z.id, self.bank_anchor, m, &order);
+                    if !m.shift {
+                        self.bank_anchor = Some(z.id);
+                    }
+                }
                 if mapping::target(ui, resp.rect, Control::ShowBank { zone: Some(z.id) }) {
                     continue;
                 }
@@ -629,13 +710,11 @@ fn arrow(ui: &mut egui::Ui, rect: egui::Rect, icon: Icon, enabled: bool) -> bool
 /// Bank tab; a dot shows that something is running in the bank.
 fn chip(
     ui: &mut egui::Ui,
-    page: &mut PageFilter,
-    value: PageFilter,
+    selected: bool,
     label: &str,
     color: Color32,
     live: bool,
 ) -> egui::Response {
-    let selected = *page == value;
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_string(), theme::body(), color);
@@ -680,9 +759,6 @@ fn chip(
         theme::body(),
         if selected { theme::text() } else { color },
     );
-    if resp.clicked() {
-        *page = value;
-    }
     resp
 }
 
@@ -1434,5 +1510,35 @@ fn apply_bank(
             e.sync();
             st.selected_scenes.retain(|s| e.show().scene(*s).is_some());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bank_multi_selection() {
+        let z = |n| ZoneId(n);
+        let order = [z(1), z(2), z(3), z(4)];
+        let none = egui::Modifiers::NONE;
+        let ctrl = egui::Modifiers::COMMAND;
+        let shift = egui::Modifiers::SHIFT;
+        let mut p = PageFilter::All;
+        p.click(z(2), None, none, &order);
+        assert!(p == PageFilter::Zones(vec![z(2)]));
+        p.click(z(4), Some(z(2)), ctrl, &order);
+        assert!(p == PageFilter::Zones(vec![z(2), z(4)]));
+        p.click(z(4), Some(z(4)), ctrl, &order);
+        assert!(p == PageFilter::Zones(vec![z(2)]), "Ctrl toggles off");
+        p.click(z(4), Some(z(2)), shift, &order);
+        assert!(
+            p == PageFilter::Zones(vec![z(2), z(3), z(4)]),
+            "Shift range"
+        );
+        p.click(z(2), Some(z(2)), ctrl, &order);
+        p.click(z(3), Some(z(2)), ctrl, &order);
+        p.click(z(4), Some(z(2)), ctrl, &order);
+        assert!(p == PageFilter::All, "nothing left: all banks");
     }
 }
