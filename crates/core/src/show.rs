@@ -1,7 +1,6 @@
 //! The show: everything that is saved. The file is JSON and contains a copy
 //! of the fixture types used so it loads on every computer.
 
-use std::collections::HashMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -266,7 +265,7 @@ impl Step {
         u64::from(self.fade_ms) + u64::from(self.hold_ms)
     }
 
-    pub fn value_map(&self) -> HashMap<ChannelRef, u8> {
+    pub fn value_map(&self) -> crate::fasthash::FastMap<ChannelRef, u8> {
         self.values
             .iter()
             .map(|v| (v.channel_ref(), v.value))
@@ -879,6 +878,17 @@ impl Show {
     // ---------- Patch ----------
 
     pub fn fixture(&self, id: FixtureId) -> Option<&Fixture> {
+        // The engine asks thousands of times per frame. IDs are handed out
+        // in order, so the fixture usually sits at position id − 1 (or, after
+        // deletions, can be found by bisection); otherwise search.
+        let guess = (id.0 as usize).wrapping_sub(1);
+        if let Some(f) = self.fixtures.get(guess).filter(|f| f.id == id) {
+            return Some(f);
+        }
+        let i = self.fixtures.partition_point(|f| f.id < id);
+        if let Some(f) = self.fixtures.get(i).filter(|f| f.id == id) {
+            return Some(f);
+        }
         self.fixtures.iter().find(|f| f.id == id)
     }
 
@@ -1492,6 +1502,15 @@ impl Show {
     }
 
     pub fn scene(&self, id: SceneId) -> Option<&Scene> {
+        // same shortcut as `fixture`
+        let guess = (id.0 as usize).wrapping_sub(1);
+        if let Some(s) = self.scenes.get(guess).filter(|s| s.id == id) {
+            return Some(s);
+        }
+        let i = self.scenes.partition_point(|s| s.id < id);
+        if let Some(s) = self.scenes.get(i).filter(|s| s.id == id) {
+            return Some(s);
+        }
         self.scenes.iter().find(|s| s.id == id)
     }
 
