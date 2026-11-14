@@ -1059,6 +1059,13 @@ impl Gpu {
         image::RgbaImage::from_raw(w, h, px)
     }
 
+    /// Create the render target of this size (its texture can be shown
+    /// before the frame is drawn into it).
+    pub fn prepare(&mut self, rs: &egui_wgpu::RenderState, size: [u32; 2], msaa: u32) {
+        let size = [size[0].clamp(1, 8192), size[1].clamp(1, 8192)];
+        self.ensure_targets(rs, size, msaa);
+    }
+
     /// Draws a frame into the egui texture.
     pub fn render(&mut self, rs: &egui_wgpu::RenderState, size: [u32; 2], msaa: u32, f: &Frame3d) {
         let size = [size[0].clamp(1, 8192), size[1].clamp(1, 8192)];

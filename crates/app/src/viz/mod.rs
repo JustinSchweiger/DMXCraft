@@ -124,6 +124,9 @@ enum DialogKind {
 
 pub struct VizView {
     gpu: Option<Gpu>,
+    /// Image prepared under the engine lock, drawn on the graphics card after
+    /// it is released (see [`VizView::flush`]).
+    pending: Option<(Frame3d, [u32; 2], u32)>,
     camera: Option<OrbitCamera>,
     room: [f32; 3],
     mode: Mode,
@@ -471,6 +474,7 @@ impl Default for VizView {
     fn default() -> Self {
         Self {
             gpu: None,
+            pending: None,
             camera: None,
             room: [0.0; 3],
             mode: Mode::Live,
@@ -513,6 +517,16 @@ impl Default for VizView {
 const VENUE_EXT: &str = "dmxvenue";
 
 impl VizView {
+    /// Draw the prepared image (call after the engine lock is released).
+    pub fn flush(&mut self, rs: Option<&egui_wgpu::RenderState>) {
+        let (Some((frame, px, msaa)), Some(rs), Some(gpu)) =
+            (self.pending.take(), rs, self.gpu.as_mut())
+        else {
+            return;
+        };
+        gpu.render(rs, px, msaa, &frame);
+    }
+
     /// Count the view as drawn in this frame (also while the layout is
     /// paused, e.g. during a fullscreen change), so it does not count as
     /// opened again.
@@ -888,7 +902,10 @@ impl VizView {
         let frame = self.frame3d(cx, &cam, aspect, time, q);
         let gpu = self.gpu.get_or_insert_with(|| Gpu::new(rs));
         upload_assets(gpu, rs, cx.engine.show());
-        gpu.render(rs, px, msaa, &frame);
+        // only the target here; the drawing itself happens without the engine
+        // lock, so the DMX output does not wait for the graphics card
+        gpu.prepare(rs, px, msaa);
+        self.pending = Some((frame, px, msaa));
         if let Some(tex) = gpu.texture {
             painter.image(
                 tex,

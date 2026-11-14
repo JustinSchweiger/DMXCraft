@@ -1331,6 +1331,8 @@ impl eframe::App for DmxCraftApp {
                 ctx.request_repaint();
             }
         }
+        // engine released: now the 3D image is drawn on the graphics card
+        self.viz.flush(rs.as_ref());
         self.state.viewport_busy = false;
         // remember hidden panels
         if (self.state.props_hidden, self.state.programmer_hidden)
@@ -1385,6 +1387,8 @@ impl eframe::App for DmxCraftApp {
                             };
                             viz.ui(ui, &mut cx, rs.as_ref(), true);
                         });
+                    // engine released: draw the image
+                    viz.flush(rs.as_ref());
                     viewport_input(vctx, state, true);
                     if vctx.input(|i| i.viewport().close_requested()) {
                         state.viz_window = false;
