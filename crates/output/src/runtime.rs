@@ -48,7 +48,13 @@ impl Runtime {
     pub fn start(engine: Arc<Mutex<Engine>>, mut output: Box<dyn DmxOutput>, hz: u32) -> Self {
         let hz = hz.clamp(1, 60);
         let period = Duration::from_secs_f64(1.0 / f64::from(hz));
-        let universes = engine.lock().map_or(1, |e| usize::from(e.show().universes));
+        let universes = usize::from(
+            engine
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .show()
+                .universes,
+        );
         let last_frame = Arc::new(Mutex::new(DmxFrame::new(universes)));
         let status = Arc::new(Mutex::new(OutputStatus::Connecting));
         let stop = Arc::new(AtomicBool::new(false));
@@ -66,9 +72,7 @@ impl Runtime {
             .name("dmxcraft-output".into())
             .spawn(move || {
                 let set_status = |s: OutputStatus| {
-                    if let Ok(mut g) = t_status.lock() {
-                        *g = s;
-                    }
+                    *t_status.lock().unwrap_or_else(|p| p.into_inner()) = s;
                 };
                 let mut connected = false;
                 let mut retry_at = Instant::now();
@@ -77,6 +81,7 @@ impl Runtime {
                 let mut fps_count = 0u32;
                 let mut fps_since = Instant::now();
                 let mut frame = DmxFrame::new(universes);
+                let mut engine_failed = false;
 
                 while !t_stop.load(Ordering::Relaxed) {
                     let now = Instant::now();
@@ -94,13 +99,23 @@ impl Runtime {
                     let work_start = Instant::now();
                     let dt = now - last_tick;
                     last_tick = now;
-                    if let Ok(mut e) = t_engine.lock() {
-                        e.tick(dt);
-                        e.render(&mut frame);
+                    {
+                        // A panic elsewhere while holding the engine must not
+                        // stop the light: keep clocking with the engine as it is
+                        let mut e = t_engine.lock().unwrap_or_else(|p| p.into_inner());
+                        let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            e.tick(dt);
+                            e.render(&mut frame);
+                        }));
+                        if ok.is_err() && !engine_failed {
+                            engine_failed = true;
+                            eprintln!("engine panicked during tick; output keeps running");
+                        }
                     }
-                    if let Ok(mut lf) = t_frame.lock() {
-                        lf.clone_from(&frame);
-                    }
+                    t_frame
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .clone_from(&frame);
 
                     // Compute time of the engine relative to the tick duration
                     record_load(&t_load, work_start.elapsed(), period);
@@ -173,15 +188,15 @@ impl Runtime {
     pub fn last_frame(&self) -> DmxFrame {
         self.last_frame
             .lock()
-            .map(|f| f.clone())
-            .unwrap_or_else(|_| DmxFrame::new(1))
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     pub fn status(&self) -> OutputStatus {
         self.status
             .lock()
-            .map(|s| s.clone())
-            .unwrap_or(OutputStatus::Error("Status not readable".into()))
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     /// Load of the output clock, 0.0..=1.0 (above 1.0 = the clock is not kept).
@@ -251,6 +266,47 @@ mod tests {
         assert_eq!(frames.last().unwrap().get(0, 5), Some(222));
         assert_eq!(rt.status(), OutputStatus::Stopped);
         assert!(rt.load() < 1.0, "Load {} with a tiny show", rt.load());
+    }
+
+    #[test]
+    fn output_keeps_running_after_a_panic_elsewhere() {
+        let mut show = Show::new("T", 1);
+        for t in builtin_fixture_types() {
+            show.upsert_fixture_type(t);
+        }
+        let f = show.add_fixture("D", "generic/dimmer-1ch", 0, 5).unwrap();
+        let id = show.add_scene(
+            "An",
+            None,
+            vec![Step::new(vec![ChannelValue {
+                fixture: f,
+                channel: 0,
+                value: 99,
+            }])],
+        );
+        let engine = Arc::new(Mutex::new(Engine::new(show)));
+        // another thread panics while holding the engine: the lock is poisoned
+        let e2 = engine.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = e2.lock().unwrap();
+            panic!("test panic");
+        })
+        .join();
+        assert!(engine.is_poisoned());
+        engine
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .activate(id);
+        let rec = RecordingOutput::default();
+        let frames = rec.frames.clone();
+        let mut rt = Runtime::start(engine, Box::new(rec), 50);
+        let t0 = std::time::Instant::now();
+        while frames.lock().unwrap().len() < 3 && t0.elapsed() < Duration::from_secs(3) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        rt.stop();
+        let frames = frames.lock().unwrap();
+        assert_eq!(frames.last().unwrap().get(0, 5), Some(99));
     }
 
     struct Failing;

@@ -712,10 +712,8 @@ pub fn call(host: &Host, name: &str, a: &Value) -> R {
     } else {
         Vec::new()
     };
-    let mut guard = host
-        .engine
-        .lock()
-        .map_err(|_| "Engine not available".to_string())?;
+    // still usable after a panic elsewhere (the show itself is intact)
+    let mut guard = host.engine.lock().unwrap_or_else(|p| p.into_inner());
     let e: &mut Engine = &mut guard;
     let out = match name {
         "get_overview" => overview(e),

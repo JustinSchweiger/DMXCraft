@@ -28,7 +28,10 @@ impl McpServer {
             .name("mcp".into())
             .spawn(move || {
                 for req in s.incoming_requests() {
-                    serve(&host, req);
+                    // a failing request must not end the server
+                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        serve(&host, req);
+                    }));
                 }
             })
             .map_err(|e| e.to_string())?;
@@ -115,7 +118,17 @@ fn serve(host: &Host, mut req: tiny_http::Request) {
             return;
         }
     };
-    match protocol::handle(host, msg) {
+    let id = msg.get("id").cloned().unwrap_or(Value::Null);
+    let answer =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| protocol::handle(host, msg)))
+            .unwrap_or_else(|_| {
+                Some(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {"code": -32603, "message": "Internal error (the tool failed)"},
+                }))
+            });
+    match answer {
         Some(answer) => {
             let _ = req.respond(
                 Response::from_string(answer.to_string())
