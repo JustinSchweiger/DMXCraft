@@ -965,8 +965,12 @@ impl TouchView {
                         .interact_pointer_pos()
                         .filter(|_| resp.dragged() || resp.clicked())
                     {
-                        let travel = fader_parts(rect).1;
-                        v = (1.0 - (pos.y - travel.top()) / travel.height()).clamp(0.0, 1.0);
+                        let travel = fader_parts(rect, item.horizontal).1;
+                        v = if item.horizontal {
+                            ((pos.x - travel.left()) / travel.width()).clamp(0.0, 1.0)
+                        } else {
+                            (1.0 - (pos.y - travel.top()) / travel.height()).clamp(0.0, 1.0)
+                        };
                     }
                 } else if resp.dragged() {
                     v = (value - resp.drag_delta().y / 160.0).clamp(0.0, 1.0);
@@ -1426,6 +1430,17 @@ impl TouchView {
                     ui.add(Toggle::new(&mut item.long_press, ""))
                         .on_hover_text(t("Only triggers when held – against accidental touches"));
                 });
+            }
+            if item.kind == TouchKind::Fader {
+                let mut horizontal = item.horizontal;
+                f.row(t("Horizontal"), |ui| {
+                    ui.add(Toggle::new(&mut horizontal, ""));
+                });
+                if horizontal != item.horizontal {
+                    // turn it on its side: width and height swap
+                    item.horizontal = horizontal;
+                    std::mem::swap(&mut item.w, &mut item.h);
+                }
             }
         });
         if pick_img {
@@ -2218,8 +2233,20 @@ fn content_rect(rect: Rect, item: &TouchItem) -> Rect {
 }
 
 /// Fader: (track with handle, travel of the handle center).
-fn fader_parts(rect: Rect) -> (Rect, Rect) {
+fn fader_parts(rect: Rect, horizontal: bool) -> (Rect, Rect) {
     const HANDLE_H: f32 = 34.0;
+    if horizontal {
+        // value on the left, track to the right of it
+        let track = Rect::from_min_max(
+            pos2(rect.left() + H_VALUE_W, rect.top()),
+            pos2(rect.right() - 8.0, rect.bottom()),
+        );
+        let travel = Rect::from_min_max(
+            pos2(track.left() + HANDLE_H * 0.5, track.top()),
+            pos2(track.right() - HANDLE_H * 0.5, track.bottom()),
+        );
+        return (track, travel);
+    }
     let track = Rect::from_min_max(
         pos2(rect.left(), rect.top() + 30.0),
         pos2(rect.right(), rect.bottom() - 26.0),
@@ -2229,6 +2256,76 @@ fn fader_parts(rect: Rect) -> (Rect, Rect) {
         pos2(track.right(), track.bottom() - HANDLE_H * 0.5),
     );
     (track, travel)
+}
+
+/// Width of the value at the left of a horizontal fader.
+const H_VALUE_W: f32 = 52.0;
+
+/// Horizontal fader: value on the left, label above the track.
+#[allow(clippy::too_many_arguments)]
+fn paint_h_fader(
+    p: &egui::Painter,
+    item: &TouchItem,
+    rect: Rect,
+    value: f32,
+    hot: bool,
+    accent: Color32,
+    label: &str,
+    size: f32,
+) {
+    p.rect_filled(rect, theme::R_M, theme::raised());
+    let (track, travel) = fader_parts(rect, true);
+    let text_color = item.text_color.map(theme::rgb).unwrap_or(theme::text());
+    p.text(
+        pos2(rect.left() + H_VALUE_W * 0.5, rect.center().y),
+        Align2::CENTER_CENTER,
+        format!("{:.0}", value * 100.0),
+        theme::heading_font(),
+        text_color,
+    );
+    // label above the track (if there is room for it)
+    let mut cy = track.center().y;
+    if !label.is_empty() && rect.height() >= 56.0 {
+        let g = p.layout(
+            label.to_string(),
+            egui::FontId::proportional(size.min(14.0)),
+            text_color,
+            track.width(),
+        );
+        p.galley(pos2(track.left(), rect.top() + 5.0), g.clone(), text_color);
+        cy = (rect.top() + 5.0 + g.size().y + rect.bottom()) * 0.5;
+    }
+    // Slot with level in the element color
+    let slot = Rect::from_center_size(pos2(track.center().x, cy), vec2(track.width() - 6.0, 6.0));
+    p.rect_filled(slot, 3.0, theme::bg());
+    let hx = travel.left() + travel.width() * value;
+    let level = Rect::from_min_max(slot.min, pos2(hx, slot.bottom()));
+    p.rect_filled(level, 3.0, accent);
+    let handle = Rect::from_center_size(
+        pos2(hx, cy),
+        vec2(34.0, (rect.height() - 16.0).clamp(16.0, 40.0)),
+    );
+    p.rect_filled(handle, theme::R_S, theme::raised_hover());
+    p.rect_stroke(
+        handle,
+        theme::R_S,
+        Stroke::new(
+            1.5,
+            if hot {
+                theme::text()
+            } else {
+                theme::text_dim()
+            },
+        ),
+        StrokeKind::Inside,
+    );
+    p.line_segment(
+        [
+            pos2(handle.center().x, handle.top() + 7.0),
+            pos2(handle.center().x, handle.bottom() - 7.0),
+        ],
+        Stroke::new(2.5, theme::text()),
+    );
 }
 
 /// Readable text color on a background.
@@ -2378,9 +2475,12 @@ fn paint_item(
                 p.circle_filled(rect.right_top() + vec2(-9.0, 9.0), 3.5, theme::DANGER);
             }
         }
+        TouchKind::Fader if item.horizontal => {
+            paint_h_fader(p, item, rect, value, hot, accent, &label, size);
+        }
         TouchKind::Fader => {
             p.rect_filled(rect, theme::R_M, theme::raised());
-            let (track, travel) = fader_parts(rect);
+            let (track, travel) = fader_parts(rect, false);
             let text_color = item.text_color.map(theme::rgb).unwrap_or(theme::text());
             p.text(
                 pos2(rect.center().x, rect.top() + 15.0),

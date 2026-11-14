@@ -295,6 +295,8 @@ pub struct TouchItem {
     /// elements show exactly their label (empty = no text).
     #[serde(default = "auto_label_default")]
     pub auto_label: bool,
+    /// Fader lying on its side (moves left/right).
+    pub horizontal: bool,
 }
 
 fn auto_label_default() -> bool {
@@ -399,6 +401,7 @@ impl TouchItem {
             style: ButtonStyle::Normal,
             long_press: false,
             auto_label: false,
+            horizontal: false,
         }
     }
 }

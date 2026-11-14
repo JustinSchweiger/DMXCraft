@@ -331,6 +331,7 @@ fn layout_json(e: &Engine, settings: &Settings) -> String {
                         "text_size": i.text_size,
                         "style": i.style,
                         "long_press": i.long_press,
+                        "horizontal": i.horizontal,
                     })
                 })
                 .collect();

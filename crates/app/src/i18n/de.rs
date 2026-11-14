@@ -5,6 +5,7 @@
 //! must have the same names in both columns.
 
 pub const ENTRIES: &[(&str, &str)] = &[
+    ("Horizontal", "Horizontal"),
     ("Also lock playback", "Auch die Wiedergabe sperren"),
     (
         "Scenes, touch view, web remote and keyboard/MIDI mappings do nothing while locked",

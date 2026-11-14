@@ -295,7 +295,7 @@ function reflow(items, width) {
     let w, h;
     switch (i.kind) {
       case "label": w = n; h = 1; break;
-      case "fader": w = 2; h = 6; break;
+      case "fader": if (i.horizontal) { w = n; h = 2; } else { w = 2; h = 6; } break;
       case "color": case "xy": w = n; h = Math.max(4, Math.round(n * 0.7)); break;
       case "tracking": w = n; h = Math.max(5, Math.round(n * 0.8)); break;
       default: w = i.w >= 2 * i.h && n >= 4 ? 4 : 2; h = 2;
@@ -710,6 +710,7 @@ function paintItem(i, r, hot) {
     case "fader": {
       const v = valueOf(i);
       g.fillStyle = th.raised; rr(r.x, r.y, r.w, r.h, 8); g.fill();
+      if (i.horizontal) { drawHFader(i, r, v, hot, accent, label, size); break; }
       const f = faderParts(r);
       const tc = i.text_color || th.text;
       g.font = font(16); g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = tc;
@@ -831,6 +832,38 @@ function contentRect(r, i) {
   return { x: r.x + 8, y: r.y + top, w: r.w - 16, h: r.h - top - 8 };
 }
 
+// horizontal fader: value on the left, track to the right of it
+const H_VALUE_W = 52;
+function hFaderParts(r) {
+  const track = { x: r.x + H_VALUE_W, y: r.y, w: r.w - H_VALUE_W - 8, h: r.h };
+  const travel = { x: track.x + 17, y: track.y, w: track.w - 34, h: track.h };
+  return { track, travel };
+}
+
+function drawHFader(i, r, v, hot, accent, label, size) {
+  const f = hFaderParts(r);
+  const tc = i.text_color || th.text;
+  g.font = font(16); g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = tc;
+  g.fillText(Math.round(v * 100), r.x + H_VALUE_W / 2, r.y + r.h / 2);
+  let cy = r.y + r.h / 2;
+  if (label && r.h >= 56) {
+    const ls = Math.min(size, 14);
+    g.font = font(ls); g.textAlign = "left"; g.textBaseline = "top"; g.fillStyle = tc;
+    g.fillText(wrap(label, f.track.w)[0] || "", f.track.x, r.y + 5);
+    cy = (r.y + 5 + ls * 1.25 + r.y + r.h) / 2;
+  }
+  const slot = { x: f.track.x + 3, y: cy - 3, w: f.track.w - 6, h: 6 };
+  g.fillStyle = th.bg; rr(slot.x, slot.y, slot.w, slot.h, 3); g.fill();
+  const hx = f.travel.x + f.travel.w * v;
+  g.fillStyle = accent; rr(slot.x, slot.y, hx - slot.x, slot.h, 3); g.fill();
+  const hh = clamp(r.h - 16, 16, 40);
+  g.fillStyle = th.raised_hover; rr(hx - 17, cy - hh / 2, 34, hh, 4); g.fill();
+  g.strokeStyle = hot ? th.text : th.text_dim; g.lineWidth = 1.5;
+  rr(hx - 16.25, cy - hh / 2 + 0.75, 32.5, hh - 1.5, 4); g.stroke();
+  g.strokeStyle = th.text; g.lineWidth = 2.5;
+  g.beginPath(); g.moveTo(hx, cy - hh / 2 + 7); g.lineTo(hx, cy + hh / 2 - 7); g.stroke();
+}
+
 function faderParts(r) {
   const track = { x: r.x, y: r.y + 30, w: r.w, h: r.h - 56 };
   const travel = { x: track.x, y: track.y + 17, w: track.w, h: track.h - 34 };
@@ -930,8 +963,18 @@ cv.addEventListener("pointerdown", (ev) => {
       }
       break;
     case "fader": {
-      const f = faderParts(r);
       const v = valueOf(i);
+      if (i.horizontal) {
+        const f = hFaderParts(r);
+        const hx = f.travel.x + f.travel.w * v;
+        if (Math.abs(pt.x - hx) > 20) {
+          ptr.v0 = clamp((pt.x - f.travel.x) / f.travel.w, 0, 1);
+          setValue(i, ptr.v0);
+        }
+        setLocal(i, { active: true });
+        break;
+      }
+      const f = faderParts(r);
       const hy = f.travel.y + f.travel.h - f.travel.h * v;
       // außerhalb des Griffs: Griff springt zum Finger
       if (Math.abs(pt.y - hy) > 20) {
@@ -990,6 +1033,11 @@ cv.addEventListener("pointermove", (ev) => {
   ptr.last = pt;
   switch (i.kind) {
     case "fader": {
+      if (i.horizontal) {
+        const f = hFaderParts(r);
+        setValue(i, clamp(ptr.v0 + (pt.x - ptr.start.x) / f.travel.w, 0, 1));
+        break;
+      }
       const f = faderParts(r);
       setValue(i, clamp(ptr.v0 - (pt.y - ptr.start.y) / f.travel.h, 0, 1));
       break;
