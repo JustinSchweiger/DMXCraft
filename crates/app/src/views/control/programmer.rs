@@ -816,7 +816,21 @@ fn toolbar(ui: &mut egui::Ui, e: &mut Engine, st: &mut AppState) {
                 layer.clear(e, c);
             }
         }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            hide_button(ui, st);
+        });
     });
+}
+
+/// Hides the programmer (a narrow bar on the right shows it again).
+pub(super) fn hide_button(ui: &mut egui::Ui, st: &mut AppState) {
+    if ui
+        .add(IconButton::new(Icon::ChevronRight).size(34.0).flat())
+        .on_hover_text(t("Hide programmer"))
+        .clicked()
+    {
+        st.programmer_hidden = true;
+    }
 }
 
 pub(super) fn tool_separator(ui: &mut egui::Ui) {

@@ -5,6 +5,10 @@
 //! must have the same names in both columns.
 
 pub const ENTRIES: &[(&str, &str)] = &[
+    ("Hide sidebar", "Seitenleiste ausblenden"),
+    ("Show sidebar", "Seitenleiste einblenden"),
+    ("Hide programmer", "Programmer ausblenden"),
+    ("Show programmer", "Programmer einblenden"),
     ("Show “{v}” loaded", "Show „{v}“ geladen"),
     ("Settings not saved: {e}", "Einstellungen nicht gespeichert: {e}"),
     ("Show “{name}” loaded", "Show „{name}“ geladen"),

@@ -127,6 +127,10 @@ pub struct AppState {
     pub scene_anchor: Option<SceneId>,
     /// Wrap scenes at the bottom into more columns (setting).
     pub wrap_scenes: bool,
+    /// Scene sidebar hidden (CONTROL).
+    pub props_hidden: bool,
+    /// Programmer hidden (CONTROL).
+    pub programmer_hidden: bool,
     /// Value ranges on the fader tracks (setting).
     pub fader_ranges: bool,
     /// Quality of the 3D visualizer (setting).
@@ -256,6 +260,8 @@ impl AppState {
             timeline_sel: BTreeSet::new(),
             scene_anchor: None,
             wrap_scenes: false,
+            props_hidden: false,
+            programmer_hidden: false,
             fader_ranges: true,
             viz_quality: crate::viz::Quality::default(),
             viz_window: false,

@@ -19,7 +19,7 @@ use crate::ui::widgets::{Dialog, Icon, IconButton, Toggle};
 use crate::views::{View, ViewCtx};
 
 /// Width of the tab bar.
-const TABS_W: f32 = 40.0;
+pub const TABS_W: f32 = 40.0;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 enum Tab {
@@ -64,47 +64,7 @@ impl View for ScenePropsView {
         ui.allocate_rect(full, Sense::hover());
 
         // Tab bar
-        let p = ui.painter();
-        p.line_segment(
-            [tabs.left_top(), tabs.left_bottom()],
-            Stroke::new(1.0, theme::border()),
-        );
-        let mut tab_ui = ui.new_child(
-            egui::UiBuilder::new()
-                .max_rect(tabs.shrink2(Vec2::new(3.0, 0.0)))
-                .layout(egui::Layout::top_down(egui::Align::Center)),
-        );
-        // several scenes: properties apply to all, effects only one at a time
-        let multi = cx.state.selected_scenes.len() > 1;
-        // only shown, not remembered: back to one scene, FX is open again
-        let shown = if multi && self.tab == Tab::Effects {
-            Tab::Properties
-        } else {
-            self.tab
-        };
-        for (tab, icon, tip) in [
-            (Tab::Properties, Icon::Sliders, t("Properties")),
-            (Tab::Effects, Icon::Fx, t("Effects")),
-            (Tab::Third, Icon::Gear, t("Advanced properties")),
-        ] {
-            let enabled = !(multi && tab == Tab::Effects);
-            let r = tab_ui
-                .add(
-                    IconButton::new(icon)
-                        .size(32.0)
-                        .flat()
-                        .active(shown == tab)
-                        .enabled(enabled),
-                )
-                .on_hover_text(tip);
-            let key = format!("scene/tab/{}", tab as u8);
-            let mapped = crate::mapping::button(&tab_ui, &r, &key, shown == tab, || {
-                (t("Sidebar").to_string(), tip.to_string())
-            });
-            if (r.clicked() || mapped) && enabled {
-                self.tab = tab;
-            }
-        }
+        let shown = self.tab_bar(ui, tabs, cx).0;
 
         let mut ui = ui.new_child(
             egui::UiBuilder::new()
@@ -113,16 +73,19 @@ impl View for ScenePropsView {
         );
         let ui = &mut ui;
         if let Some(g) = cx.state.selected_group {
+            let rest = plain_bar(ui, cx.state);
+            let mut ui = child(ui, rest);
             egui::ScrollArea::vertical()
                 .id_salt("scene_group_editor")
                 .auto_shrink([false, false])
-                .show(ui, |ui| {
+                .show(&mut ui, |ui| {
                     super::scene_groups::editor(ui, cx.engine, cx.state, g)
                 });
             return;
         }
         let scenes = selected_scenes(cx);
         let Some(&id) = scenes.first() else {
+            plain_bar(ui, cx.state);
             return;
         };
         if scenes.len() > 1 {
@@ -140,10 +103,12 @@ impl View for ScenePropsView {
             self.effects_tab(ui, cx, id, locked);
             return;
         }
+        let rest = plain_bar(ui, cx.state);
+        let mut body = child(ui, rest);
         egui::ScrollArea::vertical()
             .id_salt("scene_props")
             .auto_shrink([false, false])
-            .show(ui, |ui| match shown {
+            .show(&mut body, |ui| match shown {
                 Tab::Properties => properties(ui, cx.engine, id, locked),
                 Tab::Third => advanced(ui, cx.engine, id, locked, &mut self.picker),
                 Tab::Effects => {}
@@ -155,6 +120,46 @@ impl View for ScenePropsView {
         }
     }
 }
+
+/// Button at the far left of a bottom bar: hides the sidebar.
+fn hide_button(ui: &mut egui::Ui, bar: Rect, st: &mut crate::state::AppState) {
+    let mut left = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(bar.with_min_y(bar.top() + 1.0))
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
+    if left
+        .add(IconButton::new(Icon::ChevronRight).size(30.0).flat())
+        .on_hover_text(t("Hide sidebar"))
+        .clicked()
+    {
+        st.props_hidden = true;
+    }
+}
+
+/// Bottom bar of the tabs without own buttons: only the hide button.
+fn plain_bar(ui: &mut egui::Ui, st: &mut crate::state::AppState) -> Rect {
+    let area = ui.available_rect_before_wrap();
+    let bar = Rect::from_min_max(pos2(area.left(), area.bottom() - BAR_H), area.max);
+    ui.painter().line_segment(
+        [bar.left_top(), bar.right_top()],
+        Stroke::new(1.0, theme::border()),
+    );
+    hide_button(ui, bar, st);
+    Rect::from_min_max(area.min, pos2(area.right(), bar.top() - theme::SP_XS))
+}
+
+/// Child area (top-down) in `rect`.
+fn child(ui: &mut egui::Ui, rect: Rect) -> egui::Ui {
+    ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+    )
+}
+
+/// Height of the bottom bar with the buttons.
+const BAR_H: f32 = 40.0;
 
 /// Selected scenes that still exist (sorted by ID).
 fn selected_scenes(cx: &ViewCtx<'_>) -> Vec<SceneId> {
@@ -541,6 +546,74 @@ pub(super) fn bar_slider(
 }
 
 impl ScenePropsView {
+    /// Tab bar in `rect` (vertical, icons from the top). Returns the shown
+    /// tab and whether a tab was clicked.
+    fn tab_bar(&mut self, ui: &mut egui::Ui, rect: Rect, cx: &mut ViewCtx<'_>) -> (Tab, bool) {
+        ui.painter().line_segment(
+            [rect.left_top(), rect.left_bottom()],
+            Stroke::new(1.0, theme::border()),
+        );
+        let mut tab_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(rect.shrink2(Vec2::new(3.0, 0.0)))
+                .layout(egui::Layout::top_down(egui::Align::Center)),
+        );
+        // several scenes: properties apply to all, effects only one at a time
+        let multi = cx.state.selected_scenes.len() > 1;
+        // only shown, not remembered: back to one scene, FX is open again
+        let shown = if multi && self.tab == Tab::Effects {
+            Tab::Properties
+        } else {
+            self.tab
+        };
+        let mut clicked = false;
+        for (tab, icon, tip) in [
+            (Tab::Properties, Icon::Sliders, t("Properties")),
+            (Tab::Effects, Icon::Fx, t("Effects")),
+            (Tab::Third, Icon::Gear, t("Advanced properties")),
+        ] {
+            let enabled = !(multi && tab == Tab::Effects);
+            let r = tab_ui
+                .add(
+                    IconButton::new(icon)
+                        .size(32.0)
+                        .flat()
+                        .active(shown == tab && !cx.state.props_hidden)
+                        .enabled(enabled),
+                )
+                .on_hover_text(tip);
+            let key = format!("scene/tab/{}", tab as u8);
+            let mapped = crate::mapping::button(&tab_ui, &r, &key, shown == tab, || {
+                (t("Sidebar").to_string(), tip.to_string())
+            });
+            if (r.clicked() || mapped) && enabled {
+                self.tab = tab;
+                clicked = true;
+            }
+        }
+        (shown, clicked)
+    }
+
+    /// Hidden sidebar: only the tab bar; a tab or the button at the bottom
+    /// shows the sidebar again.
+    pub fn rail(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>) {
+        let full = ui.available_rect_before_wrap();
+        ui.allocate_rect(full, Sense::hover());
+        let (_, clicked) = self.tab_bar(ui, full, cx);
+        let mut bottom = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(full.shrink2(Vec2::new(3.0, 0.0)))
+                .layout(egui::Layout::bottom_up(egui::Align::Center)),
+        );
+        let show = bottom
+            .add(IconButton::new(Icon::ChevronLeft).size(32.0).flat())
+            .on_hover_text(t("Show sidebar"))
+            .clicked();
+        if clicked || show {
+            cx.state.props_hidden = false;
+        }
+    }
+
     /// “Effects” tab: for STATIC scenes the tiles to choose from, for FX scenes
     /// the list of effects and the toolbar at the bottom.
     fn effects_tab(&mut self, ui: &mut egui::Ui, cx: &mut ViewCtx<'_>, id: SceneId, locked: bool) {
@@ -551,8 +624,7 @@ impl ScenePropsView {
         if effects.is_empty() || self.adding {
             let mut pick = None;
             // STATIC scene: import/export at the bottom as for FX scenes
-            const BAR_H: f32 = 40.0;
-            let with_bar = effects.is_empty();
+            let with_bar = true;
             let area = ui.available_rect_before_wrap();
             let bar_rect = Rect::from_min_max(pos2(area.left(), area.bottom() - BAR_H), area.max);
             let tiles_h = if with_bar {
@@ -598,7 +670,8 @@ impl ScenePropsView {
                         .max_rect(bar_rect.with_min_y(bar_rect.top() + 1.0))
                         .layout(egui::Layout::right_to_left(egui::Align::Center)),
                 );
-                let on = !locked && self.fx_dialog.is_none();
+                hide_button(ui, bar_rect, cx.state);
+                let on = !locked && self.fx_dialog.is_none() && effects.is_empty();
                 if bar
                     .add(IconButton::new(Icon::Export).size(30.0).flat().enabled(on))
                     .on_hover_text(t("Export scene"))
@@ -657,7 +730,6 @@ impl ScenePropsView {
         }
 
         // List of effects, the toolbar below
-        const BAR_H: f32 = 40.0;
         let area = ui.available_rect_before_wrap();
         let bar_rect = Rect::from_min_max(pos2(area.left(), area.bottom() - BAR_H), area.max);
         let list_h = (area.height() - BAR_H - theme::SP_XS).max(60.0);
@@ -944,6 +1016,7 @@ impl ScenePropsView {
             Stroke::new(1.0, theme::border()),
         );
         ui.allocate_rect(bar_rect, Sense::hover());
+        hide_button(ui, bar_rect, cx.state);
         let mut bar = ui.new_child(
             egui::UiBuilder::new()
                 .max_rect(bar_rect.with_min_y(bar_rect.top() + 1.0))

@@ -146,6 +146,8 @@ impl DmxCraftApp {
         );
         let mut state = AppState::new(show_path.unwrap_or_default());
         state.message = message;
+        state.props_hidden = settings.hide_scene_props;
+        state.programmer_hidden = settings.hide_programmer;
         if settings.start_touch {
             state.mode = Mode::Touch;
         }
@@ -1120,7 +1122,7 @@ impl eframe::App for DmxCraftApp {
                         if let Some([h, _]) = rescale {
                             bottom = bottom.exact_size((h * full.y).round());
                         }
-                        let mut prog_w = 0.0;
+                        let mut prog_w = None;
                         let lower = bottom.show(ui, |ui| {
                             let mut prog = egui::Panel::right("programmer_panel")
                                 .resizable(true)
@@ -1130,18 +1132,43 @@ impl eframe::App for DmxCraftApp {
                             if let Some([_, w]) = rescale {
                                 prog = prog.exact_size((w * full.x).round());
                             }
-                            prog_w = prog
-                                .show(ui, |ui| control.programmer.ui(ui, &mut cx))
-                                .response
-                                .rect
-                                .width();
+                            // hidden: a narrow bar with the button to show it
+                            let rail = egui::Panel::right("programmer_rail")
+                                .resizable(false)
+                                .exact_size(RAIL_W)
+                                .frame(area);
+                            let mut shown = !cx.state.programmer_hidden;
+                            let r = egui::Panel::show_switched(
+                                ui,
+                                &mut shown,
+                                rail,
+                                prog,
+                                |ui, expanded| {
+                                    if expanded {
+                                        control.programmer.ui(ui, &mut cx);
+                                    } else {
+                                        programmer_rail(ui, cx.state);
+                                    }
+                                    expanded
+                                },
+                            );
+                            if !shown {
+                                cx.state.programmer_hidden = true;
+                            }
+                            // only the open programmer gives its share
+                            if r.inner && !cx.state.programmer_hidden {
+                                prog_w = Some(r.response.rect.width());
+                            }
                             egui::CentralPanel::default_margins()
                                 .frame(area)
                                 .show(ui, |ui| control.stage.ui(ui, &mut cx));
                         });
                         if full.x > 1.0 && full.y > 1.0 {
-                            self.live_split =
-                                Some([lower.response.rect.height() / full.y, prog_w / full.x]);
+                            let w = prog_w.map_or_else(
+                                || self.live_split.map_or(0.5, |[_, w]| w),
+                                |w| w / full.x,
+                            );
+                            self.live_split = Some([lower.response.rect.height() / full.y, w]);
                             self.live_area = full;
                             self.live_screen = screen;
                         }
@@ -1151,12 +1178,33 @@ impl eframe::App for DmxCraftApp {
                                 .show(ui, |ui| control.touch.ui(ui, &mut cx));
                         } else {
                             // Sidebar with the settings of the selected scene
-                            egui::Panel::right("scene_props")
+                            let props = egui::Panel::right("scene_props")
                                 .resizable(true)
                                 .default_size(360.0)
                                 .min_size(340.0)
-                                .frame(area)
-                                .show(ui, |ui| control.props.ui(ui, &mut cx));
+                                .frame(area);
+                            // hidden: only its tab bar
+                            let rail = egui::Panel::right("scene_props_rail")
+                                .resizable(false)
+                                .exact_size(RAIL_W)
+                                .frame(area);
+                            let mut shown = !cx.state.props_hidden;
+                            egui::Panel::show_switched(
+                                ui,
+                                &mut shown,
+                                rail,
+                                props,
+                                |ui, expanded| {
+                                    if expanded {
+                                        control.props.ui(ui, &mut cx);
+                                    } else {
+                                        control.props.rail(ui, &mut cx);
+                                    }
+                                },
+                            );
+                            if !shown {
+                                cx.state.props_hidden = true;
+                            }
                             egui::CentralPanel::default_margins()
                                 .frame(area)
                                 .show(ui, |ui| control.grid.ui(ui, &mut cx));
@@ -1207,6 +1255,17 @@ impl eframe::App for DmxCraftApp {
             }
         }
         self.state.viewport_busy = false;
+        // remember hidden panels
+        if (self.state.props_hidden, self.state.programmer_hidden)
+            != (
+                self.settings.hide_scene_props,
+                self.settings.hide_programmer,
+            )
+        {
+            self.settings.hide_scene_props = self.state.props_hidden;
+            self.settings.hide_programmer = self.state.programmer_hidden;
+            self.save_settings();
+        }
         // Requests of the AI assistant to the visualizer (camera, image)
         let jobs = self.mcp.take_viz_jobs();
         if !jobs.is_empty() {
@@ -1470,6 +1529,28 @@ fn edit_preview(e: &mut Engine, st: &mut AppState) {
         e.clear_programmer();
         load_step(e, id, i);
         st.edit_programmer = Some(crate::views::control::programmer::programmer_values(e));
+    }
+}
+
+/// Width of a hidden side area (scene sidebar, programmer): its narrow bar.
+const RAIL_W: f32 = crate::views::control::scene_props::TABS_W + 12.0;
+
+/// Hidden programmer: narrow bar with the button to show it again.
+fn programmer_rail(ui: &mut egui::Ui, st: &mut AppState) {
+    use crate::ui::widgets::{Icon, IconButton};
+    let full = ui.available_rect_before_wrap();
+    ui.allocate_rect(full, egui::Sense::hover());
+    let mut bar = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(full)
+            .layout(egui::Layout::top_down(egui::Align::Center)),
+    );
+    if bar
+        .add(IconButton::new(Icon::ChevronLeft).size(34.0).flat())
+        .on_hover_text(t("Show programmer"))
+        .clicked()
+    {
+        st.programmer_hidden = false;
     }
 }
 

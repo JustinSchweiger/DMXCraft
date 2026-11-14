@@ -37,6 +37,12 @@ pub struct Settings {
     pub open_dmx: Vec<String>,
     /// Wrap scenes at the bottom into more columns (instead of scrolling).
     pub wrap_scenes: bool,
+    /// Scene sidebar hidden (only its tab bar is shown).
+    #[serde(default)]
+    pub hide_scene_props: bool,
+    /// Programmer hidden (only a narrow bar is shown).
+    #[serde(default)]
+    pub hide_programmer: bool,
     /// Show the value ranges of the fixture file on the fader tracks.
     #[serde(default = "yes")]
     pub fader_ranges: bool,
@@ -91,6 +97,8 @@ impl Default for Settings {
             output: "simulation".into(),
             open_dmx: Vec::new(),
             wrap_scenes: false,
+            hide_scene_props: false,
+            hide_programmer: false,
             fader_ranges: true,
             mcp_enabled: false,
             mcp_port: dmxcraft_mcp::DEFAULT_PORT,

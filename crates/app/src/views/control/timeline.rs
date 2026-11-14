@@ -278,6 +278,8 @@ impl TimelineView {
                 .on_hover_text(t("Grid options"));
             menu::dropdown(&grid, |ui| grid_options(ui, &mut tl, locked));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                super::programmer::hide_button(ui, st);
+                super::programmer::tool_separator(ui);
                 ui.label(
                     egui::RichText::new(fmt_ms(st.timeline_cursor))
                         .monospace()
