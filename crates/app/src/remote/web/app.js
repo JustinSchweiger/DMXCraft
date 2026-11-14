@@ -390,7 +390,7 @@ function dim(hex, f) {
   return `rgb(${Math.round(r * f)},${Math.round(gg * f)},${Math.round(b * f)})`;
 }
 
-function font(size) { return `${size}px DMXText, system-ui, sans-serif`; }
+function font(size) { return `${size}px DMXText, DMXIcons, system-ui, sans-serif`; }
 
 /** Text umbrechen (wie egui-Layout mit Breite). */
 function wrap(text, maxW) {
@@ -616,7 +616,9 @@ function paintItem(i, r, hot) {
   const base = i.color;
   const label = i.label || "";
   const auto = i.kind === "label" ? clamp(r.h * 0.42, 13, 48) : clamp(Math.min(r.w, r.h) * 0.16, 11, 22);
-  const size = i.text_size > 0 ? i.text_size : auto;
+  // nur Icons (Zeichen im Private-Use-Bereich): groß
+  const iconsOnly = /^[\s\uE000-\uF8FF]+$/.test(label) && /[\uE000-\uF8FF]/.test(label);
+  const size = i.text_size > 0 ? i.text_size : iconsOnly ? Math.max(Math.min(r.w, r.h) * 0.42, 14) : auto;
   const accent = base || th.accent;
   const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
   switch (i.kind) {

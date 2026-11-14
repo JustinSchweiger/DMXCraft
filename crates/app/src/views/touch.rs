@@ -93,6 +93,11 @@ pub struct TouchView {
     page_drag: Option<u32>,
     /// Long-press buttons being held: element → start time (s).
     holding: HashMap<u32, f64>,
+    /// Element type being dragged from the edit bar onto the page.
+    add_drag: Option<TouchKind>,
+    /// Last drawn grid: visible area, origin, pixels per unit, snap step
+    /// (units).
+    grid_geo: Option<(Rect, Pos2, f32, Option<f32>)>,
 }
 
 impl Default for TouchView {
@@ -109,6 +114,8 @@ impl Default for TouchView {
             track_drag: None,
             page_drag: None,
             holding: HashMap::new(),
+            add_drag: None,
+            grid_geo: None,
         }
     }
 }
@@ -239,10 +246,84 @@ impl View for TouchView {
         if let Some(r) = panel_rect {
             self.panel(ui, r, cx, cx.state.touch_page);
         }
+        self.drop_new(ui, cx, editing);
     }
 }
 
 impl TouchView {
+    /// Element dragged from the edit bar: preview on the page, created where
+    /// it is released.
+    fn drop_new(&mut self, ui: &mut Ui, cx: &mut ViewCtx<'_>, editing: bool) {
+        let Some(kind) = self.add_drag else {
+            return;
+        };
+        let (pos, released) = ui.input(|i| (i.pointer.hover_pos(), !i.pointer.primary_down()));
+        let place = match (self.grid_geo, pos, cx.state.touch_page) {
+            (Some((vis, origin, u, snap)), Some(pos), Some(page)) if vis.contains(pos) => {
+                let (w, h) = kind.default_size();
+                // pointer in the middle of the new element
+                let mut x = (pos.x - origin.x) / u - w / 2.0;
+                let mut y = (pos.y - origin.y) / u - h / 2.0;
+                if let Some(s) = snap {
+                    x = (x / s).round() * s;
+                    y = (y / s).round() * s;
+                }
+                let (x, y) = (x.max(0.0), y.max(0.0));
+                let rect = Rect::from_min_size(origin + vec2(x * u, y * u), vec2(w * u, h * u));
+                Some((page, x, y, rect))
+            }
+            _ => None,
+        };
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        let layer = egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("touch_add_drag"));
+        let p = ui.ctx().layer_painter(layer);
+        match place {
+            Some((_, _, _, rect)) => {
+                p.rect_filled(rect, theme::R_M, theme::accent().gamma_multiply(0.25));
+                p.rect_stroke(
+                    rect,
+                    theme::R_M,
+                    Stroke::new(1.5, theme::accent()),
+                    StrokeKind::Inside,
+                );
+                p.text(
+                    rect.center(),
+                    Align2::CENTER_CENTER,
+                    kind_name(kind),
+                    theme::body(),
+                    theme::text(),
+                );
+            }
+            None => {
+                if let Some(pos) = pos {
+                    p.text(
+                        pos + vec2(12.0, 12.0),
+                        Align2::LEFT_TOP,
+                        kind_name(kind),
+                        theme::body(),
+                        theme::text(),
+                    );
+                }
+            }
+        }
+        if !released {
+            return;
+        }
+        self.add_drag = None;
+        if let (true, Some((page, x, y, _))) = (editing, place) {
+            let mut item = TouchItem::new(kind);
+            if kind == TouchKind::Label {
+                item.label = t("Label").to_string();
+            }
+            if kind.uses_fixtures() {
+                item.fixtures = cx.state.selection_order.clone();
+            }
+            let id = cx.engine.show_mut().touch.add_item_at(page, item, x, y);
+            cx.state.touch_sel = id;
+            cx.state.touch_multi = id.into_iter().collect();
+        }
+    }
+
     fn page_tabs(
         &mut self,
         ui: &mut Ui,
@@ -437,6 +518,12 @@ impl TouchView {
             },
         );
         let origin = area.min + vec2(PAD, PAD);
+        self.grid_geo = Some((
+            ui.clip_rect().intersect(area),
+            origin,
+            u,
+            snap.then_some(step_px / UNIT),
+        ));
         // Clean up the selection: only elements of this page, main selection
         // included
         {
@@ -996,7 +1083,11 @@ impl TouchView {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = theme::SP_S;
                         for (k, icon, label) in row {
-                            if add_tile(ui, w, *k, icon, label) {
+                            let tile = add_tile(ui, w, *k, icon, label);
+                            if tile.drag_started() {
+                                self.add_drag = Some(*k);
+                            }
+                            if tile.clicked() {
                                 let mut item = TouchItem::new(*k);
                                 if *k == TouchKind::Label {
                                     item.label = t("Label").to_string();
@@ -1160,6 +1251,12 @@ impl TouchView {
             return;
         };
         let before = item.clone();
+        // older shows: automatic name and separate icon become the label text
+        if item.auto_label || item.icon.is_some() {
+            item.label = display_label(cx.engine.show(), &item);
+            item.icon = None;
+            item.auto_label = false;
+        }
         let mut remove = false;
         let mut duplicate = false;
         section_header(ui, kind_name(item.kind), |ui| {
@@ -1198,13 +1295,41 @@ impl TouchView {
             } else {
                 item_target(show, &item)
             };
-            ui.label(egui::RichText::new(text).color(theme::text_dim()));
+            if matches!(
+                item.kind,
+                TouchKind::Button | TouchKind::Fader | TouchKind::Knob
+            ) {
+                if let Some((control, name)) = target_menu(ui, show, &item) {
+                    // the label follows the target unless it was changed
+                    let old = item.control.map(|_| short_name(&item_target(show, &item)));
+                    if item.label.is_empty() || old.as_deref() == Some(item.label.as_str()) {
+                        item.label = name;
+                    }
+                    if let Some(Control::Scene {
+                        target: dmxcraft_core::mapping::SceneTarget::Scene { id },
+                    }) = control
+                    {
+                        if let Some(sc) = show.scene(id) {
+                            item.color = item.color.or(sc.color);
+                        }
+                    }
+                    item.control = control;
+                    item.channels.clear();
+                }
+            } else {
+                ui.label(egui::RichText::new(text).color(theme::text_dim()));
+            }
             ui.add_space(theme::SP_XS);
         }
         let mut pick_img = false;
         form(ui, "touch_props", |f| {
             f.row(t("Label"), |ui| {
-                ui.add(text_field(&mut item.label).desired_width(ui.available_width()));
+                ui.add(
+                    egui::TextEdit::multiline(&mut item.label)
+                        .desired_rows(1)
+                        .desired_width(ui.available_width())
+                        .hint_text(t("Text – icons as :name:")),
+                );
             });
             f.row(t("Text size"), |ui| {
                 ui.add(
@@ -1228,7 +1353,15 @@ impl TouchView {
             });
             if matches!(item.kind, TouchKind::Button | TouchKind::Label) {
                 f.row(t("Icon"), |ui| {
-                    icon_picker(ui, ("touch_icon", sel), &mut item.icon);
+                    // inserts the icon into the text (move and scale it there)
+                    let mut pick = None;
+                    icon_picker(ui, ("touch_icon", sel), &mut pick);
+                    if let Some(name) = pick {
+                        if !item.label.is_empty() && !item.label.ends_with(char::is_whitespace) {
+                            item.label.push(' ');
+                        }
+                        item.label.push_str(&format!(":{name}:"));
+                    }
                 });
                 f.row(t("Image"), |ui| {
                     if ui.button(t("Load …")).clicked() {
@@ -1369,8 +1502,8 @@ impl TouchView {
 }
 
 /// “Add element” tile: icon and name.
-fn add_tile(ui: &mut Ui, w: f32, kind: TouchKind, icon: &str, label: &str) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, 64.0), Sense::click());
+fn add_tile(ui: &mut Ui, w: f32, kind: TouchKind, icon: &str, label: &str) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, 64.0), Sense::click_and_drag());
     let p = ui.painter();
     let fill = if resp.hovered() {
         theme::raised_hover()
@@ -1409,7 +1542,7 @@ fn add_tile(ui: &mut Ui, w: f32, kind: TouchKind, icon: &str, label: &str) -> bo
         theme::caption(),
         theme::text(),
     );
-    resp.clicked()
+    resp.on_hover_text(t("Click to add, or drag onto the page"))
 }
 
 /// Color swatches (optionally with “none”). Returns `true` if changed.
@@ -1717,16 +1850,365 @@ fn item_title(item: &TouchItem) -> String {
 
 /// Label: own or from the target.
 pub(crate) fn display_label(show: &Show, item: &TouchItem) -> String {
-    if !item.label.is_empty() {
-        return item.label.clone();
-    }
-    if item.control.is_some() {
+    // older shows: empty label = name of the target
+    let text = if item.label.is_empty() && item.auto_label && item.control.is_some() {
         let full = item_target(show, item);
-        return full
-            .split_once(": ")
-            .map_or(full.clone(), |x| x.1.to_string());
+        full.split_once(": ")
+            .map_or(full.clone(), |x| x.1.to_string())
+    } else {
+        item.label.clone()
+    };
+    // older shows: separate icon above the text
+    match &item.icon {
+        Some(icon) if text.is_empty() => format!(":{icon}:"),
+        Some(icon) => format!(":{icon}:\n{text}"),
+        None => text,
     }
-    String::new()
+}
+
+/// Target chooser of a button, fader or knob: `Some((control, name))` when
+/// one was picked (`control` `None` = remove the target).
+fn target_menu(ui: &mut Ui, show: &Show, item: &TouchItem) -> Option<(Option<Control>, String)> {
+    use dmxcraft_core::mapping::{ui_key, SceneTarget};
+    let fader = matches!(item.kind, TouchKind::Fader | TouchKind::Knob);
+    let current = if item.control.is_some() {
+        short_name(&item_target(show, item))
+    } else {
+        t("Choose target …").to_string()
+    };
+    let resp = ui.add(egui::Button::new(current).min_size(vec2(ui.available_width(), 0.0)));
+    let mut out = None;
+    let ui_button = |key: String| Control::Ui {
+        key: ui_key(&key),
+        fader: false,
+    };
+    let ui_fader = |key: String| Control::Ui {
+        key: ui_key(&key),
+        fader: true,
+    };
+    menu::dropdown(&resp, |ui| {
+        menu::begin(ui);
+        let mut pick = |ui: &mut Ui, label: &str, c: Control, name: String| {
+            let on = item.control == Some(c);
+            if menu::item(ui, MenuItem::new(label).checked(on)) {
+                out = Some((Some(c), name));
+            }
+        };
+        if fader {
+            pick(ui, t("Master"), Control::Master, t("Master").to_string());
+            pick(
+                ui,
+                t("Sound master"),
+                Control::AudioMaster,
+                t("Sound master").to_string(),
+            );
+            menu::sub(ui, MenuItem::new(t("Sound")), |ui| {
+                pick(
+                    ui,
+                    t("Volume"),
+                    Control::SoundVolume { deck: None },
+                    t("Volume").to_string(),
+                );
+                for d in 0..show.sound.decks.len() {
+                    let name = crate::tr!("Player {d}", d = crate::views::sound::deck_name(d));
+                    pick(
+                        ui,
+                        &name,
+                        Control::SoundVolume {
+                            deck: Some(d as u8),
+                        },
+                        name.clone(),
+                    );
+                }
+            });
+            if !show.trackers.is_empty() {
+                menu::sub(ui, MenuItem::new(t("Live tracking")), |ui| {
+                    for tr in &show.trackers {
+                        menu::sub(ui, MenuItem::new(&tr.name), |ui| {
+                            for (k, l) in [
+                                ("x", t("Left / right")),
+                                ("z", t("Front / back")),
+                                ("y", t("Height")),
+                                ("dimmer", t("Dimmer")),
+                                ("zoom", t("Zoom")),
+                            ] {
+                                let c = ui_fader(format!("tracking/{}/{k}", tr.id));
+                                pick(ui, l, c, format!("{}: {l}", tr.name));
+                            }
+                        });
+                    }
+                });
+            }
+        } else {
+            menu::sub(ui, MenuItem::new(t("Scene")), |ui| {
+                pick(
+                    ui,
+                    t("Selected scene"),
+                    Control::Scene {
+                        target: SceneTarget::Selected,
+                    },
+                    t("Selected scene").to_string(),
+                );
+                menu::separator(ui);
+                for z in &show.zones {
+                    let scenes: Vec<_> = show
+                        .scenes
+                        .iter()
+                        .filter(|s| s.zone == Some(z.id))
+                        .collect();
+                    if scenes.is_empty() {
+                        continue;
+                    }
+                    menu::sub(ui, MenuItem::new(&z.name), |ui| {
+                        for sc in scenes {
+                            pick(
+                                ui,
+                                &sc.name,
+                                Control::Scene {
+                                    target: SceneTarget::Scene { id: sc.id },
+                                },
+                                sc.name.clone(),
+                            );
+                        }
+                    });
+                }
+            });
+            menu::sub(ui, MenuItem::new(t("Bank")), |ui| {
+                pick(
+                    ui,
+                    t("Show all banks"),
+                    Control::ShowBank { zone: None },
+                    t("All").to_string(),
+                );
+                pick(
+                    ui,
+                    t("Next bank"),
+                    Control::BankStep { delta: 1 },
+                    t("Next bank").to_string(),
+                );
+                pick(
+                    ui,
+                    t("Previous bank"),
+                    Control::BankStep { delta: -1 },
+                    t("Previous bank").to_string(),
+                );
+                menu::separator(ui);
+                for z in &show.zones {
+                    menu::sub(ui, MenuItem::new(&z.name), |ui| {
+                        pick(
+                            ui,
+                            t("Show bank"),
+                            Control::ShowBank { zone: Some(z.id) },
+                            z.name.clone(),
+                        );
+                        pick(
+                            ui,
+                            t("Pause"),
+                            Control::ZonePause { zone: z.id },
+                            format!("{}: {}", z.name, t("Pause")),
+                        );
+                        pick(
+                            ui,
+                            t("Next scene"),
+                            Control::ZoneStep {
+                                zone: z.id,
+                                delta: 1,
+                            },
+                            format!("{} ›", z.name),
+                        );
+                        pick(
+                            ui,
+                            t("Previous scene"),
+                            Control::ZoneStep {
+                                zone: z.id,
+                                delta: -1,
+                            },
+                            format!("‹ {}", z.name),
+                        );
+                    });
+                }
+            });
+            if !show.groups.is_empty() {
+                menu::sub(ui, MenuItem::new(t("Group")), |ui| {
+                    pick(
+                        ui,
+                        t("All"),
+                        Control::Group { id: None },
+                        t("All").to_string(),
+                    );
+                    for g in &show.groups {
+                        pick(
+                            ui,
+                            &g.name,
+                            Control::Group { id: Some(g.id) },
+                            g.name.clone(),
+                        );
+                    }
+                });
+            }
+            if !show.trackers.is_empty() {
+                menu::sub(ui, MenuItem::new(t("Live tracking")), |ui| {
+                    for tr in &show.trackers {
+                        menu::sub(ui, MenuItem::new(&tr.name), |ui| {
+                            for (k, l) in [
+                                ("follow", t("Follow")),
+                                ("light", t("Own light")),
+                                ("own_zoom", t("Own zoom")),
+                            ] {
+                                let c = ui_button(format!("tracking/{}/{k}", tr.id));
+                                pick(ui, l, c, tr.name.clone());
+                            }
+                        });
+                    }
+                });
+            }
+            menu::sub(ui, MenuItem::new(t("Sound")), |ui| {
+                for (i, pad) in show.sound.pads.iter().enumerate() {
+                    if pad.path.is_empty() {
+                        continue;
+                    }
+                    let name = crate::tr!("Pad {n}: {name}", n = i + 1, name = pad.label());
+                    pick(ui, &name, ui_button(format!("sound/pad/{i}")), pad.label());
+                }
+                pick(
+                    ui,
+                    t("Stop all pads"),
+                    ui_button("sound/pads/stop".into()),
+                    t("Stop all pads").to_string(),
+                );
+                menu::separator(ui);
+                for d in 0..show.sound.decks.len() {
+                    let deck = crate::views::sound::deck_name(d);
+                    for (k, l) in [("play", t("Play / pause")), ("stop", t("Stop"))] {
+                        let name = crate::tr!("Player {d}: {what}", d = deck, what = l);
+                        pick(
+                            ui,
+                            &name,
+                            ui_button(format!("sound/deck/{d}/{k}")),
+                            name.clone(),
+                        );
+                    }
+                }
+                pick(
+                    ui,
+                    t("Crossfade"),
+                    ui_button("sound/xfade".into()),
+                    t("Crossfade").to_string(),
+                );
+                pick(ui, t("Mute"), Control::AudioMute, t("Mute").to_string());
+                pick(
+                    ui,
+                    t("Fade out"),
+                    Control::AudioFade,
+                    t("Fade out").to_string(),
+                );
+            });
+            menu::sub(ui, MenuItem::new(t("Programmer")), |ui| {
+                for (m, l) in [
+                    ("Edit", "Edit"),
+                    ("Blind", t("Blind edit")),
+                    ("Live", t("Live")),
+                ] {
+                    pick(
+                        ui,
+                        l,
+                        ui_button(format!("programmer/mode/{m}")),
+                        l.to_string(),
+                    );
+                }
+                pick(
+                    ui,
+                    t("Reset all beams"),
+                    ui_button("programmer/reset_all".into()),
+                    t("Reset all beams").to_string(),
+                );
+            });
+            menu::separator(ui);
+            pick(
+                ui,
+                t("Blackout"),
+                Control::Blackout,
+                t("Blackout").to_string(),
+            );
+            pick(
+                ui,
+                t("Stop all"),
+                Control::StopAll,
+                t("Stop all").to_string(),
+            );
+        }
+        menu::separator(ui);
+        ui.add(MenuItem::new(t("Or Alt + click on a control")).enabled(false));
+        if item.control.is_some() && menu::item(ui, MenuItem::new(t("Remove target")).danger()) {
+            out = Some((None, String::new()));
+        }
+    });
+    out
+}
+
+/// Name of a target without its category (“Scene: Intro” → “Intro”).
+fn short_name(full: &str) -> String {
+    full.split_once(": ")
+        .map_or_else(|| full.to_string(), |x| x.1.to_string())
+}
+
+/// Label with the icon tokens replaced by their glyphs (web remote: the
+/// icon font is a fallback of the text font there).
+pub(crate) fn label_with_glyphs(label: &str) -> String {
+    use dmxcraft_core::touch::{label_tokens, LabelPart};
+    label_tokens(label)
+        .into_iter()
+        .map(|part| match part {
+            LabelPart::Text(t) => t.to_string(),
+            LabelPart::Icon(name) => {
+                icon_library::glyph(name).map_or_else(|| format!(":{name}:"), |c| c.to_string())
+            }
+        })
+        .collect()
+}
+
+/// Does the label consist of icons only (then they are drawn large)?
+fn icons_only(label: &str) -> bool {
+    use dmxcraft_core::touch::{label_tokens, LabelPart};
+    let parts = label_tokens(label);
+    parts.iter().any(|p| matches!(p, LabelPart::Icon(_)))
+        && parts.iter().all(|p| {
+            matches!(p, LabelPart::Icon(_))
+                || matches!(p, LabelPart::Text(t) if t.trim().is_empty())
+        })
+}
+
+/// Text with icons (`:name:`), centered and wrapped.
+fn label_galley(
+    p: &egui::Painter,
+    label: &str,
+    size: f32,
+    color: Color32,
+    width: f32,
+) -> std::sync::Arc<egui::Galley> {
+    use dmxcraft_core::touch::{label_tokens, LabelPart};
+    use egui::text::{LayoutJob, TextFormat};
+    let text_fmt = TextFormat::simple(egui::FontId::proportional(size), color);
+    let icon_fmt = TextFormat::simple(
+        egui::FontId::new(
+            size * 1.15,
+            egui::FontFamily::Name(crate::ui::widgets::icons::ICON_FAMILY.into()),
+        ),
+        color,
+    );
+    let mut job = LayoutJob::default();
+    for part in label_tokens(label) {
+        match part {
+            LabelPart::Text(t) => job.append(t, 0.0, text_fmt.clone()),
+            LabelPart::Icon(name) => match icon_library::glyph(name) {
+                Some(c) => job.append(&c.to_string(), 0.0, icon_fmt.clone()),
+                None => job.append(&format!(":{name}:"), 0.0, text_fmt.clone()),
+            },
+        }
+    }
+    job.wrap.max_width = width.max(10.0);
+    job.halign = Align::Center;
+    p.layout_job(job)
 }
 
 /// Area below the label (color wheel, XY pad).
@@ -1781,8 +2263,12 @@ fn paint_item(
     } else {
         (rect.height().min(rect.width()) * 0.16).clamp(11.0, 22.0)
     };
+    // a fixed text size grows and shrinks with the view zoom
+    let zoom = rect.width() / (item.w * UNIT).max(1.0);
     let size = if item.text_size > 0.0 {
-        item.text_size
+        item.text_size * zoom
+    } else if icons_only(&label) {
+        (rect.height().min(rect.width()) * 0.42).max(14.0)
     } else {
         auto
     };
@@ -1873,30 +2359,11 @@ fn paint_item(
             } else {
                 rect
             };
-            // Icon above the label (alone: centered and large)
-            let mut text_center = rect.center();
-            if let Some(icon) = &item.icon {
-                let icon_size = if label.is_empty() {
-                    (rect.height().min(rect.width()) * 0.5).max(14.0)
-                } else {
-                    (rect.height().min(rect.width()) * 0.32).max(12.0)
-                };
-                let c = if label.is_empty() {
-                    rect.center()
-                } else {
-                    rect.center() - vec2(0.0, icon_size * 0.45)
-                };
-                icon_library::paint(p, c, icon, icon_size, text_color);
-                text_center = rect.center() + vec2(0.0, icon_size * 0.5);
-            }
             if !label.is_empty() {
-                let galley = p.layout(
-                    label,
-                    egui::FontId::proportional(size),
-                    text_color,
-                    rect.width() - 12.0,
-                );
-                let pos = text_center - galley.size() * 0.5;
+                let p = &p.with_clip_rect(p.clip_rect().intersect(rect));
+                let galley = label_galley(p, &label, size, text_color, rect.width() - 12.0);
+                // halign center: the galley is laid out around x = 0
+                let pos = pos2(rect.center().x, rect.center().y - galley.size().y * 0.5);
                 if tex.is_some() && item.text_color.is_none() {
                     // Shadow for readability on images
                     p.galley(
@@ -2381,6 +2848,9 @@ pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::Touch
                 } else if item.kind != TouchKind::Label {
                     item.control = control;
                     item.channels = channels;
+                    if item.label.is_empty() {
+                        item.label = short_name(&label);
+                    }
                 }
                 st.info(t("Target assigned"));
                 return;
@@ -2407,10 +2877,8 @@ pub fn apply_pick(e: &mut Engine, st: &mut AppState, pick: crate::mapping::Touch
     } else if matches!(control, Some(Control::Ui { .. })) {
         // interface controls have no name of their own in the show
         item.label = label.clone();
-    } else if pick.kind == TouchKind::Fader {
-        item.label = label
-            .split_once(": ")
-            .map_or(label.clone(), |x| x.1.to_string());
+    } else {
+        item.label = short_name(&label);
     }
     if let Some(Control::Scene {
         target: dmxcraft_core::mapping::SceneTarget::Scene { id },

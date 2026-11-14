@@ -24,9 +24,9 @@ use tiny_http::{Header, Method, Request, Response, Server};
 use crate::settings::Settings;
 use crate::state::AppState;
 use crate::ui::theme;
-use crate::ui::widgets::icon_library;
 use crate::views::touch::{
-    current_color, current_position, display_label, item_value, mapping_of, set_color, set_position,
+    current_color, current_position, display_label, item_value, label_with_glyphs, mapping_of,
+    set_color, set_position,
 };
 
 /// Default port of the remote.
@@ -321,12 +321,12 @@ fn layout_json(e: &Engine, settings: &Settings) -> String {
                         "id": i.id,
                         "kind": i.kind,
                         "x": i.x, "y": i.y, "w": i.w, "h": i.h,
-                        "label": display_label(show, i),
+                        "label": label_with_glyphs(&display_label(show, i)),
                         "own_label": !i.label.is_empty(),
                         "color": i.color.map(rgb_hex),
                         "text_color": i.text_color.map(rgb_hex),
                         "image": i.image,
-                        "icon": i.icon.as_deref().and_then(icon_library::glyph).map(String::from),
+                        "icon": Value::Null,
                         "active": i.control.is_some() || !i.fixtures.is_empty(),
                         "text_size": i.text_size,
                         "style": i.style,

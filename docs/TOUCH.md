@@ -27,14 +27,16 @@ and can also be operated from a phone or tablet via the touch remote
   * label, button, fader, knob,
   * color wheel and XY pad, both for the current selection.
 
-  A new button, fader or knob has no target yet (red dot). While it is
-  selected, Alt + click on a control gives it that target.
+  A new button, fader or knob has no target yet (red dot). Choose one in the
+  edit bar (“Choose target …”: scenes, banks, groups, live tracking, sound,
+  programmer, blackout …), or Alt + click on a control while it is selected.
 
 ## Editing
 
 **Edit** at the top right shows the bar on the right:
 
-* **Add:** button, fader, knob, label, color wheel, XY pad, live tracking.
+* **Add:** button, fader, knob, label, color wheel, XY pad, live tracking –
+  click a tile, or drag it onto the page where the element should go.
 * **Page** (when no element is selected):
   * background color,
   * background image (PNG/JPEG, saved in the show).
@@ -47,7 +49,9 @@ and can also be operated from a phone or tablet via the touch remote
 * **Element:**
   * label, text size, text color,
   * color (presets or a custom color),
-  * icon from the icon library,
+  * label: exactly the text shown (empty = no text); icons go into the text
+    as `:name:` (the icon button inserts them), so they can be moved and
+    scale with the text size,
   * image,
   * size, “Take over selection” (color wheel/XY),
   * buttons: **style** (normal, outline, switch, status light, round),

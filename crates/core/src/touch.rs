@@ -134,6 +134,17 @@ impl TouchLayout {
         Some(id)
     }
 
+    /// Insert an element on a page at a given position; returns its ID.
+    pub fn add_item_at(&mut self, page: u32, mut item: TouchItem, x: f32, y: f32) -> Option<u32> {
+        self.page(page)?;
+        let id = self.new_id();
+        item.id = id;
+        item.x = x.max(0.0);
+        item.y = y.max(0.0);
+        self.page_mut(page)?.items.push(item);
+        Some(id)
+    }
+
     /// Copy an element with a new ID (next to the original).
     pub fn duplicate(&mut self, page: u32, item: u32) -> Option<u32> {
         let copy = self
@@ -280,6 +291,53 @@ pub struct TouchItem {
     /// Button only triggers after being held for [`LONG_PRESS_MS`] (against
     /// accidental touches).
     pub long_press: bool,
+    /// Older shows: an empty label shows the name of the target. New
+    /// elements show exactly their label (empty = no text).
+    #[serde(default = "auto_label_default")]
+    pub auto_label: bool,
+}
+
+fn auto_label_default() -> bool {
+    true
+}
+
+/// Icon tokens in labels: `:name:` (name from the icon library).
+pub fn label_tokens(label: &str) -> Vec<LabelPart<'_>> {
+    let mut parts = Vec::new();
+    let mut rest = label;
+    while let Some(start) = rest.find(':') {
+        let after = &rest[start + 1..];
+        let Some(len) = after.find(':') else {
+            break;
+        };
+        let name = &after[..len];
+        let valid = !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        if valid {
+            if start > 0 {
+                parts.push(LabelPart::Text(&rest[..start]));
+            }
+            parts.push(LabelPart::Icon(name));
+            rest = &after[len + 1..];
+        } else {
+            // not a token: keep the colon as text
+            parts.push(LabelPart::Text(&rest[..start + 1]));
+            rest = after;
+        }
+    }
+    if !rest.is_empty() {
+        parts.push(LabelPart::Text(rest));
+    }
+    parts
+}
+
+/// Part of a label: text or an icon (by name).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LabelPart<'a> {
+    Text(&'a str),
+    Icon(&'a str),
 }
 
 /// How long a long-press button has to be held (ms).
@@ -340,12 +398,31 @@ impl TouchItem {
             text_size: 0.0,
             style: ButtonStyle::Normal,
             long_press: false,
+            auto_label: false,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn label_tokens_split_icons_and_text() {
+        use super::LabelPart::{Icon, Text};
+        assert_eq!(
+            super::label_tokens(":sun: Licht: an :fire:"),
+            vec![Icon("sun"), Text(" Licht:"), Text(" an "), Icon("fire")]
+        );
+        assert_eq!(super::label_tokens("12:30"), vec![Text("12:30")]);
+        assert!(super::label_tokens("").is_empty());
+    }
+
+    #[test]
+    fn old_items_keep_their_automatic_label() {
+        let old: super::TouchItem = serde_json::from_str(r#"{"id":1,"kind":"button"}"#).unwrap();
+        assert!(old.auto_label);
+        assert!(!super::TouchItem::new(super::TouchKind::Button).auto_label);
+    }
+
     #[test]
     fn pages_can_be_reordered() {
         let mut t = TouchLayout::default();
