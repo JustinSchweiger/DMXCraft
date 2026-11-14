@@ -34,7 +34,7 @@ and can also be operated from a phone or tablet via the touch remote
 
 **Edit** at the top right shows the bar on the right:
 
-* **Add:** button, fader, knob, label, color wheel, XY pad.
+* **Add:** button, fader, knob, label, color wheel, XY pad, live tracking.
 * **Page** (when no element is selected):
   * background color,
   * background image (PNG/JPEG, saved in the show).
@@ -79,6 +79,9 @@ The magnifiers change the view size (click the percentage: 100 %).
 * **Color wheel:** hue to the right, saturation downwards. It sets red, green
   and blue of the fixtures as live values.
 * **XY pad:** sets pan and tilt as live values.
+* **Live tracking:** the room from above with the targets of LIVE TRACKING
+  (also in the web remote). Drag a target to move it, tap it to switch
+  following on or off.
 
 Programmer or sidebar buttons only work while the respective element is
 shown.

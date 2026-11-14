@@ -62,6 +62,15 @@ pub enum Cmd {
     Color { item: u32, rgb: [u8; 3] },
     /// XY pad (0–1).
     Xy { item: u32, x: f32, y: f32 },
+    /// LIVE TRACKING: move a target (room coordinates in m).
+    Track {
+        item: u32,
+        tracker: u32,
+        x: f32,
+        z: f32,
+    },
+    /// LIVE TRACKING: switch following of a target.
+    TrackToggle { item: u32, tracker: u32 },
 }
 
 /// Shared with the server thread.
@@ -239,7 +248,9 @@ fn apply(e: &mut Engine, st: &mut AppState, cmd: &Cmd) {
         Cmd::Press { item, .. }
         | Cmd::Value { item, .. }
         | Cmd::Color { item, .. }
-        | Cmd::Xy { item, .. } => *item,
+        | Cmd::Xy { item, .. }
+        | Cmd::Track { item, .. }
+        | Cmd::TrackToggle { item, .. } => *item,
     };
     let Some(item) = find_item(&e.show().touch, id).cloned() else {
         return;
@@ -262,6 +273,18 @@ fn apply(e: &mut Engine, st: &mut AppState, cmd: &Cmd) {
         (Cmd::Color { rgb, .. }, TouchKind::Color) => set_color(e, &item.fixtures, *rgb),
         (Cmd::Xy { x, y, .. }, TouchKind::Xy) => {
             set_position(e, &item.fixtures, x.clamp(0.0, 1.0), y.clamp(0.0, 1.0));
+        }
+        (Cmd::Track { tracker, x, z, .. }, TouchKind::Tracking) => {
+            let (xr, zr) = e.show().tracking_area();
+            if let Some(t) = e.show_mut().tracker_mut(*tracker) {
+                t.target[0] = x.clamp(xr[0], xr[1]);
+                t.target[2] = z.clamp(zr[0], zr[1]);
+            }
+        }
+        (Cmd::TrackToggle { tracker, .. }, TouchKind::Tracking) => {
+            if let Some(t) = e.show_mut().tracker_mut(*tracker) {
+                t.active = !t.active;
+            }
         }
         _ => {}
     }
@@ -331,8 +354,83 @@ fn layout_json(e: &Engine, settings: &Settings) -> String {
             "light": theme::is_light(),
         },
         "pages": pages,
+        "room": room_json(show),
     })
     .to_string()
+}
+
+/// LIVE TRACKING: the room from above (only when a page shows it).
+fn room_json(show: &dmxcraft_core::Show) -> Value {
+    let used = show
+        .touch
+        .pages
+        .iter()
+        .flat_map(|p| &p.items)
+        .any(|i| i.kind == TouchKind::Tracking);
+    if !used {
+        return Value::Null;
+    }
+    let (xr, zr) = show.tracking_area();
+    let head_y = show
+        .fixtures
+        .iter()
+        .map(|f| show.placement3d(f.id).position[1])
+        .fold(0.0f32, f32::max)
+        .max(2.5);
+    let mut shapes = crate::viz::floor_plan(show);
+    shapes.retain(|s| s.bottom < head_y - 0.3 || s.truss);
+    shapes.sort_by(|a, b| a.top.total_cmp(&b.top));
+    let round = |v: f32| (f64::from(v) * 100.0).round() / 100.0;
+    let shapes: Vec<Value> = shapes
+        .iter()
+        .map(|s| {
+            json!({
+                "pts": s.outline.iter().map(|q| [round(q[0]), round(q[1])]).collect::<Vec<_>>(),
+                "shade": round((s.top / head_y).clamp(0.0, 1.0)),
+                "truss": s.truss,
+            })
+        })
+        .collect();
+    let heads: Vec<Value> = show
+        .fixtures
+        .iter()
+        .filter(|f| {
+            show.type_of(f).is_some_and(|ty| {
+                ty.has_kind(dmxcraft_core::ChannelKind::Pan)
+                    && ty.has_kind(dmxcraft_core::ChannelKind::Tilt)
+            })
+        })
+        .map(|f| {
+            let p = show.placement3d(f.id).position;
+            json!({ "id": f.id, "x": round(p[0]), "z": round(p[2]) })
+        })
+        .collect();
+    json!({
+        "x": [round(xr[0]), round(xr[1])],
+        "z": [round(zr[0]), round(zr[1])],
+        "shapes": shapes,
+        "heads": heads,
+    })
+}
+
+/// LIVE TRACKING: targets with color, position and their moving heads.
+fn trackers_json(show: &dmxcraft_core::Show) -> Value {
+    let round = |v: f32| (f64::from(v) * 1000.0).round() / 1000.0;
+    show.trackers
+        .iter()
+        .map(|t| {
+            json!({
+                "id": t.id,
+                "name": t.name,
+                "color": hex(crate::views::control::tracking::color(show, t.id)),
+                "x": round(t.target[0]),
+                "z": round(t.target[2]),
+                "active": t.active,
+                "fixtures": t.fixtures,
+            })
+        })
+        .collect::<Vec<_>>()
+        .into()
 }
 
 /// States of all elements: values, on/off, color, position.
@@ -363,7 +461,7 @@ fn state_json(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, layout_rev
                     xy.insert(key, json!([x, y]));
                 }
             }
-            TouchKind::Label => {}
+            TouchKind::Label | TouchKind::Tracking => {}
         }
     }
     json!({
@@ -373,6 +471,7 @@ fn state_json(e: &Engine, st: &AppState, states: &HashMap<u64, bool>, layout_rev
         "colors": colors,
         "xy": xy,
         "blackout": e.blackout(),
+        "trackers": trackers_json(e.show()),
     })
 }
 
@@ -612,6 +711,35 @@ mod tests {
                 y: 0.9
             }
         );
+    }
+
+    #[test]
+    fn tracking_moves_and_switches_a_target() {
+        use dmxcraft_core::touch::TouchItem;
+        let mut e = Engine::new(dmxcraft_core::Show::new("T", 1));
+        let mut st = AppState::new(String::new());
+        let tr = e.show_mut().add_tracker("A", Vec::new());
+        let page = e.show_mut().touch.add_page("P");
+        let item = e
+            .show_mut()
+            .touch
+            .add_item(page, TouchItem::new(TouchKind::Tracking))
+            .unwrap();
+        let cmds: Vec<Cmd> = serde_json::from_str(&format!(
+            r#"[{{"t":"track","item":{item},"tracker":{tr},"x":1.5,"z":2.0}},
+               {{"t":"track_toggle","item":{item},"tracker":{tr}}}]"#
+        ))
+        .unwrap();
+        for c in &cmds {
+            apply(&mut e, &mut st, c);
+        }
+        let (xr, zr) = e.show().tracking_area();
+        let t = e.show().tracker(tr).unwrap();
+        assert_eq!(t.target[0], 1.5f32.clamp(xr[0], xr[1]));
+        assert_eq!(t.target[2], 2.0f32.clamp(zr[0], zr[1]));
+        assert!(t.active);
+        let state = state_json(&e, &st, &HashMap::new(), 1);
+        assert_eq!(state["trackers"][0]["id"], tr);
     }
 
     #[test]

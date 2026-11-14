@@ -424,8 +424,77 @@ impl TrackingView {
     /// The room from above: venue, moving heads, beams and targets.
     fn room(&mut self, ui: &mut egui::Ui, e: &mut Engine) {
         let area = ui.available_rect_before_wrap().shrink(2.0);
-        let (xr, zr) = e.show().tracking_area();
-        let (w, d) = (xr[1] - xr[0], zr[1] - zr[0]);
+        let map = RoomMap::new(e.show(), area);
+        let room = map.room;
+        let resp = ui.interact(
+            room,
+            ui.make_persistent_id("tracking_room"),
+            Sense::click_and_drag(),
+        );
+        let p = ui.painter_at(area.expand(2.0));
+        map.paint(&p, e.show(), self.current, true);
+        let show = e.show();
+        if show.trackers.is_empty() {
+            p.text(
+                room.center(),
+                egui::Align2::CENTER_CENTER,
+                t("Select moving heads and create a tracker"),
+                theme::body(),
+                theme::text_dim(),
+            );
+        }
+        // click/drag: the nearest target, otherwise the current one
+        if resp.drag_started() || resp.clicked() {
+            if let Some(near) = resp
+                .interact_pointer_pos()
+                .and_then(|pos| map.target_at(show, pos, 20.0))
+            {
+                self.current = Some(near);
+            }
+        }
+        if resp.dragged() || resp.clicked() {
+            if let (Some(pos), Some(id)) = (resp.interact_pointer_pos(), self.current) {
+                let [x, z] = map.to_room(pos);
+                edit(e, id, |t| {
+                    t.target[0] = x;
+                    t.target[2] = z;
+                });
+            }
+        }
+        if resp.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+            // mouse wheel: height of the target under the cursor, otherwise
+            // of the current one (one notch = 10 cm)
+            let wheel = ui.input(|i| i.smooth_scroll_delta.y);
+            if wheel != 0.0 {
+                let under = resp
+                    .hover_pos()
+                    .and_then(|pos| map.target_at(e.show(), pos, 20.0));
+                if let Some(id) = under.or(self.current) {
+                    edit(e, id, |t| {
+                        t.target[1] = (t.target[1] + wheel * 0.00125).clamp(0.0, MAX_HEIGHT);
+                    });
+                }
+                ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
+            }
+        }
+    }
+}
+
+/// The room from above, fitted into a rectangle (shared by the tracking view
+/// and the touch surface).
+pub struct RoomMap {
+    pub room: Rect,
+    scale: f32,
+    turn: bool,
+    xr: [f32; 2],
+    zr: [f32; 2],
+}
+
+impl RoomMap {
+    pub fn new(show: &dmxcraft_core::Show, area: Rect) -> Self {
+        let (xr, zr) = show.tracking_area();
+        let (w, d) = ((xr[1] - xr[0]).max(0.1), (zr[1] - zr[0]).max(0.1));
         // Long side of the room along the long side of the area: turned by
         // 90° (stage side to the right) when that gives a larger plan
         let upright = (area.width() / w).min(area.height() / d);
@@ -437,47 +506,80 @@ impl TrackingView {
         } else {
             vec2(w * scale, d * scale)
         };
-        let room = Rect::from_center_size(area.center(), size);
-        // upright: x to the right, z downwards (like the 3D view from above);
-        // turned: z to the right, x upwards
-        let to_screen = |x: f32, z: f32| -> Pos2 {
-            if turn {
-                pos2(
-                    room.left() + (z - zr[0]) * scale,
-                    room.bottom() - (x - xr[0]) * scale,
-                )
-            } else {
-                pos2(
-                    room.left() + (x - xr[0]) * scale,
-                    room.top() + (z - zr[0]) * scale,
-                )
-            }
-        };
-        let to_room = |p: Pos2| -> [f32; 2] {
-            let (x, z) = if turn {
-                (
-                    xr[0] + (room.bottom() - p.y) / scale,
-                    zr[0] + (p.x - room.left()) / scale,
-                )
-            } else {
-                (
-                    xr[0] + (p.x - room.left()) / scale,
-                    zr[0] + (p.y - room.top()) / scale,
-                )
-            };
-            [x.clamp(xr[0], xr[1]), z.clamp(zr[0], zr[1])]
-        };
-        let resp = ui.interact(
-            room,
-            ui.make_persistent_id("tracking_room"),
-            Sense::click_and_drag(),
-        );
-        let p = ui.painter_at(area.expand(2.0));
-        p.rect_filled(room, theme::R_S, theme::bg());
+        Self {
+            room: Rect::from_center_size(area.center(), size),
+            scale,
+            turn,
+            xr,
+            zr,
+        }
+    }
 
+    /// upright: x to the right, z downwards (like the 3D view from above);
+    /// turned: z to the right, x upwards
+    pub fn to_screen(&self, x: f32, z: f32) -> Pos2 {
+        let (room, s) = (self.room, self.scale);
+        if self.turn {
+            pos2(
+                room.left() + (z - self.zr[0]) * s,
+                room.bottom() - (x - self.xr[0]) * s,
+            )
+        } else {
+            pos2(
+                room.left() + (x - self.xr[0]) * s,
+                room.top() + (z - self.zr[0]) * s,
+            )
+        }
+    }
+
+    pub fn to_room(&self, p: Pos2) -> [f32; 2] {
+        let (room, s) = (self.room, self.scale);
+        let (x, z) = if self.turn {
+            (
+                self.xr[0] + (room.bottom() - p.y) / s,
+                self.zr[0] + (p.x - room.left()) / s,
+            )
+        } else {
+            (
+                self.xr[0] + (p.x - room.left()) / s,
+                self.zr[0] + (p.y - room.top()) / s,
+            )
+        };
+        [
+            x.clamp(self.xr[0], self.xr[1]),
+            z.clamp(self.zr[0], self.zr[1]),
+        ]
+    }
+
+    /// Target nearest to `pos` (within `radius` pixels).
+    pub fn target_at(&self, show: &dmxcraft_core::Show, pos: Pos2, radius: f32) -> Option<u32> {
+        show.trackers
+            .iter()
+            .map(|tr| {
+                (
+                    tr.id,
+                    self.to_screen(tr.target[0], tr.target[2]).distance(pos),
+                )
+            })
+            .filter(|(_, d)| *d < radius)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(id, _)| id)
+    }
+
+    /// Venue, beams, moving heads and targets; `labels`: names and heights
+    /// next to the targets.
+    pub fn paint(
+        &self,
+        p: &egui::Painter,
+        show: &dmxcraft_core::Show,
+        current: Option<u32>,
+        labels: bool,
+    ) {
+        let room = self.room;
+        let to_screen = |x: f32, z: f32| self.to_screen(x, z);
+        p.rect_filled(room, theme::R_S, theme::bg());
         // venue from above: low objects darker, high ones lighter; ceilings
         // and anything above the heads are left out
-        let show = e.show();
         let head_y = show
             .fixtures
             .iter()
@@ -559,7 +661,7 @@ impl TrackingView {
         // targets
         for tr in &show.trackers {
             let c = to_screen(tr.target[0], tr.target[2]);
-            let strong = tr.active || self.current == Some(tr.id);
+            let strong = tr.active || current == Some(tr.id);
             let col = color(show, tr.id);
             let col = if strong { col } else { col.gamma_multiply(0.5) };
             if !tr.active {
@@ -580,69 +682,18 @@ impl TrackingView {
                 p.line_segment([c - v * (r + 5.0), c - v * 4.0], Stroke::new(1.5, col));
                 p.line_segment([c + v * 4.0, c + v * (r + 5.0)], Stroke::new(1.5, col));
             }
+            let text = if labels {
+                format!("{} · {:.1} m", tr.name, tr.target[1])
+            } else {
+                tr.name.clone()
+            };
             p.text(
                 c + vec2(r + 7.0, -r - 3.0),
                 egui::Align2::LEFT_BOTTOM,
-                format!("{} · {:.1} m", tr.name, tr.target[1]),
+                text,
                 theme::caption(),
                 col,
             );
-        }
-        if show.trackers.is_empty() {
-            p.text(
-                room.center(),
-                egui::Align2::CENTER_CENTER,
-                t("Select moving heads and create a tracker"),
-                theme::body(),
-                theme::text_dim(),
-            );
-        }
-        // click/drag: the nearest target, otherwise the current one
-        if resp.drag_started() || resp.clicked() {
-            if let Some(pos) = resp.interact_pointer_pos() {
-                let near = show
-                    .trackers
-                    .iter()
-                    .map(|tr| (tr.id, to_screen(tr.target[0], tr.target[2]).distance(pos)))
-                    .filter(|(_, d)| *d < 20.0)
-                    .min_by(|a, b| a.1.total_cmp(&b.1))
-                    .map(|(id, _)| id);
-                if near.is_some() {
-                    self.current = near;
-                }
-            }
-        }
-        if resp.dragged() || resp.clicked() {
-            if let (Some(pos), Some(id)) = (resp.interact_pointer_pos(), self.current) {
-                let [x, z] = to_room(pos);
-                edit(e, id, |t| {
-                    t.target[0] = x;
-                    t.target[2] = z;
-                });
-            }
-        }
-        if resp.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
-            // mouse wheel: height of the target under the cursor, otherwise
-            // of the current one (one notch = 10 cm)
-            let wheel = ui.input(|i| i.smooth_scroll_delta.y);
-            if wheel != 0.0 {
-                let under = resp.hover_pos().and_then(|pos| {
-                    e.show()
-                        .trackers
-                        .iter()
-                        .map(|tr| (tr.id, to_screen(tr.target[0], tr.target[2]).distance(pos)))
-                        .filter(|(_, d)| *d < 20.0)
-                        .min_by(|a, b| a.1.total_cmp(&b.1))
-                        .map(|(id, _)| id)
-                });
-                if let Some(id) = under.or(self.current) {
-                    edit(e, id, |t| {
-                        t.target[1] = (t.target[1] + wheel * 0.00125).clamp(0.0, MAX_HEIGHT);
-                    });
-                }
-                ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
-            }
         }
     }
 }

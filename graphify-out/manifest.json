@@ -756,21 +756,21 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/touch.rs": {
-    "mtime": 1794347755.9206717,
-    "seen": 1794351231.7150576,
-    "ast_hash": "4af8cc8a89d242d494bd491fdeb9fe82",
+    "mtime": 1794616683.3110607,
+    "seen": 1794616795.76228,
+    "ast_hash": "13d769ba24b2feb394674c843d9adc04",
     "semantic_hash": ""
   },
   "crates/core/src/touch.rs": {
-    "mtime": 1794306605.7182646,
-    "seen": 1794306733.5730042,
-    "ast_hash": "25760cac3ccbb2a15f41e9ce18f88d9a",
+    "mtime": 1794616208.6688275,
+    "seen": 1794616795.762348,
+    "ast_hash": "d33f3958ce2ad69bb54b7cec9fbe925f",
     "semantic_hash": ""
   },
   "docs/TOUCH.md": {
-    "mtime": 1794347755.9206717,
-    "seen": 1794351231.715128,
-    "ast_hash": "cbb6cf6c35641fb48a2fdca0575efecd",
+    "mtime": 1794616682.00974,
+    "seen": 1794616795.7623997,
+    "ast_hash": "7cabadf616dc2a58882c7b79e2239563",
     "semantic_hash": ""
   },
   "crates/app/src/ui/widgets/icon_library.rs": {
@@ -780,15 +780,15 @@
     "semantic_hash": ""
   },
   "crates/app/src/remote/mod.rs": {
-    "mtime": 1794306525.2787697,
-    "seen": 1794306733.5728793,
-    "ast_hash": "5ce064ace433fd2f16a0ca4ac7cdaea6",
+    "mtime": 1794616596.776698,
+    "seen": 1794616795.7621543,
+    "ast_hash": "cbe882ca9d79b1f11c02809125452824",
     "semantic_hash": ""
   },
   "crates/app/src/remote/web/app.js": {
-    "mtime": 1794166426.76233,
-    "seen": 1794168638.2989314,
-    "ast_hash": "77856c6f22594048830698d05b4b9833",
+    "mtime": 1794616563.505398,
+    "seen": 1794616795.7621567,
+    "ast_hash": "4c8bbe6ed8d0ec19c56663bf0de010a0",
     "semantic_hash": ""
   },
   "crates/core/src/audio.rs": {
@@ -1038,9 +1038,9 @@
     "semantic_hash": ""
   },
   "crates/app/src/views/control/tracking.rs": {
-    "mtime": 1794520095.9018335,
-    "seen": 1794520904.8441017,
-    "ast_hash": "55c12e4f3449e17e9ee164baa0c4a410",
+    "mtime": 1794616683.1790607,
+    "seen": 1794616795.7622323,
+    "ast_hash": "7cb6d15e0e843d2c07e4cf6da369a98e",
     "semantic_hash": ""
   },
   "crates/core/src/tracking.rs": {

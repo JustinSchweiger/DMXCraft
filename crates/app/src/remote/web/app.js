@@ -297,6 +297,7 @@ function reflow(items, width) {
       case "label": w = n; h = 1; break;
       case "fader": w = 2; h = 6; break;
       case "color": case "xy": w = n; h = Math.max(4, Math.round(n * 0.7)); break;
+      case "tracking": w = n; h = Math.max(5, Math.round(n * 0.8)); break;
       default: w = i.w >= 2 * i.h && n >= 4 ? 4 : 2; h = 2;
     }
     let r = from, c = 0;
@@ -436,6 +437,126 @@ function xyOf(i) {
   const l = local.get(i.id);
   if (l && l.xy && (l.active || l.until > performance.now())) return l.xy;
   return state && state.xy[i.id];
+}
+
+// Live-Verfolgung: Raum von oben, eingepasst in das Feld (wie RoomMap in
+// views/control/tracking.rs)
+function roomMap(f) {
+  const room = layout && layout.room;
+  if (!room) return null;
+  const xr = room.x, zr = room.z;
+  const w = Math.max(xr[1] - xr[0], 0.1), d = Math.max(zr[1] - zr[0], 0.1);
+  const upright = Math.min(f.w / w, f.h / d), turned = Math.min(f.w / d, f.h / w);
+  const turn = turned > upright * 1.05;
+  const s = Math.max(upright, turned) * 0.97;
+  const rw = turn ? d * s : w * s, rh = turn ? w * s : d * s;
+  const left = f.x + (f.w - rw) / 2, top = f.y + (f.h - rh) / 2;
+  return {
+    room, rect: { x: left, y: top, w: rw, h: rh },
+    toScreen: (x, z) => turn ? [left + (z - zr[0]) * s, top + rh - (x - xr[0]) * s]
+                             : [left + (x - xr[0]) * s, top + (z - zr[0]) * s],
+    toRoom: (px, py) => {
+      const x = turn ? xr[0] + (top + rh - py) / s : xr[0] + (px - left) / s;
+      const z = turn ? zr[0] + (px - left) / s : zr[0] + (py - top) / s;
+      return [clamp(x, xr[0], xr[1]), clamp(z, zr[0], zr[1])];
+    },
+  };
+}
+
+function trackersOf(i) {
+  const list = (state && state.trackers) || [];
+  const l = local.get(i.id);
+  if (!l || !l.track || !(l.active || l.until > performance.now())) return list;
+  return list.map((t) => t.id === l.track.id ? Object.assign({}, t, { x: l.track.x, z: l.track.z }) : t);
+}
+
+function targetAt(i, pt) {
+  const m = roomMap(contentRect(rectOf(i), i));
+  if (!m) return null;
+  let best = null, bestD = 28 / scale;
+  for (const t of trackersOf(i)) {
+    const [x, y] = m.toScreen(t.x, t.z);
+    const dd = Math.hypot(pt.x - x, pt.y - y);
+    if (dd < bestD) { best = t; bestD = dd; }
+  }
+  return best;
+}
+
+function alpha(hexColor, a) {
+  const n = parseInt(hexColor.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+function paintRoom(i, f) {
+  const m = roomMap(f);
+  if (!m) return;
+  const r = m.rect;
+  g.fillStyle = th.bg; rr(r.x, r.y, r.w, r.h, 4); g.fill();
+  g.save(); g.beginPath(); g.rect(f.x - 2, f.y - 2, f.w + 4, f.h + 4); g.clip();
+  g.lineWidth = 1;
+  for (const sh of m.room.shapes) {
+    g.beginPath();
+    sh.pts.forEach(([x, z], k) => { const [px, py] = m.toScreen(x, z); k ? g.lineTo(px, py) : g.moveTo(px, py); });
+    g.closePath();
+    if (sh.truss) { g.strokeStyle = th.text_dim; g.globalAlpha = 0.5; g.stroke(); g.globalAlpha = 1; continue; }
+    g.globalAlpha = 0.35 + 0.65 * sh.shade; g.fillStyle = th.raised; g.fill(); g.globalAlpha = 1;
+    g.strokeStyle = th.border; g.stroke();
+  }
+  g.strokeStyle = th.border; rr(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 4); g.stroke();
+  const trackers = trackersOf(i);
+  const heads = new Map(m.room.heads.map((h) => [h.id, h]));
+  const owner = new Map();
+  for (const t of trackers) for (const fx of t.fixtures) if (!owner.has(fx)) owner.set(fx, t.color);
+  // Strahlen folgender Köpfe
+  for (const t of trackers) {
+    if (!t.active) continue;
+    const [cx, cy] = m.toScreen(t.x, t.z);
+    for (const fx of t.fixtures) {
+      const h = heads.get(fx);
+      if (!h) continue;
+      const [ax, ay] = m.toScreen(h.x, h.z);
+      const len = Math.hypot(cx - ax, cy - ay);
+      if (len < 1) continue;
+      const nx = -(cy - ay) / len * 6, ny = (cx - ax) / len * 6;
+      g.fillStyle = alpha(t.color, 0.18);
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(cx + nx, cy + ny); g.lineTo(cx - nx, cy - ny); g.closePath(); g.fill();
+    }
+  }
+  // Moving Heads
+  for (const h of m.room.heads) {
+    const [x, y] = m.toScreen(h.x, h.z);
+    const c = owner.get(h.id);
+    g.beginPath(); g.arc(x, y, c ? 5.5 : 4.5, 0, Math.PI * 2);
+    if (c) { g.fillStyle = c; g.fill(); g.strokeStyle = th.bg; g.stroke(); }
+    else { g.strokeStyle = th.text_dim; g.stroke(); }
+  }
+  // Ziele
+  for (const t of trackers) {
+    const [cx, cy] = m.toScreen(t.x, t.z);
+    const col = t.active ? t.color : alpha(t.color, 0.55);
+    if (!t.active) {
+      g.strokeStyle = alpha(t.color, 0.3); g.lineWidth = 1;
+      for (const fx of t.fixtures) {
+        const h = heads.get(fx);
+        if (!h) continue;
+        const [ax, ay] = m.toScreen(h.x, h.z);
+        g.beginPath(); g.moveTo(ax, ay); g.lineTo(cx, cy); g.stroke();
+      }
+    }
+    const rad = 12;
+    if (t.active) { g.fillStyle = alpha(t.color, 0.25); g.beginPath(); g.arc(cx, cy, rad, 0, Math.PI * 2); g.fill(); }
+    g.strokeStyle = col; g.lineWidth = 2;
+    g.beginPath(); g.arc(cx, cy, rad, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 1.5; g.beginPath();
+    for (const [vx, vy] of [[1, 0], [0, 1]]) {
+      g.moveTo(cx - vx * (rad + 5), cy - vy * (rad + 5)); g.lineTo(cx - vx * 4, cy - vy * 4);
+      g.moveTo(cx + vx * 4, cy + vy * 4); g.lineTo(cx + vx * (rad + 5), cy + vy * (rad + 5));
+    }
+    g.stroke();
+    g.font = font(12); g.textAlign = "left"; g.textBaseline = "bottom"; g.fillStyle = col;
+    g.fillText(t.name, cx + rad + 7, cy - rad - 3);
+  }
+  g.restore();
 }
 
 function isHot(i) {
@@ -602,6 +723,11 @@ function paintItem(i, r, hot) {
       }
       break;
     }
+    case "tracking": {
+      panel(i, r);
+      paintRoom(i, contentRect(r, i));
+      break;
+    }
     case "xy": {
       panel(i, r);
       const f = contentRect(r, i);
@@ -747,6 +873,18 @@ cv.addEventListener("pointerdown", (ev) => {
       setLocal(i, { active: true });
       fieldMove(i, r, pt, true);
       break;
+    case "tracking": {
+      // Ziel ziehen verschiebt es, Antippen schaltet das Folgen
+      const t = targetAt(i, pt);
+      if (t) {
+        ptr.tracker = t.id;
+        setLocal(i, { active: true, track: { id: t.id, x: t.x, z: t.z } });
+      } else {
+        pointers.delete(ev.pointerId);
+        if (scrollable()) pan = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, px: panX, py: panY };
+      }
+      break;
+    }
   }
   dirty = true;
 });
@@ -787,6 +925,16 @@ cv.addEventListener("pointermove", (ev) => {
     case "xy":
       fieldMove(i, r, pt, false);
       break;
+    case "tracking": {
+      if (!ptr.moved && Math.hypot(ev.clientX - ptr.cx, ev.clientY - ptr.cy) < 8) break;
+      ptr.moved = true;
+      const m = roomMap(contentRect(r, i));
+      if (!m) break;
+      const [x, z] = m.toRoom(pt.x, pt.y);
+      setLocal(i, { track: { id: ptr.tracker, x, z } });
+      send({ t: "track", item: i.id, tracker: ptr.tracker, x, z });
+      break;
+    }
   }
 });
 
@@ -805,6 +953,10 @@ function release(ev) {
     } else {
       sendNow({ t: "press", item: i.id, down: false });
     }
+  } else if (i.kind === "tracking" && !ptr.moved) {
+    if (navigator.vibrate) navigator.vibrate(8);
+    sendNow({ t: "track_toggle", item: i.id, tracker: ptr.tracker });
+    setLocal(i, { active: false, track: null });
   } else {
     // letzten Wert sofort senden, Anzeige kurz halten bis der Server ihn meldet
     flush();

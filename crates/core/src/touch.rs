@@ -212,6 +212,8 @@ pub enum TouchKind {
     Color,
     /// XY pad: sets pan/tilt of the assigned fixtures.
     Xy,
+    /// LIVE TRACKING: the room from above with the targets to drag.
+    Tracking,
 }
 
 impl TouchKind {
@@ -223,6 +225,7 @@ impl TouchKind {
             TouchKind::Fader => (1.0, 4.0),
             TouchKind::Knob => (2.0, 2.0),
             TouchKind::Color | TouchKind::Xy => (4.0, 4.0),
+            TouchKind::Tracking => (6.0, 4.0),
         }
     }
 

@@ -27,6 +27,7 @@ use crate::ui::widgets::dialog::{form, select_all};
 use crate::ui::widgets::icon_library;
 use crate::ui::widgets::menu::{self, MenuItem};
 use crate::ui::widgets::{section_header, text_field, Icon, IconButton, Toggle};
+use crate::views::control::tracking::RoomMap;
 use crate::views::{View, ViewCtx};
 
 /// Pixels of one unit at 100 %.
@@ -37,6 +38,8 @@ const GAP: f32 = 6.0;
 const PAD: f32 = 10.0;
 /// Width of the edit bar on the right.
 const PANEL_W: f32 = 300.0;
+/// LIVE TRACKING: how close (pixels) a touch must be to grab a target.
+const TARGET_GRAB: f32 = 28.0;
 /// Grid steps (pixels at 100 %).
 const GRID_STEPS: [f32; 6] = [12.0, 18.0, 24.0, 36.0, 48.0, 72.0];
 
@@ -84,6 +87,8 @@ pub struct TouchView {
     held: Vec<u32>,
     textures: HashMap<u32, egui::TextureHandle>,
     image_dialog: Option<(ImageTarget, Receiver<Option<PathBuf>>)>,
+    /// LIVE TRACKING: the target being dragged (element, tracker).
+    track_drag: Option<(u32, u32)>,
 }
 
 impl Default for TouchView {
@@ -97,6 +102,7 @@ impl Default for TouchView {
             held: Vec::new(),
             textures: HashMap::new(),
             image_dialog: None,
+            track_drag: None,
         }
     }
 }
@@ -837,6 +843,39 @@ impl TouchView {
                 }
                 paint_item(p, cx.engine, cx.state, states, item, rect, 0.0, false, tex);
             }
+            TouchKind::Tracking => {
+                // drag a target to move it, tap it to switch following
+                let resp = ui.interact(rect, id, Sense::click_and_drag());
+                let map = RoomMap::new(cx.engine.show(), content_rect(rect, item));
+                if resp.drag_started() {
+                    let origin = ui.input(|i| i.pointer.press_origin());
+                    self.track_drag = origin
+                        .and_then(|o| map.target_at(cx.engine.show(), o, TARGET_GRAB))
+                        .map(|tr| (item.id, tr));
+                }
+                let dragging = self.track_drag.filter(|(i, _)| *i == item.id);
+                if let (Some((_, tr)), Some(pos)) = (dragging, resp.interact_pointer_pos()) {
+                    if resp.dragged() {
+                        let [x, z] = map.to_room(pos);
+                        if let Some(t) = cx.engine.show_mut().tracker_mut(tr) {
+                            t.target[0] = x;
+                            t.target[2] = z;
+                        }
+                    }
+                }
+                if resp.drag_stopped() && dragging.is_some() {
+                    self.track_drag = None;
+                }
+                if resp.clicked() {
+                    let hit = resp
+                        .interact_pointer_pos()
+                        .and_then(|pos| map.target_at(cx.engine.show(), pos, TARGET_GRAB));
+                    if let Some(t) = hit.and_then(|tr| cx.engine.show_mut().tracker_mut(tr)) {
+                        t.active = !t.active;
+                    }
+                }
+                paint_item(p, cx.engine, cx.state, states, item, rect, 0.0, false, tex);
+            }
         }
     }
 
@@ -871,6 +910,7 @@ impl TouchView {
                     (TouchKind::Label, "x", t("Label")),
                     (TouchKind::Color, "palette", t("Color wheel")),
                     (TouchKind::Xy, "plus", t("XY pad")),
+                    (TouchKind::Tracking, "person", t("Live tracking")),
                 ];
                 let w = (ui.available_width() - 2.0 * theme::SP_S) / 3.0;
                 for row in kinds.chunks(3) {
@@ -1067,7 +1107,7 @@ impl TouchView {
             }
         });
         let show = cx.engine.show();
-        if item.kind != TouchKind::Label {
+        if !matches!(item.kind, TouchKind::Label | TouchKind::Tracking) {
             let text = if item.kind.uses_fixtures() {
                 match item.fixtures.len() {
                     0 => t("no devices").to_string(),
@@ -1452,7 +1492,7 @@ fn target_entry(ui: &mut Ui, show: &Show, item: &TouchItem) {
         } else {
             names.join(", ")
         }
-    } else if item.kind == TouchKind::Label {
+    } else if matches!(item.kind, TouchKind::Label | TouchKind::Tracking) {
         return;
     } else {
         item_target(show, item)
@@ -1541,6 +1581,7 @@ fn kind_name(k: TouchKind) -> &'static str {
         TouchKind::Knob => t("Knob"),
         TouchKind::Color => t("Color wheel"),
         TouchKind::Xy => t("XY pad"),
+        TouchKind::Tracking => t("Live tracking"),
     }
 }
 
@@ -1931,6 +1972,25 @@ fn paint_item(
                 p.circle_filled(m, 8.0, accent);
                 p.circle_stroke(m, 8.0, Stroke::new(2.0, Color32::WHITE));
             }
+        }
+        TouchKind::Tracking => {
+            p.rect_filled(rect, theme::R_M, theme::raised());
+            if !item.label.is_empty() {
+                p.text(
+                    rect.left_top() + vec2(10.0, 15.0),
+                    Align2::LEFT_CENTER,
+                    &item.label,
+                    theme::body(),
+                    item.text_color.map(theme::rgb).unwrap_or(theme::text()),
+                );
+            }
+            let field = content_rect(rect, item);
+            RoomMap::new(show, field).paint(
+                &p.with_clip_rect(field.expand(2.0)),
+                show,
+                None,
+                false,
+            );
         }
     }
 }
