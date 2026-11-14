@@ -305,6 +305,6 @@ mod tests {
         assert!(fires.is_empty(), "taken, the element does not run it again");
         // the next frame reports it as on
         apply(&mut fires, &mut states, &mut e, &mut st);
-        assert_eq!(states[&ui_key(&format!("tracking/{id}/follow"))], true);
+        assert!(states[&ui_key(&format!("tracking/{id}/follow"))]);
     }
 }
