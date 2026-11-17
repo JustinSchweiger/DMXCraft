@@ -359,7 +359,7 @@ fn audio(ui: &mut Ui, s: &mut Settings, ch: &mut SettingsChanges) {
     ch.save |= ui
         .add(Toggle::new(
             &mut s.audio_fade_stop,
-            t("Stop SUPER SCENES with sound after fading out"),
+            t("Stop SUPER SCENES with sound and the SOUND tab after fading out"),
         ))
         .changed();
     ui.add_space(theme::SP_M);

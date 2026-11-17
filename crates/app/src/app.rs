@@ -1326,7 +1326,10 @@ impl eframe::App for DmxCraftApp {
             cx.engine.set_timeline_cursor(cx.state.timeline_cursor);
             let scrubbing = cx.state.audio.scrubbing;
             cx.state.obs.update(cx.engine, scrubbing, &ctx);
-            cx.state.audio.update(cx.engine, &self.settings);
+            if cx.state.audio.update(cx.engine, &self.settings) {
+                // faded out: the SOUND tab stops as well
+                cx.state.sound.stop_playing();
+            }
             if cx.state.audio.fading() {
                 ctx.request_repaint();
             }

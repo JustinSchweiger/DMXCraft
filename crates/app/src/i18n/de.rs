@@ -1301,7 +1301,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Audio", "Ton"),
     ("Starting a SUPER SCENE resets the sound master to 100 %", "Start einer SUPER SCENE setzt den Ton-Master auf 100 %"),
     ("A MIDI fader on the sound master only takes effect again once it reaches the current value – so it never jumps.", "Ein MIDI-Fader auf dem Ton-Master wirkt danach erst wieder, wenn er den aktuellen Wert erreicht – er springt also nicht."),
-    ("Stop SUPER SCENES with sound after fading out", "Nach dem Ausfaden die SUPER SCENES mit Ton stoppen"),
+    ("Stop SUPER SCENES with sound and the SOUND tab after fading out", "Nach dem Ausfaden die SUPER SCENES mit Ton und den SOUND-Tab stoppen"),
     ("Sound master", "Ton-Master"),
     ("Mute sound", "Ton stumm"),
     ("Fade out sound", "Ton ausfaden"),

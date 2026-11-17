@@ -26,7 +26,10 @@ volumes, settings); playback itself is not.
 The crossfader mixes A and B (center = both full). “Crossfade to …” starts
 the other player and fades over in the set time; the previous one stops
 afterwards. **Master** controls all players and pads; the sound master in the
-title bar applies as well.
+title bar applies as well. “Fade out sound” (title bar, MIDI) fades it too;
+with “Stop SUPER SCENES with sound and the SOUND tab after fading out”
+(settings) all players and pads stop once the fade is over, so nothing comes
+back when the sound master is raised again.
 
 ## Pads
 

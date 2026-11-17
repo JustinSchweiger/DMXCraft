@@ -408,6 +408,18 @@ impl SoundPlayer {
         self.pads.clear();
     }
 
+    /// Stop all players and pads but keep the loaded tracks (e.g. after
+    /// “Fade out sound”).
+    pub fn stop_playing(&mut self) {
+        for d in 0..self.decks.len() {
+            if self.decks[d].player.is_some() {
+                self.stop(d);
+            }
+        }
+        self.pads.clear();
+        self.xfade_run = None;
+    }
+
     /// Stop everything (e.g. when the show is closed).
     pub fn stop_all(&mut self) {
         self.pads.clear();

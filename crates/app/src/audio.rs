@@ -226,11 +226,15 @@ impl AudioPlayer {
     }
 
     /// Adapt playback to the running SUPER SCENES.
-    pub fn update(&mut self, e: &mut Engine, settings: &crate::settings::Settings) {
+    /// Returns `true` when a fade-out has just finished and everything playing
+    /// should stop (setting “Stop … after fading out”); the caller then stops
+    /// the SOUND tab as well.
+    pub fn update(&mut self, e: &mut Engine, settings: &crate::settings::Settings) -> bool {
         let scrubbing = std::mem::take(&mut self.scrubbing);
         self.fade_ms = settings.audio_fade_ms;
         self.limit = f32::from(settings.audio_limit_pct.clamp(1, 100)) / 100.0;
-        if self.tick(e, settings.audio_reset_on_start) && settings.audio_fade_stop {
+        let stop = self.tick(e, settings.audio_reset_on_start) && settings.audio_fade_stop;
+        if stop {
             // faded out: stop SUPER SCENES with audio (incl. “Jump to”)
             let with_audio: Vec<SceneId> = e
                 .show()
@@ -275,7 +279,7 @@ impl AudioPlayer {
         }
         self.sinks.retain(|k, _| wanted.contains_key(k));
         if wanted.is_empty() {
-            return;
+            return stop;
         }
         if self.stream.is_none() && !self.stream_failed {
             match rodio::OutputStreamBuilder::open_default_stream() {
@@ -287,7 +291,7 @@ impl AudioPlayer {
             }
         }
         let Some(stream) = &self.stream else {
-            return;
+            return stop;
         };
         for (key, (path, pos, vol, rate)) in wanted {
             let vol = vol.clamp(0.0, 1.0);
@@ -331,6 +335,7 @@ impl AudioPlayer {
             }
             p.sink.play();
         }
+        stop
     }
 }
 
