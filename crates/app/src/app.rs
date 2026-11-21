@@ -92,8 +92,8 @@ pub struct DmxCraftApp {
     fullscreen: Fullscreen,
     /// Toggle fullscreen in the next frame.
     toggle_fullscreen: bool,
-    /// Last detected USB DMX interfaces (for the settings).
-    usb_ports: Vec<dmxcraft_output::UsbDmxPort>,
+    /// Last detected DMX interfaces (for the settings).
+    usb_ports: Vec<dmxcraft_output::DmxDevice>,
     /// State of the show at the last load/save (for “unsaved”).
     saved_show: Show,
     /// Question “Save before closing?” open.
@@ -490,7 +490,7 @@ impl DmxCraftApp {
                 e.set_blackout(!bo);
             }
             MenuAction::Settings => {
-                self.usb_ports = dmxcraft_output::list_ports();
+                self.usb_ports = dmxcraft_output::list_devices();
                 self.settings_open = true;
             }
             MenuAction::CheckUpdates => self.updater.check(ctx.clone(), true),

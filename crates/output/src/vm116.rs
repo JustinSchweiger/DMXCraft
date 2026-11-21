@@ -17,13 +17,12 @@
 //! Firmware upgrades with 64-byte reports exist; they also understand the
 //! standard 8-byte reports used here.
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dmxcraft_core::UNIVERSE_SIZE;
 
-use crate::open_dmx::{Shared, UsbDmxPort, UsbDriver};
+use crate::devices::{DmxDevice, Driver, Shared};
 
 /// USB vendor ID of Velleman.
 pub const VM116_VENDOR_ID: u16 = 0x10CF;
@@ -118,7 +117,7 @@ fn devices(api: &hidapi::HidApi) -> impl Iterator<Item = &hidapi::DeviceInfo> {
 }
 
 /// Lists the connected VM116 / K8062 interfaces.
-pub fn list() -> Vec<UsbDmxPort> {
+pub fn list() -> Vec<DmxDevice> {
     let Ok(api) = hidapi::HidApi::new() else {
         return Vec::new();
     };
@@ -140,12 +139,13 @@ pub fn list() -> Vec<UsbDmxPort> {
             } else {
                 "Velleman VM116 / K8062".to_string()
             };
-            Some(UsbDmxPort {
+            Some(DmxDevice {
                 key,
                 port_name: path,
                 label,
                 ftdi: false,
-                driver: UsbDriver::Vm116,
+                driver: Driver::Vm116,
+                recognized: true,
             })
         })
         .collect()
@@ -175,7 +175,7 @@ pub(crate) fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
     let name = key.trim_start_matches(KEY_PREFIX).to_string();
     let label = if name.len() > 24 { "VM116" } else { &name };
     let mut api: Option<hidapi::HidApi> = None;
-    while !shared.stop.load(Ordering::Relaxed) {
+    while !shared.stopped() {
         let api = match &mut api {
             Some(a) => {
                 let _ = a.refresh_devices();
@@ -200,9 +200,9 @@ pub(crate) fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
         };
         shared.set_connected();
         let mut buf = [0u8; REPORT_SIZE + 1]; // report ID 0 + report
-        'frames: while !shared.stop.load(Ordering::Relaxed) {
+        'frames: while !shared.stopped() {
             let start = Instant::now();
-            let channels = shared.data.lock().map(|d| *d).unwrap_or([0; UNIVERSE_SIZE]);
+            let channels = shared.channels();
             for report in encode_frame(&channels) {
                 buf[1..].copy_from_slice(&report);
                 if let Err(e) = device.write(&buf) {
@@ -217,7 +217,6 @@ pub(crate) fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
             }
         }
     }
-    shared.connected.store(false, Ordering::Relaxed);
 }
 
 #[cfg(test)]

@@ -33,9 +33,12 @@ pub struct Settings {
     pub open_last_show: bool,
     /// Selected output: "simulation" or "open_dmx".
     pub output: String,
-    /// USB DMX: per universe (index) the key of the interface (serial number of
-    /// the cable, `vm116:…` for a Velleman VM116), empty = none.
+    /// Per universe (index) the key of the DMX interface (serial number of
+    /// a cable, `pro:…`, `vm116:…`, `udmx:…`, `artnet`, `sacn`), empty = none.
     pub open_dmx: Vec<String>,
+    /// Destination of Art-Net packets (`host` or `host:port`, empty =
+    /// broadcast).
+    pub artnet_target: String,
     /// Wrap scenes at the bottom into more columns (instead of scrolling).
     pub wrap_scenes: bool,
     /// Scene sidebar hidden (only its tab bar is shown).
@@ -100,6 +103,7 @@ impl Default for Settings {
             open_last_show: true,
             output: "simulation".into(),
             open_dmx: Vec::new(),
+            artnet_target: String::new(),
             wrap_scenes: false,
             hide_scene_props: false,
             hide_programmer: false,
@@ -141,10 +145,10 @@ fn default_instance_name() -> String {
 pub const RECENT_MAX: usize = 8;
 
 impl Settings {
-    /// Active output: USB DMX as soon as a cable belongs to a universe.
+    /// Active output: DMX interfaces as soon as one belongs to a universe.
     pub fn output_kind(&self) -> dmxcraft_output::OutputKind {
         if self.open_dmx.iter().any(|k| !k.is_empty()) {
-            dmxcraft_output::OutputKind::OpenDmx
+            dmxcraft_output::OutputKind::Devices
         } else {
             dmxcraft_output::OutputKind::Simulation
         }
@@ -156,13 +160,19 @@ impl Settings {
             open_dmx: (0..usize::from(dmxcraft_core::UNIVERSES))
                 .map(|u| self.open_dmx.get(u).filter(|k| !k.is_empty()).cloned())
                 .collect(),
+            network: dmxcraft_output::NetworkConfig {
+                artnet_target: self.artnet_target.trim().to_string(),
+            },
         }
     }
 
-    /// Assign a cable to a universe (`None` = none). A cable can only belong to
-    /// one universe.
+    /// Assign an interface to a universe (`None` = none). A device can only
+    /// belong to one universe; network outputs serve any number.
     pub fn assign_open_dmx(&mut self, universe: usize, key: Option<String>) {
-        if let Some(k) = &key {
+        if let Some(k) = key
+            .as_ref()
+            .filter(|k| !dmxcraft_output::Driver::for_key(k).is_network())
+        {
             for slot in &mut self.open_dmx {
                 if slot == k {
                     slot.clear();
@@ -314,9 +324,13 @@ mod tests {
         assert_eq!(cfg.open_dmx[0], None);
         assert_eq!(cfg.open_dmx[1].as_deref(), Some("A"));
         assert_eq!(cfg.open_dmx.len(), 8);
-        assert_eq!(s.output_kind(), dmxcraft_output::OutputKind::OpenDmx);
+        assert_eq!(s.output_kind(), dmxcraft_output::OutputKind::Devices);
         s.assign_open_dmx(1, None);
         assert!(s.open_dmx.is_empty());
         assert_eq!(s.output_kind(), dmxcraft_output::OutputKind::Simulation);
+        // Network outputs may serve several universes
+        s.assign_open_dmx(0, Some("artnet".into()));
+        s.assign_open_dmx(2, Some("artnet".into()));
+        assert_eq!(s.open_dmx, ["artnet", "", "artnet"]);
     }
 }

@@ -7,7 +7,7 @@
 use crate::i18n::t;
 use crate::midi_device::{DeviceModel, MidiDevice};
 use dmxcraft_core::{Engine, UNIVERSES};
-use dmxcraft_output::UsbDmxPort;
+use dmxcraft_output::DmxDevice;
 use eframe::egui::{self, pos2, vec2, Align2, Sense, Stroke, Ui};
 
 use crate::i18n::{self, Lang};
@@ -105,7 +105,7 @@ pub struct SettingsWindow {
 pub struct SettingsCx<'a> {
     pub settings: &'a mut Settings,
     pub engine: &'a mut Engine,
-    pub usb_ports: &'a mut Vec<UsbDmxPort>,
+    pub usb_ports: &'a mut Vec<DmxDevice>,
     pub show_path: &'a str,
     pub mcp: &'a crate::mcp::McpStatus,
     pub remote: &'a crate::remote::RemoteLink,
@@ -696,12 +696,12 @@ fn outputs(
     ui: &mut Ui,
     s: &mut Settings,
     e: &Engine,
-    ports: &mut Vec<UsbDmxPort>,
+    ports: &mut Vec<DmxDevice>,
     ch: &mut SettingsChanges,
 ) {
     ui.horizontal(|ui| {
         ui.label(theme::heading_text(t("Universes"))).on_hover_text(
-            t("One USB DMX interface per universe: Open DMX / FTDI cable or Velleman VM116 / K8062. The assignment follows the device's serial number and survives replugging."),
+            t("One DMX interface per universe: USB (Open DMX / FTDI, DMX USB Pro, Velleman VM116, uDMX) or the network (Art-Net, sACN). The assignment follows the device's serial number and survives replugging. Over the network universe 1 is Art-Net port address 0 and sACN universe 1."),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
@@ -709,9 +709,12 @@ fn outputs(
                 .on_hover_text(t("Search for devices again"))
                 .clicked()
             {
-                *ports = dmxcraft_output::list_ports();
+                *ports = dmxcraft_output::list_devices();
             }
-            let n = ports.iter().filter(|p| p.is_dmx()).count();
+            let n = ports
+                .iter()
+                .filter(|p| p.recognized && !p.driver.is_network())
+                .count();
             ui.label(
                 egui::RichText::new(match n {
                     0 => t("no USB DMX interface found").to_string(),
@@ -759,7 +762,7 @@ fn outputs(
                     full_combo(ui, ("settings_universe", u), text, |ui| {
                         ui.selectable_value(&mut picked, None, t("– no device –"));
                         for p in ports.iter() {
-                            let label = if p.is_dmx() {
+                            let label = if p.ftdi || !p.driver.is_serial() {
                                 p.label.clone()
                             } else {
                                 tr!("{label} (not FTDI)", label = p.label)
@@ -790,6 +793,25 @@ fn outputs(
                 ui.end_row();
             }
         });
+
+    section(ui, t("Network"));
+    form(ui, "settings_network", |f| {
+        f.row(t("Art-Net destination"), |ui| {
+            let r = ui.add(
+                egui::TextEdit::singleline(&mut s.artnet_target)
+                    .hint_text(t("255.255.255.255 (broadcast)"))
+                    .desired_width(220.0),
+            );
+            if r.lost_focus() {
+                ch.save = true;
+                ch.restart_output = true;
+            }
+        });
+    });
+    hint(
+        ui,
+        t("Art-Net goes to this address (a node's IP or a broadcast address such as 2.255.255.255), sACN to the multicast group of each universe."),
+    );
 }
 
 fn midi(

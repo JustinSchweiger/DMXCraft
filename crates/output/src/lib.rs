@@ -2,19 +2,25 @@
 //!
 //! Everything that sends DMX data somewhere implements [`DmxOutput`].
 //! The [`Runtime`] thread clocks the engine and sends every frame to the
-//! chosen backend: simulation or USB DMX interfaces ([`open_dmx`] for Open
-//! DMX / FTDI cables, [`vm116`] for the Velleman VM116 / K8062).
+//! chosen backend: simulation or DMX interfaces ([`DeviceOutput`], one per
+//! universe): [`open_dmx`] for Open DMX / FTDI cables, [`enttec_pro`] for
+//! the Enttec DMX USB Pro and compatibles, [`vm116`] for the Velleman VM116 /
+//! K8062, [`udmx`] for the uDMX, [`network`] for Art-Net and sACN.
 
 pub mod backends;
+pub mod devices;
+pub mod enttec_pro;
+pub mod network;
 pub mod open_dmx;
 pub mod runtime;
+pub mod udmx;
 pub mod vm116;
 
 use dmxcraft_core::DmxFrame;
 use thiserror::Error;
 
 pub use backends::{NullOutput, RecordingOutput};
-pub use open_dmx::{list_ports, OpenDmx, UsbDmxPort, UsbDriver};
+pub use devices::{list_devices, DeviceOutput, DmxDevice, Driver, NetworkConfig};
 pub use runtime::{OutputStatus, Runtime};
 
 #[derive(Debug, Error)]
@@ -49,26 +55,29 @@ pub trait DmxOutput: Send {
 /// Settings for the outputs.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OutputConfig {
-    /// USB DMX: per universe (index) the key of the interface (serial number
-    /// of an FTDI cable, `vm116:…` for a Velleman VM116).
+    /// Per universe (index) the key of the DMX interface (see
+    /// [`devices`]).
     pub open_dmx: Vec<Option<String>>,
+    /// Settings of Art-Net and sACN.
+    pub network: NetworkConfig,
 }
 
 /// Available outputs for the selection in the UI.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputKind {
     Simulation,
-    OpenDmx,
+    /// DMX interfaces (USB and network), one per universe.
+    Devices,
 }
 
 impl OutputKind {
     /// Outputs offered for selection.
-    pub const ALL: [OutputKind; 2] = [OutputKind::Simulation, OutputKind::OpenDmx];
+    pub const ALL: [OutputKind; 2] = [OutputKind::Simulation, OutputKind::Devices];
 
     pub fn label(self) -> &'static str {
         match self {
             OutputKind::Simulation => "Simulation (no device)",
-            OutputKind::OpenDmx => "USB DMX interface",
+            OutputKind::Devices => "DMX interfaces",
         }
     }
 
@@ -76,7 +85,7 @@ impl OutputKind {
     pub fn key(self) -> &'static str {
         match self {
             OutputKind::Simulation => "simulation",
-            OutputKind::OpenDmx => "open_dmx",
+            OutputKind::Devices => "open_dmx",
         }
     }
 
@@ -90,7 +99,10 @@ impl OutputKind {
     pub fn create(self, config: &OutputConfig) -> Box<dyn DmxOutput> {
         match self {
             OutputKind::Simulation => Box::new(NullOutput::default()),
-            OutputKind::OpenDmx => Box::new(OpenDmx::new(config.open_dmx.clone())),
+            OutputKind::Devices => Box::new(DeviceOutput::new(
+                config.open_dmx.clone(),
+                config.network.clone(),
+            )),
         }
     }
 }

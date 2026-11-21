@@ -42,7 +42,7 @@ a sound player and a live 3D visualizer. Output goes through inexpensive USB-DMX
 | 🎹 **Control** | Keyboard, MIDI and a freely designed touch surface |
 | 📺 **OBS** | Play videos from SUPER SCENES in an OBS browser source in sync with sound and light, and switch OBS scenes |
 | 🤖 **AI assistant** | Built-in MCP server: let an AI assistant patch fixtures and program scenes |
-| 🔌 **Output** | Up to 8 universes over USB-DMX (Open DMX / FTDI cables, Velleman VM116 / K8062), one interface per universe, or simulation |
+| 🔌 **Output** | Up to 8 universes over USB-DMX (Open DMX / FTDI, Enttec DMX USB Pro and compatibles, Velleman VM116, uDMX), Art-Net or sACN, or simulation |
 | 💾 **Safe** | Auto-save in the background, recovery of unsaved changes after a crash, crash log (`crash.log` in the settings folder) |
 | 🌍 **Everywhere** | English and German UI, installers and auto-update for all three systems |
 
@@ -102,7 +102,7 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/JustinSchweiger/DMXCraf
 The same command works on macOS if you prefer a terminal install without an app bundle.
 </details>
 
-### USB-DMX interfaces
+### DMX interfaces
 
 Plug in the interface and assign it to a universe under *Edit → Settings … → Outputs*. Without
 an assignment DMXCraft runs in simulation mode. Supported:
@@ -110,22 +110,35 @@ an assignment DMXCraft runs in simulation mode. Supported:
 | Interface | How it is driven |
 |---|---|
 | Open DMX USB and clones (FTDI FT232R, e.g. Enttec Open DMX, DSD TECH SH-RS09B) | serial port, DMXCraft generates the DMX timing |
+| Enttec DMX USB Pro and compatibles (DMXking ultraDMX Micro / Pro, clones) | serial port, one message per frame (Pro API label 6) |
 | Velleman VM116 / K8062 | USB HID (no driver needed), 8-byte reports with zero compression |
+| uDMX (Anyma and clones) | USB vendor requests |
+| Art-Net | UDP to a node or a broadcast address (*Art-Net destination*) |
+| sACN / E1.31 | UDP multicast, group of the universe |
 
-Every interface serves one universe; the assignment follows the serial number. The VM116 has no
-serial number: a single VM116 is found again after replugging; with several of them check the
-assignment after replugging.
+Every USB interface serves one universe; the assignment follows the serial number. The Open DMX
+cable and the DMX USB Pro use the same FTDI chip, so every serial device is listed twice
+(*· Open DMX* and *· DMX USB Pro*) – pick the entry that matches your interface. Devices without a
+serial number (VM116, most uDMX) are found again after replugging as long as only one of them is
+connected. Art-Net and sACN can serve several universes: universe 1 is Art-Net port address 0
+(net 0, sub-net 0, universe 0) and sACN universe 1.
 
-On Linux your user needs access to the devices. Open DMX cables (`/dev/ttyUSB*`):
+**Windows:** the uDMX needs the WinUSB driver once: install it with [Zadig](https://zadig.akeo.ie/)
+(select the uDMX, driver *WinUSB*). All other interfaces work with the system drivers.
+
+**Linux:** your user needs access to the devices. Serial interfaces (`/dev/ttyUSB*`):
 
 ```sh
 sudo usermod -aG dialout $USER   # then log out and back in
 ```
 
-Velleman VM116 (`/dev/hidraw*`) – a udev rule, then replug the interface:
+Velleman VM116 and uDMX – udev rules, then replug the interface:
 
 ```sh
-echo 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="10cf", ATTRS{idProduct}=="8062", MODE="0660", TAG+="uaccess"'   | sudo tee /etc/udev/rules.d/60-dmxcraft-vm116.rules
+sudo tee /etc/udev/rules.d/60-dmxcraft.rules <<'RULES'
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="10cf", ATTRS{idProduct}=="8062", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="05dc", ATTRS{product}=="uDMX", MODE="0660", TAG+="uaccess"
+RULES
 sudo udevadm control --reload-rules
 ```
 
@@ -159,7 +172,7 @@ process still running from the build folder (a running `.exe` cannot be overwrit
 ```
 crates/
   core/    data model, engine, effects, timeline, audio analysis (no I/O)
-  output/  output thread and backends (simulation, USB-DMX: Open DMX, VM116)
+  output/  output thread and backends (simulation, USB-DMX, Art-Net, sACN)
   ofl/     fixture library (Open Fixture Library, QLC+)
   mcp/     MCP server
   app/     user interface (egui), 3D visualizer, updater
