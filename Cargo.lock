@@ -755,7 +755,7 @@ dependencies = [
 
 [[package]]
 name = "dmxcraft"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "axoupdater",
  "bytemuck",
@@ -786,7 +786,7 @@ dependencies = [
 
 [[package]]
 name = "dmxcraft-core"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "roxmltree 0.20.0",
  "serde",
@@ -796,7 +796,7 @@ dependencies = [
 
 [[package]]
 name = "dmxcraft-mcp"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "dmxcraft-core",
  "dmxcraft-ofl",
@@ -807,7 +807,7 @@ dependencies = [
 
 [[package]]
 name = "dmxcraft-ofl"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "dmxcraft-core",
  "flate2",
@@ -819,7 +819,7 @@ dependencies = [
 
 [[package]]
 name = "dmxcraft-output"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "dmxcraft-core",
  "hidapi",
