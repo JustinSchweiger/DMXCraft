@@ -17,7 +17,7 @@
 //! Firmware upgrades with 64-byte reports exist; they also understand the
 //! standard 8-byte reports used here.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use dmxcraft_core::UNIVERSE_SIZE;
@@ -111,6 +111,25 @@ fn key_of(dev: &hidapi::DeviceInfo) -> (String, bool) {
     }
 }
 
+/// The one hidapi context of the program. hidapi is not thread-safe for
+/// enumerating and opening (on macOS all threads share one `IOHIDManager`;
+/// concurrent use crashes the process), so every call goes through this lock.
+static HID: Mutex<Option<hidapi::HidApi>> = Mutex::new(None);
+
+/// Runs `f` with the hidapi context, its device list refreshed to the
+/// connected VM116 interfaces.
+fn with_hid<R>(f: impl FnOnce(&hidapi::HidApi) -> R) -> Result<R, String> {
+    let mut guard = HID.lock().unwrap_or_else(|p| p.into_inner());
+    let api = match guard.as_mut() {
+        Some(api) => api,
+        None => guard.insert(hidapi::HidApi::new().map_err(|e| e.to_string())?),
+    };
+    api.reset_devices().map_err(|e| e.to_string())?;
+    api.add_devices(VM116_VENDOR_ID, VM116_PRODUCT_ID)
+        .map_err(|e| e.to_string())?;
+    Ok(f(api))
+}
+
 fn devices(api: &hidapi::HidApi) -> impl Iterator<Item = &hidapi::DeviceInfo> {
     api.device_list()
         .filter(|d| d.vendor_id() == VM116_VENDOR_ID && d.product_id() == VM116_PRODUCT_ID)
@@ -118,11 +137,12 @@ fn devices(api: &hidapi::HidApi) -> impl Iterator<Item = &hidapi::DeviceInfo> {
 
 /// Lists the connected VM116 / K8062 interfaces.
 pub fn list() -> Vec<DmxDevice> {
-    let Ok(api) = hidapi::HidApi::new() else {
-        return Vec::new();
-    };
+    with_hid(list_in).unwrap_or_default()
+}
+
+fn list_in(api: &hidapi::HidApi) -> Vec<DmxDevice> {
     let mut seen = Vec::new();
-    devices(&api)
+    devices(api)
         .filter_map(|d| {
             let path = d.path().to_string_lossy().into_owned();
             // Some systems list a device once per HID collection
@@ -174,23 +194,8 @@ fn open(api: &hidapi::HidApi, key: &str) -> Result<hidapi::HidDevice, String> {
 pub(crate) fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
     let name = key.trim_start_matches(KEY_PREFIX).to_string();
     let label = if name.len() > 24 { "VM116" } else { &name };
-    let mut api: Option<hidapi::HidApi> = None;
     while !shared.stopped() {
-        let api = match &mut api {
-            Some(a) => {
-                let _ = a.refresh_devices();
-                a
-            }
-            None => match hidapi::HidApi::new() {
-                Ok(a) => api.insert(a),
-                Err(e) => {
-                    shared.set_error(format!("Universe {}: USB HID: {e}", universe + 1));
-                    std::thread::sleep(RETRY);
-                    continue;
-                }
-            },
-        };
-        let device = match open(api, &key) {
+        let device = match with_hid(|api| open(api, &key)).and_then(|r| r) {
             Ok(d) => d,
             Err(e) => {
                 shared.set_error(format!("Universe {}: VM116 {label}: {e}", universe + 1));
@@ -216,6 +221,9 @@ pub(crate) fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
                 std::thread::sleep(MIN_FRAME - elapsed);
             }
         }
+        // Closing also talks to the shared HID state
+        let _guard = HID.lock().unwrap_or_else(|p| p.into_inner());
+        drop(device);
     }
 }
 
@@ -294,6 +302,24 @@ mod tests {
                 };
             }
             roundtrip(ch);
+        }
+    }
+
+    /// Listing from several threads at once (UI and reconnecting send
+    /// threads) must not crash; hidapi on macOS is not thread-safe.
+    #[test]
+    fn listing_from_many_threads() {
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                std::thread::spawn(|| {
+                    for _ in 0..5 {
+                        let _ = list();
+                    }
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
         }
     }
 
