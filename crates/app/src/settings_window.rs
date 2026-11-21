@@ -701,7 +701,7 @@ fn outputs(
 ) {
     ui.horizontal(|ui| {
         ui.label(theme::heading_text(t("Universes"))).on_hover_text(
-            t("One USB DMX cable (Open DMX / FTDI) per universe. The assignment follows the cable's serial number and survives replugging."),
+            t("One USB DMX interface per universe: Open DMX / FTDI cable or Velleman VM116 / K8062. The assignment follows the device's serial number and survives replugging."),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
@@ -711,12 +711,12 @@ fn outputs(
             {
                 *ports = dmxcraft_output::list_ports();
             }
-            let n = ports.iter().filter(|p| p.ftdi).count();
+            let n = ports.iter().filter(|p| p.is_dmx()).count();
             ui.label(
                 egui::RichText::new(match n {
-                    0 => t("no USB DMX cable found").to_string(),
-                    1 => t("1 cable found").to_string(),
-                    n => tr!("{n} cables found", n = n),
+                    0 => t("no USB DMX interface found").to_string(),
+                    1 => t("1 interface found").to_string(),
+                    n => tr!("{n} interfaces found", n = n),
                 })
                 .color(theme::text_dim()),
             );
@@ -759,7 +759,7 @@ fn outputs(
                     full_combo(ui, ("settings_universe", u), text, |ui| {
                         ui.selectable_value(&mut picked, None, t("– no device –"));
                         for p in ports.iter() {
-                            let label = if p.ftdi {
+                            let label = if p.is_dmx() {
                                 p.label.clone()
                             } else {
                                 tr!("{label} (not FTDI)", label = p.label)

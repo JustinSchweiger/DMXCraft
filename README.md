@@ -42,7 +42,7 @@ a sound player and a live 3D visualizer. Output goes through inexpensive USB-DMX
 | 🎹 **Control** | Keyboard, MIDI and a freely designed touch surface |
 | 📺 **OBS** | Play videos from SUPER SCENES in an OBS browser source in sync with sound and light, and switch OBS scenes |
 | 🤖 **AI assistant** | Built-in MCP server: let an AI assistant patch fixtures and program scenes |
-| 🔌 **Output** | Up to 8 universes over USB-DMX (Open DMX / FTDI), one cable per universe, or simulation |
+| 🔌 **Output** | Up to 8 universes over USB-DMX (Open DMX / FTDI cables, Velleman VM116 / K8062), one interface per universe, or simulation |
 | 💾 **Safe** | Auto-save in the background, recovery of unsaved changes after a crash, crash log (`crash.log` in the settings folder) |
 | 🌍 **Everywhere** | English and German UI, installers and auto-update for all three systems |
 
@@ -102,13 +102,31 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/JustinSchweiger/DMXCraf
 The same command works on macOS if you prefer a terminal install without an app bundle.
 </details>
 
-### USB-DMX cables
+### USB-DMX interfaces
 
-Plug in the cable and assign it to a universe under *Edit → Settings … → Outputs*. Without an
-assignment DMXCraft runs in simulation mode. On Linux your user needs access to `/dev/ttyUSB*`:
+Plug in the interface and assign it to a universe under *Edit → Settings … → Outputs*. Without
+an assignment DMXCraft runs in simulation mode. Supported:
+
+| Interface | How it is driven |
+|---|---|
+| Open DMX USB and clones (FTDI FT232R, e.g. Enttec Open DMX, DSD TECH SH-RS09B) | serial port, DMXCraft generates the DMX timing |
+| Velleman VM116 / K8062 | USB HID (no driver needed), 8-byte reports with zero compression |
+
+Every interface serves one universe; the assignment follows the serial number. The VM116 has no
+serial number: a single VM116 is found again after replugging; with several of them check the
+assignment after replugging.
+
+On Linux your user needs access to the devices. Open DMX cables (`/dev/ttyUSB*`):
 
 ```sh
 sudo usermod -aG dialout $USER   # then log out and back in
+```
+
+Velleman VM116 (`/dev/hidraw*`) – a udev rule, then replug the interface:
+
+```sh
+echo 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="10cf", ATTRS{idProduct}=="8062", MODE="0660", TAG+="uaccess"'   | sudo tee /etc/udev/rules.d/60-dmxcraft-vm116.rules
+sudo udevadm control --reload-rules
 ```
 
 ## Documentation
@@ -141,7 +159,7 @@ process still running from the build folder (a running `.exe` cannot be overwrit
 ```
 crates/
   core/    data model, engine, effects, timeline, audio analysis (no I/O)
-  output/  output thread and backends (simulation, USB-DMX cable)
+  output/  output thread and backends (simulation, USB-DMX: Open DMX, VM116)
   ofl/     fixture library (Open Fixture Library, QLC+)
   mcp/     MCP server
   app/     user interface (egui), 3D visualizer, updater

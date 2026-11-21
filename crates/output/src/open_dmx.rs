@@ -14,6 +14,10 @@
 //! 40 Hz). The thread reconnects by itself when the cable is unplugged and
 //! plugged in again. The cable → universe assignment uses the serial number
 //! of the FTDI chip so it stays the same after a restart or replugging.
+//!
+//! [`OpenDmx`] also drives the other USB interfaces (one per universe, each in
+//! its own thread): the device type comes from the assignment key, see
+//! [`UsbDriver`] and [`crate::vm116`].
 
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -50,14 +54,58 @@ pub struct UsbDmxPort {
     pub label: String,
     /// Is an FTDI chip (the usual design for Open DMX cables).
     pub ftdi: bool,
+    /// How DMX is sent to the device.
+    pub driver: UsbDriver,
 }
 
-/// Lists the connected USB serial devices, FTDI devices first.
+/// Kind of USB DMX interface.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UsbDriver {
+    /// Serial cable without processor (Open DMX / FTDI).
+    OpenDmx,
+    /// Velleman VM116 / K8062 (USB HID).
+    Vm116,
+}
+
+impl UsbDriver {
+    /// Driver for a stored assignment key.
+    pub fn for_key(key: &str) -> UsbDriver {
+        if key.starts_with(crate::vm116::KEY_PREFIX) {
+            UsbDriver::Vm116
+        } else {
+            UsbDriver::OpenDmx
+        }
+    }
+}
+
+impl UsbDmxPort {
+    /// Known DMX interface (FTDI cable or a dedicated DMX device), as opposed
+    /// to any other USB serial device.
+    pub fn is_dmx(&self) -> bool {
+        self.ftdi || self.driver != UsbDriver::OpenDmx
+    }
+}
+
+/// Lists the connected USB DMX interfaces and USB serial devices: dedicated
+/// DMX devices and FTDI cables first.
 pub fn list_ports() -> Vec<UsbDmxPort> {
+    let mut out = list_serial_ports();
+    out.extend(crate::vm116::list());
+    out.sort_by(|a, b| {
+        b.is_dmx()
+            .cmp(&a.is_dmx())
+            .then(a.label.cmp(&b.label))
+            .then(a.port_name.cmp(&b.port_name))
+    });
+    out
+}
+
+/// Lists the connected USB serial devices.
+fn list_serial_ports() -> Vec<UsbDmxPort> {
     let Ok(ports) = serialport::available_ports() else {
         return Vec::new();
     };
-    let mut out: Vec<UsbDmxPort> = ports
+    ports
         .into_iter()
         // macOS reports every device as tty.* and cu.* – only cu.* for sending
         .filter(|p| !cfg!(target_os = "macos") || p.port_name.starts_with("/dev/cu."))
@@ -78,18 +126,17 @@ pub fn list_ports() -> Vec<UsbDmxPort> {
                     port_name: p.port_name,
                     label,
                     ftdi,
+                    driver: UsbDriver::OpenDmx,
                 })
             }
             _ => None,
         })
-        .collect();
-    out.sort_by(|a, b| b.ftdi.cmp(&a.ftdi).then(a.port_name.cmp(&b.port_name)));
-    out
+        .collect()
 }
 
 /// Finds the current port name for a stored key.
 fn resolve(key: &str) -> Option<String> {
-    list_ports()
+    list_serial_ports()
         .into_iter()
         .find(|p| p.key == key || p.port_name == key)
         .map(|p| p.port_name)
@@ -141,11 +188,28 @@ pub fn send_frame(line: &mut dyn DmxLine, channels: &[u8; UNIVERSE_SIZE]) -> io:
 }
 
 /// Shared state between the output and the send thread of a cable.
-struct Shared {
-    data: Mutex<[u8; UNIVERSE_SIZE]>,
-    stop: AtomicBool,
-    connected: AtomicBool,
+pub(crate) struct Shared {
+    pub(crate) data: Mutex<[u8; UNIVERSE_SIZE]>,
+    pub(crate) stop: AtomicBool,
+    pub(crate) connected: AtomicBool,
     error: Mutex<Option<String>>,
+}
+
+impl Shared {
+    /// Not connected, with the reason.
+    pub(crate) fn set_error(&self, msg: String) {
+        self.connected.store(false, Ordering::Relaxed);
+        if let Ok(mut e) = self.error.lock() {
+            *e = Some(msg);
+        }
+    }
+
+    pub(crate) fn set_connected(&self) {
+        self.connected.store(true, Ordering::Relaxed);
+        if let Ok(mut e) = self.error.lock() {
+            *e = None;
+        }
+    }
 }
 
 struct Worker {
@@ -154,7 +218,8 @@ struct Worker {
     handle: Option<JoinHandle<()>>,
 }
 
-/// Output via one or more Open DMX cables.
+/// Output via one or more USB DMX interfaces (Open DMX cables, VM116), one
+/// per universe.
 pub struct OpenDmx {
     /// Per universe (index) the key of the assigned cable.
     assign: Vec<Option<String>>,
@@ -189,12 +254,15 @@ impl Drop for OpenDmx {
 }
 
 fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
-    let set_error = |msg: String| {
-        shared.connected.store(false, Ordering::Relaxed);
-        if let Ok(mut e) = shared.error.lock() {
-            *e = Some(msg);
-        }
-    };
+    match UsbDriver::for_key(&key) {
+        UsbDriver::OpenDmx => run_serial_worker(key, universe, shared),
+        UsbDriver::Vm116 => crate::vm116::run_worker(key, universe, shared),
+    }
+}
+
+/// Send thread of an Open DMX cable.
+fn run_serial_worker(key: String, universe: usize, shared: Arc<Shared>) {
+    let set_error = |msg: String| shared.set_error(msg);
     while !shared.stop.load(Ordering::Relaxed) {
         let Some(port_name) = resolve(&key) else {
             set_error(format!("Universe {}: cable {key} not found", universe + 1));
@@ -216,10 +284,7 @@ fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
                 continue;
             }
         };
-        shared.connected.store(true, Ordering::Relaxed);
-        if let Ok(mut e) = shared.error.lock() {
-            *e = None;
-        }
+        shared.set_connected();
         while !shared.stop.load(Ordering::Relaxed) {
             let channels = shared.data.lock().map(|d| *d).unwrap_or([0; UNIVERSE_SIZE]);
             if let Err(e) = send_frame(&mut port, &channels) {
@@ -234,7 +299,7 @@ fn run_worker(key: String, universe: usize, shared: Arc<Shared>) {
 
 impl DmxOutput for OpenDmx {
     fn name(&self) -> &str {
-        "USB-DMX (Open DMX)"
+        "USB-DMX"
     }
 
     fn open(&mut self) -> Result<(), OutputError> {
@@ -247,7 +312,7 @@ impl DmxOutput for OpenDmx {
             .collect();
         if assigned.is_empty() {
             return Err(OutputError::NotFound(
-                "no USB DMX cable is assigned to any universe (Settings → Output)".into(),
+                "no USB DMX interface is assigned to any universe (Settings → Output)".into(),
             ));
         }
         for (universe, key) in assigned {
@@ -259,7 +324,7 @@ impl DmxOutput for OpenDmx {
             });
             let s = shared.clone();
             let handle = std::thread::Builder::new()
-                .name(format!("open-dmx-u{}", universe + 1))
+                .name(format!("usb-dmx-u{}", universe + 1))
                 .spawn(move || run_worker(key, universe, s))
                 .map_err(|e| OutputError::Transfer(e.to_string()))?;
             self.workers.push(Worker {
@@ -386,6 +451,35 @@ mod tests {
         assert_eq!(frame[0], 0, "Start code (break checked: {ok})");
         assert_eq!(frame[1], 255);
         assert_eq!(frame[2], 128);
+    }
+
+    #[test]
+    fn driver_follows_the_key() {
+        assert_eq!(UsbDriver::for_key("A6XYZ123"), UsbDriver::OpenDmx);
+        assert_eq!(UsbDriver::for_key("/dev/ttyUSB0"), UsbDriver::OpenDmx);
+        assert_eq!(UsbDriver::for_key("vm116:1234"), UsbDriver::Vm116);
+    }
+
+    #[test]
+    fn missing_vm116_is_reported_not_fatal() {
+        let mut o = OpenDmx::new(vec![None, Some("vm116:DOES-NOT-EXIST".into())]);
+        o.open().unwrap();
+        o.send(&DmxFrame::new(2)).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut health = None;
+        while Instant::now() < deadline {
+            health = o.health();
+            if health.as_deref().is_some_and(|h| h.contains("VM116")) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let health = health.unwrap();
+        assert!(
+            health.contains("Universe 2") && health.contains("VM116"),
+            "{health}"
+        );
+        o.close();
     }
 
     #[test]

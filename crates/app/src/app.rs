@@ -92,7 +92,7 @@ pub struct DmxCraftApp {
     fullscreen: Fullscreen,
     /// Toggle fullscreen in the next frame.
     toggle_fullscreen: bool,
-    /// Last detected USB DMX cables (for the settings).
+    /// Last detected USB DMX interfaces (for the settings).
     usb_ports: Vec<dmxcraft_output::UsbDmxPort>,
     /// State of the show at the last load/save (for “unsaved”).
     saved_show: Show,

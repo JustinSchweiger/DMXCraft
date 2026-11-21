@@ -19,6 +19,6 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/JustinSchweiger/DMXCraf
 >
 > **Already installed?** DMXCraft checks for updates on startup and offers this version in the title bar.
 >
-> **USB-DMX on Linux:** your user needs access to `/dev/ttyUSB*`: `sudo usermod -aG dialout $USER`, then log in again.
+> **USB-DMX on Linux:** your user needs access to `/dev/ttyUSB*`: `sudo usermod -aG dialout $USER`, then log in again. For a Velleman VM116 add the udev rule from the README (*USB-DMX interfaces*).
 
 ---

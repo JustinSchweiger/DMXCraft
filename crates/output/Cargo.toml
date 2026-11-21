@@ -12,4 +12,5 @@ authors.workspace = true
 [dependencies]
 dmxcraft-core.workspace = true
 serialport = { version = "4.10", default-features = false }
+hidapi = { version = "2.6", default-features = false, features = ["linux-native-basic-udev", "windows-native"] }
 thiserror.workspace = true

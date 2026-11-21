@@ -2,17 +2,19 @@
 //!
 //! Everything that sends DMX data somewhere implements [`DmxOutput`].
 //! The [`Runtime`] thread clocks the engine and sends every frame to the
-//! chosen backend: simulation or USB DMX cable ([`open_dmx`]).
+//! chosen backend: simulation or USB DMX interfaces ([`open_dmx`] for Open
+//! DMX / FTDI cables, [`vm116`] for the Velleman VM116 / K8062).
 
 pub mod backends;
 pub mod open_dmx;
 pub mod runtime;
+pub mod vm116;
 
 use dmxcraft_core::DmxFrame;
 use thiserror::Error;
 
 pub use backends::{NullOutput, RecordingOutput};
-pub use open_dmx::{list_ports, OpenDmx, UsbDmxPort};
+pub use open_dmx::{list_ports, OpenDmx, UsbDmxPort, UsbDriver};
 pub use runtime::{OutputStatus, Runtime};
 
 #[derive(Debug, Error)]
@@ -47,7 +49,8 @@ pub trait DmxOutput: Send {
 /// Settings for the outputs.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OutputConfig {
-    /// USB DMX: per universe (index) the key of the cable.
+    /// USB DMX: per universe (index) the key of the interface (serial number
+    /// of an FTDI cable, `vm116:…` for a Velleman VM116).
     pub open_dmx: Vec<Option<String>>,
 }
 
@@ -65,7 +68,7 @@ impl OutputKind {
     pub fn label(self) -> &'static str {
         match self {
             OutputKind::Simulation => "Simulation (no device)",
-            OutputKind::OpenDmx => "USB DMX cable (Open DMX / FTDI)",
+            OutputKind::OpenDmx => "USB DMX interface",
         }
     }
 

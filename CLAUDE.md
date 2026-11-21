@@ -14,7 +14,8 @@ Windows and macOS, output via USB DMX cables (Open DMX / FTDI).
 
 ```
 crates/core    data model (show, patch, scenes, zones, groups) + engine – no I/O, with tests
-crates/output  DmxOutput trait, output thread, backends (open_dmx.rs = USB DMX cable)
+crates/output  DmxOutput trait, output thread, backends (open_dmx.rs = USB DMX cables,
+               one thread per universe; vm116.rs = Velleman VM116 / K8062 over HID)
 crates/ofl     Open Fixture Library / QLC+ converters + embedded library (data/)
 crates/mcp     MCP server (AI assistant): tools.rs, protocol.rs, server.rs, bridge.rs – docs/MCP.md
 crates/app     user interface

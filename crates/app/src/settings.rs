@@ -33,7 +33,8 @@ pub struct Settings {
     pub open_last_show: bool,
     /// Selected output: "simulation" or "open_dmx".
     pub output: String,
-    /// USB DMX: per universe (index) the serial number of the cable, empty = none.
+    /// USB DMX: per universe (index) the key of the interface (serial number of
+    /// the cable, `vm116:…` for a Velleman VM116), empty = none.
     pub open_dmx: Vec<String>,
     /// Wrap scenes at the bottom into more columns (instead of scrolling).
     pub wrap_scenes: bool,
